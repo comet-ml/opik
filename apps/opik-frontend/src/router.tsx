@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy } from "react";
 import {
   createRootRoute,
   createRoute,
@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
+import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
 import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
 import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
@@ -16,7 +17,6 @@ import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage"
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import OldHomePage from "@/components/pages/HomePage/OldHomePage";
-import ChatPage from "@/components/pages/ChatPage/ChatPage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
@@ -30,13 +30,26 @@ import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
-import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
+import NewQuickstartPage from "@/components/pages/NewQuickstartPage/NewQuickstartPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
+import AnnotationQueuePage from "@/components/pages/AnnotationQueuePage/AnnotationQueuePage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import AddEditAlertPage from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AddEditAlertPage";
+import AlertNestedRoute from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AlertNestedRoute";
+
+declare module "@tanstack/react-router" {
+  interface StaticDataRouteOption {
+    hideUpgradeButton?: boolean;
+    title?: string;
+    param?: string;
+    paramValue?: string;
+  }
+}
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -68,6 +81,12 @@ const workspaceGuardPartialLayoutRoute = createRoute({
   id: "workspaceGuardPartialLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={PartialPageLayout} />,
+});
+
+const workspaceGuardSMELayoutRoute = createRoute({
+  id: "workspaceGuardSMELayout",
+  getParentRoute: () => rootRoute,
+  component: () => <WorkspaceGuard Layout={SMEPageLayout} />,
 });
 
 const workspaceGuardEmptyLayoutRoute = createRoute({
@@ -109,7 +128,10 @@ const quickstartRoute = createRoute({
 const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: GetStartedPage,
+  component: NewQuickstartPage,
+  staticData: {
+    hideUpgradeButton: true,
+  },
 });
 
 // ----------- home
@@ -129,16 +151,6 @@ const homeRouteNew = createRoute({
   component: HomePage,
   staticData: {
     title: "Home",
-  },
-});
-
-// ----------- chat
-const chatRoute = createRoute({
-  path: "/$workspaceName/chat",
-  getParentRoute: () => workspaceGuardRoute,
-  component: ChatPage,
-  staticData: {
-    title: "Chat",
   },
 });
 
@@ -327,6 +339,13 @@ const redirectDatasetsRoute = createRoute({
   component: RedirectDatasets,
 });
 
+// ----------- SME flow
+const homeSMERoute = createRoute({
+  path: "/$workspaceName/sme",
+  getParentRoute: () => workspaceGuardSMELayoutRoute,
+  component: lazy(() => import("@/components/pages/SMEFlowPage/SMEFlowPage")),
+});
+
 // --------- playground
 
 const playgroundRoute = createRoute({
@@ -349,6 +368,33 @@ const configurationRoute = createRoute({
   component: ConfigurationPage,
 });
 
+const alertsRoute = createRoute({
+  path: "/alerts",
+  getParentRoute: () => configurationRoute,
+  staticData: {
+    title: "Alerts",
+  },
+  component: AlertNestedRoute,
+});
+
+const alertNewRoute = createRoute({
+  path: "/new",
+  getParentRoute: () => alertsRoute,
+  staticData: {
+    title: "New alert",
+  },
+  component: AddEditAlertPage,
+});
+
+const alertEditRoute = createRoute({
+  path: "/$alertId",
+  getParentRoute: () => alertsRoute,
+  staticData: {
+    param: "alertId",
+  },
+  component: AddEditAlertPage,
+});
+
 // --------- production
 
 const onlineEvaluationRoute = createRoute({
@@ -358,6 +404,29 @@ const onlineEvaluationRoute = createRoute({
     title: "Online evaluation",
   },
   component: OnlineEvaluationPage,
+});
+
+const annotationQueuesRoute = createRoute({
+  path: "/annotation-queues",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Annotation queues",
+  },
+});
+
+const annotationQueuesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => annotationQueuesRoute,
+  component: AnnotationQueuesPage,
+});
+
+const annotationQueueDetailsRoute = createRoute({
+  path: "/$annotationQueueId",
+  getParentRoute: () => annotationQueuesRoute,
+  component: AnnotationQueuePage,
+  staticData: {
+    param: "annotationQueueId",
+  },
 });
 
 // ----------- Automation logs
@@ -374,11 +443,11 @@ const routeTree = rootRoute.addChildren([
     quickstartRoute,
     getStartedRoute,
   ]),
+  workspaceGuardSMELayoutRoute.addChildren([homeSMERoute]),
   workspaceGuardRoute.addChildren([
     baseRoute,
     homeRoute,
     homeRouteNew,
-    chatRoute,
     workspaceRoute.addChildren([
       projectsRoute.addChildren([
         projectsListRoute,
@@ -407,8 +476,14 @@ const routeTree = rootRoute.addChildren([
         redirectDatasetsRoute,
       ]),
       playgroundRoute,
-      configurationRoute,
+      configurationRoute.addChildren([
+        alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
+      ]),
       onlineEvaluationRoute,
+      annotationQueuesRoute.addChildren([
+        annotationQueuesListRoute,
+        annotationQueueDetailsRoute,
+      ]),
     ]),
   ]),
 ]);

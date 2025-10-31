@@ -10,6 +10,7 @@ import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesS
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
+import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import { Button } from "@/components/ui/button";
 import { Construction } from "lucide-react";
 import { useState } from "react";
@@ -61,11 +62,19 @@ const TracesPage = () => {
           </h1>
           {isGuardrailsEnabled && (
             <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
-              <Construction className="mr-2 size-3.5" />
+              <Construction className="mr-1.5 size-3.5" />
               Set a guardrail
             </Button>
           )}
         </PageBodyStickyContainer>
+        {project?.description && (
+          <PageBodyStickyContainer
+            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
+            direction="horizontal"
+          >
+            <div className="text-muted-slate">{project.description}</div>
+          </PageBodyStickyContainer>
+        )}
         <Tabs
           defaultValue="traces"
           value={type as string}
@@ -88,6 +97,9 @@ const TracesPage = () => {
               </TabsTrigger>
               <TabsTrigger variant="underline" value="rules">
                 Online evaluation
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="annotation-queues">
+                Annotation queues
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
@@ -113,6 +125,9 @@ const TracesPage = () => {
           </TabsContent>
           <TabsContent value="rules">
             <RulesTab projectId={projectId} />
+          </TabsContent>
+          <TabsContent value="annotation-queues">
+            <AnnotationQueuesTab projectId={projectId} />
           </TabsContent>
         </Tabs>
       </PageBodyScrollContainer>

@@ -4,8 +4,6 @@ import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
-import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -84,7 +82,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 created_by,
                 last_updated_by,
                 last_updated_at
-            ) <settings_clause>
+            )
             VALUES (
                 :id,
                 :dataset_id,
@@ -131,6 +129,68 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 AND experiment_id IN (SELECT id FROM experiments_final)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = :entity_type
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = :entity_type
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
+                FROM feedback_scores_combined_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -149,10 +209,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             name,
                             entity_id AS trace_id,
                             value
-                        FROM feedback_scores final
-                        WHERE workspace_id = :workspace_id
-                        AND entity_type = :entity_type
-                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                        FROM feedback_scores_final
                     ) fs ON fs.trace_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
                     HAVING length(fs.name) > 0
@@ -212,7 +269,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
             	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
-            ) <settings_clause>
+            )
             SELECT
                 id,
                 dataset_id,
@@ -235,7 +292,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
             	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
-            ) <settings_clause>
+            )
             SELECT
                 id,
                 dataset_id,
@@ -297,7 +354,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Void> upsert(@NonNull Optimization optimization) {
@@ -501,11 +557,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Publisher<? extends Result> upsert(Optimization optimization, Connection connection) {
-        ST template = new ST(UPSERT);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
-        var statement = connection.createStatement(template.render())
+        var statement = connection.createStatement(UPSERT)
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
                 .bind("name", optimization.name())
@@ -568,7 +620,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
         ST template = buildUpdateTemplate(update);
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         var statement = createUpdateStatement(id, update, connection, template.render());
 
@@ -576,11 +627,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Flux<? extends Result> updateDatasetDeleted(Set<UUID> datasetIds, Connection connection) {
-        ST template = new ST(SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
-        Statement statement = connection.createStatement(template.render());
+        Statement statement = connection.createStatement(SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID);
         statement.bind("dataset_ids", datasetIds);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));

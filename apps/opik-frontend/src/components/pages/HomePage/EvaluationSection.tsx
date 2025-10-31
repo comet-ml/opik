@@ -54,7 +54,7 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
     },
     {
       id: "trace_count",
-      label: "Nb of items",
+      label: "Item count",
       type: COLUMN_TYPE.number,
     },
     {

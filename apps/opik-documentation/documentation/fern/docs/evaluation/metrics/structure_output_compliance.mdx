@@ -1,0 +1,76 @@
+---
+description: Describes the StructuredOutputCompliance metric
+
+pytest\_codeblocks\_skip: true
+---
+
+The `StructuredOutputCompliance` metric allows you to verify whether a given LLM output is valid JSON and adheres to an expected schema. You can optionally provide a Pydantic schema to validate the structure and types of the fields.
+
+## How to use the StructuredOutputCompliance metric
+
+You can use the `StructuredOutputCompliance` metric as follows:
+
+```python
+from opik.evaluation.metrics import StructuredOutputCompliance
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    name: str = Field(description="The name of the user")
+    age: int = Field(description="The age of the user")
+
+metric = StructuredOutputCompliance()
+
+# Example 1: Valid JSON, but not schema-compliant
+metric.score(
+    output='{"name": "John Doe"}',
+    schema=User,
+)
+
+# Example 2: Valid JSON and schema-compliant
+metric.score(
+    output='{"name": "John Doe", "age": 30}',
+    schema=User,
+)
+
+# Example 3: Invalid JSON
+metric.score(
+    output='{"name": "John Doe", "age": }',
+)
+```
+
+Asynchronous scoring is also supported with the `ascore` method.
+
+<Tip>The `StructuredOutputCompliance` score is `1` if the output is compliant, and `0` if it is not.</Tip>
+
+## Prompt Template
+
+Opik uses an LLM as a Judge to evaluate the structural compliance. The default model used is `gpt-4o`, but this can be changed to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers). You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section.
+
+The prompt used by the LLM looks like this:
+
+```markdown
+You are an expert in structured data validation. Your task is to determine whether the given OUTPUT complies with the expected STRUCTURE. The structure may be described as a JSON schema, a Pydantic model, or simply implied to be valid JSON.
+
+Guidelines:
+
+1. OUTPUT must be a valid JSON object (not just a string).
+2. If a schema is provided, the OUTPUT must match the schema exactly in field names, types, and structure.
+3. If no schema is provided, ensure the OUTPUT is a well-formed and parsable JSON.
+4. Common formatting issues (missing quotes, incorrect brackets, etc.) should be flagged.
+5. Partial compliance is considered non-compliant.
+6. Respond only in the specified JSON format.
+
+{examples_str}
+
+EXPECTED STRUCTURE (optional):
+{schema}
+
+OUTPUT:
+{output}
+
+Respond in the following JSON format:
+{{
+    "score": true or false,  // true if output fully complies, false otherwise
+    "reason": ["list of reasons for failure or confirmation"]
+}}
+```

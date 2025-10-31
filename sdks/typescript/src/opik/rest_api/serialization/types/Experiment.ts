@@ -5,11 +5,12 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNode } from "./JsonNode";
+import { JsonListString } from "./JsonListString";
 import { ExperimentType } from "./ExperimentType";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { Comment } from "./Comment";
 import { PercentageValues } from "./PercentageValues";
+import { ExperimentStatus } from "./ExperimentStatus";
 import { PromptVersionLink } from "./PromptVersionLink";
 
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
@@ -18,7 +19,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         datasetName: core.serialization.property("dataset_name", core.serialization.string()),
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
-        metadata: JsonNode.optional(),
+        metadata: JsonListString.optional(),
         type: ExperimentType.optional(),
         optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
@@ -38,6 +39,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+        status: ExperimentStatus.optional(),
         promptVersion: core.serialization.property("prompt_version", PromptVersionLink.optional()),
         promptVersions: core.serialization.property(
             "prompt_versions",
@@ -51,7 +53,7 @@ export declare namespace Experiment {
         dataset_name: string;
         dataset_id?: string | null;
         name?: string | null;
-        metadata?: JsonNode.Raw | null;
+        metadata?: JsonListString.Raw | null;
         type?: ExperimentType.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
@@ -65,6 +67,7 @@ export declare namespace Experiment {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        status?: ExperimentStatus.Raw | null;
         prompt_version?: PromptVersionLink.Raw | null;
         prompt_versions?: PromptVersionLink.Raw[] | null;
     }

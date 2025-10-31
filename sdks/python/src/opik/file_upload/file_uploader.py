@@ -3,9 +3,9 @@ from typing import Optional
 
 import httpx
 
-from opik import s3_httpx_client
 from . import upload_client, file_upload_monitor
 from . import upload_options as file_upload_options
+from .. import format_helpers, s3_httpx_client
 from .s3_multipart_upload import file_parts_strategy, s3_file_uploader
 from ..rest_api import client as rest_api_client
 from ..rest_api import types as rest_api_types
@@ -30,9 +30,10 @@ def upload_attachment(
         )
     except Exception as e:
         LOGGER.error(
-            "Failed to upload attachment: '%s' from file: '%s', reason: %s",
+            "Failed to upload attachment: '%s' from file: [%s] with size: [%s]. Error: %s",
             upload_options.file_name,
             upload_options.file_path,
+            format_helpers.format_bytes(upload_options.file_size),
             e,
             exc_info=True,
         )

@@ -13,17 +13,11 @@ EXCEPTION_RAISED_FROM_TRACKED_FUNCTION = (
     "Exception raised from tracked function %s.\nInputs: %s\nError message: %s"
 )
 
-FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN = (
-    "Failed to extract token usage from presumably OpenAI LLM langchain run."
-)
+FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN = "Failed to extract token usage from presumably OpenAI LLM langchain run. The run dictionary: %s"
 
-FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GROQ_LLM_RUN = (
-    "Failed to extract token usage from presumably Groq LLM langchain run."
-)
+FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GROQ_LLM_RUN = "Failed to extract token usage from presumably Groq LLM langchain run. The run dictionary: %s"
 
-FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN = (
-    "Failed to extract token usage from presumably Google LLM langchain run."
-)
+FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN = "Failed to extract token usage from presumably Google LLM langchain run. The run dictionary: %s"
 
 UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION = "Unexpected exception happened when tried to create a span for function %s.\nInputs: %s\nError message: %s"
 
@@ -35,6 +29,8 @@ FAILED_TO_PARSE_OPENAI_STREAM_CONTENT = "Failed to parse openai Stream content. 
 
 FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER = "Failed to process %s. Error: %s"
 
+MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY = "This error may be due to incorrect configuration. For configuration help, see: https://www.comet.com/docs/opik/tracing/sdk_configuration"
+
 HALLUCINATION_DETECTION_FAILED = "Failed hallucination detection"
 
 FACTUALITY_SCORE_CALC_FAILED = "Failed to calculate factuality score"
@@ -42,6 +38,10 @@ FACTUALITY_SCORE_CALC_FAILED = "Failed to calculate factuality score"
 ANSWER_RELEVANCE_SCORE_CALC_FAILED = "Failed to calculate answer relevance score"
 
 MODERATION_SCORE_CALC_FAILED = "Failed to calculate moderation score"
+
+STRUCTURED_OUTPUT_COMPLIANCE_FAILED = (
+    "Failed to parse structured output compliance metric output."
+)
 
 CONTEXT_RECALL_SCORE_CALC_FAILED = "Failed to calculate context recall score"
 
@@ -66,7 +66,7 @@ PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Opik API key: %
 
 LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate limit error detected. We recommend reducing the amount of parallel requests by setting `task_threads` evaluation parameter to a smaller number"
 
-WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream_usage`=True during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
+WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream_usage=True` during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
 
 # Storing all the messages in this module is considered a deprecated practice.
 # Do it only if your message is used in more than one place.

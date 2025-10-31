@@ -6,9 +6,11 @@ import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 
 @Getter
+@Setter
 public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
@@ -67,7 +69,7 @@ public class OpikConfiguration extends JobConfiguration {
     private OpenTelemetryConfig openTelemetry = new OpenTelemetryConfig();
 
     @Valid @NotNull @JsonProperty
-    private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
+    private WorkspaceSettings workspaceSettings = WorkspaceSettings.builder().build();
 
     @Valid @NotNull @JsonProperty
     private S3Config s3Config = new S3Config();
@@ -82,8 +84,20 @@ public class OpikConfiguration extends JobConfiguration {
     private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
 
     @Valid @NotNull @JsonProperty
-    private AsyncInsertConfig asyncInsert = new AsyncInsertConfig();
+    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
 
     @Valid @NotNull @JsonProperty
-    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
+    private ResponseFormattingConfig responseFormatting = new ResponseFormattingConfig();
+
+    @Valid @NotNull @JsonProperty
+    private WebhookConfig webhook = new WebhookConfig();
+
+    @Valid @JsonProperty
+    private QueuesConfig queues = new QueuesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JacksonConfig jacksonConfig = new JacksonConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AttachmentsConfig attachmentsConfig = new AttachmentsConfig();
 }

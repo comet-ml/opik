@@ -284,6 +284,7 @@ def verify_attachments(
     entity_id: str,
     attachments: Dict[str, Attachment],
     data_sizes: Dict[str, int],
+    timeout: int = 10,
 ) -> None:
     if not synchronization.until(
         lambda: (
@@ -293,6 +294,7 @@ def verify_attachments(
             is not None
         ),
         allow_errors=True,
+        max_try_seconds=timeout,
     ):
         raise AssertionError(f"Failed to get {entity_type} with id {entity_id}.")
 
@@ -314,6 +316,7 @@ def verify_attachments(
         )
         == len(attachments),
         allow_errors=True,
+        max_try_seconds=timeout,
     ):
         raise AssertionError(
             f"Failed to get all expected attachments for {entity_type} with id {entity_id}."
@@ -418,10 +421,10 @@ def _verify_experiment_prompts(
     # check that experiment config/metadata contains Prompt's template
     experiment_prompts = experiment_content.metadata["prompts"]
 
-    for i, prompt in enumerate(prompts):
+    for prompt in prompts:
         assert (
-            experiment_prompts[i] == prompt.prompt
-        ), f"{experiment_prompts[i]} != {prompt.prompt}"
+            experiment_prompts[prompt.name] == prompt.prompt
+        ), f"{experiment_prompts[prompt.name]} != {prompt.prompt}"
 
 
 def verify_optimization(
@@ -545,3 +548,31 @@ def _assert_feedback_scores(
         assert expected_score["value"] == pytest.approx(
             actual_score["value"], abs=0.0001
         )
+
+
+def verify_prompt_version(
+    prompt: Prompt,
+    *,
+    name: Any = mock.ANY,  # type: ignore
+    template: Any = mock.ANY,  # type: ignore
+    type: Any = mock.ANY,  # type: ignore
+    metadata: Any = mock.ANY,  # type: ignore
+    version_id: Any = mock.ANY,  # type: ignore
+    prompt_id: Any = mock.ANY,  # type: ignore
+    commit: Any = mock.ANY,  # type: ignore
+) -> None:
+    assert name == prompt.name, f"{prompt.name} != {name}"
+    assert template == prompt.prompt, testlib.prepare_difference_report(
+        template, prompt.prompt
+    )
+    assert type == prompt.type, f"{type} != {prompt.type}"
+    assert metadata == prompt.metadata, testlib.prepare_difference_report(
+        metadata, prompt.metadata
+    )
+    assert (
+        version_id == prompt.__internal_api__version_id__
+    ), f"{prompt.__internal_api__version_id__} != {version_id}"
+    assert (
+        prompt_id == prompt.__internal_api__prompt_id__
+    ), f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
+    assert commit == prompt.commit, f"{prompt.commit} != {commit}"

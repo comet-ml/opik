@@ -4,7 +4,7 @@ import os
 import re
 import threading
 from hashlib import sha256
-from typing import Any, Dict, List, Literal, Optional, cast
+from typing import Any, Literal, cast
 
 import litellm
 import pydantic
@@ -42,12 +42,12 @@ class LM(BaseLM):
         max_tokens: int = 1000,
         cache: bool = True,
         cache_in_memory: bool = True,
-        callbacks: Optional[List[BaseCallback]] = None,
+        callbacks: list[BaseCallback] | None = None,
         num_retries: int = 8,
         provider=None,
-        finetuning_model: Optional[str] = None,
-        launch_kwargs: Optional[dict[str, Any]] = None,
-        train_kwargs: Optional[dict[str, Any]] = None,
+        finetuning_model: str | None = None,
+        launch_kwargs: dict[str, Any] | None = None,
+        train_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ):
         """
@@ -93,9 +93,9 @@ class LM(BaseLM):
 
         if model_pattern:
             # Handle OpenAI reasoning models (o1, o3)
-            assert (
-                max_tokens >= 20_000 and temperature == 1.0
-            ), "OpenAI's reasoning models require passing temperature=1.0 and max_tokens >= 20_000 to `dspy.LM(...)`"
+            assert max_tokens >= 20_000 and temperature == 1.0, (
+                "OpenAI's reasoning models require passing temperature=1.0 and max_tokens >= 20_000 to `dspy.LM(...)`"
+            )
             self.kwargs = dict(
                 temperature=temperature, max_completion_tokens=max_tokens, **kwargs
             )
@@ -145,20 +145,27 @@ class LM(BaseLM):
         ):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
-        self.llm_call_counter += 1
+        self._increment_llm_counter()
         return results
 
-    def launch(self, launch_kwargs: Optional[Dict[str, Any]] = None):
+    def _increment_llm_counter(self) -> None:
+        """Increment the LLM call counter."""
+        self.llm_call_counter += 1
+        parent = getattr(self, "parent_optimizer", None)
+        if parent is not None and hasattr(parent, "_increment_llm_counter"):
+            parent._increment_llm_counter()
+
+    def launch(self, launch_kwargs: dict[str, Any] | None = None):
         self.provider.launch(self, launch_kwargs)
 
-    def kill(self, launch_kwargs: Optional[Dict[str, Any]] = None):
+    def kill(self, launch_kwargs: dict[str, Any] | None = None):
         self.provider.kill(self, launch_kwargs)
 
     def finetune(
         self,
-        train_data: List[Dict[str, Any]],
-        train_data_format: Optional[TrainDataFormat],
-        train_kwargs: Optional[Dict[str, Any]] = None,
+        train_data: list[dict[str, Any]],
+        train_data_format: TrainDataFormat | None,
+        train_kwargs: dict[str, Any] | None = None,
     ) -> TrainingJob:
         from dspy import settings as settings
 
@@ -222,7 +229,7 @@ class LM(BaseLM):
         return {key: getattr(self, key) for key in state_keys} | self.kwargs
 
 
-def request_cache(maxsize: Optional[int] = None):
+def request_cache(maxsize: int | None = None):
     """
     A threadsafe decorator to create an in-memory LRU cache for LM inference functions that accept
     a dictionary-like LM request. An in-memory cache for LM calls is critical for ensuring
@@ -235,7 +242,7 @@ def request_cache(maxsize: Optional[int] = None):
         A decorator that wraps the target function with caching.
     """
 
-    def cache_key(request: Dict[str, Any]) -> str:
+    def cache_key(request: dict[str, Any]) -> str:
         """
         Obtain a unique cache key for the given request dictionary by hashing its JSON
         representation. For request fields having types that are known to be JSON-incompatible,
@@ -278,7 +285,7 @@ def request_cache(maxsize: Optional[int] = None):
             # concurrently, e.g. during optimization and evaluation
             lock=threading.RLock(),
         )
-        def func_cached(key: str, request: Dict[str, Any], *args, **kwargs):
+        def func_cached(key: str, request: dict[str, Any], *args, **kwargs):
             return func(request, *args, **kwargs)
 
         @functools.wraps(func)
@@ -302,8 +309,8 @@ def request_cache(maxsize: Optional[int] = None):
     return decorator
 
 
-@request_cache(maxsize=None)
-def cached_litellm_completion(request: Dict[str, Any], num_retries: int):
+@request_cache(maxsize=2000)
+def cached_litellm_completion(request: dict[str, Any], num_retries: int):
     return litellm_completion(
         request,
         cache={"no-cache": False, "no-store": False},
@@ -312,7 +319,7 @@ def cached_litellm_completion(request: Dict[str, Any], num_retries: int):
 
 
 def litellm_completion(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     num_retries: int,
     cache={"no-cache": True, "no-store": True},
 ):
@@ -361,8 +368,8 @@ def litellm_completion(
     return stream_completion()
 
 
-@request_cache(maxsize=None)
-def cached_litellm_text_completion(request: Dict[str, Any], num_retries: int):
+@request_cache(maxsize=2000)
+def cached_litellm_text_completion(request: dict[str, Any], num_retries: int):
     return litellm_text_completion(
         request,
         num_retries=num_retries,
@@ -371,7 +378,7 @@ def cached_litellm_text_completion(request: Dict[str, Any], num_retries: int):
 
 
 def litellm_text_completion(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     num_retries: int,
     cache={"no-cache": True, "no-store": True},
 ):

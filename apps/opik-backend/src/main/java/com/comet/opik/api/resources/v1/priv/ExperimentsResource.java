@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.filter.ExperimentFilter;
@@ -33,12 +34,11 @@ import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -58,6 +58,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -123,12 +124,13 @@ public class ExperimentsResource {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata metadata = workspaceMetadataService
+        var metadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -153,7 +155,7 @@ public class ExperimentsResource {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
                 .map(experimentPage -> {
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (metadata.cannotUseDynamicSorting()) {
                         return experimentPage.toBuilder().sortableBy(List.of()).build();
                     }
                     return experimentPage;
@@ -278,6 +280,25 @@ public class ExperimentsResource {
         return Response.created(uri).build();
     }
 
+    @PATCH
+    @Path("/{id}")
+    @Operation(operationId = "updateExperiment", summary = "Update experiment by id", description = "Update experiment by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response update(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull @Valid ExperimentUpdate experimentUpdate) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating experiment with id '{}', workspaceId '{}'", id, workspaceId);
+        experimentService.update(id, experimentUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Updated experiment with id '{}', workspaceId '{}'", id, workspaceId);
+        return Response.noContent().build();
+    }
+
     @POST
     @Path("/delete")
     @Operation(operationId = "deleteExperimentsById", summary = "Delete experiments by id", description = "Delete experiments by id", responses = {
@@ -389,7 +410,7 @@ public class ExperimentsResource {
         log.info("Creating experiment items, count '{}'", newRequest.size());
         experimentItemService.create(newRequest)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info("Created experiment items, count '{}'", newRequest.size());
         return Response.noContent().build();
@@ -418,6 +439,7 @@ public class ExperimentsResource {
             "Maximum request size is 4MB.", responses = {
                     @ApiResponse(responseCode = "204", description = "No content"),
                     @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "409", description = "Experiment dataset mismatch", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
     @RateLimited
@@ -428,7 +450,8 @@ public class ExperimentsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("Recording experiment items in bulk, count '{}'", request.items().size());
+        log.info("Recording experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
+                request.experimentId());
 
         List<ExperimentItemBulkRecord> items = request.items()
                 .stream()
@@ -440,6 +463,7 @@ public class ExperimentsResource {
                 .toList();
 
         Experiment experiment = Experiment.builder()
+                .id(request.experimentId())
                 .datasetName(request.datasetName())
                 .name(request.experimentName())
                 .build();
@@ -447,10 +471,11 @@ public class ExperimentsResource {
         experimentItemBulkIngestionService.ingest(experiment, items)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
-        log.info("Recorded experiment items in bulk, count '{}'", request.items().size());
+        log.info("Recorded experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
+                request.experimentId());
 
         return Response.noContent().build();
     }

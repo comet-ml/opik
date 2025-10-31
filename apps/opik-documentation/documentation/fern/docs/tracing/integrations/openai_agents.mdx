@@ -1,3 +1,8 @@
+---
+title: Observability for OpenAI Agents with Opik
+description: Start here to integrate Opik into your OpenAI Agents-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 OpenAI released an agentic framework aptly named [Agents](https://platform.openai.com/docs/guides/agents). What
 sets this framework apart from others is that it provides a rich set of core building blocks:
 
@@ -10,29 +15,15 @@ sets this framework apart from others is that it provides a rich set of core bui
 Opik's integration with Agents is just one line of code and allows you to analyse and debug the agent execution
 flow in our Open-Source platform.
 
-<Frame>
-  <img src="/img/tracing/openai_agents.png" />
-</Frame>
+## Account Setup
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai-agents.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) and grab your API Key.
 
-## Getting started
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
 
 First, ensure you have both `opik` and `openai-agents` packages installed:
 
@@ -40,20 +31,47 @@ First, ensure you have both `opik` and `openai-agents` packages installed:
 pip install opik openai-agents
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring OpenAI Agents
+
+In order to use OpenAI Agents, you will need to configure your OpenAI API key. You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+
+You can set them as environment variables:
 
 ```bash
-opik configure
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 ## Enabling logging to Opik
 
 To enable logging to Opik, simply add the following two lines of code to your existing OpenAI Agents code:
 
-```python {3,5}
+```python
+import os
 from agents import Agent, Runner
 from agents import set_trace_processors
 from opik.integrations.openai.agents import OpikTracingProcessor
+
+# Set project name for better organization
+os.environ["OPIK_PROJECT_NAME"] = "openai-agents-demo"
 
 set_trace_processors(processors=[OpikTracingProcessor()])
 
@@ -67,6 +85,91 @@ print(result.final_output)
   The Opik integration will automatically track both the token usage and overall cost of each LLM call that is being
   made. You can also view this information aggregated for the entire agent execution.
 </Tip>
+
+## Advanced Example: Agents with Function Tools
+
+For more complex use cases, you can create agents with custom function tools and use the `@track` decorator for multi-step workflows:
+
+```python
+from agents import Agent, Runner, function_tool
+from opik import track
+
+@function_tool
+def calculate_average(numbers: list[float]) -> float:
+    return sum(numbers) / len(numbers)
+
+@function_tool  
+def get_recommendation(topic: str, user_level: str) -> str:
+    recommendations = {
+        "python": {
+            "beginner": "Start with Python.org's tutorial, then try Python Crash Course book. Practice with simple scripts and built-in functions.",
+            "intermediate": "Explore frameworks like Flask/Django, learn about decorators, context managers, and dive into Python's data structures.",
+            "advanced": "Study Python internals, contribute to open source, learn about metaclasses, and explore performance optimization."
+        },
+        "machine learning": {
+            "beginner": "Start with Andrew Ng's Coursera course, learn basic statistics, and try scikit-learn with simple datasets.",
+            "intermediate": "Dive into deep learning with TensorFlow/PyTorch, study different algorithms, and work on real projects.",
+            "advanced": "Research latest papers, implement algorithms from scratch, and contribute to ML frameworks."
+        }
+    }
+    
+    topic_lower = topic.lower()
+    level_lower = user_level.lower()
+    
+    if topic_lower in recommendations and level_lower in recommendations[topic_lower]:
+        return recommendations[topic_lower][level_lower]
+    else:
+        return f"For {topic} at {user_level} level: Focus on fundamentals, practice regularly, and build projects to apply your knowledge."
+
+def create_advanced_agent():
+    """Create an advanced agent with tools and comprehensive instructions."""
+    instructions = """
+    You are an expert programming tutor and learning advisor. You have access to tools that help you:
+    1. Calculate averages for performance metrics, grades, or other numerical data
+    2. Provide personalized learning recommendations based on topics and user experience levels
+    
+    Your role:
+    - Help users learn programming concepts effectively
+    - Provide clear, beginner-friendly explanations when needed
+    - Use your tools when appropriate to give concrete help
+    - Offer structured learning paths and resources
+    - Be encouraging and supportive
+    
+    When users ask about:
+    - Programming languages: Use get_recommendation to provide tailored advice
+    - Performance or scores: Use calculate_average if numbers are involved
+    - Learning paths: Combine your knowledge with tool-based recommendations
+    
+    Always explain your reasoning and make your responses educational.
+    """
+    
+    return Agent(
+        name="AdvancedProgrammingTutor",
+        instructions=instructions,
+        model="gpt-4o-mini",
+        tools=[calculate_average, get_recommendation]
+    )
+
+# Create and use the advanced agent
+advanced_agent = create_advanced_agent()
+
+# Example queries
+queries = [
+    "I'm new to Python programming. Can you tell me about it?",
+    "I got these test scores: 85, 92, 78, 96, 88. What's my average and how am I doing?",
+    "I know some Python basics but want to learn machine learning. What should I do next?",
+]
+
+for i, query in enumerate(queries, 1):
+    print(f"\n📝 Query {i}: {query}")
+    result = Runner.run_sync(advanced_agent, query)
+    print(f"🤖 Response: {result.final_output}")
+    print("=" * 80)
+```
+
+{/* <Frame>
+  <img src="/img/cookbook/openai_agents_cookbook.png" />
+</Frame> */}
 
 ## Logging threads
 

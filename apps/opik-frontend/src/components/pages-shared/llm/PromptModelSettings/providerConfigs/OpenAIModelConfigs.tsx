@@ -2,19 +2,38 @@ import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMOpenAIConfigsType } from "@/types/providers";
+import {
+  LLMOpenAIConfigsType,
+  PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
+} from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
+import { isReasoningModel } from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface OpenAIModelSettingsProps {
   configs: Partial<LLMOpenAIConfigsType>;
+  model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
 }
 
 const OpenAIModelConfigs = ({
   configs,
+  model,
   onChange,
 }: OpenAIModelSettingsProps) => {
+  // Reasoning models (GPT-5, O1, O3, O4-mini) require temperature = 1.0
+  const isReasoning = isReasoningModel(model);
+
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -22,13 +41,19 @@ const OpenAIModelConfigs = ({
           value={configs.temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={0}
+          min={isReasoning ? 1 : 0}
           max={1}
           step={0.01}
-          defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
+          defaultValue={isReasoning ? 1 : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
           tooltip={
-            <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+            <PromptModelSettingsTooltipContent
+              text={
+                isReasoning
+                  ? "Reasoning models require temperature = 1.0. This setting controls randomness in completions."
+                  : "Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive."
+              }
+            />
           }
         />
       )}
@@ -39,7 +64,7 @@ const OpenAIModelConfigs = ({
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
           min={0}
-          max={10000}
+          max={128000}
           step={1}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
@@ -95,6 +120,33 @@ const OpenAIModelConfigs = ({
             <PromptModelSettingsTooltipContent text="How much to penalize new tokens based on whether they appear in the text so far. Increases the model's likelihood to talk about new topics" />
           }
         />
+      )}
+
+      {isReasoning && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="reasoningEffort" className="text-sm font-medium">
+              Reasoning effort
+            </Label>
+            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." />
+          </div>
+          <Select
+            value={configs.reasoningEffort || "medium"}
+            onValueChange={(value: ReasoningEffort) =>
+              onChange({ reasoningEffort: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select reasoning effort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="minimal">Minimal</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       )}
     </div>
   );

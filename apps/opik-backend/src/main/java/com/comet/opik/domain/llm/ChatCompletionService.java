@@ -45,7 +45,10 @@ public class ChatCompletionService {
         this.retryPolicy = newRetryPolicy();
     }
 
-    public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+    public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
+        // must be final or effectively final for lambda
+        var request = MessageContentNormalizer.normalizeRequest(rawRequest);
+
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
 
@@ -53,7 +56,6 @@ public class ChatCompletionService {
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
             chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
-            log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         } catch (RuntimeException runtimeException) {
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
@@ -69,9 +71,11 @@ public class ChatCompletionService {
     }
 
     public void createAndStreamResponse(
-            @NonNull ChatCompletionRequest request,
+            @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
+        var request = MessageContentNormalizer.normalizeRequest(rawRequest);
+
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());

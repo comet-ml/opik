@@ -17,6 +17,9 @@ type FeatureTogglesState = {
 const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
+  [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
+  [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
+  [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {

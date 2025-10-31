@@ -1,9 +1,4 @@
 import { DropdownOption } from "@/types/shared";
-import {
-  LLMPromptConfigsType,
-  PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
-} from "@/types/providers";
 
 export enum LLM_MESSAGE_ROLE {
   system = "system",
@@ -32,6 +27,7 @@ export interface LLMMessage {
   role: LLM_MESSAGE_ROLE;
   promptId?: string;
   promptVersionId?: string;
+  autoImprove?: boolean;
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id">;
@@ -42,6 +38,7 @@ export enum LLM_JUDGE {
   moderation = "moderation",
   answer_relevance = "answer_relevance",
   context_precision = "context_precision",
+  structure_compliance = "structure_compliance",
   conversational_coherence = "conversational_coherence",
   session_completeness = "session_completeness",
   user_frustration = "user_frustration",
@@ -52,18 +49,6 @@ export type LLMPromptTemplate = {
   variables: Record<string, string>;
   schema: LLMJudgeSchema[];
 } & DropdownOption<LLM_JUDGE>;
-
-export type ChatLLMessage = LLMMessage & {
-  isLoading?: boolean;
-};
-
-export interface LLMChatType {
-  value: string;
-  messages: ChatLLMessage[];
-  model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
-  configs: LLMPromptConfigsType;
-}
 
 export type ScoresValidationError =
   | {

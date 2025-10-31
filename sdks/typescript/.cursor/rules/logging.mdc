@@ -1,0 +1,30 @@
+---
+globs: sdks/typescript/src/**/*.ts
+description: Logging practices for the TypeScript SDK
+alwaysApply: false
+---
+
+## Logging
+
+Centralized logger: [utils/logger.ts](mdc:sdks/typescript/src/opik/utils/logger.ts) (tslog).
+
+- Use `logger` for structured logs; put context in the last parameter as an object
+- Control level with `OPIK_LOG_LEVEL` env or `setLoggerLevel()`
+- Disable logs with `disableLogger()` (sets minLevel very high)
+- Avoid logging sensitive data (keys, PII, payload contents)
+- Prefer clear messages keyed to lifecycle: init, enqueue, flush, error
+
+Levels (env values): `SILLY`, `TRACE`, `DEBUG`, `INFO` (default), `WARN`, `ERROR`, `FATAL`
+
+Examples:
+
+```ts
+import { logger } from "@/utils/logger";
+logger.debug("Creating new trace", { projectName });
+logger.info("Successfully flushed all data to Opik");
+logger.error("Failed to retrieve datasets", { error });
+```
+
+Helpers:
+- `createLink(url, text?)` returns a terminal hyperlink, used in project start logs
+

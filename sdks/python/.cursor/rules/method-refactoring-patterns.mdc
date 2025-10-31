@@ -1,0 +1,155 @@
+---
+description: Patterns for identifying and refactoring methods to improve code quality and maintainability
+globs: sdks/python/src/opik/**/*
+alwaysApply: false
+---
+# Method Refactoring Patterns
+
+Guidelines for identifying when methods need refactoring and how to improve them systematically.
+
+## Logic Duplication Detection
+
+### When to Extract Helper Methods
+
+**Red Flag**: Similar code blocks with only minor differences - these are prime candidates for helper methods that extract the common pattern while parameterizing the differences.
+
+## Access Control Review
+
+### Method Visibility Analysis
+
+**Question to Ask**: "Is this method called from outside this class?"
+
+```python
+# ❌ Bad: Public method only used internally
+class DataProcessor:
+    def process_data(self, data):
+        cleaned = self.clean_data(data)      # Only called here
+        validated = self.validate_data(data) # Only called here
+        return self.format_data(validated)
+
+    def clean_data(self, data):      # Should be private
+        pass
+
+    def validate_data(self, data):   # Should be private
+        pass
+
+    def format_data(self, data):     # Should be private
+        pass
+```
+
+```python
+# ✅ Good: Appropriate access control
+class DataProcessor:
+    def process_data(self, data):        # Public interface
+        cleaned = self._clean_data(data)
+        validated = self._validate_data(data)
+        return self._format_data(validated)
+
+    def _clean_data(self, data):         # Private helper
+        pass
+
+    def _validate_data(self, data):      # Private helper
+        pass
+
+    def _format_data(self, data):        # Private helper
+        pass
+```
+
+## Parameter Redundancy Detection
+
+### Avoiding State Duplication
+
+**Red Flag**: Passing data that's already stored in the object
+
+```python
+# ❌ Bad: Redundant parameter passing
+class SpanTracker:
+    def __init__(self):
+        self._span_data = {}
+
+    def set_span_data(self, data: Dict[str, Any]) -> None:
+        self._span_data.update(data)
+
+    def validate_span(self, data: Dict[str, Any]) -> bool:  # Redundant parameter
+        span_id = data.get("span_id")                       # Could use self._span_data
+        # Validate using external data instead of stored state
+        return span_id is not None
+```
+
+```python
+# ✅ Good: Use internal state
+class SpanTracker:
+    def __init__(self):
+        self._span_data = {}
+
+    def set_span_data(self, data: Dict[str, Any]) -> None:
+        """Store span data in internal state."""
+        self._span_data.update(data)
+
+    def validate_span(self) -> bool:  # No redundant parameters
+        """Validate span using internal state."""
+        span_id = self._span_data.get("span_id")
+        # Validate using internal state
+        return span_id is not None
+```
+
+## Method Naming Improvement
+
+### Descriptive vs Generic Names
+
+**Pattern**: Methods should describe **what** they do, not **how** they do it
+
+```python
+# ❌ Bad: Generic, unclear names
+def process_span(self, value):          # What kind of processing?
+def update_trace(self, name):           # What kind of update?
+def handle_data(self, data):            # Too generic
+def get_raw(self):                      # What does "raw" mean?
+```
+
+```python
+# ✅ Good: Specific, action-oriented names
+def _validate_and_store_span_input(self, value):   # Clear action + outcome
+def _extract_and_set_trace_metadata(self, name):   # Clear action + target
+def _parse_and_validate_feedback(self, data):      # Clear actions
+def get_unprocessed_span_data(self):                # Clear what is returned
+```
+
+## Refactoring Decision Tree
+
+When reviewing a method, ask these questions in order:
+
+1. **Duplication**: Does this logic appear elsewhere with minor variations?
+   - → Extract common patterns into helper methods
+
+2. **Access**: Is this method only called from within this class?
+   - → Make it private with `_` prefix
+
+3. **Parameters**: Am I passing data that's already stored in `self`?
+   - → Remove redundant parameters, use internal state
+
+4. **Naming**: Does the method name clearly describe its action and purpose?
+   - → Rename to be more descriptive and action-oriented
+
+5. **Constants**: Are there magic strings/numbers that appear in multiple places?
+   - → Extract to constants module
+
+## Implementation Checklist
+
+Before writing a new method:
+
+- [ ] Is there similar logic elsewhere that I can reuse?
+- [ ] Should this method be public or private?
+- [ ] Are all parameters necessary, or can I use internal state?
+- [ ] Does the method name clearly describe what it does?
+- [ ] Are there magic values that should be constants?
+
+## Code Review Questions
+
+When reviewing methods:
+
+- [ ] Are there duplicated code blocks that could be extracted?
+- [ ] Are all public methods actually used outside the class?
+- [ ] Are parameters redundant with object state?
+- [ ] Are method names descriptive and action-oriented?
+- [ ] Are constants defined in multiple places?

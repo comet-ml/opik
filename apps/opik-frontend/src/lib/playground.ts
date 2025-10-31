@@ -8,6 +8,7 @@ import {
   DEFAULT_VERTEX_AI_CONFIGS,
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
+import { getDefaultTemperatureForModel } from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
   LLMGeminiConfigsType,
@@ -24,13 +25,15 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
 export const getDefaultConfigByProvider = (
   provider?: PROVIDER_TYPE | "",
+  model?: PROVIDER_MODEL_TYPE | "",
 ): LLMPromptConfigsType => {
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     return {
-      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
+      temperature: getDefaultTemperatureForModel(model),
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
@@ -39,10 +42,16 @@ export const getDefaultConfigByProvider = (
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    // For models requiring exclusive params, clear topP to use temperature by default
+    const isExclusive =
+      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
+      model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
+      model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5;
+
     return {
       temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
-      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
+      topP: isExclusive ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
     } as LLMAnthropicConfigsType;
   }
 
@@ -112,8 +121,18 @@ export const generateDefaultPrompt = ({
     messages: [generateDefaultLLMPromptMessage()],
     model: modelByDefault,
     provider,
-    configs: getDefaultConfigByProvider(provider),
+    configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
   };
+};
+
+export const parseCompletionOutput = (run: RunStreamingReturn) => {
+  return (
+    run.result ||
+    run.opikError ||
+    run.providerError ||
+    run.pythonProxyError ||
+    "The AI provider returned an empty response. Please, try again."
+  );
 };

@@ -66,6 +66,28 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
                 {"field": "feedback_scores", "operator": ">=", "value": "4.5"},
             ],
         ),
+        (
+            'type="llm" and total_estimated_cost>0',
+            [
+                {"field": "type", "operator": "=", "value": "llm"},
+                {"field": "total_estimated_cost", "operator": ">", "value": "0"},
+            ],
+        ),
+        (
+            'type="llm" and total_estimated_cost>0 and provider="openai"',
+            [
+                {"field": "type", "operator": "=", "value": "llm"},
+                {"field": "total_estimated_cost", "operator": ">", "value": "0"},
+                {"field": "provider", "operator": "=", "value": "openai"},
+            ],
+        ),
+        (
+            'id starts_with "123456" and id ends_with "789012"',
+            [
+                {"field": "id", "operator": "starts_with", "value": "123456"},
+                {"field": "id", "operator": "ends_with", "value": "789012"},
+            ],
+        ),
     ],
 )
 def test_valid_oql_expressions(filter_string, expected):
@@ -81,7 +103,6 @@ def test_valid_oql_expressions(filter_string, expected):
 @pytest.mark.parametrize(
     "filter_string, error_pattern",
     [
-        ('name > "test"', r"Operator > is not supported for field name.*"),
         ('invalid_field.key = "value"', r"Field invalid_field\.key is not supported.*"),
         ("name = test", r"Invalid value.*"),
         (

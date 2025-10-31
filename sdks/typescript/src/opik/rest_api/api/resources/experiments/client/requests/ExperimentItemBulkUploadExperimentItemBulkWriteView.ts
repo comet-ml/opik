@@ -17,5 +17,7 @@ import * as OpikApi from "../../../../index";
 export interface ExperimentItemBulkUploadExperimentItemBulkWriteView {
     experimentName: string;
     datasetName: string;
+    /** Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName */
+    experimentId?: string;
     items: OpikApi.ExperimentItemBulkRecordExperimentItemBulkWriteView[];
 }

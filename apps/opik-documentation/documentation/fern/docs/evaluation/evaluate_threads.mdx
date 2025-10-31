@@ -1,11 +1,16 @@
 ---
 subtitle: Step-by-step guide on how to evaluate conversation threads
 ---
+
 When you are running multi-turn conversations using frameworks that support LLM agents, the Opik integration will
 automatically group related traces into conversation threads using parameters suitable for each framework.
 
 This guide will walk you through the process of evaluating and optimizing conversation threads in Opik using
 the `evaluate_threads` function in the Python SDK.
+
+<Note>
+For complete API reference documentation, see the [`evaluate_threads` API reference](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/evaluate_threads.html).
+</Note>
 
 ## Using the Python SDK
 
@@ -13,6 +18,9 @@ The Python SDK provides a simple and efficient way to evaluate and optimize conv
 `evaluate_threads` function. This function allows you to specify a filter string to select specific threads for
 evaluation, a list of metrics to apply to each thread, and it returns a `ThreadsEvaluationResult` object
 containing the evaluation results and feedback scores.
+
+Most importantly, this function **automatically uploads the feedback scores to your traces in Opik!**
+So, once evaluation is completed, you can also [see the results in the UI](#using-opik-ui-to-view-results).
 
 To run the threads evaluation, you can use the following code:
 
@@ -38,6 +46,73 @@ results = evaluate_threads(
 )
 ```
 
+<Tip>
+Want to create your own custom conversation metrics? Check out the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric) to learn how to build specialized metrics for evaluating multi-turn dialogues.
+</Tip>
+
+### Understanding the Transform Arguments
+
+Threads consist of multiple traces, and each trace has an input and output. In practice, these typically contain user messages and agent responses. However, trace inputs and outputs are rarely just simple strings—they are usually complex data structures whose exact format depends on your agent framework.
+
+To handle this complexity, you need to provide `trace_input_transform` and `trace_output_transform` functions. These are **critical parameters** that tell Opik how to extract the actual message content from your framework-specific trace structure.
+
+#### Why Transform Functions Are Needed
+
+Different agent frameworks structure their trace data differently:
+- **LangChain** might store messages in `{"messages": [{"content": "..."}]}`
+- **CrewAI** might use `{"task": {"description": "..."}}`
+- **Custom implementations** can have any structure you've defined
+
+Without transform functions, Opik wouldn't know where to find the actual user questions and agent responses within your trace data.
+
+#### How Transform Functions Work
+
+Using these functions, the Opik evaluation engine will convert your threads chosen for evaluation into the standardized format expected by all Opik thread evaluation metrics:
+
+```json
+[
+    {
+        "role": "user",
+        "content": "input string from trace 1"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 1"
+    },
+    {
+        "role": "user",
+        "content": "input string from trace 2"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 2"
+    }
+]
+```
+
+**Example:**
+
+If your trace input has the following structure:
+
+```json
+{
+    "content": {
+        "user_question": "Tell me about your service?"
+    },
+    "metadata": {...}
+}
+```
+
+Then your `trace_input_transform` should be:
+
+```python
+lambda x: x["content"]["user_question"]
+```
+
+<Tip>
+Don't want to deal with transformations because your traces don't have a consistent format? Try using LLM-based transformations, language models are good at this!.
+</Tip>
+
 #### Using filter string
 
 The `evaluate_threads` function takes a filter string as an argument. This string is used to select the threads that
@@ -57,20 +132,39 @@ filter_string='id = "0197ad2a" AND status = "inactive"'
 
 **Supported filter fields and operators**
 
-The `evaluate_threads` function supports the following filter fields in the `filter_string` and
-operators to be applied to the corresponding fields:
+The `evaluate_threads` function supports the following filter fields in the `filter_string` using Opik Query Language (OQL).
+All fields and operators are the same as those supported by `search_traces` and `search_spans`:
 
-| Field              | Type     | Operators                     |
-|--------------------|----------|-------------------------------|
-| id                 | string   | ``=, contains, not_contains`` |
-| status             | string   | ``=, contains, not_contains`` |
-| start_time         | datetime | ``=, >, <, >=, <=``           |
-| end_time           | datetime | ``=, >, <, >=, <=``           |
-| feedback_scores    | dict     | ``=, >, <, >=, <=``           |
-| tags               | list     | ``contains``                  |
-| duration           | number   | ``=, >, <, >=, <=``           |
-| number_of_messages | number   | ``=, >, <, >=, <=``           |
-| created_by         | string   | ``=, contains, not_contains`` |
+| Field                     | Type       | Operators                                                                   |
+| ------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `id`                      | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `created_by`              | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `thread_id`               | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `type`                    | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `model`                   | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `provider`                | String     | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `status`                  | String     | `=`, `contains`, `not_contains`                                             |
+| `start_time`              | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `end_time`                | DateTime   | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `input`                   | String     | `=`, `contains`, `not_contains`                                             |
+| `output`                  | String     | `=`, `contains`, `not_contains`                                             |
+| `metadata`                | Dictionary | `=`, `contains`, `>`, `<`                                                   |
+| `feedback_scores`         | Numeric    | `=`, `>`, `<`, `>=`, `<=`                                                   |
+| `tags`                    | List       | `contains`                                                                  |
+| `usage.total_tokens`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `usage.prompt_tokens`     | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `usage.completion_tokens` | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `duration`                | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `number_of_messages`      | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+| `total_estimated_cost`    | Numeric    | `=`, `!=`, `>`, `<`, `>=`, `<=`                                             |
+
+**Rules:**
+
+- String values must be wrapped in double quotes
+- DateTime fields require ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
+- Use dot notation for nested objects: `metadata.model`, `feedback_scores.accuracy`
+- Multiple conditions can be combined with `AND` (OR is not supported)
 
 The `feedback_scores` field is a dictionary where the keys are the metric names and the values are the metric values.
 You can use it to filter threads based on their feedback scores. For example, if you want to evaluate only threads
@@ -82,9 +176,14 @@ filter_string='feedback_scores.user_frustration_score >= 0.5'
 
 Where `user_frustration_score` is the name of the user frustration metric and `0.5` is the threshold value to filter by.
 
-#### Using Opik UI to view results
+<Tip>
+**Best practice**: If you are using SDK for thread evaluation, automate it by setting up a scheduled cron job with filters to regularly generate feedback scores for specific traces.
+</Tip>
+
+## Using Opik UI to view results
 
 Once the evaluation is complete, you can access the evaluation results in the Opik UI.
+Not only you will be able to see the score values, but the LLM-judge reasoning behind these values too!
 
 <Frame>
   <img src="/img/evaluation/threads_user_frustration_score.png" />
@@ -94,8 +193,21 @@ Once the evaluation is complete, you can access the evaluation results in the Op
   Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
   Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
 
-  You can only evaluate/score threads that are inactive.
+You can only evaluate/score threads that are inactive.
+
 </Note>
+
+## Multi-Value Feedback Scores for Threads
+
+**Team-based thread evaluation** enables multiple evaluators to score conversation threads independently, providing more reliable assessment of multi-turn dialogue quality.
+
+**Key benefits for thread evaluation:**
+
+- **Conversation complexity scoring** - Multiple reviewers can assess different aspects like coherence, user satisfaction, and goal completion across conversation turns
+- **Reduced evaluation bias** - Individual subjectivity in judging conversational quality is mitigated through team consensus
+- **Thread-specific metrics** - Teams can collaboratively evaluate conversation-specific aspects like frustration levels, topic drift, and resolution success
+
+This collaborative approach is especially valuable for conversational threads where dialogue quality, context maintenance, and user experience assessment often require multiple expert perspectives.
 
 ## Next steps
 

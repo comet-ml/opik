@@ -60,7 +60,7 @@ To log your first trace, you can use the `track` decorator::
 
 **Note:** The `track` decorator supports nested functions, if you track multiple functions, each functionc call will be associated with the parent trace.
 
-**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/tracing/integrations/langchain>`_ for these libraries.
+**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/integrations/langchain>`_ for these libraries.
 
 ----------------------------
 Using LLM evaluation metrics
@@ -160,6 +160,7 @@ You can learn more about the `opik` python SDK in the following sections:
    track
    configure
    opik_context/index
+   context_manager/index
 
 .. toctree::
    :caption: Integrations
@@ -184,7 +185,9 @@ You can learn more about the `opik` python SDK in the following sections:
    evaluation/evaluate
    evaluation/evaluate_prompt
    evaluation/evaluate_experiment
+   evaluation/evaluate_threads
    evaluation/metrics/index
+   message_processing_emulation/index
 
 .. toctree::
    :caption: Prompt management
@@ -208,6 +211,12 @@ You can learn more about the `opik` python SDK in the following sections:
    testing/llm_unit
 
 .. toctree::
+   :caption: Simulation
+   :maxdepth: 1
+   
+   simulation/index
+
+.. toctree::
    :caption: REST API Reference
    :maxdepth: 1
    
@@ -218,7 +227,7 @@ You can learn more about the `opik` python SDK in the following sections:
 .. toctree::
    :caption: Objects
    :maxdepth: 1
-   
+
    Objects/Trace.rst
    Objects/TraceData.rst
    Objects/TracePublic.rst
@@ -238,7 +247,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst
    Objects/DistributedTraceHeadersDict.rst
-   
+
 .. toctree::
    :maxdepth: 1
    :caption: Command Line Interface

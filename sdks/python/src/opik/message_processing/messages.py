@@ -11,6 +11,7 @@ from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 @dataclasses.dataclass
 class BaseMessage:
     delivery_time: float = field(init=False, default=0.0)
+    delivery_attempts: int = field(init=False, default=1)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         # we are not using dataclasses.as_dict() here
@@ -18,6 +19,8 @@ class BaseMessage:
         data = {**self.__dict__}
         if "delivery_time" in data:
             data.pop("delivery_time")
+        if "delivery_attempts" in data:
+            data.pop("delivery_attempts")
         return data
 
 
@@ -228,6 +231,25 @@ class GuardrailBatchMessage(BaseMessage):
         data = super().as_payload_dict()
         data.pop("supports_batching")
         return data
+
+
+@dataclasses.dataclass
+class ExperimentItemMessage(BaseMessage):
+    """
+    There is no handler for that in the message processor, it exists
+    only as an item of CreateExperimentItemsBatchMessage
+    """
+
+    id: str
+    experiment_id: str
+    trace_id: str
+    dataset_item_id: str
+
+
+@dataclasses.dataclass
+class CreateExperimentItemsBatchMessage(BaseMessage):
+    batch: List[ExperimentItemMessage]
+    supports_batching: bool = True
 
 
 @dataclasses.dataclass

@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { FeedbackScoreSource } from "./FeedbackScoreSource";
+import { ValueEntry } from "./ValueEntry";
 
 export const FeedbackScore: core.serialization.ObjectSchema<serializers.FeedbackScore.Raw, OpikApi.FeedbackScore> =
     core.serialization.object({
@@ -18,6 +19,10 @@ export const FeedbackScore: core.serialization.ObjectSchema<serializers.Feedback
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+        valueByAuthor: core.serialization.property(
+            "value_by_author",
+            core.serialization.record(core.serialization.string(), ValueEntry).optional(),
+        ),
     });
 
 export declare namespace FeedbackScore {
@@ -31,5 +36,6 @@ export declare namespace FeedbackScore {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        value_by_author?: Record<string, ValueEntry.Raw> | null;
     }
 }

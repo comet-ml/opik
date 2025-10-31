@@ -7,7 +7,7 @@ from ...models import base_model
 
 if TYPE_CHECKING:
     import langchain_core.language_models
-    from langchain import schema
+    import langchain_core.messages
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,15 +59,19 @@ class LangchainChatModel(base_model.OpikBaseModel):
                 "role": "user",
             },
         ]
-        response = self.generate_provider_response(messages=request, **kwargs)
-        return response.content
+        with base_model.get_provider_response(
+            model_provider=self, messages=request, **kwargs
+        ) as response:
+            return base_model.check_model_output_string(response.content)
 
     def generate_provider_response(
         self,
         messages: List[Dict[str, Any]],
         **kwargs: Any,
-    ) -> "schema.AIMessage":
+    ) -> "langchain_core.messages.AIMessage":
         """
+        Do not use this method directly. It is intended to be used within `base_model.get_provider_response()` method.
+
         Generate a provider-specific response using the Langchain model.
 
         Args:
@@ -112,13 +116,17 @@ class LangchainChatModel(base_model.OpikBaseModel):
             },
         ]
 
-        response = await self.agenerate_provider_response(messages=request, **kwargs)
-        return response.content
+        async with base_model.aget_provider_response(
+            model_provider=self, messages=request, **kwargs
+        ) as response:
+            return base_model.check_model_output_string(response.content)
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
-    ) -> "schema.AIMessage":
+    ) -> "langchain_core.messages.AIMessage":
         """
+        Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.
+
         Generate a provider-specific response using the Langchain model. Async version.
 
         Args:

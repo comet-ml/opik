@@ -5,9 +5,15 @@ import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(
     private readonly api: OpikApiClientTemp,
-    delay?: number,
+    delay?: number
   ) {
-    super({ delay, name: "TraceBatchQueue" });
+    super({
+      delay,
+      enableCreateBatch: true,
+      enableUpdateBatch: true,
+      enableDeleteBatch: true,
+      name: "TraceBatchQueue",
+    });
   }
 
   protected getId(entity: SavedTrace) {
@@ -21,7 +27,8 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   protected async getEntity(id: string) {
     return (await this.api.traces.getTraceById(
       id,
-      this.api.requestOptions,
+      {},
+      this.api.requestOptions
     )) as SavedTrace;
   }
 

@@ -1,6 +1,7 @@
 import { Explainer } from "@/types/shared";
 
 export enum EXPLAINER_ID {
+  visible_scores = "visible_scores",
   what_do_you_use_projects_for = "what_do_you_use_projects_for",
   what_are_feedback_scores = "what_are_feedback_scores",
   i_created_a_project_now_what = "i_created_a_project_now_what",
@@ -9,6 +10,7 @@ export enum EXPLAINER_ID {
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
   i_added_traces_to_a_dataset_now_what = "i_added_traces_to_a_dataset_now_what",
+  how_to_choose_annotation_queue_type = "how_to_choose_annotation_queue_type",
   why_would_i_want_to_add_traces_to_a_dataset = "why_would_i_want_to_add_traces_to_a_dataset",
   hows_the_cost_estimated = "hows_the_cost_estimated",
   hows_the_thread_cost_estimated = "hows_the_thread_cost_estimated",
@@ -47,7 +49,9 @@ export enum EXPLAINER_ID {
   what_happens_if_i_edit_an_ai_provider = "what_happens_if_i_edit_an_ai_provider",
   what_happens_if_i_edit_a_rule = "what_happens_if_i_edit_a_rule",
   what_happens_if_i_edit_a_thread_rule = "what_happens_if_i_edit_a_thread_rule",
+  what_happens_if_i_edit_a_feedback_definition = "what_happens_if_i_edit_a_feedback_definition",
   why_would_i_want_to_create_a_new_project = "why_would_i_want_to_create_a_new_project",
+  what_are_annotation_queues = "what_are_annotation_queues",
   whats_the_commit_history = "whats_the_commit_history",
   why_would_i_compare_commits = "why_would_i_compare_commits",
   whats_the_optimizer = "whats_the_optimizer",
@@ -68,9 +72,20 @@ export enum EXPLAINER_ID {
   metric_answer_relevance = "metric_answer_relevance",
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
+  trace_opik_ai = "trace_opik_ai",
+  feedback_scores_hotkeys = "feedback_scores_hotkeys",
+  llm_judge_variable_mapping = "llm_judge_variable_mapping",
+  prompt_generation_learn_more = "prompt_generation_learn_more",
+  prompt_improvement_learn_more = "prompt_improvement_learn_more",
+  prompt_improvement_optimizer = "prompt_improvement_optimizer",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
+  [EXPLAINER_ID.visible_scores]: {
+    id: EXPLAINER_ID.visible_scores,
+    description:
+      "Only the scores you select here will be visible to annotators during evaluation",
+  },
   [EXPLAINER_ID.what_do_you_use_projects_for]: {
     id: EXPLAINER_ID.what_do_you_use_projects_for,
     description:
@@ -169,6 +184,17 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.what_is_human_review,
     description:
       "Human review fields let you manually rate LLM outputs. Use them to gather structured feedback and monitor quality over time.",
+  },
+  [EXPLAINER_ID.what_are_annotation_queues]: {
+    id: EXPLAINER_ID.what_are_annotation_queues,
+    description:
+      "Add traces or thread to an annotation queue to collect human feedback on your LLM outputs. Only queues created in this project appear here, and traces can be added to them only",
+    docLink: "/evaluation/annotation_queues",
+  },
+  [EXPLAINER_ID.how_to_choose_annotation_queue_type]: {
+    id: EXPLAINER_ID.how_to_choose_annotation_queue_type,
+    description:
+      "Choose whether the annotation queue will contain the entire thread or individual traces",
   },
   [EXPLAINER_ID.whats_an_experiment]: {
     id: EXPLAINER_ID.whats_an_experiment,
@@ -288,7 +314,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_does_the_dataset_do_here]: {
     id: EXPLAINER_ID.what_does_the_dataset_do_here,
     description:
-      "Run a prompt on a dataset in the Playground to preview its performance across multiple inputs.",
+      "Run a prompt on a dataset in the Playground to preview its performance across multiple inputs. Select one or more metrics to automatically evaluate each dataset item.",
   },
   [EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground]: {
     id: EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground,
@@ -348,6 +374,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     title: "Editing a thread-level rule",
     description:
       "Changes will only apply to new threads. Existing threads won't be affected.",
+  },
+  [EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition]: {
+    id: EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition,
+    title: "Editing a feedback definition",
+    description:
+      "Changes will only apply to new feedback scores. Existing feedback scores won't be affected.",
   },
   [EXPLAINER_ID.why_would_i_want_to_create_a_new_project]: {
     id: EXPLAINER_ID.why_would_i_want_to_create_a_new_project,
@@ -480,5 +512,41 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "The context recall metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
     docLink: "/evaluation/metrics/context_recall",
+  },
+  [EXPLAINER_ID.trace_opik_ai]: {
+    id: EXPLAINER_ID.trace_opik_ai,
+    description:
+      "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
+  },
+  [EXPLAINER_ID.feedback_scores_hotkeys]: {
+    id: EXPLAINER_ID.feedback_scores_hotkeys,
+    description:
+      'Press "F" to jump to first component in feedback scores\nand use "Tab"/"Shift+Tab" to move between components\n\nController Types:\n\n1. Numerical Inputs (number fields):\n   • use arrow keys to adjust values\n   • or type numbers directly\n\n2. Dropdown selectors:\n   • press "Enter" to open select\n   • use arrow keys to navigate\n   • press "Enter" to select\n\n3. Toggle buttons:\n   • use arrow keys to navigate between options\n   • press "Enter" to select\n\n4. Reason Text Areas (comment fields):\n   • press "Enter" to open/close section\n   • type your reasoning',
+    type: "help",
+  },
+  [EXPLAINER_ID.llm_judge_variable_mapping]: {
+    id: EXPLAINER_ID.llm_judge_variable_mapping,
+    description:
+      "Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.",
+  },
+  [EXPLAINER_ID.prompt_generation_learn_more]: {
+    id: EXPLAINER_ID.prompt_generation_learn_more,
+    description:
+      "Not sure where to start? Tell us your goal in plain language, and we'll generate a ready-to-use prompt.",
+    docLink: "/prompt_engineering/improve",
+    docHash: "#generate",
+  },
+  [EXPLAINER_ID.prompt_improvement_learn_more]: {
+    id: EXPLAINER_ID.prompt_improvement_learn_more,
+    description:
+      "Give your prompt a boost! Add optional guidance, or let AI apply best-practice improvements for you.",
+    docLink: "/prompt_engineering/improve",
+    docHash: "#improve",
+  },
+  [EXPLAINER_ID.prompt_improvement_optimizer]: {
+    id: EXPLAINER_ID.prompt_improvement_optimizer,
+    description:
+      "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
+    docLink: "/agent_optimization/opik_optimizer/overview",
   },
 };

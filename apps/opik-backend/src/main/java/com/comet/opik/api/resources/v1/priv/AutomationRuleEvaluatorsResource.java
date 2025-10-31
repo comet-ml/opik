@@ -6,7 +6,13 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.filter.AutomationRuleEvaluatorFilter;
+import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -40,11 +46,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.View;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/automations/evaluators/")
 @Produces(MediaType.APPLICATION_JSON)
@@ -57,6 +65,9 @@ public class AutomationRuleEvaluatorsResource {
 
     private final @NonNull AutomationRuleEvaluatorService service;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @GET
     @Operation(operationId = "findEvaluators", summary = "Find project Evaluators", description = "Find project Evaluators", responses = {
@@ -64,16 +75,35 @@ public class AutomationRuleEvaluatorsResource {
     })
     @JsonView(View.Public.class)
     public Response find(@QueryParam("project_id") UUID projectId,
+            @QueryParam("id") @Schema(description = "Filter automation rules with rule ID containing this value (partial match, like %id%)") String id,
             @QueryParam("name") String name,
+            @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
+
+        var queryFilters = filtersFactory.newFilters(filters, AutomationRuleEvaluatorFilter.LIST_TYPE_REFERENCE);
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        List<String> sortableBy = sortingFactory.getSortableFields();
+
+        var searchCriteria = AutomationRuleEvaluatorSearchCriteria.builder()
+                .projectId(projectId)
+                .id(id)
+                .name(name)
+                .filters(queryFilters)
+                .sortingFields(sortingFields)
+                .build();
+
+        log.info("Looking for automated evaluators by '{}' on workspaceId '{}' (page {})", searchCriteria,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(projectId, workspaceId, name, page, size);
-        log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
-                evaluatorPage.size(), projectId, workspaceId, page, evaluatorPage.total());
+
+        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(page, size, searchCriteria, workspaceId,
+                sortableBy);
+
+        log.info("Found {} automated evaluators by '{}' on workspaceId '{}' (page {}, total {})",
+                evaluatorPage.size(), searchCriteria, workspaceId, page, evaluatorPage.total());
 
         return Response.ok()
                 .entity(evaluatorPage)
@@ -177,12 +207,14 @@ public class AutomationRuleEvaluatorsResource {
 
         log.info("Looking for logs for automated evaluator: id '{}' on workspace_id '{}'",
                 evaluatorId, workspaceId);
-        var criteria = LogCriteria.builder().workspaceId(workspaceId).entityId(evaluatorId).size(size).build();
-        LogPage logs = service.getLogs(criteria).block();
+        var criteria = LogCriteria.builder().entityId(evaluatorId).size(size).build();
+        LogPage logs = service.getLogs(criteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
         log.info("Found {} logs for automated evaluator: id '{}' on workspace_id '{}'", logs.size(),
                 evaluatorId, workspaceId);
 
-        return Response.ok().entity(logs).build();
+        return Response.ok(logs).build();
     }
 
 }

@@ -1,2 +1,0 @@
-crewai!=0.114.0 # Crewai broke supports for Python 3.10
-crewai-tools

@@ -5,31 +5,32 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "comet-body-s-accented inline-flex items-center justify-center whitespace-nowrap rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+  "comet-body-s-accented group inline-flex items-center justify-center whitespace-nowrap rounded-md transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-active disabled:bg-muted-gray disabled:opacity-100",
+          "bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-active disabled:bg-muted-gray disabled:opacity-100 dark:text-foreground dark:disabled:bg-muted-disabled dark:disabled:text-muted-gray",
         special:
-          "bg-[#19A979] text-primary-foreground hover:bg-[#1E8A66] active:bg-[#1A7557] disabled:bg-muted-gray disabled:opacity-100",
+          "bg-[var(--special-button)] text-primary-foreground hover:bg-[var(--special-button-hover)] active:bg-[var(--special-button-active)] disabled:bg-muted-gray disabled:opacity-100 dark:text-foreground dark:disabled:text-muted-disabled",
         destructive:
           "border border-destructive bg-background text-destructive hover:bg-destructive/5 active:bg-destructive/10 disabled:border-muted-gray disabled:text-muted-gray disabled:opacity-100",
         outline:
           "border border-border bg-background hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground disabled:border-muted-disabled disabled:text-muted-gray disabled:opacity-100",
         secondary:
-          "bg-primary-100 text-primary hover:bg-secondary hover:text-primary-hover active:bg-secondary active:text-primary-active disabled:bg-muted-disabled disabled:text-muted-gray disabled:opacity-100",
+          "bg-primary-100 text-primary hover:bg-secondary hover:text-primary-hover active:bg-secondary active:text-primary-active disabled:bg-muted-disabled disabled:text-muted-gray disabled:opacity-100 dark:bg-input dark:text-foreground hover:dark:bg-primary-100 dark:disabled:text-muted-gray",
         ghost:
           "font-normal hover:text-primary-hover active:text-primary-active disabled:text-muted-gray disabled:opacity-100",
         minimal:
           "font-normal text-light-slate hover:text-foreground active:text-foreground disabled:text-muted-gray disabled:opacity-100",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-primary underline-offset-4 hover:underline dark:text-primary-hover dark:disabled:text-muted-gray",
         tableLink:
-          "text-foreground underline underline-offset-4 hover:text-primary active:text-primary-active disabled:text-muted-gray disabled:opacity-100",
+          "text-foreground underline underline-offset-4 hover:text-primary active:text-primary-active disabled:text-muted-gray disabled:opacity-100 dark:hover:text-primary-hover",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-8 px-3",
+        xs: "h-7 px-2.5",
         "2xs": "comet-body-xs h-6 px-2",
         "3xs": "comet-body-xs h-4 px-1",
         lg: "h-11 px-8",

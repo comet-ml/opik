@@ -37,7 +37,6 @@ public abstract sealed class FeedbackScoreItem {
     @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used")
     private final String projectName;
 
-    @JsonIgnore
     private final UUID projectId;
 
     @NotBlank private final String name;
@@ -50,14 +49,11 @@ public abstract sealed class FeedbackScoreItem {
 
     @NotNull private final ScoreSource source;
 
+    private final String author;
+
     public abstract UUID id();
 
     public abstract String threadId();
-
-    @JsonIgnore
-    public UUID projectId() {
-        return projectId;
-    }
 
     // Constructor for subclasses to use
 
@@ -73,10 +69,11 @@ public abstract sealed class FeedbackScoreItem {
         // entity (trace or span) id
         @NotNull private UUID id;
 
-        @ConstructorProperties({"id", "projectName", "projectId", "name", "categoryName", "value", "reason", "source"})
+        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "source",
+                "author", "id"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source);
+                BigDecimal value, String reason, ScoreSource source, String author, UUID id) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author);
             this.id = id;
         }
 
@@ -101,11 +98,11 @@ public abstract sealed class FeedbackScoreItem {
         @JsonIgnore
         private UUID id;
 
-        @ConstructorProperties({"threadId", "projectName", "projectId", "name", "categoryName", "value", "reason",
-                "source"})
+        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason",
+                "source", "author", "threadId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source);
+                BigDecimal value, String reason, ScoreSource source, String author, String threadId) {
+            super(projectName, projectId, name, value, categoryName, reason, source, author);
             this.threadId = threadId;
         }
 

@@ -1,9 +1,9 @@
 package com.comet.opik.infrastructure.log.tables;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
-import com.comet.opik.infrastructure.AsyncInsertConfig;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.NonNull;
 import reactor.core.publisher.Mono;
@@ -13,9 +13,8 @@ import java.util.Map;
 
 public interface UserLogTableFactory {
 
-    static UserLogTableFactory getInstance(@NonNull ConnectionFactory factory,
-            @NonNull AsyncInsertConfig configuration) {
-        return new UserLogTableFactoryImpl(factory, configuration);
+    static UserLogTableFactory getInstance(@NonNull ConnectionFactory factory) {
+        return new UserLogTableFactoryImpl(factory);
     }
 
     interface UserLogTableDAO {
@@ -30,9 +29,10 @@ class UserLogTableFactoryImpl implements UserLogTableFactory {
 
     private final Map<UserLog, UserLogTableDAO> daoMap;
 
-    UserLogTableFactoryImpl(@NonNull ConnectionFactory factory, @NonNull AsyncInsertConfig configuration) {
+    UserLogTableFactoryImpl(@NonNull ConnectionFactory factory) {
         daoMap = Map.of(
-                UserLog.AUTOMATION_RULE_EVALUATOR, AutomationRuleEvaluatorLogsDAO.create(factory, configuration));
+                UserLog.AUTOMATION_RULE_EVALUATOR, AutomationRuleEvaluatorLogsDAO.create(factory),
+                UserLog.ALERT_EVENT, AlertEventLogsDAO.create(factory));
     }
 
     @Override

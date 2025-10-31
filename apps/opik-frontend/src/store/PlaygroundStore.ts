@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 
-import { PlaygroundPromptType } from "@/types/playground";
+import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -88,6 +88,9 @@ export type PlaygroundStore = {
   promptMap: Record<string, PlaygroundPromptType>;
   outputMap: PlaygroundOutputMap;
   datasetVariables: string[];
+  providerValidationTrigger: number;
+  selectedRuleIds: string[] | null;
+  createdExperiments: LogExperiment[];
 
   setPromptMap: (
     promptIds: string[],
@@ -106,6 +109,10 @@ export type PlaygroundStore = {
     changes: Partial<PlaygroundOutput>,
   ) => void;
   setDatasetVariables: (variables: string[]) => void;
+  triggerProviderValidation: () => void;
+  setSelectedRuleIds: (ruleIds: string[] | null) => void;
+  setCreatedExperiments: (experiments: LogExperiment[]) => void;
+  clearCreatedExperiments: () => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -115,6 +122,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       promptMap: {},
       outputMap: {},
       datasetVariables: [],
+      providerValidationTrigger: 0,
+      selectedRuleIds: null,
+      createdExperiments: [],
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -217,6 +227,38 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      triggerProviderValidation: () => {
+        set((state) => {
+          return {
+            ...state,
+            providerValidationTrigger: state.providerValidationTrigger + 1,
+          };
+        });
+      },
+      setSelectedRuleIds: (ruleIds) => {
+        set((state) => {
+          return {
+            ...state,
+            selectedRuleIds: ruleIds,
+          };
+        });
+      },
+      setCreatedExperiments: (experiments) => {
+        set((state) => {
+          return {
+            ...state,
+            createdExperiments: experiments,
+          };
+        });
+      },
+      clearCreatedExperiments: () => {
+        set((state) => {
+          return {
+            ...state,
+            createdExperiments: [],
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -306,5 +348,26 @@ export const useDatasetVariables = () =>
 
 export const useSetDatasetVariables = () =>
   usePlaygroundStore((state) => state.setDatasetVariables);
+
+export const useProviderValidationTrigger = () =>
+  usePlaygroundStore((state) => state.providerValidationTrigger);
+
+export const useTriggerProviderValidation = () =>
+  usePlaygroundStore((state) => state.triggerProviderValidation);
+
+export const useSelectedRuleIds = () =>
+  usePlaygroundStore((state) => state.selectedRuleIds);
+
+export const useSetSelectedRuleIds = () =>
+  usePlaygroundStore((state) => state.setSelectedRuleIds);
+
+export const useCreatedExperiments = () =>
+  usePlaygroundStore((state) => state.createdExperiments);
+
+export const useSetCreatedExperiments = () =>
+  usePlaygroundStore((state) => state.setCreatedExperiments);
+
+export const useClearCreatedExperiments = () =>
+  usePlaygroundStore((state) => state.clearCreatedExperiments);
 
 export default usePlaygroundStore;

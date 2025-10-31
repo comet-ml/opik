@@ -7,6 +7,7 @@ import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
+import com.comet.opik.api.ExperimentGroupWithTime;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
@@ -14,11 +15,13 @@ import com.comet.opik.api.grouping.GroupBy;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 
@@ -36,6 +39,9 @@ public class ExperimentResponseBuilder {
 
         return ExperimentGroupResponse.builder()
                 .content(contentMap)
+                .details(ExperimentGroupResponse.GroupDetails.builder()
+                        .groupsDetails(buildSortedGroups(groupItems, enrichInfoHolder, groups))
+                        .build())
                 .build();
     }
 
@@ -267,5 +273,43 @@ public class ExperimentResponseBuilder {
                     .groups(new HashMap<>())
                     .build();
         };
+    }
+
+    private List<ExperimentGroupResponse.GroupDetail> buildSortedGroups(List<ExperimentGroupItem> groupItems,
+            ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
+        List<ArrayList<ExperimentGroupWithTime>> groupsWithTime = IntStream.range(0, groups.size())
+                .mapToObj(i -> new ArrayList<ExperimentGroupWithTime>())
+                .toList();
+
+        groupItems.forEach(item -> {
+            for (int i = 0; i < item.groupValues().size(); i++) {
+                String groupingValue = item.groupValues().get(i);
+                if (groupingValue != null) {
+                    String label = switch (groups.get(i).field()) {
+                        case DATASET_ID ->
+                            Optional.ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
+                                    .map(Dataset::name)
+                                    .orElse(DELETED_DATASET);
+                        default -> groupingValue;
+                    };
+                    groupsWithTime.get(i).add(
+                            new ExperimentGroupWithTime(
+                                    label,
+                                    item.lastCreatedExperimentAt()));
+                }
+            }
+        });
+
+        return groupsWithTime.stream()
+                .map(groupList -> ExperimentGroupResponse.GroupDetail.builder()
+                        .groupSorting(
+                                groupList.stream()
+                                        .sorted((a, b) -> b.lastCreatedExperimentAt()
+                                                .compareTo(a.lastCreatedExperimentAt()))
+                                        .map(ExperimentGroupWithTime::name)
+                                        .distinct()
+                                        .toList())
+                        .build())
+                .toList();
     }
 }

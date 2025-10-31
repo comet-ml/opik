@@ -1,4 +1,5 @@
 from .aggregated_metric import AggregatedMetric
+from .conversation.conversation_thread_metric import ConversationThreadMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
 from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
 from .conversation.user_frustration.metric import UserFrustrationMetric
@@ -18,6 +19,7 @@ from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
 from .llm_judges.usefulness.metric import Usefulness
+from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
 from opik.exceptions import MetricComputationError
@@ -38,6 +40,7 @@ __all__ = [
     "Hallucination",
     "IsJson",
     "LevenshteinRatio",
+    "StructuredOutputCompliance",
     "MetricComputationError",
     "Moderation",
     "RagasMetricWrapper",
@@ -49,5 +52,6 @@ __all__ = [
     "Usefulness",
     "UserFrustrationMetric",
     "TrajectoryAccuracy",
+    "ConversationThreadMetric",
     # "Factuality",
 ]

@@ -1,5 +1,6 @@
-Annotating traces is a crucial aspect of evaluating and improving your LLM-based applications. By systematically recording qualitative or quantitative
-feedback on specific interactions or entire conversation flows, you can:
+Logging user feedback and scoring traces is a crucial aspect of evaluating and improving your agent.
+By systematically recording qualitative or quantitative feedback on specific interactions or entire
+conversation flows, you can:
 
 1. Track performance over time
 2. Identify areas for improvement
@@ -7,133 +8,146 @@ feedback on specific interactions or entire conversation flows, you can:
 4. Gather data for fine-tuning or retraining
 5. Provide stakeholders with concrete metrics on system effectiveness
 
-Opik allows you to annotate traces through the SDK or the UI.
+## Logging user feedback using the SDK
+
+You can use the SDKs to log user feedback and score traces:
+
+<CodeBlocks>
+```typescript title="Typescript SDK" language="typescript"
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Create a new trace
+const trace = client.trace({
+name: "my_trace",
+input: { "input": "Hi!" },
+output: { "output": "Hello!" },
+});
+
+// Log feedback scores to an existing trace
+await client.logTracesFeedbackScores([
+{ id: trace.id, name: "overall_quality", value: 0.9, reason: "Good answer" },
+{ id: trace.id, name: "coherence", value: 0.8 }
+]);
+
+```
+
+```python title="Python Function Decorator" language="python"
+import opik
+from opik import opik_context
+
+@opik.track
+def my_function():
+  opik_context.update_current_trace(
+    feedback_scores=[
+      {
+        "name": "user_feedback",
+        "value": 1,
+        "reason": "Good answer" # Optional
+      }
+    ]
+  )
+
+  return "Hello, world!"
+```
+
+```python title="Python SDK" language="python"
+import opik
+
+client = opik.Opik()
+
+# Log feedback scores to an existing trace
+client.log_traces_feedback_scores(
+  feedback_scores=[
+    {"id": "trace_id", "name": "user_feedback", "value": 1},
+    {"id": "trace_id", "name": "accuracy", "value": 1, "reason": "Good answer"} # Optional reason score
+  ]
+)
+
+# Log feedback score to a new trace
+client.trace(
+  name="my_trace",
+  input={"input": "Hi!"},
+  output={"output": "Hello!"},
+  feedback_scores=[
+    {"name": "user_feedback", "value": 1, "reason": "Good answer"}
+  ]
+)
+```
+
+</CodeBlocks>
 
 ## Annotating Traces through the UI
 
-To annotate traces through the UI, you can navigate to the trace you want to annotate in the traces page and click on the `Annotate` button.
-This will open a sidebar where you can add annotations to the trace.
+To annotate traces through the UI, you can navigate to the trace you want to annotate in the traces
+page and click on the `Annotate` button. This will open a sidebar where you can add annotations to
+the trace.
 
-You can annotate both traces and spans through the UI, make sure you have selected the correct span in the sidebar.
+You can annotate both traces and spans through the UI, make sure you have selected the correct span
+in the sidebar.
 
 <Frame>
-  <img src="/img/tracing/annotate_traces.png" />
+  <img src="/img/tracing/multivalue_feedback_scores.png" />
 </Frame>
 
-<Tip>
-  Once a feedback scores has been provided, you can also add a reason to explain why this particular score was provided.
-  This is useful to add additional context to the score.
-</Tip>
+Once a feedback scores has been provided, you can also add a reason to explain why this particular
+score was provided. This is useful to add additional context to the score.
 
-You can also add comments to traces and experiments to share insights with other team members.
+If multiple team members are annotating the same trace, you can see the annotations of each team
+member in the UI in the `Feedback scores` section. The average score will be displayed at a trace
+and trace level.
+
+<Tip>
+  If you want a more dedicated annotation interface, you can use the [Annotation Queues](/evaluation/annotation_queues)
+  feature.
+</Tip>
 
 ## Online evaluation
 
-You don't need to manually annotate each trace to measure the performance of your LLM applications! By using Opik's [online evaluation feature](/production/rules), you can define LLM as a Judge metrics that will automatically score all, or a subset, of your production traces.
+You don't need to manually annotate each trace to measure the performance of your agents! By using
+Opik's [online evaluation feature](/production/rules), you can define LLM as a Judge metrics that
+will automatically score all, or a subset, of your production traces.
 
 ![Online evaluation](/img/production/online_evaluation.gif)
 
-## Annotating traces and spans using the SDK
+## Manual evaluation
 
-You can use the SDK to annotate traces and spans which can be useful both as part of the evaluation process or if you receive user feedback scores in your application.
+While online evaluation automatically scores traces based on sampling rates and enabled rules, manual evaluation gives you complete control over which traces or threads get evaluated and when. This is particularly useful when you want to:
 
-### Annotating Traces through the SDK
+- Evaluate specific traces or threads that failed or require closer inspection
+- Apply evaluation rules to historical data that wasn't captured by sampling
+- Test new evaluation rules on selected examples before enabling them for automatic scoring
+- Re-evaluate traces with updated or modified rules
 
-Feedback scores can be logged for traces using the `log_traces_feedback_scores` method:
+### How manual evaluation works
 
-```python
-from opik import Opik
+Manual evaluation allows you to apply any existing evaluation rule to selected traces or threads directly from the UI, bypassing sampling rates and rule enablement status. You can trigger manual evaluation from:
 
-client = Opik(project_name="my_project")
-
-trace = client.trace(name="my_trace")
-
-client.log_traces_feedback_scores(
-    scores=[
-        {"id": trace.id, "name": "overall_quality", "value": 0.85},
-        {"id": trace.id, "name": "coherence", "value": 0.75},
-    ]
-)
-```
-
-<Tip>
-  The `scores` argument supports an optional `reason` field that can be provided to each score. This can be used to
-  provide a human-readable explanation for the feedback score.
-</Tip>
-
-### Annotating Spans through the SDK
-
-To log feedback scores for individual spans, use the `log_spans_feedback_scores` method:
-
-```python
-from opik import Opik
-
-client = Opik()
-
-trace = client.trace(name="my_trace")
-span = trace.span(name="my_span")
-
-client.log_spans_feedback_scores(
-    scores=[
-        {"id": span.id, "name": "overall_quality", "value": 0.85},
-        {"id": span.id, "name": "coherence", "value": 0.75},
-    ],
-)
-```
+1. **Traces page**: Select one or more traces and click "Evaluate" to apply trace-level rules
+2. **Threads page**: Select one or more threads and click "Evaluate" to apply thread-level rules
 
 <Note>
-  The `FeedbackScoreDict` class supports an optional `reason` field that can be used to provide a human-readable
-  explanation for the feedback score.
+  **Important**: Trace-level rules can only be applied to traces, and thread-level rules can only be applied to threads. Make sure you're using the appropriate rule type for your selected entities.
 </Note>
 
-### Using Opik's built-in evaluation metrics
+When you trigger manual evaluation:
+- All selected traces/threads will be queued for evaluation, regardless of sampling rate
+- You can apply multiple rules at once
+- Rules will execute even if they are currently disabled
+- Evaluation results will appear as feedback scores on the evaluated traces/threads
+- The evaluation is processed asynchronously, so you may need to wait a few seconds or refresh the page to see the results
 
-Computing feedback scores can be challenging due to the fact that Large Language Models can return unstructured text and non-deterministic outputs. In order to help with the computation of these scores, Opik provides some built-in evaluation metrics.
+This gives you the flexibility to evaluate exactly what you need, when you need it, without waiting for the next sampled trace or modifying your online evaluation configuration.
 
-Opik's built-in evaluation metrics are broken down into two main categories:
+## Next steps
 
-1. Heuristic metrics
-2. LLM as a judge metrics
+You can go one step further and:
 
-#### Heuristic Metrics
-
-Heuristic metrics are use rule-based or statistical methods that can be used to evaluate the output of LLM models.
-
-Opik supports a variety of heuristic metrics including:
-
-- `EqualsMetric`
-- `RegexMatchMetric`
-- `ContainsMetric`
-- `IsJsonMetric`
-- `PerplexityMetric`
-- `BleuMetric`
-- `RougeMetric`
-
-You can find a full list of metrics in the [Heuristic Metrics](/evaluation/metrics/heuristic_metrics) section.
-
-These can be used by calling:
-
-```python
-from opik.evaluation.metrics import Contains
-
-metric = Contains()
-score = metric.score(
-    output="The quick brown fox jumps over the lazy dog.",
-    reference="The quick brown fox jumps over the lazy dog."
-)
-```
-
-#### LLM as a Judge Metrics
-
-For LLM outputs that cannot be evaluated using heuristic metrics, you can use LLM as a judge metrics. These metrics are based on the idea of using an LLM to evaluate the output of another LLM.
-
-Opik supports many different LLM as a Judge metrics out of the box including:
-
-- `FactualityMetric`
-- `ModerationMetric`
-- `HallucinationMetric`
-- `AnswerRelevanceMetric`
-- `ContextRecallMetric`
-- `ContextPrecisionMetric`
-
-You can find a full list of supported metrics in the [Metrics Overview](/evaluation/metrics/overview) section.
+1. [Create an offline evaluation](/evaluation/evaluate_prompt) to evaluate your agent before it is
+   deployed to production
+2. [Score your agent in production](/production/rules) to track and catch specific issues with your
+   agent
+3. [Use annotation queues](/evaluation/annotation_queues) to organize your traces for review and
+   labeling by your team of experts
+4. [Checkout our LLM as a Judge metrics](/evaluation/metrics/overview)

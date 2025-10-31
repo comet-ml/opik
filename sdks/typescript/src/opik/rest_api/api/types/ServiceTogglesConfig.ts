@@ -6,4 +6,7 @@ export interface ServiceTogglesConfig {
     pythonEvaluatorEnabled: boolean;
     traceThreadPythonEvaluatorEnabled: boolean;
     guardrailsEnabled: boolean;
+    opikAiEnabled: boolean;
+    alertsEnabled: boolean;
+    welcomeWizardEnabled: boolean;
 }

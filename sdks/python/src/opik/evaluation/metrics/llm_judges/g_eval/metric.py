@@ -21,6 +21,8 @@ class GEval(base_metric.BaseMetric):
         name: str = "g_eval_metric",
         track: bool = True,
         project_name: Optional[str] = None,
+        temperature: float = 0.0,
+        seed: Optional[int] = None,
     ):
         """
         A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
@@ -36,20 +38,23 @@ class GEval(base_metric.BaseMetric):
             name: The name of the metric.
             track: Whether to track the metric. Defaults to True.
             project_name: Optional project name to track the metric in for the cases when
-                there are no parent span/trace to inherit project name from.
+                there is no parent span/trace to inherit project name from.
+            temperature: The temperature to use for the model. Defaults to 0.0.
+            seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
         """
         super().__init__(
             name=name,
             track=track,
             project_name=project_name,
         )
-        self._init_model(model)
-
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
-        self._log_probs_supported = False
+        self._seed = seed
 
+        self._log_probs_supported = False
         self._chain_of_thought_response: Optional[str] = None
+
+        self._init_model(model, temperature=temperature)
 
     def llm_chain_of_thought(self) -> str:
         if self._chain_of_thought_response is None:
@@ -62,7 +67,7 @@ class GEval(base_metric.BaseMetric):
         return self._chain_of_thought_response
 
     async def allm_chain_of_thought(self) -> str:
-        if not self._chain_of_thought_response:
+        if self._chain_of_thought_response is None:
             prompt = template.G_EVAL_COT_TEMPLATE.format(
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
@@ -74,12 +79,16 @@ class GEval(base_metric.BaseMetric):
         return self._chain_of_thought_response
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            model_kwargs = {"temperature": temperature}
+            if self._seed is not None:
+                model_kwargs["seed"] = self._seed
+
+            self._model = models_factory.get(model_name=model, **model_kwargs)
 
         if (
             hasattr(self._model, "supported_params")
@@ -119,17 +128,18 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
-            model_output = self._model.generate_provider_response(
+            with base_model.get_provider_response(
+                model_provider=self._model,
                 messages=request,
                 logprobs=self._log_probs_supported,
                 top_logprobs=20 if self._log_probs_supported else None,
                 response_format=GEvalScoreFormat,
-            )
-            return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=self._log_probs_supported,
-            )
+            ) as model_output:
+                return parser.parse_litellm_model_output(
+                    content=model_output,
+                    name=self.name,
+                    log_probs_supported=self._log_probs_supported,
+                )
 
         model_output_string = self._model.generate_string(
             input=llm_query, response_format=GEvalScoreFormat
@@ -166,17 +176,18 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
-            model_output = await self._model.agenerate_provider_response(
+            async with base_model.aget_provider_response(
+                model_provider=self._model,
                 messages=request,
                 logprobs=self._log_probs_supported,
                 top_logprobs=20 if self._log_probs_supported else None,
                 response_format=GEvalScoreFormat,
-            )
-            return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=self._log_probs_supported,
-            )
+            ) as model_output:
+                return parser.parse_litellm_model_output(
+                    content=model_output,
+                    name=self.name,
+                    log_probs_supported=self._log_probs_supported,
+                )
 
         model_output_string = await self._model.agenerate_string(
             input=llm_query, response_format=GEvalScoreFormat

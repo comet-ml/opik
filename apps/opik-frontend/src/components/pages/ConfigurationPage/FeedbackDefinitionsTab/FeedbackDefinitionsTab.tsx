@@ -5,7 +5,7 @@ import capitalize from "lodash/capitalize";
 
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
-import FeedbackDefinitionsValueCell from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsValueCell";
+import FeedbackDefinitionsValueCell from "@/components/shared/DataTableCells/FeedbackDefinitionsValueCell";
 import FeedbackDefinitionsRowActionsCell from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsRowActionsCell";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -50,6 +50,11 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
   },
   {
     id: "type",

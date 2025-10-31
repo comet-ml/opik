@@ -1,6 +1,6 @@
 import langchain_anthropic
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
@@ -107,15 +107,12 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                         input={
                             "messages": [
                                 [
-                                    {
-                                        "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                        "additional_kwargs": {},
-                                        "response_metadata": {},
-                                        "type": "human",
-                                        "name": None,
-                                        "id": None,
-                                        "example": False,
-                                    }
+                                    ANY_DICT.containing(
+                                        {
+                                            "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                            "type": "human",
+                                        }
+                                    ),
                                 ]
                             ]
                         },
@@ -157,6 +154,8 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
         max_tokens=100,
         model_name=MODEL_FOR_TESTS_FULL,
         name="custom-anthropic-llm-name",
+        streaming=True,
+        stream_usage=True,
     )
 
     template = (
@@ -224,15 +223,12 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                         input={
                             "messages": [
                                 [
-                                    {
-                                        "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                        "additional_kwargs": {},
-                                        "response_metadata": {},
-                                        "type": "human",
-                                        "name": None,
-                                        "id": None,
-                                        "example": False,
-                                    }
+                                    ANY_DICT.containing(
+                                        {
+                                            "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                            "type": "human",
+                                        }
+                                    ),
                                 ]
                             ]
                         },

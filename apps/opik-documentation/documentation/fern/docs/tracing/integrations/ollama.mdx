@@ -1,24 +1,17 @@
+---
+title: Observability for Ollama with Opik
+description: Start here to integrate Opik into your Ollama-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [Ollama](https://ollama.com/) allows users to run, interact with, and deploy AI models locally on their machines without the need for complex infrastructure or cloud dependencies.
 
-There are multiple ways to interact with Ollama from Python including but not limited to the [ollama python package](https://pypi.org/project/ollama/), [LangChain](https://python.langchain.com/docs/integrations/providers/ollama/) or by using the [OpenAI library](https://github.com/ollama/ollama/blob/main/docs/openai.md). We will cover how to trace your LLM calls for each of these methods.
+There are multiple ways to interact with Ollama from Python including but not limited to the [ollama python package](https://pypi.org/project/ollama/), [LangChain](https://python.langchain.com/docs/integrations/providers/ollama/) or by using the [OpenAI library](https://docs.ollama.com/api/openai-compatibility#openai-python-library). We will cover how to trace your LLM calls for each of these methods.
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ollama.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=ollama&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=ollama&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=ollama&utm_campaign=opik) for more information.
 
 ## Getting started
 
@@ -28,20 +21,22 @@ Before starting, you will need to have an Ollama instance running. You can insta
 
 Once Ollama is running, you can download the llama3.1 model by running `ollama pull llama3.1`. For a full list of models available on Ollama, please refer to the [Ollama library](https://ollama.com/library).
 
-### Configure Opik
+### Installation
 
-You will also need to have Opik installed. You can install and configure it by running the following command:
+You will also need to have Opik installed. You can install it by running:
 
 ```bash
-pip install --upgrade --quiet opik
-
-opik configure
+pip install opik
 ```
 
-<Tip>
-  Opik is fully open-source and can be run locally or through the Opik Cloud platform. You can learn more about hosting
-  Opik on your own infrastructure in the [self-hosting guide](/self-host/overview).
-</Tip>
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
 
 ## Tracking Ollama calls made with Ollama Python Package
 
@@ -97,11 +92,13 @@ Ollama is compatible with the OpenAI format and can be used with the OpenAI Pyth
 ```python
 from openai import OpenAI
 from opik.integrations.openai import track_openai
+import os
+
+os.environ["OPIK_PROJECT_NAME"] = "ollama-integration"
 
 # Create an OpenAI client
 client = OpenAI(
     base_url='http://localhost:11434/v1/',
-
     # required but ignored
     api_key='ollama',
 )
@@ -119,6 +116,8 @@ chat_completion = client.chat.completions.create(
     ],
     model='llama3.1',
 )
+
+print(chat_completion.choices[0].message.content)
 ```
 
 The local LLM call is now traced and logged to Opik.

@@ -11,6 +11,7 @@ import {
   LLMVertexAIConfigsType,
   LLMCustomConfigsType,
   PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
 
 import {
@@ -31,6 +32,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
+  model?: PROVIDER_MODEL_TYPE | "";
   size?: ButtonProps["size"];
   configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
@@ -38,6 +40,7 @@ interface PromptModelConfigsProps {
 
 const PromptModelConfigs = ({
   provider,
+  model,
   size = "icon-sm",
   configs,
   onChange,
@@ -47,6 +50,7 @@ const PromptModelConfigs = ({
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
+          model={model}
           onChange={onChange}
         />
       );
@@ -57,6 +61,7 @@ const PromptModelConfigs = ({
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
           onChange={onChange}
+          model={model}
         />
       );
     }

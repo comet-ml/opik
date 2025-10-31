@@ -10,12 +10,16 @@ import {
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
+import { IMAGE_TAG_START, IMAGE_TAG_END } from "@/lib/llm";
+import { DATA_IMAGE_REGEX, IMAGE_URL_REGEX } from "@/lib/images";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import mustache from "mustache";
 import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
+import { parseCompletionOutput } from "@/lib/playground";
+import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -48,9 +52,10 @@ const transformMessageIntoProviderMessage = (
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
 
-  return {
-    role: message.role,
-    content: mustache.render(
+  // Wrap any raw image URLs or base64 data in the content with <<<image>>>...<<</image>>> tags
+  // This is needed when using datasets with images where mustache directly inserts image data
+  const renderedContent = wrapImageUrlsWithTags(
+    mustache.render(
       message.content,
       serializedDatasetItem,
       {},
@@ -59,7 +64,63 @@ const transformMessageIntoProviderMessage = (
         escape: (val: string) => val,
       },
     ),
+  );
+
+  return {
+    role: message.role,
+    content: renderedContent,
   };
+};
+
+/**
+ * Wraps raw image URLs and base64 data URLs in the content with <<<image>>>...<<</image>>> tags.
+ * Detects both:
+ * - data:image/...;base64,... (base64 encoded images)
+ * - http(s)://... image URLs
+ * - [image_N] placeholders (from processInputData)
+ */
+const wrapImageUrlsWithTags = (content: string): string => {
+  /**
+   * Replacer function that wraps matches with image tags if not already wrapped.
+   * Checks the surrounding context at the match position to avoid double-wrapping.
+   */
+  const wrapIfNotAlreadyWrapped = (
+    match: string,
+    offset: number,
+    string: string,
+  ): string => {
+    const prefix = string.slice(
+      Math.max(0, offset - IMAGE_TAG_START.length),
+      offset,
+    );
+    const suffix = string.slice(
+      offset + match.length,
+      offset + match.length + IMAGE_TAG_END.length,
+    );
+
+    // Already wrapped at this position
+    if (prefix === IMAGE_TAG_START && suffix === IMAGE_TAG_END) {
+      return match;
+    }
+
+    return `${IMAGE_TAG_START}${match}${IMAGE_TAG_END}`;
+  };
+
+  let processedContent = content;
+
+  // Wrap data URLs
+  processedContent = processedContent.replace(
+    DATA_IMAGE_REGEX,
+    wrapIfNotAlreadyWrapped,
+  );
+
+  // Wrap HTTP(S) image URLs
+  processedContent = processedContent.replace(
+    IMAGE_URL_REGEX,
+    wrapIfNotAlreadyWrapped,
+  );
+
+  return processedContent;
 };
 
 interface UsePromptDatasetItemCombinationArgs {
@@ -67,6 +128,7 @@ interface UsePromptDatasetItemCombinationArgs {
   isToStop: boolean;
   workspaceName: string;
   datasetName: string | null;
+  selectedRuleIds: string[] | null;
   addAbortController: (key: string, value: AbortController) => void;
   deleteAbortController: (key: string) => void;
 }
@@ -76,10 +138,12 @@ const usePromptDatasetItemCombination = ({
   isToStop,
   workspaceName,
   datasetName,
+  selectedRuleIds,
   addAbortController,
   deleteAbortController,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
+  const hydrateDatasetItemData = useHydrateDatasetItemData();
 
   // the reason why we need ref here is that the value is taken in a deep callback
   // the prop is just taken as the value on the moment of creation
@@ -123,7 +187,7 @@ const usePromptDatasetItemCombination = ({
       const controller = new AbortController();
 
       const datasetItemId = datasetItem?.id || "";
-      const datasetItemData = datasetItem?.data || {};
+      const datasetItemData = await hydrateDatasetItemData(datasetItem);
       const key = `${datasetItemId}-${prompt.id}`;
 
       addAbortController(key, controller);
@@ -157,9 +221,6 @@ const usePromptDatasetItemCombination = ({
           },
         });
 
-        const error =
-          run.opikError || run.providerError || run.pythonProxyError;
-
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
         });
@@ -174,10 +235,17 @@ const usePromptDatasetItemCombination = ({
           promptId: prompt.id,
           datasetName,
           datasetItemId: datasetItemId,
+          selectedRuleIds,
+          datasetItemData,
         });
 
-        if (error) {
-          throw new Error(error);
+        if (
+          run.opikError ||
+          run.providerError ||
+          run.pythonProxyError ||
+          !run.result
+        ) {
+          throw new Error(parseCompletionOutput(run));
         }
       } catch (error) {
         const typedError = error as Error;
@@ -192,11 +260,13 @@ const usePromptDatasetItemCombination = ({
     },
 
     [
+      hydrateDatasetItemData,
       addAbortController,
       updateOutput,
       runStreaming,
       datasetName,
       deleteAbortController,
+      selectedRuleIds,
     ],
   );
 

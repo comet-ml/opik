@@ -5,7 +5,8 @@ import re
 import sys
 import typing
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Optional
+from collections.abc import Callable
 
 from rich import box
 from rich.console import Console, Group
@@ -71,9 +72,9 @@ class BenchmarkLogger:
 
     def setup_logger(
         self,
-        demo_datasets: List[str],
-        optimizers: List[str],
-        models: List[str],
+        demo_datasets: list[str],
+        optimizers: list[str],
+        models: list[str],
         test_mode: bool,
         run_id: str,
     ) -> None:
@@ -82,11 +83,12 @@ class BenchmarkLogger:
         self.models = (models,)
         self.test_mode = test_mode
         self.run_id = run_id
-        self.tasks_status: Dict[Any, Any] = {}
-        self.result_panels: List[Panel] = []
+        self.tasks_status: dict[Any, Any] = {}
+        self.result_panels: list[Panel] = []
+        self.completed_tasks_count = {"Success": 0, "Failed": 0}
 
     def _calculate_percentage_change(
-        self, initial: Optional[float], final: Optional[float], metric_name: str
+        self, initial: float | None, final: float | None, metric_name: str
     ) -> Text:
         """Calculate the percentage change between two values."""
 
@@ -164,6 +166,15 @@ class BenchmarkLogger:
             "status": status,
         }
 
+    def remove_active_task_status(
+        self, future: Any, final_status: str | None = None
+    ) -> None:
+        if future in self.tasks_status:
+            # Track completed tasks before removing
+            if final_status in ("Success", "Failed"):
+                self.completed_tasks_count[final_status] += 1
+            del self.tasks_status[future]
+
     def _generate_live_display_message(self) -> Group:
         active_list = []
         for status_info in self.tasks_status.values():
@@ -193,12 +204,8 @@ class BenchmarkLogger:
         nb_active_tasks = len(
             [x for x in self.tasks_status.values() if x["status"] == "Running"]
         )
-        nb_success_tasks = len(
-            [x for x in self.tasks_status.values() if x["status"] == "Success"]
-        )
-        nb_failed_tasks = len(
-            [x for x in self.tasks_status.values() if x["status"] == "Failed"]
-        )
+        nb_success_tasks = self.completed_tasks_count["Success"]
+        nb_failed_tasks = self.completed_tasks_count["Failed"]
         summary_line = Text(
             f"Run: {self.run_id} | Tasks: {nb_success_tasks + nb_failed_tasks}/{self.total_tasks} | Success: {nb_success_tasks} | Failed: {nb_failed_tasks} | Active: {nb_active_tasks}",
             style="dim",
@@ -354,7 +361,7 @@ class BenchmarkLogger:
                 Text.assemble(f" • {metric_name}: ", percent_change_text)
             )
 
-        score_rows: List[Text | Group] = []
+        score_rows: list[Text | Group] = []
         if initial_scores_grp:
             score_rows.append(Text("Initial Scores:", style="underline"))
             score_rows.append(Group(*initial_scores_grp))
@@ -401,7 +408,7 @@ class BenchmarkLogger:
         )
 
         # Add error message if available
-        error_panel: Union[Panel, Text]
+        error_panel: Panel | Text
         if task_detail_data.error_message:
             error_panel = Panel(
                 Text(task_detail_data.error_message, style="red", overflow="fold"),
@@ -428,7 +435,7 @@ class BenchmarkLogger:
         return None
 
     def print_benchmark_footer(
-        self, results: List["TaskResult"], total_duration: float
+        self, results: list["TaskResult"], total_duration: float
     ) -> None:
         """Print footer with stats, pivoted results table, and individual panels+prompts."""
         successful_tasks = len([x for x in results if x.status == "Success"])

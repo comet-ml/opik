@@ -47,7 +47,7 @@ export const SelectBox = <ValueType extends string>({
         id={id}
         className={cn(
           variantClass,
-          "data-[placeholder]:text-light-slate",
+          "data-[placeholder]:text-light-slate data-[placeholder]:dark:disabled:text-muted-gray",
           className,
         )}
       >

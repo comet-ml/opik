@@ -1,0 +1,107 @@
+---
+title: Annotation Queues
+subtitle: >-
+  Enable subject matter experts to review and annotate agent outputs with easy queues, 
+  invitations, and a clean annotation UI
+---
+
+Involving subject matter experts in AI projects is essential because they provide the domain knowledge and contextual judgment that ensures model outputs are accurate, relevant, and aligned with real-world expectations. Annotation Queues in Opik make it simple for subject matter experts (SMEs) to review and annotate agent outputs. This feature streamlines the human-in-the-loop process by providing easy queue management, simple invitation flows, and a distraction-free annotation experience designed for non-technical users.
+
+![SME Annotation Flow](/img/evaluation/sme_flow_annotating.gif)
+
+Annotation Queues are collections of traces or threads that need human review and feedback. They enable you to organize content for review, share with SMEs easily, collect structured feedback, and track progress across all your evaluation workflows.
+
+## Creating and Managing Annotation Queues
+
+Each annotation queue is defined by a collection of traces or threads, evaluation instructions, and feedback definitions:
+
+1. **Queue Configuration**: Set up the queue with clear instructions and scope
+2. **Content Selection**: Add traces or threads that need human review
+3. **SME Access**: Share queue links with subject matter experts for annotation
+
+### Setting Up Your First Queue
+
+Navigate to the **Annotation Queues** page in your project and click **Create Queue**.
+
+<Frame>
+  <img src="/img/evaluation/create_new_annotation_queue.png" />
+</Frame>
+
+Configure your queue with:
+
+- **Name**: Clear identification for your queue
+- **Scope**: Choose between traces or threads
+- **Instructions**: Provide context and guidance for reviewers
+- **Feedback Definitions**: Select the metrics SMEs will use for scoring
+
+### Adding Content to Your Queue
+
+You can add items to your queue in several ways:
+
+**From Traces/Threads Lists:**
+
+- Select one or multiple items
+- Click **Add to -> Add to annotation queue**
+- Choose an existing queue or create a new one
+
+**From Individual Trace/Thread Details:**
+
+- Open the trace or thread detail view
+- Click **Add to -> Add to annotation queue** in the actions panel
+- Select your target queue
+
+<Frame>
+  <img src="/img/evaluation/add_to_annotation_queue.png" />
+</Frame>
+
+### Sharing with Subject Matter Experts
+
+Once your queue is set up, you can share it with SMEs:
+
+**Copy Queue Link:**
+
+<Tip>
+  **SME Access Required**: Subject matter experts must be invited to your
+  workspace before they can access annotation queues. Make sure to invite them
+  to your project first, then share the queue link.
+</Tip>
+
+- Click the **Share queue** button on your queue to copy the queue link
+- Share the link directly with SMEs via email, Slack, or other communication tools
+
+## SME Annotation Experience
+
+When SMEs access a queue, they experience a streamlined, distraction-free interface designed for efficient review.
+
+<Frame>
+  <img src="/img/evaluation/sme_instruction_page.png" />
+</Frame>
+
+The annotation workflow begins with clear instructions and context, allowing SMEs to understand what they're evaluating and how to provide meaningful feedback.
+
+<Frame>
+  <img src="/img/evaluation/sme_annotation_page.png" />
+</Frame>
+
+The SME interface provides:
+
+1. **Clean, focused design**: No technical jargon or complex navigation
+2. **Clear instructions**: Queue-specific guidance displayed prominently
+3. **Structured feedback**: Predefined metrics with clear descriptions
+4. **Progress tracking**: Visual indicators of completion status
+5. **Comment system**: Optional text feedback for additional context
+
+### Annotation Workflow
+
+1. **Access the queue**: SME clicks the shared link
+2. **Review content**: Examine the trace or thread output
+3. **Provide feedback**: Score using predefined metrics
+4. **Add comments**: Optional text feedback
+5. **Submit and continue**: Move to the next item
+
+## Learn more
+
+You can learn more about Opik's annotation and evaluation features in:
+
+1. [Evaluation overview](/evaluation/overview)
+2. [Feedback definitions](/evaluation/feedback_definitions)

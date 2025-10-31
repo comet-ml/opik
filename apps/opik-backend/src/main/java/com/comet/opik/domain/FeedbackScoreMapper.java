@@ -38,10 +38,12 @@ public interface FeedbackScoreMapper {
     List<FeedbackScore> toFeedbackScores(List<? extends FeedbackScoreItem> feedbackScoreBatchItems);
 
     @Mapping(target = "id", source = "entityId")
+    @Mapping(target = "author", ignore = true)
     FeedbackScoreBatchItem toFeedbackScoreBatchItem(UUID entityId, String projectName,
             FeedbackScore feedbackScore);
 
     @Mapping(target = "id", source = "entityId")
+    @Mapping(target = "author", ignore = true)
     FeedbackScoreBatchItem toFeedbackScore(UUID entityId, UUID projectId, FeedbackScore score);
 
     /**
@@ -150,6 +152,7 @@ public interface FeedbackScoreMapper {
                             .lastUpdatedAt(Instant.parse(feedbackScore.get(7).toString()))
                             .createdBy(feedbackScore.get(8).toString())
                             .lastUpdatedBy(feedbackScore.get(9).toString())
+                            .valueByAuthor(parseValueByAuthor(feedbackScore.get(10)))
                             .build())
                     .toList();
             return feedbackScores.isEmpty() ? null : feedbackScores;

@@ -13,51 +13,183 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
 
 ## Setting Up Your Development Environment
 
-<Steps>
-  ### 1. Run External Dependencies
-  The backend relies on Clickhouse, MySQL, and Redis. You can start these using Docker Compose from the `deployment/docker-compose` directory in the repository:
-  
-  ```bash
-  cd deployment/docker-compose
-  
-  # Optionally, force a pull of the latest images
-  # docker compose pull
-  
-  docker compose up clickhouse redis mysql -d
-  ```
+We provide multiple ways to develop the backend. Choose the approach that best fits your workflow:
 
-### 2. Install Prerequisites for Backend Development
+<Tabs>
+  <Tab value="Local Process Mode" title="Local Process Mode (Recommended)">
+    **Best for rapid development**
 
-Ensure you have the following installed:
+    This mode runs the backend as a local process while infrastructure and other services run in Docker:
 
-- Java Development Kit (JDK) - Version specified in `pom.xml` (e.g., JDK 17 or newer)
-- Apache Maven - For building the project
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root - restart everything
+        scripts/dev-runner.sh --be-only-restart
 
-### 3. Build and Run the Backend Locally
+        # Or just start (faster if already built)
+        scripts/dev-runner.sh --be-only-start
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root - restart everything
+        scripts\dev-runner.ps1 --be-only-restart
 
-Navigate to the backend project directory and use Maven commands:
+        # Or just start (faster if already built)
+        scripts\dev-runner.ps1 --be-only-start
+        ```
+      </Tab>
+    </Tabs>
 
-```bash
-cd apps/opik-backend
+    The backend API will be accessible at `http://localhost:8080`.
 
-# Build the Opik application (compiles, runs tests, packages)
-mvn clean install
+    **Benefits:**
+    - Fast rebuilds and restarts
+    - Easy debugging
+    - Faster code changes without Docker container rebuilds
 
-# Start the Opik application server
-java -jar target/opik-backend-{project.pom.version}.jar server config.yml
-```
+    **Prerequisites:**
+    - Java Development Kit (JDK) 21
+    - Apache Maven 3.8+
+  </Tab>
 
-Replace `{project.pom.version}` with the actual version number found in the `pom.xml` file (e.g., `0.1.0-SNAPSHOT`).
-Once started, the Opik API should be accessible at `http://localhost:8080`.
+  <Tab value="Docker Mode" title="Docker Mode">
+    **Best for testing the complete system end to end**
+
+    This mode runs everything in Docker containers:
+
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root
+        ./opik.sh --build
+
+        # Or start without rebuilding
+        ./opik.sh
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root
+        .\opik.ps1 --build
+
+        # Or start without rebuilding
+        .\opik.ps1
+        ```
+      </Tab>
+    </Tabs>
+
+    The backend API will be accessible at `http://localhost:8080`.
+
+    **Benefits:**
+    - Closest to production environment
+    - No local Java/Maven installation needed
+    - Consistent environment across team
+
+    **Prerequisites:**
+    - Docker and Docker Compose
+  </Tab>
+
+  <Tab value="Manual Setup" title="Manual Setup">
+    **Best for understanding the build process**
+
+    Set up each component manually:
+
+    <Tabs>
+      <Tab title="Linux/Mac">
+        1. **Start infrastructure services:** The backend relies on Clickhouse, MySQL, and Redis etc.
+           ```bash
+           ./opik.sh --infra --port-mapping
+           ```
+
+        2. **Build the backend:**
+           ```bash
+           cd apps/opik-backend
+           mvn clean install
+           ```
+
+        3. **Run database migrations:**
+           ```bash
+           # MySQL migrations
+           java -jar target/opik-backend-*.jar db migrate config.yml
+
+           # ClickHouse migrations
+           java -jar target/opik-backend-*.jar dbAnalytics migrate config.yml
+           ```
+
+        4. **Start the backend:**
+           ```bash
+           java -jar target/opik-backend-*.jar server config.yml
+           ```
+      </Tab>
+      <Tab title="Windows">
+        1. **Start infrastructure services:** The backend relies on Clickhouse, MySQL, and Redis etc.
+           ```powershell
+           .\opik.ps1 --infra --port-mapping
+           ```
+
+        2. **Build the backend:**
+           ```powershell
+           cd apps\opik-backend
+           mvn clean install
+           ```
+
+        3. **Run database migrations:**
+           ```powershell
+           # MySQL migrations
+           java -jar target\opik-backend-*.jar db migrate config.yml
+
+           # ClickHouse migrations
+           java -jar target\opik-backend-*.jar dbAnalytics migrate config.yml
+           ```
+
+        4. **Start the backend:**
+           ```powershell
+           java -jar target\opik-backend-*.jar server config.yml
+           ```
+      </Tab>
+    </Tabs>
+
+    The backend API will be accessible at `http://localhost:8080`.
+
+    **Prerequisites:**
+    - Java Development Kit (JDK) 21
+    - Apache Maven 3.8+
+    - Docker and Docker Compose (for infrastructure)
+  </Tab>
+</Tabs>
+
+For comprehensive documentation on all development modes, troubleshooting, and advanced workflows, see our [Local Development Guide](/contributing/local-development).
 
 ### 4. Code Formatting
 
 We use Spotless for code formatting. Before submitting a PR, please ensure your code is formatted correctly:
 
-```bash
-cd apps/opik-backend
-mvn spotless:apply
-```
+<Tabs>
+  <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root
+        scripts/dev-runner.sh --lint-be
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root
+        scripts\dev-runner.ps1 --lint-be
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+  <Tab value="Manual Maven" title="Manual Maven">
+    ```bash
+    cd apps/opik-backend
+    mvn spotless:apply
+    ```
+  </Tab>
+</Tabs>
 
 Our CI (Continuous Integration) will check formatting using `mvn spotless:check` and fail the build if it's not correct.
 
@@ -76,8 +208,6 @@ Tests leverage the `testcontainers` library to run integration tests against rea
 
 After implementing your changes, ensuring tests pass, and code is formatted, commit your work and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
 
-</Steps>
-
 ## Advanced Backend Topics
 
 <AccordionGroup>
@@ -90,18 +220,52 @@ After implementing your changes, ensuring tests pass, and code is formatted, com
 
     - **Location**: Migrations are located at `apps/opik-backend/src/main/resources/liquibase/{{DB}}/migrations` (where `{{DB}}` is `db` for MySQL or `dbAnalytics` for ClickHouse).
     - **Automation**: Execution is typically automated via the `apps/opik-backend/run_db_migrations.sh` script, Docker images, and Helm charts in deployed environments.
-    - **Manual Execution**:
-      To run DDL migrations manually (replace `{project.pom.version}` and `{database}` as needed):
-      - Check pending migrations: `java -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
-      - Run migrations: `java -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
-      - Create schema tag: `java -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
-      - Rollback migrations: `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1` OR `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --tag {tag_name}`
-    - **Requirements for DDL Migrations**:
-      *   Must be backward compatible (new fields optional/defaulted, column removal in stages, no renaming of active tables/columns).
-      *   Must be independent of application code changes.
-      *   Must not cause downtime.
-      *   Must have a unique name.
-      *   Must contain a rollback statement (or use `empty` if Liquibase cannot auto-generate one). Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html) and [Liquibase Rollback Docs](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html).
+    
+    **Running Migrations in Local Development:**
+
+    <Tabs>
+      <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
+        <Tabs>
+          <Tab title="Linux/Mac">
+            ```bash
+            # From repository root
+            scripts/dev-runner.sh --migrate
+            ```
+          </Tab>
+          <Tab title="Windows">
+            ```powershell
+            # From repository root
+            scripts\dev-runner.ps1 --migrate
+            ```
+          </Tab>
+        </Tabs>
+
+        This command will:
+        - Start infrastructure services if needed
+        - Build the backend if no JAR file exists
+        - Run both MySQL and ClickHouse migrations automatically
+      </Tab>
+      <Tab value="Manual Execution" title="Manual Execution">
+        To run DDL migrations manually (replace `{project.pom.version}` and `{database}` as needed):
+
+        - **Check pending migrations:** `java -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
+        - **Run migrations:** `java -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
+        - **Create schema tag:** `java -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
+        - **Rollback migrations:** 
+          - `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1`
+          - OR `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --tag {tag_name}`
+
+        Where `{database}` is either `db` (for MySQL) or `dbAnalytics` (for ClickHouse).
+      </Tab>
+    </Tabs>
+
+    **Requirements for DDL Migrations:**
+    - Must be backward compatible (new fields optional/defaulted, column removal in stages, no renaming of active tables/columns).
+    - Must be independent of application code changes.
+    - Must not cause downtime.
+    - Must have a unique name.
+    - Must contain a rollback statement (or use `empty` if Liquibase cannot auto-generate one). Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html) and [Liquibase Rollback Docs](https://docs.liquibase.com/secure/user-guide-5-0/what-is-a-rollback).
+    - For more complex migration, apply the transition phase. Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html)
 
   </Accordion>
 

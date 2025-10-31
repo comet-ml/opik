@@ -47,9 +47,12 @@ class OpikConfigurator:
         # This URL set here might not be the final one.
         # It's possible that the URL will be extracted from the smart api key on the later stage.
         # In that case `self.base_url` field will be updated.
-        self.base_url = (
-            OPIK_BASE_URL_CLOUD if url is None else url_helpers.get_base_url(url)
-        )
+        if url is None:
+            self.base_url = (
+                OPIK_BASE_URL_LOCAL if self.use_local else OPIK_BASE_URL_CLOUD
+            )
+        else:
+            self.base_url = url_helpers.get_base_url(url)
 
     def configure(self) -> None:
         """
@@ -100,6 +103,8 @@ class OpikConfigurator:
                 self.current_config.config_file_fullpath,
             )
 
+        self._log_project_configuration_message()
+
     def _configure_local(self) -> None:
         """
         Configure the local Opik instance by setting the local URL and workspace.
@@ -116,6 +121,7 @@ class OpikConfigurator:
         # Step 1: If the URL is provided and active, update the configuration
         if url_was_provided and opik_rest_helpers.is_instance_active(self.base_url):
             self._update_config(save_to_file=self.force)
+            self._log_project_configuration_message()
             return
 
         # Step 2: Check if the default local instance is active
@@ -127,6 +133,7 @@ class OpikConfigurator:
                 LOGGER.info(
                     f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
                 )
+                self._log_project_configuration_message()
                 return
 
             # Step 3: Ask user if they want to use the found local instance
@@ -146,6 +153,7 @@ class OpikConfigurator:
             if use_url:
                 self.base_url = OPIK_BASE_URL_LOCAL
                 self._update_config()
+                self._log_project_configuration_message()
                 return
 
         # Step 4: Ask user for URL if no valid local instance is found or approved
@@ -155,6 +163,7 @@ class OpikConfigurator:
             )
         self._ask_for_url()
         self._update_config()
+        self._log_project_configuration_message()
 
     def _set_api_key(self) -> bool:
         """
@@ -401,6 +410,17 @@ class OpikConfigurator:
         except Exception as e:
             LOGGER.error(f"Failed to update config: {str(e)}")
             raise ConfigurationError("Failed to update configuration.")
+
+    def _log_project_configuration_message(self) -> None:
+        """
+        Log an informative message about project configuration after successful setup.
+        """
+        project_name = self.current_config.project_name
+
+        LOGGER.info(
+            f"Configuration completed successfully. Traces will be logged to '{project_name}' project. "
+            "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
+        )
 
     def _ask_for_url(self) -> None:
         """

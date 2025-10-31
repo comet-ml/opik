@@ -16,10 +16,19 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 
 type TryInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
+  ButtonComponent?: React.ComponentType<{
+    variant?: string;
+    size?: string;
+    disabled?: boolean;
+    onClick?: () => void;
+    children: React.ReactNode;
+    className?: string;
+  }>;
 };
 
 const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
   prompt,
+  ButtonComponent = Button,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -90,7 +99,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
 
   return (
     <>
-      <Button
+      <ButtonComponent
         variant="outline"
         size="sm"
         disabled={!prompt || isPendingProviderKeys}
@@ -103,9 +112,9 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
           }
         }}
       >
-        <Play className="mr-2 size-3.5" />
+        <Play className="mr-1.5 size-3.5" />
         Try in the Playground
-      </Button>
+      </ButtonComponent>
       <ConfirmDialog
         key={resetKeyRef.current}
         open={Boolean(open)}

@@ -904,11 +904,21 @@ class TestConfigureCloud:
         # Check config file wasn't overwritten, but session updated
         mock_update_config.assert_called_once_with(save_to_file=False)
 
-        # Check the logging message
-        mock_logger_info.assert_called_with(
-            "Opik is already configured. You can check the settings by viewing the config file at %s",
-            Path("/some/path/.opik.config"),
-        )
+        # Check the logging messages - should be called twice
+        expected_calls = [
+            (
+                "Opik is already configured. You can check the settings by viewing the config file at %s",
+                Path("/some/path/.opik.config"),
+            ),
+            (
+                f"Configuration completed successfully. Traces will be logged to '{mock_config_instance.project_name}' project. "
+                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+            ),
+        ]
+        assert mock_logger_info.call_count == 2
+        for i, expected_call in enumerate(expected_calls):
+            actual_call = mock_logger_info.call_args_list[i]
+            assert actual_call.args == expected_call
 
     @patch("opik.configurator.configure.OpikConfigurator._set_api_key")
     @patch("opik.configurator.configure.OpikConfigurator._set_workspace")
@@ -1098,6 +1108,26 @@ class TestConfigureLocal:
         assert configurator.base_url == "http://custom-local-instance.com/"
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    def test_configure_local__use_local_is_True__url_not_provided__use_default_localhost_url(
+        self, mock_is_instance_active, mock_update_config
+    ):
+        """
+        Test that the function configures the default localhost URL if use_local is True and url is not provided.
+        """
+        configurator = OpikConfigurator(use_local=True, force=False)
+        configurator._configure_local()
+
+        mock_update_config.assert_called_once()
+        mock_is_instance_active.assert_called_once_with(OPIK_BASE_URL_LOCAL)
+        assert configurator.api_key is None
+        assert configurator.base_url == OPIK_BASE_URL_LOCAL
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_url")
     @patch(
         "opik.configurator.configure.opik_rest_helpers.is_instance_active",
@@ -1124,9 +1154,21 @@ class TestConfigureLocal:
 
         mock_ask_for_url.assert_not_called()
         mock_is_instance_active.assert_called_once_with(OPIK_BASE_URL_LOCAL)
-        mock_logger_info.assert_called_once_with(
-            f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
-        )
+
+        # Check the logging messages - should be called twice
+        expected_calls = [
+            (
+                f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}.",
+            ),
+            (
+                f"Configuration completed successfully. Traces will be logged to '{mock_config_instance.project_name}' project. "
+                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+            ),
+        ]
+        assert mock_logger_info.call_count == 2
+        for i, expected_call in enumerate(expected_calls):
+            actual_call = mock_logger_info.call_args_list[i]
+            assert actual_call.args == expected_call
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
@@ -1354,3 +1396,74 @@ class TestOpikConfigurator:
 
         # Assert logger info was not called
         mock_logger_info.assert_not_called()
+
+
+class TestLogProjectConfigurationMessage:
+    @patch("opik.configurator.configure.LOGGER.info")
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    @patch("opik.configurator.configure._set_environment_variables_for_integrations")
+    def test_configure_cloud_calls_log_message_on_no_config_update(
+        self, mock_set_env_vars, mock_update_config, mock_logger_info
+    ):
+        """
+        Test that _log_project_configuration_message is called when cloud configuration doesn't update config.
+        """
+        configurator = OpikConfigurator(api_key="test_key", workspace="test_workspace")
+
+        # Mock the methods to simulate no config update needed
+        with (
+            patch.object(configurator, "_set_api_key", return_value=False),
+            patch.object(configurator, "_set_workspace", return_value=False),
+            patch.object(
+                configurator, "_log_project_configuration_message"
+            ) as mock_log_message,
+        ):
+            configurator._configure_cloud()
+
+            # Assert that the log message method was called
+            mock_log_message.assert_called_once()
+
+    @patch("opik.configurator.configure.LOGGER.info")
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    def test_configure_local_calls_log_message_on_provided_url(
+        self, mock_is_instance_active, mock_update_config, mock_logger_info
+    ):
+        """
+        Test that _log_project_configuration_message is called when local configuration uses provided URL.
+        """
+        configurator = OpikConfigurator(url="http://custom-url.com")
+
+        with patch.object(
+            configurator, "_log_project_configuration_message"
+        ) as mock_log_message:
+            configurator._configure_local()
+
+            # Assert that the log message method was called
+            mock_log_message.assert_called_once()
+
+    @patch("opik.configurator.configure.LOGGER.info")
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    def test_configure_local_calls_log_message_on_existing_config(
+        self, mock_is_instance_active, mock_update_config, mock_logger_info
+    ):
+        """
+        Test that _log_project_configuration_message is called when local instance is already configured.
+        """
+        configurator = OpikConfigurator()
+        configurator.current_config.url_override = OPIK_BASE_URL_LOCAL
+
+        with patch.object(
+            configurator, "_log_project_configuration_message"
+        ) as mock_log_message:
+            configurator._configure_local()
+
+            # Assert that the log message method was called
+            mock_log_message.assert_called_once()

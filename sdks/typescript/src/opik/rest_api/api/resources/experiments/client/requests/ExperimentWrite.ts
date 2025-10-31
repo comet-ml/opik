@@ -14,9 +14,10 @@ export interface ExperimentWrite {
     id?: string;
     datasetName: string;
     name?: string;
-    metadata?: OpikApi.JsonNodeWrite;
+    metadata?: OpikApi.JsonListStringWrite;
     type?: OpikApi.ExperimentWriteType;
     optimizationId?: string;
+    status?: OpikApi.ExperimentWriteStatus;
     promptVersion?: OpikApi.PromptVersionLinkWrite;
     promptVersions?: OpikApi.PromptVersionLinkWrite[];
 }

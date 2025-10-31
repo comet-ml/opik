@@ -1,8 +1,9 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useMatches, useNavigate } from "@tanstack/react-router";
 import copy from "clipboard-copy";
 import sortBy from "lodash/sortBy";
 import {
   Book,
+  Check,
   Copy,
   GraduationCap,
   Grip,
@@ -11,10 +12,10 @@ import {
   Settings,
   Shield,
   UserPlus,
+  Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -33,25 +34,32 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
+import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
-import useAppStore, { useSetAppUser } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
-import { buildUrl } from "./utils";
+import { buildUrl, isOnPremise, isProduction } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
+import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 
 const UserMenu = () => {
   const navigate = useNavigate();
+  const matches = useMatches();
   const { toast } = useToast();
-  const [openQuickstart, setOpenQuickstart] = useState(false);
+  const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
+    useThemeOptions();
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const setAppUser = useSetAppUser();
+  const hideUpgradeButton = matches.some(
+    (match) => match.staticData?.hideUpgradeButton,
+  );
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -78,14 +86,7 @@ const UserMenu = () => {
     { enabled: !!user?.loggedIn && !!workspace },
   );
 
-  useEffect(() => {
-    if (user && user.loggedIn) {
-      setAppUser({
-        apiKey: user.apiKeys[0],
-        userName: user.userName,
-      });
-    }
-  }, [user, setAppUser]);
+  const inviteMembersURL = useInviteMembersURL();
 
   if (
     !user ||
@@ -117,14 +118,8 @@ const UserMenu = () => {
 
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
-  const workspacePermissions = userPermissions.find(
-    (userPermission) => userPermission.workspaceName === workspaceName,
-  );
-  const invitePermission = workspacePermissions?.permissions.find(
-    (permission) => permission.permissionName === "invite_users_to_workspace",
-  );
-  const canInviteMembers =
-    isOrganizationAdmin || invitePermission?.permissionValue === "true";
+
+  const isAcademic = organization?.academic;
 
   const handleChangeOrganization = (newOrganization: Organization) => {
     const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
@@ -152,6 +147,35 @@ const UserMenu = () => {
     );
   };
 
+  const renderUpgradeButton = () => {
+    if (
+      isProduction() &&
+      !isOnPremise() &&
+      isOrganizationAdmin &&
+      !isAcademic &&
+      !hideUpgradeButton
+    ) {
+      return (
+        <a
+          href={buildUrl(
+            `organizations/${organization.id}/billing`,
+            workspaceName,
+            "&initialOpenUpgradeCard=true",
+          )}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Button size="sm" variant="special">
+            <Zap className="mr-1.5 size-3.5 shrink-0" />
+            Upgrade
+          </Button>
+        </a>
+      );
+    }
+
+    return null;
+  };
+
   const renderAppSelector = () => {
     return (
       <DropdownMenu>
@@ -168,14 +192,14 @@ const UserMenu = () => {
               className="flex cursor-pointer flex-row gap-3"
               onClick={handleSwitchToEM}
             >
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#6C6FF7] text-[8px] font-medium text-white">
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
                 EM
               </span>
               <span>Experiment management</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#52AEA4] text-[8px] font-medium text-white">
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-llm)] text-[8px] font-medium text-white">
                 LLM
               </span>
 
@@ -195,7 +219,7 @@ const UserMenu = () => {
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-secondary-foreground">
+              <span className="comet-body-s-accented truncate text-foreground">
                 {user.userName}
               </span>
             </TooltipWrapper>
@@ -295,14 +319,8 @@ const UserMenu = () => {
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {canInviteMembers ? (
-              <a
-                href={buildUrl(
-                  "account-settings/workspaces",
-                  workspaceName,
-                  `&initialInviteId=${workspace?.workspaceId}`,
-                )}
-              >
+            {inviteMembersURL ? (
+              <a href={inviteMembersURL}>
                 <DropdownMenuItem className="cursor-pointer">
                   <UserPlus className="mr-2 size-4" />
                   <span>Invite members</span>
@@ -313,7 +331,7 @@ const UserMenu = () => {
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem
-              onClick={() => setOpenQuickstart(true)}
+              onClick={openQuickstart}
               className="cursor-pointer"
             >
               <GraduationCap className="mr-2 size-4" />
@@ -330,7 +348,7 @@ const UserMenu = () => {
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-black text-xs">
+                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-border text-xs">
                   {organization?.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="comet-body-s truncate">
@@ -356,6 +374,34 @@ const UserMenu = () => {
               </DropdownMenuPortal>
             </DropdownMenuSub>
           </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
+                <CurrentIcon className="mr-2 size-4" />
+                <span>Theme</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent>
+                  {themeOptions.map(({ value, label, icon: Icon }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      className="cursor-pointer"
+                      onClick={() => handleThemeSelect(value)}
+                    >
+                      <div className="relative flex w-full items-center pl-6">
+                        {theme === value && (
+                          <Check className="absolute left-0 size-4" />
+                        )}
+                        <Icon className="mr-2 size-4" />
+                        <span>{label}</span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
+          </DropdownMenuGroup>
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {
@@ -375,7 +421,7 @@ const UserMenu = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer justify-center text-muted-slate"
+                className="cursor-pointer justify-center text-light-slate"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });
@@ -394,11 +440,10 @@ const UserMenu = () => {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-4">
+    <div className="flex shrink-0 items-center gap-3">
+      {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
-
-      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
     </div>
   );
 };

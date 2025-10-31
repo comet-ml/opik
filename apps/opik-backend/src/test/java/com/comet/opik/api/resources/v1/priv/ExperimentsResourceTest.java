@@ -12,8 +12,10 @@ import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -63,6 +65,7 @@ import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -75,17 +78,19 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.r2dbc.spi.Statement;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,8 +111,8 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -172,6 +177,7 @@ import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -243,13 +249,16 @@ class ExperimentsResourceTest {
     private DatasetResourceClient datasetResourceClient;
     private SpanResourceClient spanResourceClient;
     private TraceDeletedListener traceDeletedListener;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, TraceDeletedListener traceDeletedListener) {
+    void beforeAll(ClientSupport client, TraceDeletedListener traceDeletedListener,
+            TransactionTemplateAsync clickHouseTemplate) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.traceDeletedListener = traceDeletedListener;
+        this.clickHouseTemplate = clickHouseTemplate;
 
         ClientSupportUtils.config(client);
         defaultEventBus = contextConfig.mockEventBus();
@@ -1021,6 +1030,18 @@ class ExperimentsResourceTest {
                             Operator.CONTAINS,
                             "$.model[0].nullField",
                             "NUL"),
+                    Arguments.of(
+                            Operator.NOT_CONTAINS,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT 2.0"),
+                    Arguments.of(
+                            Operator.STARTS_WITH,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT"),
+                    Arguments.of(
+                            Operator.ENDS_WITH,
+                            "$.model[0].version",
+                            "Chat-GPT 4.0"),
                     Arguments.of(
                             Operator.GREATER_THAN,
                             "model[0].year",
@@ -2019,6 +2040,67 @@ class ExperimentsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("legacy experiments with unknown status should show up as completed")
+        void testUnknownStatusExperimentCanBeRetrieved() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            // simulate legacy experiment insertion with 'unknown' status directly in ClickHouse
+            Mono<Void> insertResult = clickHouseTemplate.nonTransaction(connection -> {
+                String insertSql = """
+                        INSERT INTO experiments (
+                            id,
+                            dataset_id,
+                            name,
+                            workspace_id,
+                            metadata,
+                            created_by,
+                            last_updated_by,
+                            prompt_version_id,
+                            prompt_id,
+                            prompt_versions,
+                            type,
+                            optimization_id,
+                            status
+                        ) VALUES (
+                            :id, :dataset_id, :name, :workspace_id, :metadata, :created_by, :last_updated_by,
+                            :prompt_version_id, :prompt_id, :prompt_versions, :type, :optimization_id, 'unknown'
+                        )
+                        """;
+
+                Statement statement = connection.createStatement(insertSql)
+                        .bind("id", experiment.id())
+                        .bind("dataset_id", experiment.datasetId())
+                        .bind("name", experiment.name())
+                        .bind("workspace_id", workspaceId)
+                        .bind("metadata", experiment.metadata().toString())
+                        .bind("created_by", USER)
+                        .bind("last_updated_by", USER)
+                        .bindNull("prompt_version_id", UUID.class)
+                        .bindNull("prompt_id", UUID.class)
+                        .bind("prompt_versions", new UUID[]{})
+                        .bind("type", ExperimentType.REGULAR)
+                        .bind("optimization_id", "");
+
+                return Mono.from(statement.execute())
+                        .then();
+            });
+
+            // Execute the insertion
+            StepVerifier.create(insertResult)
+                    .verifyComplete();
+
+            var actual = experimentResourceClient.streamExperiments(ExperimentStreamRequest.builder()
+                    .limit(5).name(experiment.name()).build(), apiKey, workspaceName);
+            assertThat(actual).hasSize(1);
+            assertThat(actual.getFirst().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        }
     }
 
     @Nested
@@ -2468,6 +2550,9 @@ class ExperimentsResourceTest {
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build())),
                     Arguments.of(List
                             .of(GroupBy.builder().field(METADATA).key("provider").type(FieldType.DICTIONARY).build())),
+                    Arguments.of(List
+                            .of(GroupBy.builder().field(METADATA).key("invalid key").type(FieldType.DICTIONARY)
+                                    .build())),
                     Arguments.of(List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build(),
                             GroupBy.builder().field(METADATA).key("something").type(FieldType.DICTIONARY).build())));
         }
@@ -4480,22 +4565,9 @@ class ExperimentsResourceTest {
             List<ExperimentItem> unexpectedExperimentItems,
             String apiKey,
             String workspaceName) {
-        try (var actualResponse = client.target(getExperimentItemsPath())
-                .path("stream")
-                .request()
-                .accept(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-            var actualExperimentItems = experimentResourceClient.getStreamed(
-                    actualResponse, EXPERIMENT_ITEM_TYPE_REFERENCE);
-
-            ExperimentTestAssertions.assertExperimentResults(actualExperimentItems, expectedExperimentItems,
-                    unexpectedExperimentItems, USER);
-        }
+        var actualExperimentItems = experimentResourceClient.streamExperimentItems(request, apiKey, workspaceName);
+        ExperimentTestAssertions.assertExperimentResults(actualExperimentItems, expectedExperimentItems,
+                unexpectedExperimentItems, USER);
     }
 
     private String getExperimentsPath() {
@@ -4916,6 +4988,399 @@ class ExperimentsResourceTest {
 
             assertThat(trace).isNotNull();
             assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
+        }
+
+        @Test
+        @DisplayName("Should add items to same experiment when same experiment ID used across multiple uploads")
+        void experimentItemsBulk__whenUsingSameExperimentIdAcrossMultipleUploads__thenAllItemsAddedToSameExperiment() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create multiple dataset items for the test
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Generate a UUID v7 for the experiment
+            var experimentId = podamFactory.manufacturePojo(UUID.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            // Create first bulk upload with the experiment ID
+            var trace1 = createTrace();
+            var span1 = creatrSpan();
+            var feedbackScore1 = createScore();
+
+            var bulkRecord1 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem1.id())
+                    .trace(trace1)
+                    .spans(List.of(span1))
+                    .feedbackScores(List.of(feedbackScore1))
+                    .build();
+
+            var bulkUpload1 = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .experimentId(experimentId) // Use the generated experiment ID
+                    .items(List.of(bulkRecord1))
+                    .build();
+
+            // Create second bulk upload with the same experiment ID
+            var trace2 = createTrace();
+            var span2 = creatrSpan();
+            var feedbackScore2 = createScore();
+
+            var bulkRecord2 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem2.id())
+                    .trace(trace2)
+                    .spans(List.of(span2))
+                    .feedbackScores(List.of(feedbackScore2))
+                    .build();
+
+            var bulkUpload2 = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .experimentId(experimentId) // Use the same experiment ID
+                    .items(List.of(bulkRecord2))
+                    .build();
+
+            // when - upload both batches
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload1, API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload2, API_KEY, TEST_WORKSPACE);
+
+            // then - verify both items were added to the same experiment
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperimentItems).hasSize(2);
+
+            // Verify all items belong to the same experiment
+            assertThat(actualExperimentItems)
+                    .allSatisfy(item -> assertThat(item.experimentId()).isEqualTo(experimentId));
+
+            // Verify the correct dataset items are present
+            var datasetItemIds = actualExperimentItems.stream()
+                    .map(ExperimentItem::datasetItemId)
+                    .collect(Collectors.toSet());
+            assertThat(datasetItemIds).containsExactlyInAnyOrder(datasetItem1.id(), datasetItem2.id());
+
+            // Verify the correct traces are present
+            var traceIds = actualExperimentItems.stream()
+                    .map(ExperimentItem::traceId)
+                    .collect(Collectors.toSet());
+            assertThat(traceIds).containsExactlyInAnyOrder(trace1.id(), trace2.id());
+        }
+
+        @Test
+        @DisplayName("Should fail when using same experiment ID with different dataset")
+        void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentDataset__thenReturnConflict() {
+            // given - Create first dataset and experiment
+            var dataset1 = podamFactory.manufacturePojo(Dataset.class);
+            var dataset1Id = datasetResourceClient.createDataset(dataset1, API_KEY, TEST_WORKSPACE);
+
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(dataset1Id)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset1.name(), null, List.of(datasetItem1)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Generate a UUID v7 for the experiment
+            var experimentId = podamFactory.manufacturePojo(UUID.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            var trace1 = createTrace();
+            var span1 = creatrSpan();
+            var feedbackScore1 = createScore();
+
+            var bulkRecord1 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem1.id())
+                    .trace(trace1)
+                    .spans(List.of(span1))
+                    .feedbackScores(List.of(feedbackScore1))
+                    .build();
+
+            var bulkUpload1 = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset1.name())
+                    .experimentId(experimentId) // Use the generated experiment ID
+                    .items(List.of(bulkRecord1))
+                    .build();
+
+            // Create second dataset
+            var dataset2 = podamFactory.manufacturePojo(Dataset.class);
+            var dataset2Id = datasetResourceClient.createDataset(dataset2, API_KEY, TEST_WORKSPACE);
+
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(dataset2Id)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset2.name(), null, List.of(datasetItem2)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create second bulk upload with the same experiment ID but different dataset
+            var trace2 = createTrace();
+            var span2 = creatrSpan();
+            var feedbackScore2 = createScore();
+            var bulkRecord2 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem2.id())
+                    .trace(trace2)
+                    .spans(List.of(span2))
+                    .feedbackScores(List.of(feedbackScore2))
+                    .build();
+
+            var bulkUpload2 = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset2.name()) // Different dataset!
+                    .experimentId(experimentId) // Same experiment ID
+                    .items(List.of(bulkRecord2))
+                    .build();
+
+            // when - upload first batch successfully
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload1, API_KEY, TEST_WORKSPACE);
+
+            // then - second upload should fail with conflict
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload2, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+
+                var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).contains(
+                        "Experiment '%s' belongs to dataset '%s', but request specifies dataset '%s'"
+                                .formatted(experimentId, dataset1.name(), dataset2.name()));
+            }
+
+            // Verify only the first experiment items were created
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperimentItems).hasSize(1);
+            assertThat(actualExperimentItems.getFirst().experimentId()).isEqualTo(experimentId);
+            assertThat(actualExperimentItems.getFirst().datasetItemId()).isEqualTo(datasetItem1.id());
+            assertThat(actualExperimentItems.getFirst().traceId()).isEqualTo(trace1.id());
+        }
+
+        @Test
+        @DisplayName("Should ignore different name when using same experiment ID with a different experiment name")
+        void experimentItemsBulk__whenUsingSameExperimentIdWithDifferentName__ignoreTheNewName() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create multiple dataset items for the test
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Generate a UUID v7 for the experiment
+            var experimentId = podamFactory.manufacturePojo(UUID.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            // Create first bulk upload with the experiment ID
+            var trace1 = createTrace();
+            var span1 = creatrSpan();
+            var feedbackScore1 = createScore();
+
+            var bulkRecord1 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem1.id())
+                    .trace(trace1)
+                    .spans(List.of(span1))
+                    .feedbackScores(List.of(feedbackScore1))
+                    .build();
+
+            var bulkUpload1 = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .experimentId(experimentId) // Use the generated experiment ID
+                    .items(List.of(bulkRecord1))
+                    .build();
+
+            // Create second bulk upload with the same experiment ID
+            var trace2 = createTrace();
+            var span2 = creatrSpan();
+            var feedbackScore2 = createScore();
+
+            var bulkRecord2 = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem2.id())
+                    .trace(trace2)
+                    .spans(List.of(span2))
+                    .feedbackScores(List.of(feedbackScore2))
+                    .build();
+
+            var anotherExperimentName = "Another Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkUpload2 = ExperimentItemBulkUpload.builder()
+                    .experimentName(anotherExperimentName)
+                    .datasetName(dataset.name())
+                    .experimentId(experimentId) // Use the same experiment ID
+                    .items(List.of(bulkRecord2))
+                    .build();
+
+            // when - upload both batches
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload1, API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload2, API_KEY, TEST_WORKSPACE);
+
+            // then - verify both items were added to the same experiment
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperimentItems).hasSize(2);
+
+            // Verify all items belong to the same experiment
+            assertThat(actualExperimentItems)
+                    .allSatisfy(item -> assertThat(item.experimentId()).isEqualTo(experimentId));
+
+            // Verify the correct dataset items are present
+            var datasetItemIds = actualExperimentItems.stream()
+                    .map(ExperimentItem::datasetItemId)
+                    .collect(Collectors.toSet());
+            assertThat(datasetItemIds).containsExactlyInAnyOrder(datasetItem1.id(), datasetItem2.id());
+
+            // Verify the correct traces are present
+            var traceIds = actualExperimentItems.stream()
+                    .map(ExperimentItem::traceId)
+                    .collect(Collectors.toSet());
+            assertThat(traceIds).containsExactlyInAnyOrder(trace1.id(), trace2.id());
+
+            assertThat(experimentResourceClient.getExperimentItems(anotherExperimentName, API_KEY, TEST_WORKSPACE))
+                    .isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Update Experiments:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdateExperiments {
+
+        @ParameterizedTest
+        @MethodSource("updateExperimentTestCases")
+        @DisplayName("when updating experiment with valid data, then experiment is updated correctly")
+        void updateExperiment_whenValidUpdate_thenExperimentUpdatedCorrectly(
+                ExperimentUpdate updateRequest,
+                Function<Experiment, Experiment> experimentSetter) {
+            // given
+            var originalMetadata = JsonUtils.getJsonNodeFromString("{\"original\": \"value\"}");
+            var initialExperiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .metadata(originalMetadata)
+                    .type(ExperimentType.REGULAR)
+                    .build();
+            var experimentId = experimentResourceClient.create(initialExperiment, API_KEY, TEST_WORKSPACE);
+
+            // when
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then
+            getAndAssert(experimentId, experimentSetter.apply(initialExperiment), TEST_WORKSPACE, API_KEY);
+        }
+
+        Stream<Arguments> updateExperimentTestCases() {
+            var updatedMetadata = JsonUtils.getJsonNodeFromString("{\"temperature\": 0.7, \"max_tokens\": 100}");
+
+            return Stream.of(
+                    // Update all fields
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .name("Updated Experiment")
+                                    .metadata(updatedMetadata)
+                                    .type(ExperimentType.TRIAL)
+                                    .status(ExperimentStatus.RUNNING)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .name("Updated Experiment")
+                                    .metadata(updatedMetadata)
+                                    .type(ExperimentType.TRIAL)
+                                    .status(ExperimentStatus.RUNNING)
+                                    .build()),
+                    // Update only name
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .name("New Name Only")
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .name("New Name Only")
+                                    .build()),
+                    // Update only metadata
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .metadata(updatedMetadata)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .metadata(updatedMetadata)
+                                    .build()),
+                    // Update only type
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .type(ExperimentType.MINI_BATCH)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .type(ExperimentType.MINI_BATCH)
+                                    .build()),
+                    // Update only status
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .status(ExperimentStatus.COMPLETED)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .status(ExperimentStatus.COMPLETED)
+                                    .build()),
+                    // Empty update
+                    arguments(ExperimentUpdate.builder().build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment));
+        }
+
+        @Test
+        @DisplayName("when updating non-existent experiment, then return 404")
+        void updateExperiment_whenNonExistentExperiment_thenReturn404() {
+            // given
+            var nonExistentId = UUID.randomUUID();
+            var experimentUpdate = ExperimentUpdate.builder()
+                    .name("Non-existent")
+                    .build();
+
+            // when & then
+            experimentResourceClient.updateExperiment(nonExistentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when updating experiment with invalid values, then return 400")
+        void updateExperiment_whenInvalidUpdate_thenReturn400(ExperimentUpdate experimentUpdate) {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            // when & then
+            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        private Stream<Arguments> updateExperiment_whenInvalidUpdate_thenReturn400() {
+            return Stream.of(
+                    arguments(named("blank name", ExperimentUpdate.builder().name("   ").build())));
         }
     }
 }

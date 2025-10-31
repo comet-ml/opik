@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { FeedbackScoreCompareSource } from "./FeedbackScoreCompareSource";
+import { ValueEntryCompare } from "./ValueEntryCompare";
 
 export const FeedbackScoreCompare: core.serialization.ObjectSchema<
     serializers.FeedbackScoreCompare.Raw,
@@ -20,6 +21,10 @@ export const FeedbackScoreCompare: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+    valueByAuthor: core.serialization.property(
+        "value_by_author",
+        core.serialization.record(core.serialization.string(), ValueEntryCompare).optional(),
+    ),
 });
 
 export declare namespace FeedbackScoreCompare {
@@ -33,5 +38,6 @@ export declare namespace FeedbackScoreCompare {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        value_by_author?: Record<string, ValueEntryCompare.Raw> | null;
     }
 }

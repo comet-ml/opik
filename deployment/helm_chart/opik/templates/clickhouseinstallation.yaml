@@ -5,7 +5,6 @@ metadata:
   name: {{ include "opik.name" $ }}-clickhouse
   namespace: {{ .Release.namespace }}
   labels:
-    component: clickhouse
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -92,6 +91,14 @@ spec:
             {{- with .Values.clickhouse.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- if .Values.clickhouse.livenessProbe }}
+            livenessProbe:
+              {{- toYaml .Values.clickhouse.livenessProbe | nindent 14 }}
+            {{- end }}
+            {{- if .Values.clickhouse.readinessProbe }}
+            readinessProbe:
+              {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
             {{- end }}
           {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup

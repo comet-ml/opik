@@ -9,6 +9,7 @@ import {
   PythonCodeDetailsThreadForm,
   PythonCodeDetailsTraceForm,
 } from "@/types/automations";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
@@ -23,7 +24,7 @@ export const LLM_MESSAGE_ROLE_NAME_MAP = {
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
@@ -31,13 +32,13 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
 
 export const DEFAULT_ANTHROPIC_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
 };
 
 export const DEFAULT_GEMINI_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
 };
 
@@ -61,11 +62,27 @@ export const DEFAULT_VERTEX_AI_CONFIGS = {
 
 export const DEFAULT_CUSTOM_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
 };
+
+// Reasoning models that require temperature = 1.0
+// These models do not support temperature = 0 and will fail if used
+export const REASONING_MODELS = [
+  // GPT-5 family
+  PROVIDER_MODEL_TYPE.GPT_5,
+  PROVIDER_MODEL_TYPE.GPT_5_MINI,
+  PROVIDER_MODEL_TYPE.GPT_5_NANO,
+  PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+  // O* reasoning models
+  PROVIDER_MODEL_TYPE.GPT_O1,
+  PROVIDER_MODEL_TYPE.GPT_O1_MINI,
+  PROVIDER_MODEL_TYPE.GPT_O3,
+  PROVIDER_MODEL_TYPE.GPT_O3_MINI,
+  PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+] as const;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
@@ -77,7 +94,7 @@ export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
       id: "kYZITG1",
       role: LLM_MESSAGE_ROLE.user,
       content:
-        "You are an impartial AI judge. Evaluate if the assistant's output effectively addresses the user's input. Consider: accuracy, completeness, and relevance. Provide a score (1-10) and explain your reasoning in one clear sentence.\n" +
+        "You are an impartial AI judge. Evaluate if the assistant's output effectively addresses the user's input. Consider: accuracy, completeness, and relevance. Provide a binary score (true/false) and explain your reasoning in one clear sentence.\n" +
         "\n" +
         "INPUT:\n" +
         "{{input}}\n" +
@@ -94,8 +111,8 @@ export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
     {
       name: "Correctness",
       description:
-        "Correctness score identifies the LLM output addresses the input",
-      type: LLM_SCHEMA_TYPE.INTEGER,
+        "Whether the assistant's output effectively addresses the user's input",
+      type: LLM_SCHEMA_TYPE.BOOLEAN,
       unsaved: false,
     },
   ],
@@ -113,14 +130,10 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
       content:
         'Based on the given list of message exchanges between a User and an LLM, generate a JSON object that indicates **{WHAT_YOU_WANT_TO_MEASURE}** (e.g. "whether the last assistant message is relevant", "whether the user is frustrated", "overall hallucination severity", etc.).\n' +
         "\n" +
-        "** Example Scoring Scale: **\n" +
-        "For each evaluation dimension, assign a score between 0.0 and 1.0, where:\n" +
-        "- 1.0 = Maximum intensity/presence of the measured quality\n" +
-        "- 0.8-0.9 = High intensity with clear indicators\n" +
-        "- 0.6-0.7 = Moderate intensity with noticeable signs\n" +
-        "- 0.4-0.5 = Mild intensity with subtle indicators\n" +
-        "- 0.2-0.3 = Minimal intensity with limited evidence\n" +
-        "- 0.0-0.1 = No intensity or absence of the measured quality\n" +
+        "** Example Binary Scoring Scale: **\n" +
+        "For each evaluation dimension, provide a binary score (true/false), where:\n" +
+        "- true = The measured quality is present or the condition is met\n" +
+        "- false = The measured quality is absent or the condition is not met\n" +
         "\n" +
         "** Context Analysis Guidelines: **\n" +
         "- Consider the full conversational context and nuances from all messages\n" +
@@ -131,11 +144,11 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
         "\n" +
         "** Internal Evaluation Process: **\n" +
         "For each dimension you're measuring, internally generate an evaluation that includes:\n" +
-        "- A score (0.0-1.0) based on the criteria above\n" +
-        "- Brief reasoning for the score based on specific evidence from the conversation\n" +
+        "- A binary decision (true/false) based on the criteria above\n" +
+        "- Brief reasoning for the decision based on specific evidence from the conversation\n" +
         "- These internal evaluations are for analysis only - do NOT include them in the final output\n" +
         "\n" +
-        "After generating internal evaluations, calculate the final scores for each dimension.\n" +
+        "After generating internal evaluations, calculate the final binary scores for each dimension.\n" +
         "\n" +
         "** Guidelines for Final Results: **\n" +
         "- Make sure to only return in JSON format\n" +
@@ -144,7 +157,7 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
         "- You should CONCISELY summarize the evidence to justify the score\n" +
         "- Be confident in your reasoning, referencing specific messages that support your evaluation\n" +
         "- You should mention LLM response instead of `assistant`, and User instead of `user`\n" +
-        "- You should format scores to use 1 decimal place in the reason\n" +
+        "- You should format scores as true/false in the reason\n" +
         "- You MUST provide a 'reason' for each score in the format: 'The score is <score_value> because <your_reason>.'\n" +
         "\n" +
         "** Final Output Format: **\n" +
@@ -154,8 +167,8 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
         "```json\n" +
         "{\n" +
         '    "{score_name}": {\n' +
-        '        "score": <score_value>,\n' +
-        '        "reason": "The score is <score_value> because <your_reason>."\n' +
+        '        "score": <true_or_false>,\n' +
+        '        "reason": "The score is <true_or_false> because <your_reason>."\n' +
         "    }\n" +
         "}\n" +
         "```\n" +
@@ -164,16 +177,16 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
         "```json\n" +
         "{\n" +
         '    "{score_name_1}": {\n' +
-        '        "score": <score_value_1>,\n' +
-        '        "reason": "The score is <score_value_1> because <your_reason_1>."\n' +
+        '        "score": <true_or_false_1>,\n' +
+        '        "reason": "The score is <true_or_false_1> because <your_reason_1>."\n' +
         "    },\n" +
         '    "{score_name_2}": {\n' +
-        '        "score": <score_value_2>,\n' +
-        '        "reason": "The score is <score_value_2> because <your_reason_2>."\n' +
+        '        "score": <true_or_false_2>,\n' +
+        '        "reason": "The score is <true_or_false_2> because <your_reason_2>."\n' +
         "    },\n" +
         '    "{score_name_3}": {\n' +
-        '        "score": <score_value_3>,\n' +
-        '        "reason": "The score is <score_value_3> because <your_reason_3>."\n' +
+        '        "score": <true_or_false_3>,\n' +
+        '        "reason": "The score is <true_or_false_3> because <your_reason_3>."\n' +
         "    }\n" +
         "}\n" +
         "```\n" +
@@ -365,6 +378,42 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
         description:
           "Answer relevance score checks if the output is relevant to the question",
         type: LLM_SCHEMA_TYPE.INTEGER,
+        unsaved: false,
+      },
+    ],
+  },
+  {
+    label: "Structured Output Compliance",
+    description:
+      "Checks if the output follows a defined JSON or JSON-LD structure",
+    value: LLM_JUDGE.structure_compliance,
+    messages: [
+      {
+        id: "kYZITG6",
+        role: LLM_MESSAGE_ROLE.user,
+        content:
+          `You are an expert in evaluating structured data. Your task is to determine whether the OUTPUT is a valid JSON or JSON-LD object and conforms to the expected structure.\n\n` +
+          `Expected Schema (for context):\n` +
+          `{{context}}\n\n` +
+          `OUTPUT:\n` +
+          `{{output}}\n\n` +
+          `Your response should be JSON in the format:\n` +
+          `{\n` +
+          `  "score": true or false,\n` +
+          `  "reason": ["optional reason if false"]\n` +
+          `}`,
+      },
+    ],
+    variables: {
+      context: "",
+      output: "",
+    },
+    schema: [
+      {
+        name: "Structure Compliance",
+        description:
+          "Returns True if the output follows the expected structure",
+        type: LLM_SCHEMA_TYPE.BOOLEAN,
         unsaved: false,
       },
     ],

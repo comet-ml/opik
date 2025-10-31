@@ -16,6 +16,7 @@ export type SearchInputProps = {
   className?: string;
   dimension?: InputProps["dimension"];
   variant?: "default" | "ghost";
+  size?: "sm" | "md";
 };
 
 export const SearchInput = ({
@@ -26,6 +27,7 @@ export const SearchInput = ({
   className,
   dimension,
   variant = "default",
+  size = "md",
 }: SearchInputProps) => {
   return (
     <div className={cn("relative w-full", className)}>
@@ -33,7 +35,7 @@ export const SearchInput = ({
         <Search className="size-3.5 text-muted-slate" />
       </div>
       <DebounceInput
-        className="px-8"
+        className={cn("px-8", size === "sm" && "h-8")}
         delay={SEARCH_TEXT_DELAY}
         onValueChange={setSearchText as (value: unknown) => void}
         placeholder={placeholder}

@@ -1,5 +1,4 @@
 import sys
-from typing import List, Optional
 
 from rich.console import Console
 from rich.style import Style
@@ -13,11 +12,11 @@ console = Console(
 
 
 def ask_for_input_confirmation(
-    demo_datasets: Optional[List[str]],
-    optimizers: Optional[List[str]],
+    demo_datasets: list[str] | None,
+    optimizers: list[str] | None,
     test_mode: bool,
-    retry_failed_run_id: Optional[str],
-    resume_run_id: Optional[str],
+    retry_failed_run_id: str | None,
+    resume_run_id: str | None,
 ) -> None:
     are_default_values = all(
         [

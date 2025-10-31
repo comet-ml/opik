@@ -11,6 +11,10 @@ import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
+import { buildDocsUrl } from "@/lib/utils";
+import { SquareArrowOutUpRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -76,59 +80,79 @@ const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
   },
 };
 
-const HEURISTICS_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
+interface MetricOption extends DropdownOption<EVALUATOR_MODEL> {
+  docLink: string;
+  docHash?: string;
+}
+
+const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
   {
     value: EVALUATOR_MODEL.equals,
     label: "Equals",
-    description: "Checks for exact text match.",
+    description: "Checks if the output exactly matches the text.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#equals",
   },
   {
     value: EVALUATOR_MODEL.regex_match,
     label: "Regex match",
     description: "Verifies pattern conformity using regex.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#regexmatch",
   },
   {
     value: EVALUATOR_MODEL.contains,
     label: "Contains",
     description: "Identifies presence of a substring.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#contains",
   },
   {
     value: EVALUATOR_MODEL.isJSON,
     label: "isJson",
     description: "Validates JSON format compliance.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#isjson",
   },
   {
     value: EVALUATOR_MODEL.levenshtein,
     label: "Levenshtein",
     description: "Calculates text similarity via edit distance.",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#levenshteinratio",
   },
 ];
 
-const LLM_JUDGES_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
+const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   {
     value: EVALUATOR_MODEL.hallucination,
     label: "Hallucination",
     description: "Detects generated false information.",
+    docLink: "/evaluation/metrics/hallucination",
   },
   {
     value: EVALUATOR_MODEL.moderation,
     label: "Moderation",
     description: "Checks adherence to content standards.",
+    docLink: "/evaluation/metrics/moderation",
   },
   {
     value: EVALUATOR_MODEL.answer_relevance,
     label: "Answer relevance",
     description: "Evaluates how well the answer fits the question.",
+    docLink: "/evaluation/metrics/answer_relevance",
   },
   {
     value: EVALUATOR_MODEL.context_recall,
     label: "Context recall",
     description: "Measures retrieval of relevant context.",
+    docLink: "/evaluation/metrics/context_recall",
   },
   {
     value: EVALUATOR_MODEL.context_precision,
     label: "Context precision",
     description: "Checks accuracy of provided context details.",
+    docLink: "/evaluation/metrics/context_precision",
   },
 ];
 
@@ -202,6 +226,8 @@ const AddExperimentDialog: React.FunctionComponent<
 from opik import Opik
 from opik.evaluation import evaluate
 
+# os.environ["OPENAI_API_KEY"] = "OpenAI API key goes here"
+
 # INJECT_OPIK_CONFIGURATION
 
 ${importString}
@@ -270,10 +296,7 @@ eval_results = evaluate(
     });
   };
 
-  const generateList = (
-    title: string,
-    list: DropdownOption<EVALUATOR_MODEL>[],
-  ) => {
+  const generateList = (title: string, list: MetricOption[]) => {
     return (
       <div>
         <div className="comet-body-s-accented pb-1 pt-2 text-muted-slate">
@@ -291,7 +314,13 @@ eval_results = evaluate(
               <div className="px-2">
                 <div className="comet-body-s-accented truncate">{m.label}</div>
                 <div className="comet-body-s mt-0.5 text-light-slate">
-                  {m.description}
+                  <ExplainerDescription
+                    isMinimalLink
+                    description={m.description || ""}
+                    docLink={m.docLink}
+                    docHash={m.docHash}
+                    iconSize="size-3"
+                  />
                 </div>
               </div>
             </label>
@@ -316,8 +345,21 @@ eval_results = evaluate(
             <div className="comet-title-s">Select evaluators</div>
             {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
             {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
+            <div className="mt-4">
+              <Button variant="secondary" asChild>
+                <a
+                  href={buildDocsUrl("/evaluation/metrics/custom_metric")}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center"
+                >
+                  Learn about custom metrics
+                  <SquareArrowOutUpRight className="ml-1 size-4" />
+                </a>
+              </Button>
+            </div>
           </div>
-          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
+          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
               1. Select dataset
             </div>

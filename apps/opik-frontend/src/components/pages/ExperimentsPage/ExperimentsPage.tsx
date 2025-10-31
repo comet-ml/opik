@@ -62,7 +62,7 @@ import {
   getRowId,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
-import { isGroupFullyExpanded } from "@/lib/groups";
+import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
@@ -171,7 +171,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "total_estimated_cost",
-    label: "Total Est. Cost",
+    label: "Total estimated cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     aggregatedCell: CostCell.Aggregation as never,
@@ -181,7 +181,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "total_estimated_cost_avg",
-    label: "Avg. Cost per Trace",
+    label: "Cost per trace (avg.)",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     aggregatedCell: CostCell.Aggregation as never,
@@ -429,7 +429,7 @@ const ExperimentsPage: React.FC = () => {
             });
             return {
               id: group.id,
-              name: group.metadataPath.map((metadataPath) => {
+              name: group.metadataPath.map((metadataPath, index) => {
                 const label = get(
                   groupExperiments[0],
                   `${metadataPath}.label`.split("."),
@@ -442,9 +442,13 @@ const ExperimentsPage: React.FC = () => {
                   undefined,
                 );
 
-                return label === DELETED_DATASET_LABEL
-                  ? "Deleted dataset"
-                  : label || value || "Undefined";
+                return {
+                  label: calculateGroupLabel(groups[index]),
+                  value:
+                    label === DELETED_DATASET_LABEL
+                      ? "Deleted dataset"
+                      : label || value || "Undefined",
+                };
               }),
               experiments: groupExperiments,
             };
@@ -489,7 +493,7 @@ const ExperimentsPage: React.FC = () => {
     hasGroups,
     experiments,
     flattenGroups,
-    groups.length,
+    groups,
     expandingConfig.expanded,
     groupFieldNames,
   ]);
@@ -514,6 +518,30 @@ const ExperimentsPage: React.FC = () => {
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
         />
       </PageBodyStickyContainer>
+      {Boolean(experiments.length) && (
+        <PageBodyStickyContainer
+          direction="horizontal"
+          className="-mb-2 pt-4"
+          limitWidth
+        >
+          <FeedbackScoresChartsWrapper
+            chartsData={chartsData}
+            noDataComponent={
+              <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
+                <ChartLine className="size-4 shrink-0 text-light-slate" />
+                <div className="comet-body-s-accented text-foreground">
+                  No charts to show
+                </div>
+                <div className="comet-body-s text-muted-slate">
+                  Please expand a group to see its chart. You can expand up to{" "}
+                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
+                </div>
+              </Card>
+            }
+            isAverageScores
+          />
+        </PageBodyStickyContainer>
+      )}
       <PageBodyStickyContainer
         className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"
@@ -566,35 +594,11 @@ const ExperimentsPage: React.FC = () => {
             size="sm"
             onClick={handleNewExperimentClick}
           >
-            <Info className="mr-2 size-3.5" />
+            <Info className="mr-1.5 size-3.5" />
             Create new experiment
           </Button>
         </div>
       </PageBodyStickyContainer>
-      {Boolean(experiments.length) && (
-        <PageBodyStickyContainer
-          direction="horizontal"
-          className="z-[5]"
-          limitWidth
-        >
-          <FeedbackScoresChartsWrapper
-            chartsData={chartsData}
-            noDataComponent={
-              <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
-                <ChartLine className="size-4 shrink-0 text-light-slate" />
-                <div className="comet-body-s-accented text-foreground">
-                  No charts to show
-                </div>
-                <div className="comet-body-s text-muted-slate">
-                  Please expand a group to see its chart. You can expand up to{" "}
-                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
-                </div>
-              </Card>
-            }
-            isAverageScores
-          />
-        </PageBodyStickyContainer>
-      )}
       <DataTable
         columns={columns}
         aggregationMap={aggregationMap}

@@ -83,10 +83,10 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
   return (
     <div
       className={`relative overflow-hidden rounded-md border  bg-primary-foreground ${
-        consoleIsOpened ? "border-slate-200" : "border-transparent"
+        consoleIsOpened ? "border-border" : "border-transparent"
       }`}
     >
-      <div className="relative flex items-center justify-between border-b border-b-slate-200 py-2 pl-4 pr-2">
+      <div className="relative flex items-center justify-between border-b border-b-border py-2 pl-4 pr-2">
         <div className="flex items-center">
           <Button
             onClick={toggleConsoleIsOpened}
@@ -123,7 +123,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
       </div>
       {consoleIsOpened && (
         <div
-          className="h-[240px] w-full overflow-auto border border-transparent border-b-slate-200 bg-white"
+          className="h-[240px] w-full overflow-auto border border-transparent border-b-border bg-background"
           ref={consoleRef}
         >
           <div className="comet-body-s gap-4 text-balance px-4 py-3 font-code">
@@ -164,7 +164,9 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                 <div key={log} className="flex gap-2 text-foreground-secondary">
                   {log.includes("%cmd%") && (
                     <div className="flex gap-1">
-                      <span className="text-[#005cc5]">~/sandbox</span>
+                      <span className="text-[var(--codemirror-syntax-blue)]">
+                        ~/sandbox
+                      </span>
                     </div>
                   )}
 

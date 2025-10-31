@@ -37,19 +37,20 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
 
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
     setThreadFeedbackScore({
-      ...data,
+      scores: [data],
       threadId,
       projectId,
       projectName,
     });
   };
 
-  const onDeleteFeedbackScore = (name: string) => {
+  const onDeleteFeedbackScore = (name: string, author?: string) => {
     threadFeedbackScoreDelete({
       names: [name],
       threadId,
       projectName,
       projectId,
+      author,
     });
   };
 
@@ -61,28 +62,40 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
       activeSection={activeSection}
       explainer={EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
     >
-      {hasFeedbackScores && (
-        <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-          {feedbackScores.map((score) => (
-            <FeedbackScoreTag
-              key={score.name}
-              label={score.name}
-              value={score.value}
-              reason={score.reason}
-              lastUpdatedAt={score.last_updated_at}
-              lastUpdatedBy={score.last_updated_by}
-            />
-          ))}
-        </div>
-      )}
-      <FeedbackScoresEditor
-        key={threadId}
-        feedbackScores={feedbackScores}
-        onUpdateFeedbackScore={onUpdateFeedbackScore}
-        onDeleteFeedbackScore={onDeleteFeedbackScore}
-        className="mt-4"
-        entityCopy="threads"
-      />
+      <div className="size-full overflow-y-auto">
+        {hasFeedbackScores && (
+          <>
+            <div className="comet-body-s-accented truncate px-6 pt-4">
+              All scores
+            </div>
+            <div className="flex flex-wrap gap-2 px-6 py-2">
+              {feedbackScores.map((score) => {
+                return (
+                  <FeedbackScoreTag
+                    key={score.name}
+                    label={score.name}
+                    value={score.value}
+                    reason={score.reason}
+                    lastUpdatedAt={score.last_updated_at}
+                    lastUpdatedBy={score.last_updated_by}
+                    valueByAuthor={score.value_by_author}
+                    category={score.category_name}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+        <FeedbackScoresEditor
+          key={threadId}
+          feedbackScores={feedbackScores}
+          onUpdateFeedbackScore={onUpdateFeedbackScore}
+          onDeleteFeedbackScore={onDeleteFeedbackScore}
+          className="mt-4"
+          header={<FeedbackScoresEditor.Header />}
+          footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
+        />
+      </div>
     </DetailsActionSectionLayout>
   );
 };

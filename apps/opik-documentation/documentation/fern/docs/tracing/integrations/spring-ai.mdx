@@ -1,0 +1,149 @@
+---
+title: Observability for Spring AI (Java) with Opik
+description: Start here to integrate Opik into your Spring AI-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+Spring AI is a framework designed to simplify the integration of AI and machine learning capabilities into Spring applications. It provides a familiar Spring-based programming model for working with AI models, vector stores, and AI-powered features, making it easier to build intelligent applications within the Spring ecosystem.
+
+Spring AI's primary advantage is its seamless integration with the Spring framework, allowing developers to leverage Spring's dependency injection, configuration management, and testing capabilities while building AI-powered applications.
+
+## Getting started
+
+To use the Spring AI integration with Opik, you will need to have Spring AI and the required OpenTelemetry packages installed:
+
+```xml
+<dependencies>
+    <!-- Spring AI -->
+    <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+        <version>0.8.0</version>
+    </dependency>
+
+    <!-- OpenTelemetry -->
+    <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-api</artifactId>
+        <version>1.36.0</version>
+    </dependency>
+    <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk</artifactId>
+        <version>1.36.0</version>
+    </dependency>
+    <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-exporter-otlp</artifactId>
+        <version>1.36.0</version>
+    </dependency>
+    <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk-extension-autoconfigure</artifactId>
+        <version>1.36.0</version>
+    </dependency>
+</dependencies>
+```
+
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with Spring AI
+
+Set up OpenTelemetry instrumentation for Spring AI in your `application.properties`:
+
+```properties
+# OpenTelemetry configuration
+otel.traces.exporter=otlp
+otel.exporter.otlp.endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT}
+otel.exporter.otlp.headers=${OTEL_EXPORTER_OTLP_HEADERS}
+```
+
+Your Spring AI code will now automatically send traces to Opik:
+
+```java
+@Service
+public class AiService {
+
+    private final AiClient aiClient;
+
+    public AiService(AiClient aiClient) {
+        this.aiClient = aiClient;
+    }
+
+    public String generateResponse(String prompt) {
+        return aiClient.generate(prompt);
+    }
+}
+```
+
+## Further improvements
+
+If you have any questions or suggestions for improving the Spring AI integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

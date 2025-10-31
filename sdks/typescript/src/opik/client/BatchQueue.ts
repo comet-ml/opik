@@ -89,6 +89,17 @@ class ActionQueue<EntityData = object, EntityId = string> {
   };
 }
 
+export interface BatchQueueOptions {
+  delay?: number;
+  enableCreateBatch?: boolean;
+  enableUpdateBatch?: boolean;
+  enableDeleteBatch?: boolean;
+  createBatchSize?: number;
+  updateBatchSize?: number;
+  deleteBatchSize?: number;
+  name?: string;
+}
+
 export abstract class BatchQueue<EntityData = object, EntityId = string> {
   private readonly createQueue;
   private readonly updateQueue;
@@ -98,14 +109,13 @@ export abstract class BatchQueue<EntityData = object, EntityId = string> {
   constructor({
     delay = DEFAULT_DEBOUNCE_BATCH_DELAY,
     enableCreateBatch = true,
+    enableUpdateBatch = false,
     enableDeleteBatch = true,
+    createBatchSize = DEFAULT_BATCH_SIZE,
+    updateBatchSize = DEFAULT_BATCH_SIZE,
+    deleteBatchSize = DEFAULT_BATCH_SIZE,
     name = "BatchQueue",
-  }: {
-    delay?: number;
-    enableCreateBatch?: boolean;
-    enableDeleteBatch?: boolean;
-    name?: string;
-  }) {
+  }: BatchQueueOptions = {}) {
     this.name = name;
 
     this.createQueue = new ActionQueue<EntityData, EntityId>({
@@ -114,6 +124,7 @@ export abstract class BatchQueue<EntityData = object, EntityId = string> {
       },
       delay,
       enableBatch: enableCreateBatch,
+      batchSize: createBatchSize,
       name: `${name}:createQueue`,
     });
 
@@ -127,7 +138,8 @@ export abstract class BatchQueue<EntityData = object, EntityId = string> {
         }
       },
       delay,
-      enableBatch: false,
+      enableBatch: enableUpdateBatch,
+      batchSize: updateBatchSize,
       name: `${name}:updateQueue`,
     });
 
@@ -140,6 +152,7 @@ export abstract class BatchQueue<EntityData = object, EntityId = string> {
       },
       delay,
       enableBatch: enableDeleteBatch,
+      batchSize: deleteBatchSize,
       name: `${name}:deleteQueue`,
     });
   }

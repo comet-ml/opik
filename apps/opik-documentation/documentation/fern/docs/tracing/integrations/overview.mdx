@@ -1,38 +1,178 @@
+---
+layout: overview
+---
+
 Opik helps you easily log, visualize, and evaluate everything from raw LLM calls to advanced RAG pipelines and complex agentic systems through a robust set of integrations with popular frameworks and tools.
 
-| Integration   | Description                                                                  | Documentation                                         | Try in Colab                                                                                                                                                                                                                        |
-| ------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OpenAI        | Log traces for all OpenAI LLM calls                                          | [Documentation](/tracing/integrations/openai)         | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb)        |
-| OpenAI Agents | Log traces for OpenAI agents calls                                           | [Documentation](/tracing/integrations/openai_agents)  | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai-agents.ipynb) |
-| Google ADK    | Log traces for Google ADK agents                                             | [Documentation](/tracing/integrations/adk)            |                                                                                                                                                                                                                                     |
-| OpenRouter    | Log traces for all OpenRouter LLM calls using OpenAI SDK                     | [Documentation](/tracing/integrations/openrouter)     |                                                                                                                                                                                                                                     |
-| LiteLLM       | Call any LLM model using the OpenAI format                                   | [Documentation](/tracing/integrations/litellm)        | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb)       |
-| LangChain     | Log traces for all LangChain LLM calls                                       | [Documentation](/tracing/integrations/langchain)      | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb)     |
-| Haystack      | Log traces for all Haystack pipelines                                        | [Documentation](/tracing/integrations/haystack)       | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/haystack.ipynb)      |
-| aisuite       | Log traces for all aisuite LLM calls                                         | [Documentation](/tracing/integrations/aisuite)        | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/aisuite.ipynb)       |
-| Autogen       | Log traces for all autogen LLM calls                                         | [Documentation](/tracing/integrations/autogen)        |                                                                                                                                                                                                                                     |
-| AG2           | Log traces for all AG2 LLM calls                                             | [Documentation](/tracing/integrations/autogen)        |                                                                                                                                                                                                                                     |
-| Agno          | Log traces for all Agno agent orchestration framework calls                  | [Documentation](/tracing/integrations/agno)           |                                                                                                                                                                                                                                     |
-| Anthropic     | Log traces for all Anthropic LLM calls                                       | [Documentation](/tracing/integrations/anthropic)      | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/anthropic.ipynb)     |
-| Bedrock       | Log traces for all AWS Bedrock LLM calls                                     | [Documentation](/tracing/integrations/bedrock)        | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb)       |
-| CrewAI        | Log traces for all CrewAI LLM calls                                          | [Documentation](/tracing/integrations/crewai)         | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/crewai.ipynb)        |
-| DeepSeek      | Log traces for all LLM calls made with DeepSeek                              | [Documentation](/tracing/integrations/deepseek)       |                                                                                                                                                                                                                                     |
-| Dify          | Log traces and LLM calls for your Dify Apps                                  | [Documentation](/tracing/integrations/dify)           |                                                                                                                                                                                                                                     |
-| DSPy          | Log traces for all DSPy runs                                                 | [Documentation](/tracing/integrations/dspy)           | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb)          |
-| Gemini        | Log traces for all Gemini LLM calls                                          | [Documentation](/tracing/integrations/gemini)         | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/gemini.ipynb)        |
-| Groq          | Log traces for all Groq LLM calls                                            | [Documentation](/tracing/integrations/groq)           | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/groq.ipynb)          |
-| Guardrails    | Log traces for all Guardrails validations                                    | [Documentation](/tracing/integrations/guardrails-ai)  | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/guardrails-ai.ipynb) |
-| Instructor    | Log traces for LLM calls made with Instructor                                | [Documentation](/tracing/integrations/instructor)     | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/instructor.ipynb)    |
-| LangChainJS   | Log traces for all LangChainJS executions                                    | [Documentation](/tracing/integrations/langchainjs)    |                                                                                                                                                                                                                                     |
-| LangGraph     | Log traces for all LangGraph executions                                      | [Documentation](/tracing/integrations/langgraph)      | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb)     |
-| LlamaIndex    | Log traces for all LlamaIndex LLM calls                                      | [Documentation](/tracing/integrations/llama_index)    | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb)   |
-| Ollama        | Log traces for all Ollama LLM calls                                          | [Documentation](/tracing/integrations/ollama)         | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ollama.ipynb)        |
-| Predibase     | Fine-tune and serve open-source LLMs                                         | [Documentation](/tracing/integrations/predibase)      | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/predibase.ipynb)     |
-| Pydantic AI   | PydanticAI is a Python agent framework designed to build production apps     | [Documentation](/tracing/integrations/pydantic-ai)    | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/pydantic-ai.ipynb)   |
-| Ragas         | Evaluation framework for your Retrieval Augmented Generation (RAG) pipelines | [Documentation](/tracing/integrations/ragas)          | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb)         |
-| Smolagents    | Agent Framework built by the HuggingFace team                                | [Documentation](/tracing/integrations/smolagents)     | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/smolagents.ipynb)    |
-| Strands Agent | Log traces for all Strands Agent LLM calls                                   | [Documentation](/tracing/integrations/strands-agents) |                                                                                                                                                                                                                                     |
-| Vercel AI SDK | Log traces for all Vercel AI SDK LLM calls                                   | [Documentation](/tracing/integrations/vercel-ai-sdk)  |                                                                                                                                                                                                                                     |
-| watsonx       | Log traces for all watsonx LLM calls                                         | [Documentation](/tracing/integrations/watsonx)        | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/watsonx.ipynb)       |
+## <Icon icon="fa-brands fa-js" /> TypeScript
+
+### Frameworks
+
+<CardGroup cols={3}>
+  <Card title="BeeAI" href="/docs/opik/integrations/beeai-typescript" />
+  <Card title="LangChain" href="/docs/opik/integrations/langchainjs" />
+  <Card title="Mastra" href="/docs/opik/integrations/mastra" />
+  <Card title="Vercel AI SDK" href="/docs/opik/integrations/vercel-ai-sdk" />
+</CardGroup>
+
+### Model Providers
+
+<CardGroup cols={3}>
+  <Card
+    title="Cloudflare Workers AI"
+    href="/docs/opik/integrations/cloudflare-workers-ai"
+  />
+  <Card title="Gemini" href="/docs/opik/integrations/gemini-typescript" />
+  <Card title="OpenAI" href="/docs/opik/integrations/openai-typescript" />
+</CardGroup>
+
+### Manual Integration
+
+<CardGroup cols={3}>
+  <Card title="TypeScript SDK" href="/docs/opik/reference/typescript-sdk" />
+</CardGroup>
+
+## <Icon icon="fa-brands fa-python" /> Python
+
+### Frameworks
+
+<CardGroup cols={3}>
+  <Card title="AG2" href="/docs/opik/integrations/ag2" />
+  <Card title="Agno" href="/docs/opik/integrations/agno" />
+  <Card title="BeeAI" href="/docs/opik/integrations/beeai" />
+  <Card title="Autogen" href="/docs/opik/integrations/autogen" />
+  <Card title="CrewAI" href="/docs/opik/integrations/crewai" />
+  <Card title="DSPy" href="/docs/opik/integrations/dspy" />
+  <Card
+    title="Google Agent Development Kit"
+    href="/docs/opik/integrations/adk"
+  />
+  <Card title="Haystack" href="/docs/opik/integrations/haystack" />
+  <Card title="Instructor" href="/docs/opik/integrations/instructor" />
+  <Card title="LangChain" href="/docs/opik/integrations/langchain" />
+  <Card title="LangGraph" href="/docs/opik/integrations/langgraph" />
+  <Card title="LiveKit Agents" href="/docs/opik/integrations/livekit" />
+  <Card title="Llama Index" href="/docs/opik/integrations/llama_index" />
+  <Card
+    title="Microsoft Agent Framework"
+    href="/docs/opik/integrations/microsoft-agent-framework"
+  />
+  <Card title="OpenAI Agents" href="/docs/opik/integrations/openai_agents" />
+  <Card title="Pipecat" href="/docs/opik/integrations/pipecat" />
+  <Card title="Pydantic AI" href="/docs/opik/integrations/pydantic-ai" />
+  <Card
+    title="Semantic Kernel"
+    href="/docs/opik/integrations/semantic-kernel"
+  />
+  <Card title="Smolagents" href="/docs/opik/integrations/smolagents" />
+  <Card title="Strands Agents" href="/docs/opik/integrations/strands-agents" />
+  <Card title="VoltAgent" href="/docs/opik/integrations/voltagent" />
+</CardGroup>
+
+### Model Providers
+
+<CardGroup cols={3}>
+  <Card title="Anthropic" href="/docs/opik/integrations/anthropic" />
+  <Card title="Bedrock" href="/docs/opik/integrations/bedrock" />
+  <Card title="BytePlus" href="/docs/opik/integrations/byteplus" />
+  <Card title="Cohere" href="/docs/opik/integrations/cohere" />
+  <Card title="DeepSeek" href="/docs/opik/integrations/deepseek" />
+  <Card title="Fireworks AI" href="/docs/opik/integrations/fireworks-ai" />
+  <Card title="Gemini" href="/docs/opik/integrations/gemini" />
+  <Card title="Groq" href="/docs/opik/integrations/groq" />
+  <Card title="Mistral AI" href="/docs/opik/integrations/mistral" />
+  <Card title="Novita AI" href="/docs/opik/integrations/novita-ai" />
+  <Card title="Ollama" href="/docs/opik/integrations/ollama" />
+  <Card title="OpenAI" href="/docs/opik/integrations/openai" />
+  <Card title="Predibase" href="/docs/opik/integrations/predibase" />
+  <Card title="Together AI" href="/docs/opik/integrations/together-ai" />
+  <Card title="WatsonX" href="/docs/opik/integrations/watsonx" />
+  <Card title="xAI Grok" href="/docs/opik/integrations/xai-grok" />
+</CardGroup>
+
+### Dataset Management
+
+<CardGroup cols={3}>
+  <Card title="Gretel" href="/docs/opik/integrations/gretel" />
+  <Card
+    title="Hugging Face Datasets"
+    href="/docs/opik/integrations/huggingface-datasets"
+  />
+</CardGroup>
+
+### Evaluation
+
+<CardGroup cols={3}>
+  <Card title="Ragas" href="/docs/opik/integrations/ragas" />
+</CardGroup>
+
+### Gateways
+
+<CardGroup cols={3}>
+  <Card title="AISuite" href="/docs/opik/integrations/aisuite" />
+  <Card title="LiteLLM" href="/docs/opik/integrations/litellm" />
+  <Card title="OpenRouter" href="/docs/opik/integrations/openrouter" />
+</CardGroup>
+
+### Other
+
+<CardGroup cols={3}>
+  <Card title="Guardrails AI" href="/docs/opik/integrations/guardrails-ai" />
+</CardGroup>
+
+### Manual Integration
+
+<CardGroup cols={3}>
+  <Card
+    title="Python SDK"
+    href="https://www.comet.com/docs/opik/python-sdk-reference/"
+  />
+  <Card
+    title="OpenTelemetry Python SDK"
+    href="/docs/opik/integrations/opentelemetry-python-sdk"
+  />
+</CardGroup>
+
+## <Icon icon="fa-brands fa-java" /> Java
+
+<CardGroup cols={3}>
+  <Card title="Spring AI" href="/docs/opik/integrations/spring-ai" />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-code" /> .NET
+
+### Frameworks
+
+<CardGroup cols={3}>
+  <Card
+    title="Microsoft Agent Framework"
+    href="/docs/opik/integrations/microsoft-agent-framework-dotnet"
+  />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-gem" /> Ruby
+
+<CardGroup cols={3}>
+  <Card
+    title="OpenTelemetry Ruby SDK"
+    href="/docs/opik/integrations/opentelemetry-ruby-sdk"
+  />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-wand-magic-sparkles" /> No-Code
+
+<CardGroup cols={3}>
+  <Card title="Cursor" href="/docs/opik/integrations/cursor" />
+  <Card title="Dify" href="/docs/opik/integrations/dify" />
+  <Card title="Flowise" href="/docs/opik/integrations/flowise" />
+  <Card title="Langflow" href="/docs/opik/integrations/langflow" />
+  <Card title="OpenWebUI" href="/docs/opik/integrations/openwebui" />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-globe" /> Multi-Language
+
+<CardGroup cols={3}>
+  <Card title="OpenTelemetry" href="/docs/opik/integrations/opentelemetry" />
+</CardGroup>
 
 If you would like to see more integrations, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues/new/choose).

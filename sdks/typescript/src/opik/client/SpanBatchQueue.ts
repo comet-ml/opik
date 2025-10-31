@@ -7,9 +7,15 @@ type SpanUpdate = Partial<SavedSpan> & { traceId: string };
 export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   constructor(
     private readonly api: OpikApiClientTemp,
-    delay?: number,
+    delay?: number
   ) {
-    super({ delay, enableDeleteBatch: false, name: "SpanBatchQueue" });
+    super({
+      delay,
+      enableCreateBatch: true,
+      enableUpdateBatch: true,
+      enableDeleteBatch: true,
+      name: "SpanBatchQueue",
+    });
   }
 
   protected getId(entity: SavedSpan) {
@@ -23,7 +29,8 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   protected async getEntity(id: string) {
     return (await this.api.spans.getSpanById(
       id,
-      this.api.requestOptions,
+      {},
+      this.api.requestOptions
     )) as SavedSpan;
   }
 

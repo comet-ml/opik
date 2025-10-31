@@ -99,14 +99,15 @@ const IMAGE_URL_EXTENSIONS = [
 ] as const;
 
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
-const DATA_IMAGE_REGEX = new RegExp(
+export const DATA_IMAGE_REGEX = new RegExp(
   `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
   "g",
 );
-const IMAGE_URL_REGEX = new RegExp(
-  `https?:\\/\\/[^\\s"']+\\.(${IMAGE_URL_EXTENSIONS.join(
+// Exclude characters that are invalid in URLs: whitespace, quotes, angle brackets, curly braces, backslash, pipe, caret, backtick
+export const IMAGE_URL_REGEX = new RegExp(
+  `https?:\\/\\/[^\\s"'<>{}\\\\|\\^\`]+\\.(${IMAGE_URL_EXTENSIONS.join(
     "|",
-  )})(\\?[^"'\\\\]*(?<!\\\\))?(#[^"'\\\\]*(?<!\\\\))?`,
+  )})(\\?[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?`,
   "gi",
 );
 
@@ -149,6 +150,31 @@ export const isImageBase64String = (string?: unknown): boolean => {
 export const extractFilename = (url: string): string => {
   const match = url.match(/[^/\\?#]+(?=[?#"]|$)/);
   return match ? match[0] : url;
+};
+
+export const parseImageValue = (
+  value: unknown,
+): ParsedImageData | undefined => {
+  if (!isString(value)) {
+    return undefined;
+  }
+
+  if (isImageBase64String(value)) {
+    return {
+      url: value,
+      name: "Base64 Image",
+    };
+  }
+
+  const imageUrlMatch = value.match(IMAGE_URL_REGEX);
+  if (imageUrlMatch) {
+    return {
+      url: imageUrlMatch[0],
+      name: extractFilename(imageUrlMatch[0]),
+    };
+  }
+
+  return undefined;
 };
 
 // here we extracting only URL base images that can have no extension that can be skipped with general regex

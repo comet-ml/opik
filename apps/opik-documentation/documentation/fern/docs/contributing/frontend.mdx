@@ -13,98 +13,198 @@ The Opik frontend is a React application located in the `apps/opik-frontend` dir
 
 ## Setting Up Your Development Environment
 
-Follow these steps to run the frontend locally and see your changes instantly upon saving files:
+We provide multiple ways to develop the frontend. Choose the approach that best fits your workflow:
 
-<Steps>
-  ### 1. Prerequisites
-  Ensure you have **Node.js** (which includes npm) installed on your system. You can download it from [nodejs.org](https://nodejs.org/).
+<Tabs>
+  <Tab value="Local Process Mode" title="Local Process Mode (Recommended)">
+    **Best for rapid development with hot reload**
 
-### 2. Configure Environment Variables
+    This mode runs the frontend as a local process with Vite's dev server, providing instant hot reload when you save files:
 
-Navigate to the `apps/opik-frontend/` directory and create or update the `.env.development` file with the following values:
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root - restart everything
+        scripts/dev-runner.sh
 
-```ini
-VITE_BASE_URL=/
-VITE_BASE_API_URL=http://localhost:8080
-```
+        # Or just start (faster if already built)
+        scripts/dev-runner.sh --start
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root - restart everything
+        scripts\dev-runner.ps1
 
-This tells the frontend development server where to find the backend API.
+        # Or just start (faster if already built)
+        scripts\dev-runner.ps1 --start
+        ```
+      </Tab>
+    </Tabs>
 
-### 3. Enable CORS in the Back-End
+    Access the UI at `http://localhost:5174` (Vite dev server with hot reload).
 
-For local development, the backend needs to allow Cross-Origin Resource Sharing (CORS) from the frontend development server.
+    **Benefits:**
+    - Instant hot reload on file changes
+    - Fast rebuilds
+    - Full TypeScript type checking and linting
+    - Easy debugging with browser dev tools
 
-- Open `deployment/docker-compose/docker-compose.yaml` in the root of the repository (view on [GitHub](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/docker-compose.yaml)).
-- In the `services.backend.environment` section, add `CORS: true`:
+    **Prerequisites:**
+    - Node.js 18+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
+    - Java Development Kit (JDK) 21 (for backend)
+    - Apache Maven 3.8+ (for backend)
+  </Tab>
 
-  ```yaml
-  ---
-  OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
-  CORS: true # Add this line
-  ```
+  <Tab value="Docker Mode" title="Docker Mode">
+    **Best for testing the complete system**
 
-- If your backend services are already running via Docker Compose, you might need to restart them for this change to take effect: `docker compose down && docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d`
+    This mode runs everything in Docker containers:
 
-### 4. Start Required Backend Services
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root
+        ./opik.sh --build
 
-The frontend relies on various backend services. Run the following command from the root of the repository to start them (along with other necessary services like the database):
+        # Or start without rebuilding
+        ./opik.sh
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root
+        .\opik.ps1 --build
 
-```bash
-# Optionally, you can force a pull of the latest images first
-# docker compose pull
+        # Or start without rebuilding
+        .\opik.ps1
+        ```
+      </Tab>
+    </Tabs>
 
-docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
-```
+    Access the UI at `http://localhost:5173`.
 
-### 5. Verify the Back-End is Running
+    **Benefits:**
+    - Closest to production environment
+    - No local Node.js installation needed
+    - Consistent environment across team
 
-Wait for the Docker containers to build and start. To confirm that the backend is running successfully, open `http://localhost:8080/is-alive/ver` in your browser.
-If you see a version number displayed, the backend is ready.
+    **Prerequisites:**
+    - Docker and Docker Compose
+  </Tab>
 
-### 6. Install Front-End Dependencies
+  <Tab value="Manual Setup" title="Manual Setup">
+    **Best for understanding the build process**
 
-Navigate to the frontend project directory:
+    Set up each component manually:
+
+    <Tabs>
+      <Tab title="Linux/Mac">
+        1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
+           ```bash
+           ./opik.sh --backend --port-mapping
+           ```
+          Check that the backend is running: http://localhost:8080/is-alive/ping
+
+        2. **Configure environment variables:**
+           Update `apps/opik-frontend/.env.development`:
+           ```ini
+           VITE_BASE_URL=/
+           VITE_BASE_API_URL=http://localhost:8080
+           ```
+          This tells the frontend development server where to find the backend API.
+
+        3. **Install dependencies:**
+           ```bash
+           cd apps/opik-frontend
+           npm install
+           ```
+
+        4. **Start the frontend:**
+           ```bash
+           npm run start
+           ```
+      </Tab>
+      <Tab title="Windows">
+        1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
+           ```powershell
+           .\opik.ps1 --backend --port-mapping
+           ```
+          Check that the backend is running: http://localhost:8080/is-alive/ping
+
+        2. **Configure environment variables:**
+           Update `apps\opik-frontend\.env.development`:
+           ```ini
+           VITE_BASE_URL=/
+           VITE_BASE_API_URL=http://localhost:8080
+           ```
+          This tells the frontend development server where to find the backend API.
+
+        3. **Install dependencies:**
+           ```powershell
+           cd apps\opik-frontend
+           npm install
+           ```
+
+        4. **Start the frontend:**
+           ```powershell
+           npm run start
+           ```
+      </Tab>
+    </Tabs>
+
+    Access the UI at `http://localhost:5174`.
+
+    **Prerequisites:**
+    - Node.js 18+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
+    - Docker and Docker Compose (for backend)
+  </Tab>
+</Tabs>
+
+For comprehensive documentation on all development modes, troubleshooting, and advanced workflows, see our [Local Development Guide](/contributing/local-development).
+
+### 4. Code Quality Checks
+
+Before submitting a Pull Request, please ensure your code passes the following checks:
+
+#### Linting
+
+<Tabs>
+  <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root
+        scripts/dev-runner.sh --lint-fe
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root
+        scripts\dev-runner.ps1 --lint-fe
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+  <Tab value="Manual npm" title="Manual npm">
+    ```bash
+    cd apps/opik-frontend
+    npm run lint
+    ```
+  </Tab>
+</Tabs>
+
+#### Type Checking and Unit Tests
+
+Run these commands from the `apps/opik-frontend` directory:
 
 ```bash
 cd apps/opik-frontend
-```
 
-Install the necessary Node.js dependencies:
-
-```bash
-npm install
-```
-
-### 7. Start the Front-End Development Server
-
-Run the following command to start the frontend:
-
-```bash
-npm run start
-```
-
-Once the script completes, open `http://localhost:5174/` in your browser.
-You should see the Opik app running! 🎉
-
-{" "}
-
-<Tip title="Alternative Build Port">
-  Another built version of the frontend (served by the backend) will be available at `http://localhost:5173/`. The
-  `localhost:5174` instance provides hot-reloading and is generally preferred for active development.
-</Tip>
-
-### 8. Making Changes and Submitting a PR
-
-Now you can make your code changes in the `apps/opik-frontend` directory. Before submitting a Pull Request, please ensure your code passes the following checks:
-
-```bash
-cd apps/opik-frontend
-
-npm run e2e       # End-to-end tests
-npm run lint      # Linter checks
 npm run typecheck # TypeScript type checking
+npm run test      # Unit tests for utilities and helpers
 ```
 
-Commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
+### 5. Submitting a Pull Request
 
-</Steps>
+After implementing, commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.

@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { Dot, LineChart } from "recharts";
+
+import { DropdownOption } from "@/types/shared";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -9,7 +11,10 @@ import {
   ChartTooltip,
   ChartLegend,
 } from "@/components/ui/chart";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
 import ChartVerticalLegendContent from "@/components/shared/ChartVerticalLegendContent/ChartHorizontalLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
@@ -27,7 +32,7 @@ export type DataRecord = {
 
 export type ChartData = {
   id: string;
-  name: string | string[];
+  name: string | DropdownOption<string>[];
   data: DataRecord[];
   lines: string[];
 };
@@ -132,7 +137,7 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
         data={chartData.data}
         margin={{ top: 5, bottom: 5, left: 5, right: 0 }}
       >
-        <CartesianGrid vertical={false} />
+        <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
         <YAxis
           width={tickWidth}
           axisLine={false}

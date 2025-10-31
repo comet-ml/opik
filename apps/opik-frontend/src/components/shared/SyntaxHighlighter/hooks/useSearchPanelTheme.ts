@@ -10,10 +10,10 @@ export const useSearchPanelTheme = () => {
         backgroundColor: "transparent",
       },
       ".cm-searchMatch": {
-        background: "#FFDF20",
+        background: "var(--search-highlight)",
       },
       ".cm-searchMatch.cm-searchMatch-selected": {
-        background: "#FF8904",
+        background: "var(--search-current-highlight)",
       },
       "& .cm-panels": {
         backgroundColor: "hsl(var(--primary-foreground))",

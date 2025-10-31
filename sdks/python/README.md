@@ -107,7 +107,18 @@ def my_llm_function(user_question: str) -> str:
 
 my_llm_function("Hello, Opik!")
 ```
-Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/tracing/integrations/overview/) for popular LLM frameworks.
+Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/integrations/overview/) for popular LLM frameworks.
+
+## CLI Commands
+
+Opik provides powerful CLI commands for exporting and importing data between projects:
+
+- **Export**: Export traces, datasets, and prompts from projects to local JSON files
+- **Import**: Import data from local files into projects
+- **Migration**: Move data between projects or environments
+- **Backup**: Create local backups of your project data
+
+For detailed information about the CLI export/import functionality, see [README-IMPORT-EXPORT.md](README-IMPORT-EXPORT.md).
 
 ## Development & Contribution Guidelines
 

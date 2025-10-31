@@ -4,6 +4,7 @@ ignore_missing_imports = true
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
+python_version = "3.9"
 
 [tool.uv]
 managed = false

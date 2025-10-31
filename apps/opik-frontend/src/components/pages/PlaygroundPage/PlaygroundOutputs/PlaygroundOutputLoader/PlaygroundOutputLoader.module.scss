@@ -2,7 +2,7 @@
   width: 1.5rem;
   aspect-ratio: 2;
   --loader-gradient: no-repeat
-    radial-gradient(circle closest-side, hsl(var(--lite-slate)) 90%, #0000);
+    radial-gradient(circle closest-side, hsl(var(--light-slate)) 90%, #0000);
   background:
     var(--loader-gradient) 0 50%,
     var(--loader-gradient) 50% 50%,

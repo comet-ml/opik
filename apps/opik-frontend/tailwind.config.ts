@@ -26,6 +26,19 @@ module.exports = {
         ],
       },
       colors: {
+        white: "var(--white)",
+
+        /* Action cards */
+        "action-trace-background": "var(--action-trace-background)",
+        "action-trace-text": "var(--action-trace-text)",
+        "action-experiment-background": "var(--action-experiment-background)",
+        "action-experiment-text": "var(--action-experiment-text)",
+        "action-guardrail-background": "var(--action-guardrail-background)",
+        "action-guardrail-text": "var(--action-guardrail-text)",
+        "action-playground-background": "var(--action-playground-background)",
+        "action-playground-text": "var(--action-playground-text)",
+
+        /* Legacy colors (for backward compatibility) */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -34,10 +47,7 @@ module.exports = {
         "foreground-secondary": "hsl(var(--foreground-secondary))",
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
-        "light-slate": "hsl(var(--lite-slate))",
-        soft: {
-          background: "#FCFCFD",
-        },
+        "light-slate": "hsl(var(--light-slate))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -63,20 +73,48 @@ module.exports = {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          background: "hsl(var(--accent-background))",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
           gray: "hsl(var(--popover-gray))",
-          foreground: "hsl(var(--popover-foreground))",
         },
         tooltip: {
           DEFAULT: "hsl(var(--tooltip))",
           foreground: "hsl(var(--tooltip-foreground))",
         },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+        soft: {
+          background: "hsl(var(--soft-background))",
         },
+        slate: {
+          300: "hsl(var(--slate-300))",
+        },
+        gray: {
+          100: "var(--gray-100)",
+        },
+
+        /* Custom colors for simplified class names */
+        "toggle-outline-active": "var(--toggle-outline-active)",
+        "diff-removed-bg": "var(--diff-removed-bg)",
+        "diff-removed-text": "var(--diff-removed-text)",
+        "diff-added-bg": "var(--diff-added-bg)",
+        "diff-added-text": "var(--diff-added-text)",
+        "upload-icon-bg": "hsl(var(--upload-icon-bg))",
+        "code-block": "var(--code-block)",
+        "breadcrumb-last": "hsl(var(--breadcrumb-last))",
+        "special-button": "var(--special-button)",
+        "thread-active": "var(--thread-active)",
+
+        /* Info box colors */
+        "info-box-bg": "hsl(var(--info-box-bg))",
+        "info-box-text": "hsl(var(--info-box-text))",
+        "info-box-icon-bg": "hsl(var(--info-box-icon-bg))",
+        "info-box-icon-text": "hsl(var(--info-box-icon-text))",
+
+        /* Warning box colors */
+        "warning-box-bg": "hsl(var(--warning-box-bg))",
+        "warning-box-text": "hsl(var(--warning-box-text))",
+        "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
+        "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",
@@ -99,6 +137,9 @@ module.exports = {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },
+      boxShadow: {
+        "action-card": "var(--action-card-shadow)",
+      },
     },
   },
   plugins: [
@@ -116,5 +157,8 @@ module.exports = {
         },
       );
     },
+  ],
+  safelist: [
+    "playground-table",
   ],
 };

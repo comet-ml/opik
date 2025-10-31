@@ -67,7 +67,7 @@ const VerticallySplitCellWrapper = <TData,>({
         .forEach(
           (node) =>
             (node.style.backgroundColor = highlight
-              ? "#F1F5F9"
+              ? "hsl(var(--muted))"
               : "transparent"),
         );
     }

@@ -1,0 +1,63 @@
+---
+globs: sdks/typescript/src/**/*.ts
+description: Code structure conventions and public API boundaries for the TS SDK
+alwaysApply: false
+---
+
+## Directory map (authoritative)
+
+- Public exports: [opik/index.ts](mdc:sdks/typescript/src/opik/index.ts)
+- Client & batching:
+  - [client/Client.ts](mdc:sdks/typescript/src/opik/client/Client.ts)
+  - [client/BatchQueue.ts](mdc:sdks/typescript/src/opik/client/BatchQueue.ts)
+  - Specialized queues: `client/*BatchQueue.ts`
+- Tracing domain:
+  - [tracer/Trace.ts](mdc:sdks/typescript/src/opik/tracer/Trace.ts)
+  - [tracer/Span.ts](mdc:sdks/typescript/src/opik/tracer/Span.ts)
+- Datasets & Experiments:
+  - [dataset](mdc:sdks/typescript/src/opik/dataset/index.ts)
+  - [experiment](mdc:sdks/typescript/src/opik/experiment/index.ts)
+- Configuration: [config/Config.ts](mdc:sdks/typescript/src/opik/config/Config.ts)
+- REST API (generated):
+  - [rest_api/index.ts](mdc:sdks/typescript/src/opik/rest_api/index.ts)
+  - [rest_api/api](mdc:sdks/typescript/src/opik/rest_api/api/index.ts)
+  - [rest_api/core](mdc:sdks/typescript/src/opik/rest_api/core/index.ts)
+  - [rest_api/serialization](mdc:sdks/typescript/src/opik/rest_api/serialization/index.ts)
+- Evaluation: [evaluation](mdc:sdks/typescript/src/opik/evaluation/index.ts)
+- Integrations:
+  - [integrations/opik-openai](mdc:sdks/typescript/src/opik/integrations/opik-openai/src/index.ts)
+  - [integrations/opik-langchain](mdc:sdks/typescript/src/opik/integrations/opik-langchain/src/index.ts)
+  - [integrations/vercel](mdc:sdks/typescript/src/opik/integrations/vercel/index.ts)
+- Utilities:
+  - [utils/logger.ts](mdc:sdks/typescript/src/opik/utils/logger.ts)
+  - [utils/flushAll.ts](mdc:sdks/typescript/src/opik/utils/flushAll.ts)
+  - [utils/generateId.ts](mdc:sdks/typescript/src/opik/utils/generateId.ts)
+  - [utils/stream.ts](mdc:sdks/typescript/src/opik/utils/stream.ts)
+  - [utils/url.ts](mdc:sdks/typescript/src/opik/utils/url.ts)
+
+## Public API boundary
+
+- Only `opik/index.ts` is the public surface. Export minimal, stable symbols.
+- Do not re-export `rest_api` internals from the package root.
+- Domain objects and `Opik` (client) are the primary entry points.
+
+## File and module conventions
+
+- Use functional, single-responsibility modules; keep files short and focused.
+- Name types and interfaces descriptively; avoid abbreviations.
+- Group related helpers by domain (e.g., stream, url, logger).
+- Co-locate index files per folder to define the local surface.
+
+## Types and errors
+
+- Prefer exported TypeScript types for public shapes (e.g., `Span`, `Trace`).
+- Translate REST errors into domain-specific errors at the client layer.
+- Keep error messages actionable; never include sensitive data.
+
+## Adding new modules
+
+- New domain feature: create a dedicated folder; add an `index.ts` to collate exports.
+- Expose new capabilities via `OpikClient` and re-export in `opik/index.ts` only if part of the public API.
+- For write paths, route through batch queues; for read paths, call generated resource clients from `OpikClient`.
+
+Prefer functional utilities, descriptive names, and small, focused modules.

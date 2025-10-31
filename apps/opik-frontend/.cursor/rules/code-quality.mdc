@@ -1,0 +1,506 @@
+---
+description: Frontend code quality standards, TypeScript patterns, and naming conventions
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+
+# Frontend Code Quality Standards
+
+## TypeScript Patterns
+
+### Component Type Definitions
+
+```typescript
+// ✅ Always define explicit prop interfaces
+interface ComponentProps {
+  title: string;
+  description?: string;
+  onAction: (id: string) => void;
+  children: React.ReactNode;
+}
+
+// ✅ Always use React.FunctionComponent<Props>
+const Component: React.FunctionComponent<ComponentProps> = ({
+  title,
+  description,
+  onAction,
+  children,
+}) => {
+  // Component implementation
+};
+
+// ❌ Avoid: Implicit or any types
+const Component = ({ title, description, onAction, children }: any) => {
+  // Bad: no type safety
+};
+```
+
+### API Response Types
+
+```typescript
+// ✅ Use strict type checking for API responses
+interface ApiResponse<T> {
+  data: T;
+  success: boolean;
+  message?: string;
+}
+
+interface UserData {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+// ✅ Type API calls properly
+const fetchUser = async (id: string): Promise<ApiResponse<UserData>> => {
+  const response = await api.get(`/users/${id}`);
+  return response.data;
+};
+```
+
+### Union Types vs Enums
+
+```typescript
+// ✅ Prefer type unions for simple cases
+type ButtonVariant = "default" | "outline" | "ghost" | "destructive";
+type Size = "sm" | "md" | "lg";
+
+// ✅ Use enums for complex cases with methods
+enum UserRole {
+  ADMIN = "admin",
+  USER = "user",
+  GUEST = "guest",
+}
+
+// ✅ Const assertions for readonly arrays
+const VALID_STATUSES = ["pending", "approved", "rejected"] as const;
+type Status = (typeof VALID_STATUSES)[number];
+```
+
+### Complex Function Types
+
+```typescript
+// ✅ Always provide return types for complex functions
+const processUserData = (
+  users: UserData[],
+  filters: FilterOptions,
+): ProcessedUserData[] => {
+  return users
+    .filter((user) => applyFilters(user, filters))
+    .map((user) => transformUser(user));
+};
+
+// ✅ Type event handlers properly
+const handleUserSelect = useCallback(
+  (user: UserData, event: React.MouseEvent) => {
+    event.preventDefault();
+    onUserSelect(user.id);
+  },
+  [onUserSelect],
+);
+```
+
+## Import Organization
+
+### Import Grouping
+
+```typescript
+// 1. React and external libraries
+import React, { useState, useCallback, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { z } from "zod";
+
+// 2. UI components (grouped by source)
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+
+// 3. Shared components
+import DataTable from "@/components/shared/DataTable/DataTable";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
+
+// 4. Hooks and utilities
+import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/date-utils";
+import useEntityStore from "@/store/EntityStore";
+
+// 5. Lodash utilities (grouped together)
+import isString from "lodash/isString";
+import isArray from "lodash/isArray";
+import isEmpty from "lodash/isEmpty";
+import pick from "lodash/pick";
+import groupBy from "lodash/groupBy";
+
+// 6. Types and constants
+import { COLUMN_TYPE, ROW_HEIGHT } from "@/types/shared";
+import { UserData, ApiResponse } from "@/types/api";
+```
+
+### Import Best Practices
+
+```typescript
+// ✅ Use named imports when possible
+import { Button, Input, Select } from "@/components/ui";
+
+// ✅ Use default imports for components
+import DataTable from "@/components/shared/DataTable/DataTable";
+
+// ✅ Use namespace imports for utilities
+import * as dateUtils from "@/lib/date-utils";
+
+// ❌ Avoid: Mixed default and named imports from same module
+import Button, { ButtonProps } from "@/components/ui/button"; // Confusing
+```
+
+## Naming Conventions
+
+### File and Component Names
+
+```typescript
+// ✅ Components: PascalCase
+DataTable.tsx;
+UserProfile.tsx;
+SettingsDialog.tsx;
+
+// ✅ Utilities: camelCase
+dateUtils.ts;
+stringHelpers.ts;
+apiClient.ts;
+
+// ✅ Hooks: camelCase starting with 'use'
+useEntityList.ts;
+useUserPermissions.ts;
+useDebounce.ts;
+
+// ✅ Types: PascalCase
+UserData.ts;
+ApiResponse.ts;
+ComponentProps.ts;
+```
+
+### Variable and Function Names
+
+```typescript
+// ✅ Constants: SCREAMING_SNAKE_CASE
+const COLUMN_TYPE = {
+  STRING: "string",
+  NUMBER: "number",
+  DATE: "date",
+} as const;
+
+const API_ENDPOINTS = {
+  USERS: "/api/v1/users",
+  PROJECTS: "/api/v1/projects",
+} as const;
+
+// ✅ Event handlers: Descriptive names
+const handleDeleteClick = useCallback(() => {}, []);
+const handleUserSelect = useCallback((user: UserData) => {}, []);
+const onModalClose = useCallback(() => {}, []);
+
+// ❌ Avoid: Generic names
+const handleClick = () => {}; // Too vague
+const onSubmit = () => {}; // What is being submitted?
+```
+
+### CSS Classes
+
+```typescript
+// ✅ Use 'comet-' prefix for custom classes
+className = "comet-table-row-active";
+className = "comet-sidebar-collapsed";
+className = "comet-header-height";
+
+// ✅ Use semantic Tailwind classes
+className = "flex items-center gap-2";
+className = "rounded-lg border bg-card p-6";
+className = "text-sm text-muted-foreground";
+```
+
+## Component Composition
+
+### Favor Composition over Prop Drilling
+
+```typescript
+// ✅ Good: Using composition
+interface DialogProps {
+  children: React.ReactNode;
+  title: string;
+}
+
+const Dialog: React.FC<DialogProps> = ({ children, title }) => (
+  <DialogRoot>
+    <DialogHeader>
+      <DialogTitle>{title}</DialogTitle>
+    </DialogHeader>
+    <DialogContent>
+      {children}
+    </DialogContent>
+  </DialogRoot>
+);
+
+// Usage
+<Dialog title="Edit User">
+  <UserForm user={selectedUser} onSave={handleSave} />
+</Dialog>
+
+// ❌ Avoid: Prop drilling
+const Dialog: React.FC<{
+  user: UserData;
+  onSave: (user: UserData) => void;
+  onCancel: () => void;
+  title: string;
+  // ... many more props
+}> = ({ user, onSave, onCancel, title, ...manyOtherProps }) => {
+  // Complex component with many responsibilities
+};
+```
+
+### Custom Hooks for Logic Extraction
+
+```typescript
+// ✅ Extract common logic into custom hooks
+const useEntityActions = (entityId: string) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { toast } = useToast();
+
+  const deleteEntity = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      await api.delete(`/entities/${entityId}`);
+      toast({ description: "Entity deleted successfully" });
+    } catch (error) {
+      toast({ description: "Failed to delete entity", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [entityId, toast]);
+
+  return { deleteEntity, isDeleting };
+};
+
+// Usage in component
+const EntityCard: React.FC<{ entity: Entity }> = ({ entity }) => {
+  const { deleteEntity, isDeleting } = useEntityActions(entity.id);
+
+  return (
+    <Card>
+      <CardContent>{entity.name}</CardContent>
+      <CardActions>
+        <Button
+          variant="destructive"
+          onClick={deleteEntity}
+          disabled={isDeleting}
+        >
+          Delete
+        </Button>
+      </CardActions>
+    </Card>
+  );
+};
+```
+
+## Utility Libraries
+
+### Lodash Usage Guidelines
+
+Use Lodash for complex operations, but **always import methods individually** for optimal tree-shaking and bundle size:
+
+```typescript
+// ✅ Good: Individual imports for tree-shaking
+import pick from "lodash/pick";
+import merge from "lodash/merge";
+import cloneDeep from "lodash/cloneDeep";
+import uniqBy from "lodash/uniqBy";
+import groupBy from "lodash/groupBy";
+import orderBy from "lodash/orderBy";
+import isNil from "lodash/isNil";
+import isEmpty from "lodash/isEmpty";
+import isEqual from "lodash/isEqual";
+import camelCase from "lodash/camelCase";
+import capitalize from "lodash/capitalize";
+
+// ✅ Object operations
+const user = pick(rawUser, ["id", "name", "email"]);
+const merged = merge({}, defaultConfig, userConfig);
+const deepCloned = cloneDeep(complexObject);
+
+// ✅ Array operations
+const uniqueItems = uniqBy(items, "id");
+const grouped = groupBy(users, "role");
+const sorted = orderBy(data, ["date", "name"], ["desc", "asc"]);
+
+// ✅ Type checking - Use Lodash methods instead of built-in type checks
+import isString from "lodash/isString";
+import isNumber from "lodash/isNumber";
+import isBoolean from "lodash/isBoolean";
+import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
+import isFunction from "lodash/isFunction";
+import isDate from "lodash/isDate";
+import isRegExp from "lodash/isRegExp";
+import isNull from "lodash/isNull";
+
+// ✅ Prefer Lodash type determination over built-in methods
+if (isString(value)) {
+  /* handle string */
+}
+if (isNumber(value)) {
+  /* handle number */
+}
+if (isBoolean(value)) {
+  /* handle boolean */
+}
+if (isObject(value)) {
+  /* handle object */
+}
+if (isArray(value)) {
+  /* handle array */
+}
+
+// ❌ Avoid: Default import (includes entire library)
+import _ from "lodash"; // Bad for bundle size
+const user = _.pick(rawUser, ["id", "name", "email"]);
+
+// ❌ Avoid: Named imports from main module (still includes more than needed)
+import { pick, merge, cloneDeep } from "lodash"; // Less efficient than individual imports
+
+// ❌ Avoid: Lodash only for very specific simple operations where built-in is clearer
+import has from "lodash/has";
+const hasProperty = has(obj, "prop"); // Use: 'prop' in obj or obj.hasOwnProperty('prop')
+```
+
+## Functionality Isolation Patterns
+
+### Isolating for Future Replacement
+
+When you like the emulation of some functionality, try to isolate it in a way that makes it easy to replace in the future:
+
+```typescript
+// ✅ Good: Isolated date formatting service
+// lib/dateService.ts
+export interface DateService {
+  format(date: Date, format: string): string;
+  parse(dateString: string): Date;
+  isValid(date: any): boolean;
+}
+
+class MomentDateService implements DateService {
+  format(date: Date, format: string): string {
+    return moment(date).format(format);
+  }
+
+  parse(dateString: string): Date {
+    return moment(dateString).toDate();
+  }
+
+  isValid(date: any): boolean {
+    return moment(date).isValid();
+  }
+}
+
+// Export single instance
+export const dateService: DateService = new MomentDateService();
+
+// Usage in components
+import { dateService } from "@/lib/dateService";
+
+const formattedDate = dateService.format(new Date(), "YYYY-MM-DD");
+
+// ✅ Easy to replace later with different implementation:
+// class DayJsDateService implements DateService { ... }
+// export const dateService: DateService = new DayJsDateService();
+```
+
+```typescript
+// ✅ Good: Isolated chart service
+// lib/chartService.ts
+export interface ChartService {
+  createLineChart(data: ChartData[], container: HTMLElement): ChartInstance;
+  updateChart(chart: ChartInstance, data: ChartData[]): void;
+  destroyChart(chart: ChartInstance): void;
+}
+
+class RechartsService implements ChartService {
+  createLineChart(data: ChartData[], container: HTMLElement): ChartInstance {
+    // Recharts implementation
+    return new RechartsInstance(data, container);
+  }
+
+  // ... other methods
+}
+
+export const chartService: ChartService = new RechartsService();
+
+// Easy to replace with D3, Chart.js, etc.
+```
+
+## Code Formatting
+
+### Prettier Configuration
+
+```typescript
+// ✅ Use trailing commas in multiline structures
+const config = {
+  apiUrl: "https://api.example.com",
+  timeout: 5000,
+  retries: 3, // <- trailing comma
+};
+
+const items = [
+  "item1",
+  "item2",
+  "item3", // <- trailing comma
+];
+
+// ✅ Prefer double quotes for strings
+const message = "Hello, world!";
+const template = `User ${userName} has logged in`;
+
+// ✅ Use meaningful variable names
+const filteredActiveUsers = users.filter((user) => user.isActive);
+const formattedCreationDate = formatDate(user.createdAt);
+```
+
+### Code Organization
+
+```typescript
+// ✅ Group related functionality
+const UserManagement: React.FC = () => {
+  // 1. State declarations
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // 2. Queries and mutations
+  const { data: users, isLoading } = useUserList();
+  const deleteMutation = useDeleteUser();
+
+  // 3. Memoized values (only when needed)
+  const activeUsers = useMemo(() =>
+    users?.filter(user => user.isActive) ?? [],
+    [users]
+  );
+
+  // 4. Event handlers
+  const handleUserSelect = useCallback((user: UserData) => {
+    setSelectedUser(user);
+    setIsDialogOpen(true);
+  }, []);
+
+  const handleDeleteUser = useCallback(async (userId: string) => {
+    await deleteMutation.mutateAsync(userId);
+    setIsDialogOpen(false);
+  }, [deleteMutation]);
+
+  // 5. Early returns
+  if (isLoading) return <LoadingSpinner />;
+
+  // 6. Main render
+  return (
+    <div className="space-y-4">
+      {/* Component JSX */}
+    </div>
+  );
+};
+```

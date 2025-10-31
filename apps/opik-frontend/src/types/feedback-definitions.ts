@@ -20,6 +20,7 @@ export interface NumericalFeedbackDefinition {
 
 export type CreateFeedbackDefinition = {
   name: string;
+  description?: string;
 } & (CategoricalFeedbackDefinition | NumericalFeedbackDefinition);
 
 export type FeedbackDefinition = CreateFeedbackDefinition & {

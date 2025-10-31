@@ -14,32 +14,32 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 const ICONS_MAP = {
   [TRACE_TYPE_FOR_TREE]: {
     icon: InspectionPanel,
-    bg: "#EFE2FD",
-    color: "#491B7E",
+    bg: "var(--tag-purple-bg)",
+    color: "var(--tag-purple-text)",
     tooltip: "Trace",
   },
   [SPAN_TYPE.llm]: {
     icon: MessageCircle,
-    bg: "#E2EFFD",
-    color: "#19426B",
+    bg: "var(--tag-blue-bg)",
+    color: "var(--tag-blue-text)",
     tooltip: "LLM",
   },
   [SPAN_TYPE.general]: {
     icon: Link,
-    bg: "#DAFBF0",
-    color: "#295747",
+    bg: "var(--tag-green-bg)",
+    color: "var(--tag-green-text)",
     tooltip: "General",
   },
   [SPAN_TYPE.tool]: {
     icon: Hammer,
-    bg: "#FDE2F6",
-    color: "#72275F",
+    bg: "var(--tag-burgundy-bg)",
+    color: "var(--tag-burgundy-text)",
     tooltip: "Tool",
   },
   [SPAN_TYPE.guardrail]: {
     icon: Construction,
-    bg: "#FEE8D7",
-    color: "#734A2B",
+    bg: "var(--tag-orange-bg)",
+    color: "var(--tag-orange-text)",
     tooltip: "Guardrail",
   },
 };

@@ -115,7 +115,7 @@ class LibraryInstallTest(base_metric.BaseMetric):
         scores = result["scores"]
         assert len(scores) == 1, "Should have one score result"
         assert scores[0]["value"] == 0.0, "Library installation should fail"
-        assert "Failed to establish a new connection" in scores[0]["reason"], "Error should indicate network connection failure"
+        assert "ModuleNotFoundError: No module named 'pip'" in scores[0]["reason"], "Error should indicate pip is not available in container"
         
     finally:
         executor.cleanup()

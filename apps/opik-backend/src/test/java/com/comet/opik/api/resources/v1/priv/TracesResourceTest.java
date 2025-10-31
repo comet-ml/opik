@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
@@ -26,6 +27,7 @@ import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
@@ -40,11 +42,14 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
+import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -69,16 +74,17 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AttachmentPayloadUtilsTest;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NotFoundException;
@@ -90,9 +96,11 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -111,9 +119,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.com.google.common.collect.Lists;
-import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -129,11 +134,13 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -153,7 +160,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
-import static com.comet.opik.api.filter.SpanField.CUSTOM;
+import static com.comet.opik.api.filter.TraceField.CUSTOM;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
@@ -234,6 +241,7 @@ class TracesResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 
     private final WireMockUtils.WireMockRuntime wireMock;
 
@@ -241,7 +249,8 @@ class TracesResourceTest {
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER, MINIO).join();
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -250,9 +259,17 @@ class TracesResourceTest {
 
         MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .isMinIO(true)
+                        .minioUrl(minioUrl)
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -267,6 +284,8 @@ class TracesResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private ThreadCommentResourceClient threadCommentResourceClient;
+    private AttachmentResourceClient attachmentResourceClient;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -283,7 +302,9 @@ class TracesResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
+        this.attachmentResourceClient = new AttachmentResourceClient(client);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1592,6 +1613,7 @@ class TracesResourceTest {
                         .feedbackScores(null)
                         .guardrailsValidations(null)
                         .llmSpanCount(0)
+                        .spanCount(0)
                         .build();
 
                 traces.add(trace);
@@ -1629,6 +1651,7 @@ class TracesResourceTest {
                     .feedbackScores(null)
                     .guardrailsValidations(null)
                     .llmSpanCount(0)
+                    .spanCount(0)
                     .build();
 
             create(trace, apiKey, workspaceName);
@@ -1673,6 +1696,7 @@ class TracesResourceTest {
                             .comments(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .toList();
 
@@ -1688,6 +1712,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .toList();
 
@@ -1794,6 +1819,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1847,6 +1873,7 @@ class TracesResourceTest {
                             .threadId(UUID.randomUUID().toString())
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1894,6 +1921,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1939,6 +1967,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1983,6 +2012,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2026,6 +2056,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2048,6 +2079,76 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(),
                     filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterAnnotationQueueIdContains__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(project.name())
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .build());
+
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            // Create annotation queue with items
+            var queue1 = prepareAnnotationQueue(projectId);
+            var queue2 = prepareAnnotationQueue(projectId);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue1, queue2)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queue1.id(), Set.of(traces.getFirst().id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queue2.id(), Set.of(traces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ANNOTATION_QUEUE_IDS)
+                    .operator(Operator.CONTAINS)
+                    .value(queue1.id().toString())
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        private AnnotationQueue prepareAnnotationQueue(UUID projectId) {
+            return factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
         }
 
         @ParameterizedTest
@@ -2075,6 +2176,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2128,6 +2230,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2170,6 +2273,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2218,6 +2322,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2267,6 +2372,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2315,6 +2421,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2362,6 +2469,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2405,6 +2513,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2450,6 +2559,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2736,6 +2846,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2783,6 +2894,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2836,6 +2948,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2887,6 +3000,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2938,6 +3052,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2989,6 +3104,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -3041,6 +3157,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -3092,6 +3209,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -3144,6 +3262,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -3327,6 +3446,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -3506,6 +3626,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3619,6 +3740,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(1)
+                            .spanCount(1)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -3805,6 +3927,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(1)
+                            .spanCount(1)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -3876,6 +3999,7 @@ class TracesResourceTest {
                                     .collect(Collectors.toList()))
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(1, traces.get(1).toBuilder()
@@ -3940,6 +4064,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(traces.size() - 1, traces.getLast().toBuilder().feedbackScores(null).build());
@@ -4009,6 +4134,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .totalEstimatedCost(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -4078,6 +4204,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -4143,6 +4270,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -4206,6 +4334,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .totalEstimatedCost(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -4281,6 +4410,7 @@ class TracesResourceTest {
                                         : now.plusNanos(1000))
                                 .guardrailsValidations(null)
                                 .llmSpanCount(0)
+                                .spanCount(0)
                                 .build();
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -4439,6 +4569,7 @@ class TracesResourceTest {
                             .guardrailsValidations(null)
                             .comments(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4520,6 +4651,7 @@ class TracesResourceTest {
                             .guardrailsValidations(null)
                             .errorInfo(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -4568,6 +4700,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .guardrailsValidations(null)
                             .llmSpanCount(0)
+                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -4635,7 +4768,7 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, LIST, DICTIONARY, CUSTOM, ENUM, STRING_STATE_DB ->
                 RandomStringUtils.secure().nextAlphanumeric(10);
-            case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
+            case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
             case ERROR_CONTAINER -> "";
         };
@@ -4643,7 +4776,7 @@ class TracesResourceTest {
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB,
+            case STRING, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB,
                     DICTIONARY ->
                 null;
             case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
@@ -4653,7 +4786,7 @@ class TracesResourceTest {
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
             case STRING, DICTIONARY, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB -> " ";
-            case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
 
@@ -5087,6 +5220,69 @@ class TracesResourceTest {
                     .field(TraceThreadField.TAGS)
                     .operator(Operator.CONTAINS)
                     .value(update.tags().iterator().next())
+                    .build();
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
+        }
+
+        @Test
+        @DisplayName("When filtering by annotation queue id, should return only threads with matching queue ids")
+        void whenFilterByAnnotationQueueId__thenReturnThreadsWithMatchingTags() {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var threadId = UUID.randomUUID().toString();
+
+            // Create traces
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(project.name())
+                                .usage(null)
+                                .threadId(threadId)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Wait for thread to be created
+            Mono.delay(Duration.ofMillis(250)).block();
+
+            var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
+
+            // Create annotation queue for threads
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), Set.of(createdThread.threadModelId()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            List<TraceThread> expectedThreads = List.of(createdThread);
+
+            // Create filter for the specified status
+            var statusFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .operator(Operator.CONTAINS)
+                    .value(annotationQueue.id().toString())
                     .build();
 
             assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
@@ -6854,7 +7050,7 @@ class TracesResourceTest {
                     scoreItems.get(3).name(), scoreItems.getLast().name());
 
             // And When
-            traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, scoresToDelete, apiKey,
+            traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, scoresToDelete, null, apiKey,
                     workspaceName);
 
             // Then - Verify remaining scores using getTraceThreads API
@@ -6884,8 +7080,8 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             // When
-            try (var response = traceResourceClient.callDeleteThreadFeedbackScores(projectName, threadId, scoreNames,
-                    apiKey, workspaceName)) {
+            try (var response = traceResourceClient.callDeleteThreadFeedbackScores(
+                    projectName, threadId, scoreNames, null, apiKey, workspaceName)) {
                 // Then
                 assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
@@ -7220,6 +7416,178 @@ class TracesResourceTest {
                 }
             }
         }
+
+        @Test
+        @DisplayName("when trace contains base64 attachments, then attachments are stripped and stored")
+        void create__whenTraceContainsBase64Attachments__thenAttachmentsAreStrippedAndStored() throws Exception {
+            // Given a trace with base64 encoded attachments in its input
+            // Create longer base64 strings that exceed the 5000 character threshold using utility
+            String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Images attached:\", " +
+                            "\"png_data\": \"%s\", " +
+                            "\"gif_data\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"session_id\": \"session456\", " +
+                            "\"timestamp\": \"2024-01-15T10:30:00Z\", " +
+                            "\"model_config\": {\"temperature\": 0.7, \"max_tokens\": 1000}, " +
+                            "\"prompt\": \"Please analyze these images and provide a detailed description\", " +
+                            "\"context\": [\"Previous conversation history\", \"User preferences\"], " +
+                            "\"metadata\": {\"source\": \"web_app\", \"version\": \"1.2.3\"}}",
+                    base64Png, base64Gif);
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .build();
+
+            // When creating the trace
+            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+            assertThat(traceId).isNotNull();
+
+            // Then the trace should have attachments stripped and replaced with references
+            // Wait for async processing and attachment stripping
+            // Use strip_attachments=true to get attachment references instead of re-injected full base64 data
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
+                assertThat(retrievedTrace).isNotNull();
+                // Ensure trace is retrieved successfully before proceeding with assertions
+            });
+
+            Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
+            assertThat(retrievedTrace).isNotNull();
+
+            JsonNode retrievedInput = retrievedTrace.input();
+            assertThat(retrievedInput).isNotNull();
+
+            String retrievedInputString = retrievedInput.toString();
+
+            // Verify the base64 data is replaced by attachment references (bracketed, with context prefix and timestamp)
+            assertThat(retrievedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+            assertThat(retrievedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+            assertThat(retrievedInputString).doesNotContain(base64Png);
+            assertThat(retrievedInputString).doesNotContain(base64Gif);
+
+            var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+
+            // Verify attachments can be listed via AttachmentResourceClient
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+
+            var attachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            // Verify we got attachments
+            assertThat(attachmentPage).isNotNull();
+            assertThat(attachmentPage.content()).hasSize(2);
+
+            // Verify attachment names contain our references with context prefixes
+            var attachmentNames = attachmentPage.content().stream()
+                    .map(attachment -> attachment.fileName())
+                    .toList();
+            // Verify attachment names contain our references with context prefixes (with timestamps)
+            assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.png"));
+            assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-2-\\d+\\.gif"));
+        }
+
+        @Test
+        @DisplayName("when trace is fetched with truncate flag, then attachments are handled accordingly")
+        void getById__whenFetchedWithTruncateFlag__thenAttachmentsAreHandledAccordingly() throws Exception {
+            // Given a trace with base64 encoded attachments in its input
+            String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Images attached:\", " +
+                            "\"png_data\": \"%s\", " +
+                            "\"gif_data\": \"%s\"}",
+                    base64Png, base64Gif);
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .build();
+
+            // When creating the trace
+            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+            assertThat(traceId).isNotNull();
+
+            // Wait for async attachment stripping - verify the base64 data is no longer in the payload
+            // (it's been replaced with attachment references)
+            Awaitility.await()
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
+                        assertThat(retrievedTrace).isNotNull();
+
+                        String inputString = retrievedTrace.input().toString();
+                        // The key indicator: the original base64 data should be gone
+                        assertThat(inputString).doesNotContain(base64Png);
+                        assertThat(inputString).doesNotContain(base64Gif);
+                        // And replaced with references (this is secondary - main check is data is gone)
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+                    });
+
+            // Verify exactly 2 attachments were created (no duplicates)
+            var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+
+            var attachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            assertThat(attachmentPage).isNotNull();
+            assertThat(attachmentPage.content()).hasSize(2); // Should have exactly 2, not duplicates
+
+            // Test 1: Fetch with strip_attachments=true - should show references
+            Trace truncatedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
+            assertThat(truncatedTrace).isNotNull();
+
+            JsonNode truncatedInput = truncatedTrace.input();
+            assertThat(truncatedInput).isNotNull();
+            String truncatedInputString = truncatedInput.toString();
+
+            // Verify the base64 data is replaced by attachment references (with timestamps)
+            assertThat(truncatedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+            assertThat(truncatedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+            assertThat(truncatedInputString).doesNotContain(base64Png);
+            assertThat(truncatedInputString).doesNotContain(base64Gif);
+
+            // Test 2: Fetch with truncate=false - should show original base64 data
+            Trace fullTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, false);
+            assertThat(fullTrace).isNotNull();
+
+            JsonNode fullInput = fullTrace.input();
+            assertThat(fullInput).isNotNull();
+            String fullInputString = fullInput.toString();
+
+            // Verify the base64 data is restored (whitespace formatting may differ due to Jackson read/write)
+            assertThat(fullInputString).contains(base64Png);
+            assertThat(fullInputString).contains(base64Gif);
+            assertThat(fullInputString).contains("Images attached:");
+            // Should not contain attachment references
+            assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+            assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+        }
+
     }
 
     @Nested
@@ -7260,6 +7628,58 @@ class TracesResourceTest {
                     expectedTraces.reversed(),
                     List.of(),
                     API_KEY);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenSendingMultipleTracesWithSameId__dedupeTraces__thenReturnNoContent(
+                Function<Trace, Trace> traceModifier) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var id = generator.generate();
+            String projectName = UUID.randomUUID().toString();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(id)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .usage(null)
+                            .build())
+                    .toList();
+
+            var modifiedTraces = IntStream.range(0, traces.size())
+                    .mapToObj(i -> i == traces.size() - 1
+                            ? traceModifier.apply(traces.get(i)) // modify last item
+                            : traces.get(i))
+                    .toList();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(modifiedTraces, API_KEY,
+                    workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            getAndAssertPage(
+                    workspaceName,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    List.of(modifiedTraces.getLast()),
+                    List.of(),
+                    API_KEY);
+        }
+
+        Stream<Arguments> batch__whenSendingMultipleTracesWithSameId__dedupeTraces__thenReturnNoContent() {
+            return Stream.of(
+                    arguments(
+                            (Function<Trace, Trace>) t -> t),
+                    arguments(
+                            (Function<Trace, Trace>) trace -> trace.toBuilder()
+                                    .lastUpdatedAt(null).build()));
         }
 
         @Test
@@ -7483,6 +7903,166 @@ class TracesResourceTest {
                     assertThat(actualError).isEqualTo(expectedError);
                 } else {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("batch create traces with base64 attachments, then attachments are stripped and stored")
+        void batchCreate__whenTracesContainBase64Attachments__thenAttachmentsAreStrippedAndStored() throws Exception {
+            // Given multiple traces with base64 encoded attachments in their inputs and outputs
+            String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
+            String base64Pdf = AttachmentPayloadUtilsTest.createLargePdfBase64();
+
+            // Create first trace with PNG in input and GIF in output
+            String inputJson1 = String.format(
+                    "{\"message\": \"First trace with PNG\", " +
+                            "\"image_data\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"request_type\": \"image_analysis\"}",
+                    base64Png);
+
+            String outputJson1 = String.format(
+                    "{\"result\": \"Analysis complete\", " +
+                            "\"chart_data\": \"%s\", " +
+                            "\"confidence\": 0.95}",
+                    base64Gif);
+
+            // Create second trace with PDF in input and PNG in metadata
+            String inputJson2 = String.format(
+                    "{\"message\": \"Second trace with PDF\", " +
+                            "\"document_data\": \"%s\", " +
+                            "\"user_id\": \"user456\", " +
+                            "\"request_type\": \"document_processing\"}",
+                    base64Pdf);
+
+            String metadataJson2 = String.format(
+                    "{\"processed_image\": \"%s\", " +
+                            "\"processing_time\": 1250, " +
+                            "\"model_version\": \"v2.1\"}",
+                    base64Png);
+
+            // Create third trace with multiple attachments in different fields
+            String inputJson3 = String.format(
+                    "{\"message\": \"Third trace with multiple attachments\", " +
+                            "\"primary_image\": \"%s\", " +
+                            "\"secondary_document\": \"%s\", " +
+                            "\"user_id\": \"user789\", " +
+                            "\"batch_id\": \"batch_001\"}",
+                    base64Gif, base64Pdf);
+
+            var traces = List.of(
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .input(JsonUtils.readTree(inputJson1))
+                            .output(JsonUtils.readTree(outputJson1))
+                            .metadata(JsonUtils.readTree("{}"))
+                            .build(),
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .input(JsonUtils.readTree(inputJson2))
+                            .output(JsonUtils.readTree("{\"result\": \"Document processed successfully\"}"))
+                            .metadata(JsonUtils.readTree(metadataJson2))
+                            .build(),
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .input(JsonUtils.readTree(inputJson3))
+                            .output(JsonUtils.readTree("{\"result\": \"Multi-attachment processing complete\"}"))
+                            .metadata(JsonUtils.readTree("{}"))
+                            .build());
+
+            // When batch creating the traces
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            // Then all traces should have attachments stripped and replaced with references
+            // Wait for async processing and attachment stripping
+            var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+
+            // Use strip_attachments=true to get attachment references instead of re-injected full base64 data
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                // Ensure all traces can be retrieved successfully before proceeding with assertions
+                for (var originalTrace : traces) {
+                    Trace retrievedTrace = traceResourceClient.getById(originalTrace.id(), TEST_WORKSPACE, API_KEY,
+                            true);
+                    assertThat(retrievedTrace).isNotNull();
+                }
+            });
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+
+            // Verify each trace has its attachments processed
+            for (int i = 0; i < traces.size(); i++) {
+                var originalTrace = traces.get(i);
+                var retrievedTrace = traceResourceClient.getById(originalTrace.id(), TEST_WORKSPACE, API_KEY, true);
+                assertThat(retrievedTrace).isNotNull();
+
+                // Verify original base64 data is not present in any field
+                String inputString = retrievedTrace.input().toString();
+                String outputString = retrievedTrace.output().toString();
+                String metadataString = retrievedTrace.metadata().toString();
+
+                assertThat(inputString).doesNotContain(base64Png);
+                assertThat(inputString).doesNotContain(base64Gif);
+                assertThat(inputString).doesNotContain(base64Pdf);
+
+                assertThat(outputString).doesNotContain(base64Png);
+                assertThat(outputString).doesNotContain(base64Gif);
+                assertThat(outputString).doesNotContain(base64Pdf);
+
+                assertThat(metadataString).doesNotContain(base64Png);
+                assertThat(metadataString).doesNotContain(base64Gif);
+                assertThat(metadataString).doesNotContain(base64Pdf);
+
+                // Verify attachment references are present based on trace content (bracketed, with context prefix and timestamp)
+                switch (i) {
+                    case 0 : // First trace: PNG in input, GIF in output
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.gif\\]");
+                        break;
+                    case 1 : // Second trace: PDF in input, PNG in metadata
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.pdf\\]");
+                        assertThat(metadataString).containsPattern("\\[metadata-attachment-\\d+-\\d+\\.png\\]");
+                        break;
+                    case 2 : // Third trace: GIF and PDF in input
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.pdf\\]");
+                        break;
+                }
+
+                // Verify attachments are stored and can be listed
+                var attachmentPage = attachmentResourceClient.attachmentList(
+                        projectId,
+                        EntityType.TRACE,
+                        originalTrace.id(),
+                        baseUrl,
+                        API_KEY,
+                        TEST_WORKSPACE,
+                        200);
+
+                assertThat(attachmentPage).isNotNull();
+                assertThat(attachmentPage.content()).isNotEmpty();
+
+                var attachmentNames = attachmentPage.content().stream()
+                        .map(attachment -> attachment.fileName())
+                        .toList();
+
+                // Verify correct number of attachments based on trace content
+                switch (i) {
+                    case 0 : // First trace should have 2 attachments (PNG + GIF)
+                        assertThat(attachmentPage.content()).hasSize(2);
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.png"));
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("output-attachment-1-\\d+\\.gif"));
+                        break;
+                    case 1 : // Second trace should have 2 attachments (PDF + PNG)
+                        assertThat(attachmentPage.content()).hasSize(2);
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.pdf"));
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("metadata-attachment-1-\\d+\\.png"));
+                        break;
+                    case 2 : // Third trace should have 2 attachments (GIF + PDF)
+                        assertThat(attachmentPage.content()).hasSize(2);
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.gif"));
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-2-\\d+\\.pdf"));
+                        break;
                 }
             }
         }
@@ -8260,6 +8840,143 @@ class TracesResourceTest {
                     .build();
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
+
+        @Test
+        @DisplayName("when updating trace with different attachments, then old attachments are deleted and new ones are stored")
+        void update__whenUpdatingTraceWithDifferentAttachments__thenOldAttachmentsAreDeletedAndNewOnesAreStored()
+                throws Exception {
+            // Step 1: Create a trace with 3 JPG attachments
+            String base64Jpg1 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg2 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg3 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Original trace with 3 JPG images\", " +
+                            "\"image1\": \"%s\", " +
+                            "\"image2\": \"%s\", " +
+                            "\"image3\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"operation\": \"image_processing\"}",
+                    base64Jpg1, base64Jpg2, base64Jpg3);
+
+            var originalTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed 3 images\"}"))
+                    .metadata(JsonUtils.readTree("{\"format\": \"jpg\", \"count\": 3}"))
+                    .build();
+
+            // Create the trace
+            UUID traceId = traceResourceClient.createTrace(originalTrace, API_KEY, TEST_WORKSPACE);
+            assertThat(traceId).isNotNull();
+
+            // Wait for async processing and attachment stripping
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
+                assertThat(retrievedTrace).isNotNull();
+                // Ensure the trace is fully processed
+                String inputString = retrievedTrace.input().toString();
+                assertThat(inputString).doesNotContain(base64Jpg1);
+                assertThat(inputString).doesNotContain(base64Jpg2);
+                assertThat(inputString).doesNotContain(base64Jpg3);
+            });
+
+            var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+
+            // Step 2: Verify we have 3 JPG attachments initially
+            var initialAttachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            assertThat(initialAttachmentPage).isNotNull();
+            assertThat(initialAttachmentPage.content()).hasSize(3);
+
+            // Verify all initial attachments are JPEGs
+            var initialAttachmentNames = initialAttachmentPage.content().stream()
+                    .map(attachment -> attachment.fileName())
+                    .toList();
+            assertThat(initialAttachmentNames).allSatisfy(name -> assertThat(name).contains(".jpg"));
+
+            // Step 3: Update the trace with 2 PNG attachments (different type and count)
+            String base64Png1 = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Png2 = AttachmentPayloadUtilsTest.createLargePngBase64();
+
+            String updatedInputJson = String.format(
+                    "{\"message\": \"Updated trace with 2 PNG images\", " +
+                            "\"png_image1\": \"%s\", " +
+                            "\"png_image2\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"operation\": \"png_processing\"}",
+                    base64Png1, base64Png2);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(updatedInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed 2 PNG images\"}"))
+                    .metadata(JsonUtils.readTree("{\"format\": \"png\", \"count\": 2}"))
+                    .build();
+
+            // Perform the update
+            traceResourceClient.updateTrace(traceId, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Wait for async processing and attachment stripping for the update
+            // Also wait for ClickHouse ReplicatedReplacingMergeTree to merge the rows
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Trace updatedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
+                        assertThat(updatedTrace).isNotNull();
+
+                        String updatedInputString = updatedTrace.input().toString();
+
+                        // First, check for the new message to confirm ClickHouse merge completed
+                        assertThat(updatedInputString).contains("Updated trace with 2 PNG images");
+
+                        // Verify original JPG base64 data is not present
+                        assertThat(updatedInputString).doesNotContain(base64Jpg1);
+                        assertThat(updatedInputString).doesNotContain(base64Jpg2);
+                        assertThat(updatedInputString).doesNotContain(base64Jpg3);
+
+                        // Verify new PNG base64 data is not present (should be replaced by references)
+                        assertThat(updatedInputString).doesNotContain(base64Png1);
+                        assertThat(updatedInputString).doesNotContain(base64Png2);
+
+                        // Verify PNG attachment references are present (with timestamps)
+                        assertThat(updatedInputString).containsPattern("input-attachment-1-\\d+\\.png");
+                        assertThat(updatedInputString).containsPattern("input-attachment-2-\\d+\\.png");
+                    });
+
+            // Step 4: Verify we now have 2 PNG attachments (old JPGs should be deleted)
+            var finalAttachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.TRACE,
+                    traceId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            assertThat(finalAttachmentPage).isNotNull();
+            assertThat(finalAttachmentPage.content()).hasSize(2);
+
+            // Verify all final attachments are PNGs
+            var finalAttachmentNames = finalAttachmentPage.content().stream()
+                    .map(attachment -> attachment.fileName())
+                    .toList();
+            assertThat(finalAttachmentNames).allSatisfy(name -> assertThat(name).contains(".png"));
+
+            // Step 5: Verify the updated trace exists and was updated
+            Trace finalTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(finalTrace).isNotNull();
+            assertThat(finalTrace.id()).isEqualTo(traceId);
+        }
     }
 
     @Nested
@@ -8625,55 +9342,37 @@ class TracesResourceTest {
         @Test
         @DisplayName("when trace does not exist, then return no content")
         void deleteFeedback__whenTraceDoesNotExist__thenReturnNoContent() {
-
             var id = generator.generate();
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .path("feedback-scores")
-                    .path("delete")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            var deleteFeedbackScore = factory.manufacturePojo(DeleteFeedbackScore.class);
+            traceResourceClient.deleteTraceFeedbackScore(deleteFeedbackScore, id, API_KEY, TEST_WORKSPACE);
         }
 
-        @Test
+        Stream<String> deleteFeedback() {
+            return Stream.of(USER, null, "", "   ");
+        }
+
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Success")
-        void deleteFeedback() {
-
-            var trace = createTrace();
-            var id = create(trace, API_KEY, TEST_WORKSPACE);
-            var score = FeedbackScore.builder()
-                    .name("name")
-                    .value(BigDecimal.valueOf(1))
-                    .source(ScoreSource.UI)
-                    .build();
+        void deleteFeedback(String author) {
+            var expectedTrace = createTrace();
+            var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
+            var score = factory.manufacturePojo(FeedbackScore.class);
             create(id, score, TEST_WORKSPACE, API_KEY);
+            expectedTrace = expectedTrace.toBuilder().feedbackScores(List.of(score)).build();
+            var actualTrace = getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.feedbackScores()).hasSize(1);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .path("feedback-scores")
-                    .path("delete")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
+            var deleteFeedbackScore = DeleteFeedbackScore.builder()
+                    .name(score.name())
+                    .author(author)
+                    .build();
+            traceResourceClient.deleteTraceFeedbackScore(deleteFeedbackScore, id, API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
-
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            expectedTrace = expectedTrace.toBuilder().feedbackScores(null).build();
+            var actualEntity = getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity.feedbackScores()).isNull();
         }
-
     }
 
     @Nested
@@ -9360,6 +10059,58 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when trace thread is retrieved with truncate parameter, then messages are truncated accordingly")
+        void getTraceThread__whenTruncateParameter__thenMessagesAreTruncatedAccordingly() {
+
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            // Create a long message that exceeds the truncation threshold of 10001 characters
+            var longMessage = "x".repeat(15000);
+            var longInput = "{\"content\": \"" + longMessage + "\"}";
+            var longOutput = "{\"result\": \"" + longMessage + "\"}";
+
+            var trace1 = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString(longInput))
+                    .build();
+
+            var trace2 = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .output(JsonUtils.getJsonNodeFromString(longOutput))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            // Test with truncate=false (default behavior) - should return full messages
+            var threadWithoutTruncate = traceResourceClient.getTraceThread(threadId, projectId, false, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(threadWithoutTruncate.firstMessage()).isNotNull();
+            assertThat(threadWithoutTruncate.lastMessage()).isNotNull();
+            assertThat(threadWithoutTruncate.firstMessage().toString()).contains(longMessage);
+            assertThat(threadWithoutTruncate.lastMessage().toString()).contains(longMessage);
+
+            // Test with truncate=true - should return truncated messages
+            var threadWithTruncate = traceResourceClient.getTraceThread(threadId, projectId, true, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(threadWithTruncate.firstMessage()).isNotNull();
+            assertThat(threadWithTruncate.lastMessage()).isNotNull();
+            // Truncated messages should be significantly shorter than the original
+            assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(longInput.length());
+            assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(longOutput.length());
+            // Truncated messages should be around 10001 characters (the threshold) plus some JSON formatting overhead
+            // Allow up to 10% overhead for JSON serialization
+            assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(11000);
+            assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(11000);
+        }
+
+        @Test
         @DisplayName("when trace thread does not exist, then return not found")
         void getTraceThread__whenTraceThreadDoesNotExist__thenReturnNotFound() {
             var threadId = UUID.randomUUID().toString();
@@ -9961,6 +10712,69 @@ class TracesResourceTest {
 
             var expectedClosedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
                     TraceThreadStatus.INACTIVE);
+
+            TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
+        }
+
+        @Test
+        void closeMultipleTraceThreads__happyPath() {
+            // Given: Create multiple traces with different thread IDs
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var threadId1 = randomUUID().toString();
+            var threadId2 = randomUUID().toString();
+            var threadId3 = randomUUID().toString();
+
+            // Create traces with different thread IDs
+            Trace trace1 = createTrace().toBuilder()
+                    .threadId(threadId1)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
+
+            Trace trace2 = createTrace().toBuilder()
+                    .threadId(threadId2)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
+
+            Trace trace3 = createTrace().toBuilder()
+                    .threadId(threadId3)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            // Wait for threads to be created
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var traceThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
+                        List.of(), List.of(), Map.of());
+                assertThat(traceThreadPage.content()).hasSize(3);
+            });
+
+            // When: Close multiple trace threads using the batch endpoint
+            traceResourceClient.closeTraceThreads(Set.of(threadId1, threadId2, threadId3), projectId, projectName,
+                    apiKey, workspaceName);
+
+            // Then: Assert that all threads are closed using getTraceThreads API
+            var closedThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
+                    List.of(), List.of(), Map.of());
+
+            var expectedClosedThreads = List.of(
+                    getExpectedThreads(List.of(trace1), projectId, threadId1, List.of(), TraceThreadStatus.INACTIVE)
+                            .getFirst(),
+                    getExpectedThreads(List.of(trace2), projectId, threadId2, List.of(), TraceThreadStatus.INACTIVE)
+                            .getFirst(),
+                    getExpectedThreads(List.of(trace3), projectId, threadId3, List.of(), TraceThreadStatus.INACTIVE)
+                            .getFirst());
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
         }

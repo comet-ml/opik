@@ -1,0 +1,19 @@
+---
+globs: sdks/typescript/**/*
+description: Testing patterns for the Opik TypeScript SDK (Vitest)
+alwaysApply: false
+---
+
+## Testing Best Practices (TypeScript SDK)
+
+- Runner: Vitest (`npm test` in `sdks/typescript`)
+- Test the public API; avoid `rest_api` internals
+- Mock network (fetch) and timers to keep tests deterministic
+- For batching, assert persistence effects only after `await client.flush()` (or `flushAll()`)
+- Use typed fixtures that align with `rest_api/api` exports where needed
+
+Patterns
+- Control debounce by configuring small delays or disabling batching in tests
+- Advance fake timers to trigger queue flushes when not using explicit `flush()`
+- Assert no unintended logs at `ERROR` level
+

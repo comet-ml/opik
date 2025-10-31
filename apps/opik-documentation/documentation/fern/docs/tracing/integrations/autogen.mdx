@@ -1,9 +1,15 @@
-[Autogen](https://microsoft.github.io/autogen/stable/) is a framework for
-building AI agents and applications built and maintained by Microsft.
+---
+title: Observability for AutoGen with Opik
+description: Start here to integrate Opik into your AutoGen-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
 
-Opik's integration with Autogen relies on it's built-in logging framework that
-relies on OpenTelemetry. You can learn more about Opik's OpenTelemetry features
-in our [get started guide](/tracing/opentelemetry/overview).
+[Autogen](https://microsoft.github.io/autogen/stable/) is a framework for building AI agents and applications built and maintained by Microsoft.
+
+Autogen's primary advantage is its enterprise-ready architecture with built-in logging and observability features, making it ideal for production multi-agent systems that require robust monitoring and debugging capabilities.
+
+<Frame>
+  <img src="/img/tracing/autogen_integration.png" alt="Autogen tracing" />
+</Frame>
 
 ## Getting started
 
@@ -24,6 +30,28 @@ configure the OpenTelemetry integration:
             
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
 
@@ -162,8 +190,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Once the integration is set-up, you will see the trace in Opik:
+## Further improvements
 
-<Frame>
-  <img src="/img/tracing/autogen_integration.png" />
-</Frame>
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

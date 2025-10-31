@@ -40,8 +40,18 @@ import {
   buildGroupFieldNameForMeta,
 } from "@/lib/groups";
 import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
+import useDatasetsList from "@/api/datasets/useDatasetsList";
+import { COLUMN_DATASET_ID } from "@/types/shared";
 
 export type GroupedExperiment = Record<string, string> & Experiment;
+
+const DATASETS_SORTING: Sorting = [
+  {
+    id: "last_created_experiment_at",
+    desc: true,
+  },
+];
+const MAX_AMOUNT_OF_DATASET_FOR_SORTING = 1000;
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
@@ -86,6 +96,7 @@ const buildGroupPath = (
   currentPath: string[] = [],
   accumulatedFilters: Filters = [],
   accumulatedRowGroupData: Record<string, unknown> = {},
+  datasetOrderMap?: Record<string, number>,
 ): FlattenGroup[] => {
   if (groupIndex >= groups.length) {
     return [];
@@ -95,6 +106,8 @@ const buildGroupPath = (
   const result: FlattenGroup[] = [];
 
   const entries = Object.entries(currentGroupsMap);
+  const isDatasetGroup = currentGroup.field === COLUMN_DATASET_ID;
+
   const sortedEntries = entries.sort(([a], [b]) => {
     const labelA = currentGroupsMap[a].label ?? a;
     const labelB = currentGroupsMap[b].label ?? b;
@@ -105,6 +118,13 @@ const buildGroupPath = (
     if (isEmptyOrDeletedA && !isEmptyOrDeletedB) return 1; // A goes to the end
     if (!isEmptyOrDeletedA && isEmptyOrDeletedB) return -1; // B goes to the end
     if (isEmptyOrDeletedA && isEmptyOrDeletedB) return 0;
+
+    // If grouping by dataset and we have dataset order map, use it
+    if (isDatasetGroup && datasetOrderMap) {
+      const orderA = datasetOrderMap[a] ?? Number.MAX_SAFE_INTEGER;
+      const orderB = datasetOrderMap[b] ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB;
+    }
 
     if (currentGroup.direction === SORT_DIRECTION.ASC) {
       return labelA.localeCompare(labelB);
@@ -119,6 +139,7 @@ const buildGroupPath = (
       createFilter({
         field: currentGroup.field,
         key: currentGroup.key,
+        type: currentGroup.type,
         operator: "=",
         value,
       }),
@@ -159,6 +180,7 @@ const buildGroupPath = (
         metadataPath,
         currentFilters,
         currentRowGroupData,
+        datasetOrderMap,
       );
       result.push(...nestedGroups);
     }
@@ -170,12 +192,13 @@ const buildGroupPath = (
 const flattenExperimentsGroups = (
   groupsMap: Record<string, ExperimentsGroupNode>,
   groups: Groups,
+  datasetOrderMap?: Record<string, number>,
 ): FlattenGroup[] => {
   if (!groups.length || !Object.keys(groupsMap).length) {
     return [];
   }
 
-  return buildGroupPath(groupsMap, groups);
+  return buildGroupPath(groupsMap, groups, "", 0, [], [], {}, datasetOrderMap);
 };
 
 const buildAggregationMap = (
@@ -265,6 +288,10 @@ export default function useGroupedExperimentsList(
   const experimentsCache = useExperimentsCache();
   const groups = useMemo(() => params.groups ?? [], [params.groups]);
   const hasGroups = Boolean(groups?.length);
+  const isGroupingByDataset = useMemo(
+    () => groups?.some((g) => g.field === COLUMN_DATASET_ID) ?? false,
+    [groups],
+  );
 
   const {
     data: groupsData,
@@ -302,6 +329,25 @@ export default function useGroupedExperimentsList(
       },
     );
 
+  const {
+    data: datasetsData,
+    isPending: isDatasetsPending,
+    refetch: refetchDatasets,
+  } = useDatasetsList(
+    {
+      workspaceName: params.workspaceName,
+      page: 1,
+      size: MAX_AMOUNT_OF_DATASET_FOR_SORTING,
+      withExperimentsOnly: true,
+      sorting: DATASETS_SORTING,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: hasGroups && isGroupingByDataset,
+      refetchInterval,
+    },
+  );
+
   const { data, isPending, isPlaceholderData, refetch } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
@@ -321,9 +367,20 @@ export default function useGroupedExperimentsList(
 
   const groupsMap = useMemo(() => groupsData?.content ?? {}, [groupsData]);
 
+  const datasetOrderMap = useMemo(() => {
+    if (!datasetsData?.content) return undefined;
+
+    const orderMap: Record<string, number> = {};
+    datasetsData.content.forEach((dataset, index) => {
+      orderMap[dataset.id] = index;
+    });
+
+    return orderMap;
+  }, [datasetsData?.content]);
+
   const flattenGroups = useMemo(
-    () => flattenExperimentsGroups(groupsMap, groups),
-    [groupsMap, groups],
+    () => flattenExperimentsGroups(groupsMap, groups, datasetOrderMap),
+    [groupsMap, groups, datasetOrderMap],
   );
 
   const aggregationMap = useMemo(() => {
@@ -458,15 +515,28 @@ export default function useGroupedExperimentsList(
 
   const groupedRefetch = useCallback(
     (options?: RefetchOptions) => {
-      return Promise.all([
+      const refetchPromises: Promise<unknown>[] = [
         refetchGroups(options),
         refetchGroupsAggregations(options),
         ...Object.values(experimentsResponses).map((response) =>
           response.refetch(options),
         ),
-      ]);
+      ];
+
+      // Only refetch datasets when grouping by dataset
+      if (isGroupingByDataset) {
+        refetchPromises.push(refetchDatasets(options));
+      }
+
+      return Promise.all(refetchPromises);
     },
-    [experimentsResponses, refetchGroups, refetchGroupsAggregations],
+    [
+      experimentsResponses,
+      refetchGroups,
+      refetchGroupsAggregations,
+      refetchDatasets,
+      isGroupingByDataset,
+    ],
   );
 
   const transformedData = useMemo(
@@ -494,9 +564,15 @@ export default function useGroupedExperimentsList(
     ],
   );
 
+  // When groups are active, we're only pending if the initial groups/datasets queries are pending
+  // The individual experiment queries for expanded groups will load separately
+  // Only check isDatasetsPending if the datasets query is actually enabled
+  const groupedIsPending =
+    isGroupsPending || (isGroupingByDataset && isDatasetsPending);
+
   return {
     data: transformedData,
-    isPending: hasGroups ? isGroupsPending : isPending,
+    isPending: hasGroups ? groupedIsPending : isPending,
     isPlaceholderData: hasGroups ? isGroupsPlaceholderData : isPlaceholderData,
     refetch: hasGroups ? groupedRefetch : refetch,
   };

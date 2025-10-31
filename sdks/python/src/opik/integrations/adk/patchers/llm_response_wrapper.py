@@ -11,7 +11,7 @@ import opik
 from opik import llm_usage
 from opik.llm_usage import opik_usage
 
-LOGGER = logging.Logger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 
 class LlmResponseCreateWrapper:
@@ -26,6 +26,7 @@ class LlmResponseCreateWrapper:
     def __call__(
         self, generate_content_response: genai_types.GenerateContentResponse
     ) -> adk_models.LlmResponse:
+        LOGGER.debug("LlmResponseCreateWrapper called")
         return _wrap_llm_response_create(
             generate_content_response, self.wrapped_response_create
         )
@@ -38,10 +39,11 @@ class LLMUsageData:
     provider: Optional[str]
 
 
-def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
+def pop_llm_usage_data(
+    result_dict: Dict[str, Any], provider: Optional[str]
+) -> Optional[LLMUsageData]:
     """Extracts Opik usage metadata from ADK output and removes it from the result dict."""
     opik_usage_metadata = None
-    provider = None
     model = None
 
     if (custom_metadata := result_dict.get("custom_metadata", None)) is not None:
@@ -49,11 +51,6 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
             model = custom_metadata.pop("model_version", None)
             if model is not None:
                 model = model.split("/")[-1]
-
-            provider = custom_metadata.pop("provider", None)
-    else:
-        provider = adk_helpers.get_adk_provider()
-        model = None
 
     # in streaming mode ADK returns the usage metadata in the result dict as the last call
     # to the after_model_callback bypassing our patching (no opik_usage)
@@ -70,13 +67,9 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
             logger=LOGGER,
             error_message="Failed to log token usage from ADK Gemini call",
         )
-    # if not google provider was used - usage data will be in OpenAI format
     else:
-        usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=opik.LLMProvider.OPENAI,
+        usage = llm_usage.build_opik_usage_from_unknown_provider(
             usage=opik_usage_metadata,
-            logger=LOGGER,
-            error_message=f"Failed to log token usage from ADK {provider} call",
         )
 
     if usage is None:
@@ -92,6 +85,8 @@ def _wrap_llm_response_create(
     ],
 ) -> adk_models.LlmResponse:
     usage_metadata = generate_content_response.usage_metadata
+    LOGGER.debug("_wrap_llm_response_create: usage_metadata=%s", usage_metadata)
+
     response = wrapped_response_create(generate_content_response)
     if usage_metadata is None:
         return response
@@ -102,5 +97,9 @@ def _wrap_llm_response_create(
     response.custom_metadata["opik_usage"] = usage_metadata
     response.custom_metadata["provider"] = adk_helpers.get_adk_provider()
     response.custom_metadata["model_version"] = generate_content_response.model_version
+    LOGGER.debug(
+        "_wrap_llm_response_create finished: response.custom_metadata=%s",
+        response.custom_metadata,
+    )
 
     return response

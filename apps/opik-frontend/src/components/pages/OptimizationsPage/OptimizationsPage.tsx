@@ -22,7 +22,6 @@ import {
 } from "use-query-params";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
-import uniq from "lodash/uniq";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -375,6 +374,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     },
     [setGroupLimit],
   );
+
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
     const indexMap: Record<string, number> = {};
@@ -394,22 +394,25 @@ const OptimizationsPage: React.FunctionComponent = () => {
           index += 1;
         }
 
+        // Only include the main objective score in the chart
+        const objectiveName = optimization.objective_name;
+        const objectiveScore = optimization.feedback_scores?.find(
+          (score) => score.name === objectiveName,
+        );
+
         groupsMap[key].data.unshift({
           entityId: optimization.id,
           entityName: optimization.name,
           createdDate: formatDate(optimization.created_at),
-          scores: (optimization.feedback_scores || []).reduce<
-            Record<string, number>
-          >((acc, score) => {
-            acc[score.name] = score.value;
-            return acc;
-          }, {}),
+          scores: objectiveScore
+            ? { [objectiveScore.name]: objectiveScore.value }
+            : {},
         });
 
-        groupsMap[key].lines = uniq([
-          ...groupsMap[key].lines,
-          ...(optimization.feedback_scores || []).map((s) => s.name),
-        ]);
+        // Only add the objective name to lines
+        if (objectiveName && !groupsMap[key].lines.includes(objectiveName)) {
+          groupsMap[key].lines.push(objectiveName);
+        }
       }
     });
 
@@ -474,7 +477,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
             size="sm"
             onClick={handleNewOptimizationClick}
           >
-            <Info className="mr-2 size-3.5" />
+            <Info className="mr-1.5 size-3.5" />
             Create new optimization
           </Button>
         </div>

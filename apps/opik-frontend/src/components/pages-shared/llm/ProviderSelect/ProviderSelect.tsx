@@ -44,7 +44,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     return (
       <div className="flex w-full items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon />
+          <Icon className="text-foreground" />
           {label}
         </div>
       </div>
@@ -65,7 +65,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       >
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
-            <Icon />
+            <Icon className="text-foreground" />
             {option.label}
           </div>
           {isConfigured && <Tag variant="green">Configured</Tag>}

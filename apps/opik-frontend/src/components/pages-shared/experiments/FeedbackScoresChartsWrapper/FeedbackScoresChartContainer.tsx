@@ -19,12 +19,13 @@ import FeedbackScoresChartContent, {
   ChartData,
 } from "./FeedbackScoresChartContent";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { DropdownOption } from "@/types/shared";
 
 type FeedbackScoresChartContainerProps = {
   className: string;
   chartData?: ChartData;
   chartId: string;
-  chartName?: string | string[];
+  chartName?: string | DropdownOption<string>[];
   subtitle?: string;
 };
 
@@ -58,8 +59,9 @@ const FeedbackScoresChartContainer: React.FC<
       };
     }
 
-    const fullName = chartName.join(" / ");
-    const tooltip = fullName;
+    const labels = chartName.map((o) => o.value);
+    const fullName = labels.join(" / ");
+    const tooltip = chartName.map((o) => `${o.label}: ${o.value}`).join(" / ");
 
     // For single item or when width not available
     if (width === 0 || chartName.length <= 1) {
@@ -74,7 +76,7 @@ const FeedbackScoresChartContainer: React.FC<
     const ELLIPSIS_WIDTH = 13;
     const SEPARATOR_WITH_GAPS_WIDTH = 6 + 4 + 4;
 
-    const uniqNames = uniq(chartName);
+    const uniqNames = uniq(labels);
     const widthMap = getTextWidth(uniqNames, { font: "500 14px Inter" }).reduce<
       Record<string, number>
     >(
@@ -96,8 +98,8 @@ const FeedbackScoresChartContainer: React.FC<
         0,
       );
 
-    let names = chartName.slice();
-    const onlyLast = [ELLIPSIS, last(chartName) as string];
+    let names = labels.slice();
+    const onlyLast = [ELLIPSIS, last(labels) as string];
 
     if (CONTAINER_WIDTH < getWidth(["", ...onlyLast])) {
       // check the case if the last item is too long to fit into the container
@@ -120,7 +122,7 @@ const FeedbackScoresChartContainer: React.FC<
 
     return {
       nameElement: (
-        <div className="flex w-full items-center gap-1">
+        <div className="inline-flex max-w-full items-center gap-1">
           {names.map((name, index, all) => {
             const isLast = index === all.length - 1;
             const moreThanTwo = all.length > 2;

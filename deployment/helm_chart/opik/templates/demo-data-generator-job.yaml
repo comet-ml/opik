@@ -1,4 +1,4 @@
-{{- if and .Values.demoDataJob (index .Values.component "python-backend" "enabled") .Values.component.frontend.enabled .Values.component.backend.enabled }}
+{{- if and .Values.demoDataJob.enabled (index .Values.component "python-backend" "enabled") .Values.component.frontend.enabled .Values.component.backend.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -9,21 +9,36 @@ metadata:
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+  {{- if .Values.global.useHelmHooks }}
   annotations:
+  {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "0"
+  {{- else }}
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "5"
-    helm.sh/hook-delete-policy: before-hook-creation
+    "helm.sh/hook-delete-policy": hook-succeeded
+  {{- end }}
+  {{- end }}
 spec:
   template:
     metadata:
       name:  {{ include "opik.name" $ }}-demo-data-generator
     spec:
       restartPolicy: Never
+      {{- with (default $.Values.nodeSelector $.Values.demoDataJob.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (default $.Values.tolerations $.Values.demoDataJob.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:          
       - name: wait-for-python-backend-service
         image: curlimages/curl:8.12.1
         command: ["/bin/sh", "-c"]
-        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-python-backend:8000/healthcheck" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Python Backend is not available. Waiting for the Python Backend..."; done']
+        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-python-backend:8000/healthcheck" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Python Backend is not available. Waiting for the Opik Python Backend..."; done']
       - name: wait-for-frontend-service
         image: curlimages/curl:8.12.1
         command: ["/bin/sh", "-c"]

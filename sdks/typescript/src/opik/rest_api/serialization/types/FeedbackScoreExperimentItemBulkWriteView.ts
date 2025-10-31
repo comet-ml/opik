@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { FeedbackScoreExperimentItemBulkWriteViewSource } from "./FeedbackScoreExperimentItemBulkWriteViewSource";
+import { ValueEntryExperimentItemBulkWriteView } from "./ValueEntryExperimentItemBulkWriteView";
 
 export const FeedbackScoreExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     serializers.FeedbackScoreExperimentItemBulkWriteView.Raw,
@@ -20,6 +21,10 @@ export const FeedbackScoreExperimentItemBulkWriteView: core.serialization.Object
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+    valueByAuthor: core.serialization.property(
+        "value_by_author",
+        core.serialization.record(core.serialization.string(), ValueEntryExperimentItemBulkWriteView).optional(),
+    ),
 });
 
 export declare namespace FeedbackScoreExperimentItemBulkWriteView {
@@ -33,5 +38,6 @@ export declare namespace FeedbackScoreExperimentItemBulkWriteView {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        value_by_author?: Record<string, ValueEntryExperimentItemBulkWriteView.Raw> | null;
     }
 }
