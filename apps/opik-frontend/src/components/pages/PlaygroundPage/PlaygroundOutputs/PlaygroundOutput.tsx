@@ -12,9 +12,14 @@ import {
 interface PlaygroundOutputProps {
   promptId: string;
   index: number;
+  totalOutputs: number;
 }
 
-const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
+const PlaygroundOutput = ({
+  promptId,
+  index,
+  totalOutputs,
+}: PlaygroundOutputProps) => {
   const value = useOutputValueByPromptDatasetItemId(promptId);
   const isLoading = useOutputLoadingByPromptDatasetItemId(promptId);
   const stale = useOutputStaleStatusByPromptDatasetItemId(promptId);
@@ -35,11 +40,11 @@ const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
     );
   };
 
+  const outputLabel = totalOutputs === 1 ? "Output" : "Outputs";
+
   return (
     <div className="size-full min-w-[var(--min-prompt-width)]">
-      <p className="comet-body-s-accented my-3">
-        Output {getAlphabetLetter(index)}
-      </p>
+      <p className="comet-body-s-accented my-3">{outputLabel}</p>
       <div className="comet-body-s min-h-52 rounded-lg border bg-background p-3">
         {renderContent()}
       </div>

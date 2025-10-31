@@ -60,6 +60,7 @@ const PlaygroundOutputs = ({
             key={`output-${promptId}`}
             promptId={promptId}
             index={promptIdx}
+            totalOutputs={promptIds.length}
           />
         ))}
       </div>
