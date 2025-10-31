@@ -15,7 +15,7 @@ PRECOMMIT ?= $(VENV_PRECOMMIT)
 endif
 
 define warn_if_no_venv
-@if [ ! -x "$(VENV_PY)" ]; then \
+@if [ ! -f "$(VENV_PY)" ]; then \
   echo "[warn] Virtualenv $(VENV) not found; using system-level interpreters/tools."; \
 fi
 endef
