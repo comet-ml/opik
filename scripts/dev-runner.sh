@@ -123,13 +123,8 @@ verify_docker_services() {
 
 # Wrapper functions for backward compatibility and clearer intent
 start_infrastructure() {
-    # Start with --local-be-fe to get Python backend (needed for demo data)
+    # Start with --local-be-fe profile (infrastructure + Python backend only)
     start_docker_services "--local-be-fe"
-    
-    # Stop the Java backend container to avoid conflicts with local process
-    log_debug "Stopping Java backend container to avoid conflict with local process..."
-    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
-    docker stop opik-backend-1 >/dev/null 2>&1 || log_debug "Java backend container was not running"
 }
 
 stop_infrastructure() {
@@ -138,7 +133,6 @@ stop_infrastructure() {
 
 verify_infrastructure() {
     # Verify infrastructure and Python backend are running
-    # (Java backend container should be stopped in standard mode)
     verify_docker_services "--local-be-fe"
 }
 

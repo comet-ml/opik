@@ -154,8 +154,9 @@ get_docker_compose_cmd() {
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be.yaml"
     cmd="$cmd --profile local-be"
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
-    # Use backend profile to get Python backend, but we'll stop Java backend from dev-runner.sh
-    cmd="$cmd --profile backend"
+    # Use local-be-fe profile with override file
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be-fe.yaml"
+    cmd="$cmd --profile local-be-fe"
   else
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"

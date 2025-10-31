@@ -1,0 +1,31 @@
+name: opik
+
+# Override for local backend + frontend development mode
+# This mode starts infrastructure + Python backend only
+# Java backend and frontend run as local processes
+
+services:
+
+  # Python backend runs in Docker with backend profile, but we add local-be-fe profile
+  python-backend:
+    profiles: !override
+      - backend
+      - opik
+      - local-be-fe
+
+  # Disable the Java backend service entirely
+  backend:
+    profiles: !override
+      - disabled
+
+  # Disable frontend service (runs as local process)
+  frontend:
+    profiles: !override
+      - disabled
+
+  # Disable demo-data-generator (will be run manually via opik.sh --demo-data)
+  demo-data-generator:
+    profiles: !override
+      - opik
+      - local-be-fe
+
