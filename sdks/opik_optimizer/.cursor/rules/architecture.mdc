@@ -1,7 +1,7 @@
 ---
 description: Core architecture and design patterns for Opik Optimizer SDK
 globs: sdks/opik_optimizer/src/opik_optimizer/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Opik Optimizer Architecture
 
