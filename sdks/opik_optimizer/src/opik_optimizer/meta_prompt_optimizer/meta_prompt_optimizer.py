@@ -1,15 +1,11 @@
 import copy
 import json
 import logging
-import os
 import textwrap
 from typing import Any, cast
 from collections.abc import Callable
 
-import litellm
 import opik
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset, opik_context
 from opik.environment import get_tqdm_for_current_environment
 
@@ -20,6 +16,7 @@ from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
+from ..cache_config import initialize_cache
 from . import reporting
 import re
 
@@ -33,9 +30,8 @@ from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segmen
 
 tqdm = get_tqdm_for_current_environment()
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
+# Using shared cache configuration for LLM calls
+initialize_cache()
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
