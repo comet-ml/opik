@@ -198,6 +198,14 @@ def _determine_deployment_type(self, url_override: Optional[str]) -> str:
 
 ### Self-Documenting Code
 
+## Sphinx & Fern Documentation Sync
+- Update `apps/opik-documentation/python-sdk-docs/source/rest_api/overview.rst` (and related `.rst` files) when you add new public classes or reorganize modules in the Python SDK.
+- Docstring-only adjustments or new methods on existing classes do **not** require `.rst` edits, but ensure docstrings stay accurate.
+- Verify changes by running `make html` (or `sphinx-build -b html . _build/html -W --keep-going`) inside `apps/opik-documentation/python-sdk-docs`; treat warnings as failures.
+- Whenever you add/remove SDK entry points, refresh the Fern docs in `apps/opik-documentation/documentation` to keep examples aligned.
+
+## Documenting
+
 ```python
 # ✅ Good: Self-explanatory code (no comments needed)
 def validate_experiment_name(name: str) -> bool:

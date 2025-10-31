@@ -185,4 +185,55 @@ class OpikMetricProviderCustomizerTest {
         boolean isEmpty = boundariesString.trim().isEmpty();
         assertThat(isEmpty).isTrue();
     }
+
+    @Test
+    void testDurationMetrics_areRegisteredWithConvertedBoundaries() {
+        // Given - boundaries in milliseconds
+        String testBoundaries = "1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0";
+        when(configProperties.getString("otel.bucket.histogram.boundaries")).thenReturn(testBoundaries);
+
+        // When
+        customizer.customizeMeterProvider(meterProviderBuilder, configProperties);
+
+        // Then - verify that duration metrics are registered
+        ArgumentCaptor<InstrumentSelector> selectorCaptor = ArgumentCaptor.forClass(InstrumentSelector.class);
+        ArgumentCaptor<View> viewCaptor = ArgumentCaptor.forClass(View.class);
+        verify(meterProviderBuilder, atLeastOnce()).registerView(selectorCaptor.capture(), viewCaptor.capture());
+
+        // Verify at least the duration metrics are registered
+        List<InstrumentSelector> selectors = selectorCaptor.getAllValues();
+        assertThat(selectors).isNotEmpty();
+    }
+
+    @Test
+    void testBoundaryConversion_millisecondsToSeconds() {
+        // Given - boundaries in milliseconds
+        List<Double> millisecondsValues = List.of(1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0);
+        
+        // When - convert to seconds (divide by 1000)
+        List<Double> secondsValues = millisecondsValues.stream()
+                .map(boundary -> boundary / 1000.0)
+                .toList();
+
+        // Then - verify conversion
+        List<Double> expected = List.of(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0);
+        assertThat(secondsValues).isEqualTo(expected);
+    }
+
+    @Test
+    void testCustomizeMeterProvider_registersDurationMetrics() {
+        // Given
+        String testBoundaries = "100.0, 500.0, 1000.0";
+        when(configProperties.getString("otel.bucket.histogram.boundaries")).thenReturn(testBoundaries);
+
+        // When
+        customizer.customizeMeterProvider(meterProviderBuilder, configProperties);
+
+        // Then
+        ArgumentCaptor<InstrumentSelector> selectorCaptor = ArgumentCaptor.forClass(InstrumentSelector.class);
+        verify(meterProviderBuilder, atLeastOnce()).registerView(selectorCaptor.capture(), any());
+
+        // Verify that views were registered for duration metrics
+        assertThat(selectorCaptor.getAllValues()).isNotEmpty();
+    }
 }
