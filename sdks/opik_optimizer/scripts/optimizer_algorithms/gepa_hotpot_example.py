@@ -63,8 +63,9 @@ result = optimizer.optimize_prompt(
     dataset=dataset,
     metric=optimization_metric,
     n_samples=10,
-    max_trials=5,
-    reflection_minibatch_size=5,
+    max_trials=8,
+    reflection_minibatch_size=3,
     candidate_selection_strategy="best",
+    skip_perfect_score=False,
     display_progress_bar=True,
 )
