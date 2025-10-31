@@ -363,13 +363,13 @@ create_demo_data() {
   check_docker_status
   echo "📊 Creating demo data..."
 
-  local cmd
-  cmd=$(get_docker_compose_cmd)
-  
   # Run the demo-data-generator service independently (--no-deps)
   # Assumes all required services (python-backend, frontend) are already running
-  debugLog "[DEBUG] Running: $cmd up --no-deps demo-data-generator"
-  if $cmd up --no-deps demo-data-generator; then
+  local cmd
+  cmd=$(get_docker_compose_cmd) up --no-deps -d demo-data-generator
+
+  debugLog "[DEBUG] Running: $cmd"
+  if $cmd ; then
     echo "✅ Demo data created successfully!"
     return 0
   else
