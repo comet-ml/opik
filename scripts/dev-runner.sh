@@ -658,9 +658,9 @@ start_services() {
     start_infrastructure
     log_info "Step 2/5: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/5: Starting backend process..."
+    log_info "Step 3/5: Starting backend..."
     start_backend
-    log_info "Step 4/5: Starting frontend process..."
+    log_info "Step 4/5: Starting frontend..."
     start_frontend
     log_info "Step 5/5: Creating demo data..."
     if ! create_demo_data "--backend"; then
@@ -697,9 +697,9 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/10: Stopping frontend process..."
+    log_info "Step 1/10: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/10: Stopping backend process..."
+    log_info "Step 2/10: Stopping backend..."
     stop_backend
     log_info "Step 3/10: Stopping infrastructure..."
     stop_infrastructure
@@ -711,9 +711,9 @@ restart_services() {
     build_frontend
     log_info "Step 7/10: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/10: Starting backend process..."
+    log_info "Step 8/10: Starting backend..."
     start_backend
-    log_info "Step 9/10: Starting frontend process..."
+    log_info "Step 9/10: Starting frontend..."
     start_frontend
     log_info "Step 10/10: Creating demo data..."
     if ! create_demo_data "--backend"; then
@@ -727,7 +727,7 @@ restart_services() {
 start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/4: Starting infrastructure, Python backend, and Docker frontend..."
+    log_info "Step 1/4: Starting infrastructure and Docker frontend..."
     start_local_be_docker_services
     log_info "Step 2/4: Running DB migrations..."
     run_db_migrations
@@ -756,9 +756,9 @@ restart_be_only_services() {
     log_info "=== Restarting Opik BE-Only Development Environment ==="
     log_info "Step 1/7: Stopping backend process..."
     stop_backend
-    log_info "Step 2/7: Stopping infrastructure, Python backend, and Docker frontend..."
+    log_info "Step 2/7: Stopping infrastructure and Docker frontend..."
     stop_local_be_docker_services
-    log_info "Step 3/7: Starting infrastructure, Python backend, and Docker frontend..."
+    log_info "Step 3/7: Starting infrastructure and Docker frontend..."
     start_local_be_docker_services
     log_info "Step 4/7: Building backend..."
     build_backend

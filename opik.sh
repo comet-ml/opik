@@ -342,9 +342,14 @@ create_demo_data() {
   if [[ "$LOCAL_BE" == "true" ]]; then
     # In local-be mode, python-backend is in Docker but exposed on localhost
     python_backend_url="http://localhost:8000"
-  else
-    # In other modes, use the internal Docker network name
+  elif [[ "$BACKEND" == "true" ]]; then
+    # In backend mode, use the internal Docker network name
     python_backend_url="http://python-backend:8000"
+  else
+    # In other modes (infra, full opik), python-backend may not be available
+    echo "⚠️  Demo data creation requires Python backend to be running."
+    echo "   Please use --backend or --local-be mode, or ensure python-backend is available."
+    return 1
   fi
   
   debugLog "[DEBUG] Using PYTHON_BACKEND_URL: $python_backend_url"
@@ -356,9 +361,10 @@ create_demo_data() {
   local cmd
   cmd=$(get_docker_compose_cmd)
   
-  # Run the demo-data-generator service (it will exit after completion)
-  debugLog "[DEBUG] Running: $cmd up demo-data-generator"
-  if $cmd up demo-data-generator; then
+  # Run the demo-data-generator service independently (--no-deps)
+  # Assumes all required services (python-backend, frontend) are already running
+  debugLog "[DEBUG] Running: $cmd up --no-deps demo-data-generator"
+  if $cmd up --no-deps demo-data-generator; then
     echo "✅ Demo data created successfully!"
     return 0
   else
