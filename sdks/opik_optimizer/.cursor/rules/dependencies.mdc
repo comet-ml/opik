@@ -26,6 +26,12 @@ Manage dependencies deliberately so the optimizer package remains lightweight wh
 4. Run unit and e2e tests to verify the new dependency behaves as expected across optimizers.
 5. Update documentation (README, notebooks) mentioning new installation steps or extras.
 
+## Tooling and Checks
+
+- Static typing: `pyproject.toml` configures `mypy` (see `[tool.mypy]`). Run `make test` equivalent before merging; optimizers should keep type coverage high.
+- Formatting and lint hooks: `.pre-commit-config.yaml` provides the hook set. Run `make precommit` (which executes `pre-commit run --all-files`) locally or install the hooks with `pre-commit install`.
+- Task shortcuts: `sdks/opik_optimizer/Makefile` exposes `make install`, `make install-dev`, `make test`, `make precommit`, and `make build`. Keep these targets working whenever dependencies change.
+
 ## Security and Licensing
 
 - Prefer actively maintained libraries compatible with Apache 2.0.

@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 # Opik Optimizer Code Structure
 
-Keep modules small, explicit, and aligned with the optimiser architecture so contributors can navigate the SDK quickly.
+Keep modules small, explicit, and aligned with the optimizer architecture so contributors can navigate the SDK quickly.
 
 ## Imports
 
