@@ -211,6 +211,8 @@ services:
       timeout: 60s
       retries: 30
       start_period: 2s
+    tmpfs:
+      - /var/lib/docker
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
@@ -248,6 +250,8 @@ services:
         condition: service_healthy
       python-backend:
         condition: service_healthy
+    tmpfs:
+      - /var/lib/docker
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
