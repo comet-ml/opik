@@ -181,7 +181,10 @@ class BaseOptimizer(ABC):
             raise TypeError("agent_class must inherit from OptimizableAgent")
         # Always refresh optimizer binding so reused agent classes track the current optimizer.
         # If same agent is used across more than one optimizer this ensures handover.
-        agent_class.optimizer = self  # type: ignore[attr-defined]
+        if not hasattr(agent_class, "optimizer"):
+            # Document: All agent classes should define an 'optimizer' attribute for type safety.
+            agent_class.optimizer = None
+        agent_class.optimizer = self
         return agent_class
 
     def _extract_tool_prompts(
