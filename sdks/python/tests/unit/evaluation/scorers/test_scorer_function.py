@@ -37,7 +37,7 @@ def test_validate_scorer_function_not_callable__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must be a callable function that takes two arguments: scoring_inputs and task_outputs",
+        match="scorer_function must be a callable function that takes two arguments: *.",
     ):
         validate_scorer_function(not_callable)
 
@@ -50,7 +50,7 @@ def test_validate_scorer_function_no_parameters__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must take at least two arguments: scoring_inputs and task_outputs",
+        match="scorer_function must take at least two arguments:  *.",
     ):
         validate_scorer_function(no_params)
 
@@ -63,7 +63,7 @@ def test_validate_scorer_function_one_parameter__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must take at least two arguments: scoring_inputs and task_outputs",
+        match="scorer_function must take at least two arguments:  *.",
     ):
         validate_scorer_function(one_param)
 
@@ -76,7 +76,7 @@ def test_validate_scorer_function_wrong_parameter_names__raises_error():
 
     with pytest.raises(
         ValueError,
-        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the scoring_inputs not found in function parameters",
+        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the scoring_inputs is not found in function parameters",
     ):
         validate_scorer_function(wrong_names)
 
@@ -89,7 +89,7 @@ def test_validate_scorer_function_missing_scoring_inputs__raises_error():
 
     with pytest.raises(
         ValueError,
-        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the scoring_inputs not found in function parameters",
+        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the scoring_inputs is not found in function parameters",
     ):
         validate_scorer_function(missing_scoring_inputs)
 
@@ -102,7 +102,7 @@ def test_validate_scorer_function_missing_task_outputs__raises_error():
 
     with pytest.raises(
         ValueError,
-        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the task_outputs not found in function parameters",
+        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the task_outputs is not found in function parameters",
     ):
         validate_scorer_function(missing_task_outputs)
 

@@ -15,13 +15,13 @@ EXPECTED_SCORER_FUNCTION_PARAMETERS = ["scoring_inputs", "task_outputs"]
 def validate_scorer_function(scorer_functions: ScorerFunction) -> None:
     if not callable(scorer_functions):
         raise ValueError(
-            "scorer_function must be a callable function that takes two arguments: scoring_inputs and task_outputs."
+            f"scorer_function must be a callable function that takes two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS}"
         )
 
     parameters = inspect.signature(scorer_functions).parameters
     if len(parameters) < 2:
         raise ValueError(
-            "scorer_function must take at least two arguments: scoring_inputs and task_outputs."
+            f"scorer_function must take at least two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS}"
         )
 
     names = parameters.keys()
@@ -29,5 +29,5 @@ def validate_scorer_function(scorer_functions: ScorerFunction) -> None:
         if expected_name not in names:
             raise ValueError(
                 f"scorer_function must take at least two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS} - "
-                f"the {expected_name} not found in function parameters: {names}"
+                f"the {expected_name} is not found in function parameters: {names}"
             )
