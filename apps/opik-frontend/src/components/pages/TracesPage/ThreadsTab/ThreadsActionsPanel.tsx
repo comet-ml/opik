@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash } from "lucide-react";
+import { Trash, Brain } from "lucide-react";
 import get from "lodash/get";
 import first from "lodash/first";
 import slugify from "slugify";
@@ -12,6 +12,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
+import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -89,12 +90,34 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
+      <RunEvaluationDialog
+        key={`evaluation-${resetKeyRef.current}`}
+        open={open === 3}
+        setOpen={setOpen}
+        projectId={projectId}
+        entityIds={selectedRows.map((row) => row.thread_model_id)}
+        entityType="thread"
+      />
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
         disabled={disabled}
         dataType="threads"
       />
+      <TooltipWrapper content="Evaluate">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(3);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Brain className="mr-2 size-4" />
+          Evaluate
+        </Button>
+      </TooltipWrapper>
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}

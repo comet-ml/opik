@@ -169,6 +169,9 @@ navigation:
           - page: Evaluate single prompts
             path: docs/evaluation/evaluate_prompt.mdx
             slug: evaluate_prompt
+          - page: Multimodal evaluations
+            path: docs/evaluation/evaluate_multimodal.mdx
+            slug: evaluate_multimodal
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm
@@ -614,27 +617,31 @@ navigation:
       - section: Optimization Algorithms
         slug: /algorithms
         contents:
-          - page: Evolutionary Optimizer
+          - page: Evolutionary
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
             slug: evolutionary_optimizer
-          - page: Few-Shot Bayesian Optimizer
+          - page: Few-Shot Bayesian
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
             slug: fewshot_bayesian_optimizer
-          - page: MetaPrompt Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: Hierarchical Reflective Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
-            slug: hierarchical_reflective_optimizer
-          - page: GEPA Optimizer
+          - page: GEPA
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
             slug: gepa_optimizer
-          - page: Tool Optimization (MCP & Function Calling)
+          - page: Hierarchical Reflective
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
+            slug: hierarchical_reflective_optimizer
+          - page: MetaPrompt
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: Parameter
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/parameter_optimizer.mdx
+            slug: parameter_optimizer
+          - page: Tool Signature (MCP & Functions)
             icon: fa-regular fa-tools
             path: docs/agent_optimization/algorithms/tool_optimization.mdx
             slug: tool_optimization

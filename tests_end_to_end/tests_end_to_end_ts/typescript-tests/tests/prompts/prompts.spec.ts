@@ -4,7 +4,7 @@ import { PromptsPage, PromptDetailsPage } from '../../page-objects/prompts.page'
 
 test.describe('Prompts CRUD Tests', () => {
   test.describe('Prompt creation and visibility', () => {
-    test('should verify prompt visibility in UI and SDK', async ({
+    test('should verify prompt visibility in UI and SDK @sanity @regression @prompts', async ({
       page,
       helperClient,
       createPrompt,
@@ -20,7 +20,7 @@ test.describe('Prompts CRUD Tests', () => {
   });
 
   test.describe('Prompt deletion', () => {
-    test('should delete prompt via UI', async ({
+    test('should delete prompt via UI @regression @prompts', async ({
       page,
       helperClient,
       createPrompt,
@@ -83,11 +83,11 @@ test.describe('Prompts CRUD Tests', () => {
       expect(originalVersion.prompt).toBe(createPrompt.prompt);
     };
 
-    test('should update prompt via SDK', async ({ page, helperClient, createPrompt }) => {
+    test('should update prompt via SDK @regression @prompts', async ({ page, helperClient, createPrompt }) => {
       await testPromptUpdate(page, helperClient, createPrompt, 'sdk');
     });
 
-    test('should update prompt via UI', async ({ page, helperClient, createPrompt }) => {
+    test('should update prompt via UI @regression @prompts', async ({ page, helperClient, createPrompt }) => {
       await testPromptUpdate(page, helperClient, createPrompt, 'ui');
     });
   });
