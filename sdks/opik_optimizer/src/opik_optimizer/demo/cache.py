@@ -22,7 +22,7 @@ def get_litellm_cache(name: str) -> None:
     local cache
     """
     warnings.warn(
-        "opik_optimizer.demo is deprecated; use cache_config.initialize_cache() instead.",
+        "opik_optimizer.demo is deprecated; use cache_config.initialize_cache() instead. Note all optimizers now manage cache automatically for you.",
         DeprecationWarning,
         stacklevel=2,
     )
