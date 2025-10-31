@@ -659,6 +659,10 @@ navigation:
       - section: Advanced Topics
         slug: /advanced
         contents:
+          - page: Configure Cache
+            icon: fa-regular fa-database
+            path: docs/agent_optimization/advanced/configure_cache.mdx
+            slug: configure_cache
           - page: Extending Optimizers
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/extending_optimizers.mdx

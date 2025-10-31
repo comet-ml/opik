@@ -1,0 +1,67 @@
+---
+title: "Configure Cache"
+subtitle: "Control caching for Opik Agent Optimizer runs."
+description: "Learn how to configure or disable caching for LiteLLM and other backends when running Opik optimizers."
+---
+
+Opik Agent Optimizer initializes LiteLLM caching the first time you instantiate an optimizer. This helps
+reuse network responses across evaluations, but some environments (for example, air-gapped or
+strict-compliance deployments) may need finer control or complete shutdown of caching. This guide
+explains how to configure the cache via environment variables or disable it entirely.
+
+## Environment variables
+
+The optimizer reads configuration from the `OPIK_CACHE_*` environment variables. These options apply
+before any optimizer runs and are automatically respected by every algorithm.
+
+| Variable | Purpose |
+| --- | --- |
+| `OPIK_CACHE_TYPE` | Select the backend (`memory`, `disk`, or any LiteLLM-supported type such as `redis`). |
+| `OPIK_CACHE_DIR` | Directory for disk-based caches (defaults to `~/.litellm_cache`). |
+| `OPIK_CACHE_TTL` | Time-to-live in seconds for cached entries. |
+| `OPIK_CACHE_NAMESPACE` | Namespacing key for separating cached data. |
+| `OPIK_CACHE_CONFIG_JSON` | JSON object merged into the underlying LiteLLM cache configuration. |
+
+Example:
+
+```bash
+export OPIK_CACHE_TYPE=disk
+export OPIK_CACHE_DIR="/var/tmp/opik-cache"
+export OPIK_CACHE_TTL=120
+```
+
+## Disabling the cache
+
+Set `OPIK_CACHE_DISABLED=1` (or call `cache_config.disable_cache()`) **before** constructing an
+optimizer to run without caching. The cache can be re-enabled later with `cache_config.enable_cache()`.
+
+```python
+from opik_optimizer.cache_config import disable_cache, enable_cache
+
+disable_cache()        # turns off caching for the current process
+
+# Instantiate optimizers here – no cache will be created
+
+enable_cache()         # optional: re-enable caching for future runs
+```
+
+## Clearing cache data
+
+Use `cache_config.clear_cache()` to remove cached entries while keeping the backend active. This is
+helpful after sensitive evaluations or when switching between projects.
+
+```python
+from opik_optimizer.cache_config import clear_cache
+
+clear_cache()
+```
+
+## Recommendations
+
+- **Security-sensitive workflows**: Set `OPIK_CACHE_DISABLED=1` as part of your process startup.
+- **Shared environments**: Use `OPIK_CACHE_NAMESPACE` per team or project to avoid collisions.
+- **Custom backends**: Provide detailed parameters through `OPIK_CACHE_CONFIG_JSON` (for example, host
+  and credentials for Redis or another LiteLLM-supported store).
+
+All optimizers in the SDK inherit these settings automatically, so no additional code changes are
+required once the environment variables or helper functions are in place.
