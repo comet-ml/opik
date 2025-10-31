@@ -149,7 +149,7 @@ def disable_cache(*, persist: bool = False) -> None:
     Disable LiteLLM caching for the current process.
 
     Args:
-        persist: When True, set `LITELLM_CACHE_DISABLED=1` so child processes inherit the setting.
+        persist: When True, set `OPIK_CACHE_DISABLED=1` so child processes inherit the setting.
     """
     global _CACHE_DISABLED
     _CACHE_DISABLED = True
