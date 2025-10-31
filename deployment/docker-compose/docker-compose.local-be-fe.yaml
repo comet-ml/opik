@@ -36,9 +36,9 @@ services:
 
   demo-data-generator:
     profiles: !override
-      - local-be-fe
+      - disabled
 
-  # Override frontend to not depend on backend and ensure it runs with local-be profile
+  # Disable the frontend service entirely, meant to be run as local process
   frontend:
     profiles: !override
       - disabled

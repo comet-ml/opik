@@ -398,6 +398,17 @@ print_banner() {
   elif [[ "$BACKEND" == "true" ]]; then
     echo "║  ✅ Backend services started successfully!                      ║"
     echo "║                                                                 ║"
+  elif [[ "$LOCAL_BE_FE" == "true" ]]; then
+    echo "║  ✅ Local backend + frontend mode services started!             ║"
+    echo "║                                                                 ║"
+    echo "║  ⚙️  Configuration:                                              ║"
+    echo "║     Infrastructure + Python backend running in Docker           ║"
+    echo "║     Java backend is NOT running - start on port 8080            ║"
+    echo "║     Frontend is NOT running - start on port 5174                ║"
+    echo "║                                                                 ║"
+    echo "║  📊 Access the UI (start backend + frontend first):             ║"
+    echo "║     http://localhost:5174                                       ║"
+    echo "║                                                                 ║"
   elif [[ "$LOCAL_BE" == "true" ]]; then
     echo "║  ✅ Local backend mode services started successfully!           ║"
     echo "║                                                                 ║"
