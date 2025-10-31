@@ -49,4 +49,3 @@ def test_custom_agent_optimizer_binding(prompt: ChatPrompt) -> None:
     optimizer_two = DummyOptimizer(model="gpt-4o")
     resolved_two = optimizer_two._setup_agent_class(prompt, custom_agent_class)
     assert resolved_two.optimizer is optimizer_two
-
