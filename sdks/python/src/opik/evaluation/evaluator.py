@@ -1,12 +1,11 @@
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from .. import Prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
-from ..api_objects.prompt import prompt_template
 from . import (
     asyncio_support,
     engine,
@@ -16,11 +15,16 @@ from . import (
     samplers,
 )
 from .metrics import base_metric
-from .models import base_model, models_factory
+from .models import ModelCapabilities, base_model, models_factory
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
+from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
+from opik.api_objects.prompt.types import SupportedModalities
 
 LOGGER = logging.getLogger(__name__)
+MODALITY_SUPPORT_DOC_URL = (
+    "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
+)
 
 
 def evaluate(
@@ -297,19 +301,40 @@ def evaluate_experiment(
 def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
-    def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
-        processed_messages = []
-        for message in messages:
-            processed_messages.append(
-                {
-                    "role": message["role"],
-                    "content": prompt_template.PromptTemplate(
-                        message["content"],
-                        validate_placeholders=False,
-                        type=prompt_variables.get("type", "mustache"),
-                    ).format(**prompt_variables),
-                }
+    supported_modalities = cast(
+        SupportedModalities,
+        {
+            "vision": ModelCapabilities.supports_vision(
+                getattr(model, "model_name", None)
             )
+        },
+    )
+    chat_prompt_template = ChatPromptTemplate(messages=messages)
+
+    required_modalities = chat_prompt_template.required_modalities()
+    unsupported_modalities = {
+        modality
+        for modality in required_modalities
+        if not supported_modalities.get(modality, False)
+    }
+
+    if unsupported_modalities:
+        modalities_list = ", ".join(sorted(unsupported_modalities))
+        LOGGER.warning(
+            "Model '%s' does not support %s content. Multimedia parts will be flattened "
+            "to text placeholders. See %s for supported models and customization options.",
+            getattr(model, "model_name", "unknown"),
+            modalities_list,
+            MODALITY_SUPPORT_DOC_URL,
+        )
+
+    def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
+        template_type_override = prompt_variables.get("type")
+        processed_messages = chat_prompt_template.format(
+            variables=prompt_variables,
+            supported_modalities=supported_modalities,
+            template_type=template_type_override,
+        )
 
         with base_model.get_provider_response(
             model_provider=model, messages=processed_messages
