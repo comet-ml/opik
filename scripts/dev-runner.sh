@@ -121,30 +121,30 @@ verify_docker_services() {
     return $?
 }
 
-# Wrapper functions for backward compatibility and clearer intent
-start_infrastructure() {
+# Wrapper functions for clearer intent
+start_local_be_fe() {
     # Start with --local-be-fe profile (infrastructure + Python backend only)
     start_docker_services "--local-be-fe"
 }
 
-stop_infrastructure() {
+stop_local_be_fe() {
     stop_docker_services "--local-be-fe"
 }
 
-verify_infrastructure() {
+verify_local_be_fe() {
     # Verify infrastructure and Python backend are running
     verify_docker_services "--local-be-fe"
 }
 
-start_local_be_docker_services() {
+start_local_be() {
     start_docker_services "--local-be"
 }
 
-stop_local_be_docker_services() {
+stop_local_be() {
     stop_docker_services "--local-be"
 }
 
-verify_local_be_docker_services() {
+verify_local_be() {
     verify_docker_services "--local-be"
 }
 
@@ -589,7 +589,7 @@ verify_services() {
     
     # Infrastructure + Python backend status
     local docker_services_running=false
-    if verify_infrastructure; then
+    if verify_local_be_fe; then
         echo -e "Infrastructure + Python Backend: ${GREEN}RUNNING${NC} (Docker containers)"
         docker_services_running=true
     else
@@ -629,7 +629,7 @@ verify_be_only_services() {
     
     # Infrastructure, Python backend and Docker Frontend status
     local docker_services_running=false
-    if verify_local_be_docker_services; then
+    if verify_local_be; then
         echo -e "Infrastructure + Python Backend + Frontend: ${GREEN}RUNNING${NC} (Docker containers)"
         docker_services_running=true
     else
@@ -659,7 +659,7 @@ start_services() {
     log_info "=== Starting Opik Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
     log_info "Step 1/5: Starting infrastructure and Python backend..."
-    start_infrastructure
+    start_local_be_fe
     log_info "Step 2/5: Running DB migrations..."
     run_db_migrations
     log_info "Step 3/5: Starting backend process..."
@@ -681,16 +681,16 @@ stop_services() {
     stop_frontend
     log_info "Step 2/3: Stopping backend..."
     stop_backend
-    log_info "Step 3/3: Stopping infrastructure..."
-    stop_infrastructure
+    log_info "Step 3/3: Stopping infrastructure and Python backend..."
+    stop_local_be_fe
     log_success "=== Stop Complete ==="
 }
 
 # Function to run migrations
 migrate_services() {
     log_info "=== Running Database Migrations ==="
-    log_info "Step 1/3: Starting infrastructure..."
-    start_infrastructure
+    log_info "Step 1/3: Starting infrastructure and Python backend..."
+    start_local_be_fe
     log_info "Step 2/3: Building backend..."
     build_backend
     log_info "Step 3/3: Running DB migrations..."
@@ -706,9 +706,9 @@ restart_services() {
     log_info "Step 2/10: Stopping backend process..."
     stop_backend
     log_info "Step 3/10: Stopping infrastructure and Python backend..."
-    stop_infrastructure
+    stop_local_be_fe
     log_info "Step 4/10: Starting infrastructure and Python backend..."
-    start_infrastructure
+    start_local_be_fe
     log_info "Step 5/10: Building backend..."
     build_backend
     log_info "Step 6/10: Building frontend..."
@@ -732,7 +732,7 @@ start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
     log_info "Step 1/4: Starting infrastructure, Python backend, and frontend..."
-    start_local_be_docker_services
+    start_local_be
     log_info "Step 2/4: Running DB migrations..."
     run_db_migrations
     log_info "Step 3/4: Starting backend process..."
@@ -751,7 +751,7 @@ stop_be_only_services() {
     log_info "Step 1/2: Stopping backend process..."
     stop_backend
     log_info "Step 2/2: Stopping infrastructure, Python backend, and frontend..."
-    stop_local_be_docker_services
+    stop_local_be
     log_success "=== BE-Only Stop Complete ==="
 }
 
@@ -761,9 +761,9 @@ restart_be_only_services() {
     log_info "Step 1/7: Stopping backend process..."
     stop_backend
     log_info "Step 2/7: Stopping infrastructure, Python backend, and frontend..."
-    stop_local_be_docker_services
+    stop_local_be
     log_info "Step 3/7: Starting infrastructure, Python backend, and frontend..."
-    start_local_be_docker_services
+    start_local_be
     log_info "Step 4/7: Building backend..."
     build_backend
     log_info "Step 5/7: Running DB migrations..."

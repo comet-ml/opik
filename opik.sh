@@ -154,7 +154,6 @@ get_docker_compose_cmd() {
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be.yaml"
     cmd="$cmd --profile local-be"
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
-    # Use local-be-fe profile with override file
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be-fe.yaml"
     cmd="$cmd --profile local-be-fe"
   else
