@@ -201,7 +201,7 @@ print_usage() {
   echo "  --verify        Check if all containers are healthy"
   echo "  --info          Display welcome system status, only if all containers are running"
   echo "  --stop          Stop all containers and clean up"
-  echo "  --clean         Stop all containers and remove all data volumes (WARNING: ALL DATA WILL BE LOST)"
+  echo "  --clean         Stop all containers and remove all Opik data volumes (WARNING: ALL OPIK DATA WILL BE LOST)"
   echo "  --demo-data     Create demo data independently, assumes all required services (backend, python-backend, frontend etc.) are already running"
   echo "  --build         Build containers before starting (can be combined with other flags)"
   echo "  --debug         Enable debug mode (verbose output) (can be combined with other flags)"
@@ -348,11 +348,9 @@ stop_containers() {
 clean_data() {
   check_docker_status
   echo "⚠️  WARNING: This will remove ALL Opik data including:"
-  echo "   - MySQL database (traces, projects, experiments)"
-  echo "   - ClickHouse analytics data"
-  echo "   - MinIO storage (artifacts, files)"
-  echo "   - Redis cache"
-  echo "   - ZooKeeper data"
+  echo "   - MySQL (projects, datasets etc.)"
+  echo "   - ClickHouse (traces, spans, etc."
+  echo "   - Etc."
   echo ""
   echo "🗑️  Stopping all containers and removing volumes..."
   local cmd
@@ -579,17 +577,18 @@ if [[ "$*" == *"--backend"* ]]; then
   set -- ${@/--backend/}
 fi
 
+# Check --local-be-fe BEFORE --local-be (more specific first)
+if [[ "$*" == *"--local-be-fe"* ]]; then
+  LOCAL_BE_FE=true
+  # Remove the flag from arguments
+  set -- ${@/--local-be-fe/}
+fi
+
 if [[ "$*" == *"--local-be"* ]]; then
   LOCAL_BE=true
   export OPIK_FRONTEND_FLAVOR=local_be
   # Remove the flag from arguments
   set -- ${@/--local-be/}
-fi
-
-if [[ "$*" == *"--local-be-fe"* ]]; then
-  LOCAL_BE_FE=true
-  # Remove the flag from arguments
-  set -- ${@/--local-be-fe/}
 fi
 
 # Check for guardrails flag

@@ -1,8 +1,6 @@
 name: opik
 
 # Override for local backend + frontend development mode
-# This mode starts infrastructure + Python backend only
-# Java backend and frontend run as local processes
 
 services:
 
@@ -25,28 +23,22 @@ services:
       - "9001:9000"   # MinIO API Port
       - "9090:9090"   # MinIO Web UI Console
 
-  # Python backend runs in Docker with local-be-fe profile
-  python-backend:
-    profiles: !override
-      - backend
-      - opik
-      - local-be-fe
-    ports:
-      - "8000:8000" # Python backend HTTP port
-
-  # Disable the Java backend service entirely
+  # Disable the backend service entirely, meant to be run as local process
   backend:
     profiles: !override
       - disabled
 
-  # Disable frontend service (runs as local process)
+  python-backend:
+    profiles: !override
+      - local-be-fe
+    ports:
+      - "8000:8000" # Python backend HTTP port
+
+  demo-data-generator:
+    profiles: !override
+      - local-be-fe
+
+  # Override frontend to not depend on backend and ensure it runs with local-be profile
   frontend:
     profiles: !override
       - disabled
-
-  # Enable demo-data-generator for local-be-fe profile
-  demo-data-generator:
-    profiles: !override
-      - opik
-      - local-be-fe
-

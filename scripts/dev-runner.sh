@@ -563,15 +563,11 @@ show_access_information() {
     echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
 }
 
-# Function to create demo data using opik.sh
 create_demo_data() {
-    local mode="$1"  # Either "--local-be-fe" or "--local-be"
-    
     log_info "Creating demo data..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
     
-    # Call opik.sh with the appropriate mode to create demo data
-    if ./opik.sh "$mode" --demo-data; then
+    if ./opik.sh --demo-data; then
         log_success "Demo data created"
         return 0
     else
