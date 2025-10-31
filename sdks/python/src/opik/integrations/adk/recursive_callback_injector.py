@@ -1,5 +1,5 @@
 import types
-from typing import TypeVar, List, Any, Set
+from typing import TypeVar, List, Any, Set, Callable
 from . import opik_tracer
 import logging
 from opik import _logging
@@ -46,7 +46,7 @@ class RecursiveCallbackInjector:
                 callbacks=current_callback_value
             ):
                 current_callback_value.append(callback_func)
-            elif not self._is_opik_callback_function(current_callback_value):
+            elif not self._is_opik_callback_function(current_callback_value) and isinstance(current_callback_value, Callable):
                 setattr(
                     agent, callback_field_name, [current_callback_value, callback_func]
                 )
