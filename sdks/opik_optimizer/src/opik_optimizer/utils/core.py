@@ -343,6 +343,8 @@ def create_litellm_agent_class(
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
     def _derive_class_name(name: str) -> str:
+        # Strip non-alphanumeric characters and leading digits so the generated class
+        # name is a valid Python identifier.
         cleaned = re.sub(r"\W|^(?=\d)", "", name.title())
         return f"{cleaned}LiteLLMAgent" if cleaned else "LiteLLMAgent"
 
