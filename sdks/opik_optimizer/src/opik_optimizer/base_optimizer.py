@@ -163,20 +163,25 @@ class BaseOptimizer(ABC):
     def _setup_agent_class(
         self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
     ) -> Any:
-        """
-        Setup agent class for optimization.
+        """Resolve the agent class used for prompt evaluations.
+
+        Ensures custom implementations inherit from :class:`OptimizableAgent` and that
+        the optimizer reference is always available to track metrics.
 
         Args:
-            prompt: The chat prompt
-            agent_class: Optional custom agent class
+            prompt: The chat prompt driving the agent instance.
+            agent_class: Optional custom agent class supplied by the caller.
 
         Returns:
-            The agent class to use
+            The agent class to instantiate for dataset evaluations.
         """
         if agent_class is None:
             return create_litellm_agent_class(prompt, optimizer_ref=self)
-        else:
-            return agent_class
+        if not issubclass(agent_class, OptimizableAgent):
+            raise TypeError("agent_class must inherit from OptimizableAgent")
+        if getattr(agent_class, "optimizer", None) is None:
+            agent_class.optimizer = self  # type: ignore[attr-defined]
+        return agent_class
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
