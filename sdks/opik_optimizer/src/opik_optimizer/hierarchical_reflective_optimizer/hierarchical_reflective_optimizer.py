@@ -12,7 +12,6 @@ from .. import _throttle
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
-from ..cache_config import initialize_cache
 
 from opik_optimizer.task_evaluator import _create_metric_class
 from opik_optimizer.optimization_result import OptimizationResult
@@ -24,9 +23,6 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
-
-# Using shared cache configuration for LLM calls
-initialize_cache()
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging

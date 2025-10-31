@@ -16,7 +16,6 @@ from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
-from ..cache_config import initialize_cache
 from . import reporting
 import re
 
@@ -29,9 +28,6 @@ from ..mcp_utils.mcp_workflow import (
 from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
 
 tqdm = get_tqdm_for_current_environment()
-
-# Using shared cache configuration for LLM calls
-initialize_cache()
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging

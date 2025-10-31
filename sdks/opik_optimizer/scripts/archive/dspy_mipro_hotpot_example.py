@@ -28,10 +28,7 @@ from opik_optimizer.mipro_optimizer.utils import (
 )
 from opik_optimizer.utils import optimization_context
 from opik_optimizer.utils import get_optimization_run_url_by_id
-from opik_optimizer.cache_config import initialize_cache
 
-# Using configured cache for LLM calls
-initialize_cache()
 search_wikipedia = opik.track(type="tool")(search_wikipedia)
 
 # First, we set the Opik callback for all dspy calls:

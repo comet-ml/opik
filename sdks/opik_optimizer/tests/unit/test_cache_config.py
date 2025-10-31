@@ -42,7 +42,9 @@ def test_initialize_cache_disk_custom_dir(
     _reset_cache()
 
 
-def test_initialize_cache_applies_optional_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_initialize_cache_applies_optional_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("LITELLM_CACHE_TYPE", "memory")
     monkeypatch.setenv("LITELLM_CACHE_TTL", "30")
 
