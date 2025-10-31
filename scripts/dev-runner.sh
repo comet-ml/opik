@@ -564,96 +564,19 @@ show_access_information() {
     echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
 }
 
-# Function to wait for backend to be ready
-wait_for_backend_ready() {
-    local max_attempts=30
-    local attempt=0
-    local backend_url="http://localhost:8080/is-alive/ping"
-    
-    log_info "Waiting for backend to be ready..."
-    
-    while [ $attempt -lt $max_attempts ]; do
-        if curl -s -f "$backend_url" >/dev/null 2>&1; then
-            log_success "Backend is ready"
-            return 0
-        fi
-        
-        attempt=$((attempt + 1))
-        log_debug "Backend not ready yet (attempt $attempt/$max_attempts)..."
-        sleep 2
-    done
-    
-    log_error "Backend did not become ready after $max_attempts attempts"
-    return 1
-}
-
-# Function to wait for Python backend to be ready
-wait_for_python_backend_ready() {
-    local max_attempts=30
-    local attempt=0
-    local python_backend_url="http://localhost:5001/health"
-    
-    log_info "Waiting for Python backend to be ready..."
-    
-    while [ $attempt -lt $max_attempts ]; do
-        if curl -s -f "$python_backend_url" >/dev/null 2>&1; then
-            log_success "Python backend is ready"
-            return 0
-        fi
-        
-        attempt=$((attempt + 1))
-        log_debug "Python backend not ready yet (attempt $attempt/$max_attempts)..."
-        sleep 2
-    done
-    
-    log_error "Python backend did not become ready after $max_attempts attempts"
-    return 1
-}
-
-# Function to create demo data
+# Function to create demo data using opik.sh
 create_demo_data() {
-    require_command curl
+    local mode="$1"  # Either "--backend" or "--local-be"
     
     log_info "Creating demo data..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
     
-    # Wait for backends to be ready first
-    if ! wait_for_backend_ready; then
-        log_error "Backend is not ready, skipping demo data creation"
-        return 1
-    fi
-    
-    if ! wait_for_python_backend_ready; then
-        log_error "Python backend is not ready, skipping demo data creation"
-        return 1
-    fi
-    
-    # Make the request to create demo data
-    local python_backend_url="http://localhost:5001"
-    local response
-    
-    log_debug "Sending demo data creation request to: ${python_backend_url}/v1/private/post_user_signup"
-    
-    if response=$(curl -s -w "\n%{http_code}" \
-        -X POST \
-        -H "Content-Type: application/json" \
-        -d '{"workspace":"default","apiKey":"1234"}' \
-        "${python_backend_url}/v1/private/post_user_signup" 2>&1); then
-        
-        # Extract HTTP status code (last line)
-        local http_code=$(echo "$response" | tail -n1)
-        local body=$(echo "$response" | head -n-1)
-        
-        if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-            log_success "Demo data created successfully"
-            log_debug "Response: $body"
-            return 0
-        else
-            log_error "Failed to create demo data (HTTP $http_code)"
-            log_error "Response: $body"
-            return 1
-        fi
+    # Call opik.sh with the appropriate mode to create demo data
+    if ./opik.sh "$mode" --demo-data; then
+        log_success "Demo data created"
+        return 0
     else
-        log_error "Failed to create demo data: could not connect to Python backend"
+        log_error "Failed to create demo data"
         return 1
     fi
 }
@@ -735,12 +658,12 @@ start_services() {
     start_infrastructure
     log_info "Step 2/5: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/5: Starting backend..."
+    log_info "Step 3/5: Starting backend process..."
     start_backend
-    log_info "Step 4/5: Starting frontend..."
+    log_info "Step 4/5: Starting frontend process..."
     start_frontend
     log_info "Step 5/5: Creating demo data..."
-    if ! create_demo_data; then
+    if ! create_demo_data "--backend"; then
         log_warning "Demo data creation failed, but services are running"
     fi
     log_success "=== Start Complete ==="
@@ -774,9 +697,9 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/10: Stopping frontend..."
+    log_info "Step 1/10: Stopping frontend process..."
     stop_frontend
-    log_info "Step 2/10: Stopping backend..."
+    log_info "Step 2/10: Stopping backend process..."
     stop_backend
     log_info "Step 3/10: Stopping infrastructure..."
     stop_infrastructure
@@ -788,12 +711,12 @@ restart_services() {
     build_frontend
     log_info "Step 7/10: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/10: Starting backend..."
+    log_info "Step 8/10: Starting backend process..."
     start_backend
-    log_info "Step 9/10: Starting frontend..."
+    log_info "Step 9/10: Starting frontend process..."
     start_frontend
     log_info "Step 10/10: Creating demo data..."
-    if ! create_demo_data; then
+    if ! create_demo_data "--backend"; then
         log_warning "Demo data creation failed, but services are running"
     fi
     log_success "=== Restart Complete ==="
@@ -804,14 +727,14 @@ restart_services() {
 start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/4: Starting infrastructure and Docker frontend..."
+    log_info "Step 1/4: Starting infrastructure, Python backend, and Docker frontend..."
     start_local_be_docker_services
     log_info "Step 2/4: Running DB migrations..."
     run_db_migrations
     log_info "Step 3/4: Starting backend process..."
     start_backend
     log_info "Step 4/4: Creating demo data..."
-    if ! create_demo_data; then
+    if ! create_demo_data "--local-be"; then
         log_warning "Demo data creation failed, but services are running"
     fi
     log_success "=== BE-Only Start Complete ==="
@@ -833,9 +756,9 @@ restart_be_only_services() {
     log_info "=== Restarting Opik BE-Only Development Environment ==="
     log_info "Step 1/7: Stopping backend process..."
     stop_backend
-    log_info "Step 2/7: Stopping infrastructure and Docker frontend..."
+    log_info "Step 2/7: Stopping infrastructure, Python backend, and Docker frontend..."
     stop_local_be_docker_services
-    log_info "Step 3/7: Starting infrastructure and Docker frontend..."
+    log_info "Step 3/7: Starting infrastructure, Python backend, and Docker frontend..."
     start_local_be_docker_services
     log_info "Step 4/7: Building backend..."
     build_backend
@@ -844,7 +767,7 @@ restart_be_only_services() {
     log_info "Step 6/7: Starting backend process..."
     start_backend
     log_info "Step 7/7: Creating demo data..."
-    if ! create_demo_data; then
+    if ! create_demo_data "--local-be"; then
         log_warning "Demo data creation failed, but services are running"
     fi
     log_success "=== BE-Only Restart Complete ==="
@@ -879,9 +802,6 @@ show_usage() {
     echo ""
     echo "Environment Variables:"
     echo "  DEBUG_MODE=true  - Enable debug mode"
-    echo ""
-    echo "Note:"
-    echo "  Demo data is automatically created on every start/restart"
 }
 
 # Function to handle unknown options

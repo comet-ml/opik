@@ -191,6 +191,7 @@ print_usage() {
   echo "  --verify        Check if all containers are healthy"
   echo "  --info          Display welcome system status, only if all containers are running"
   echo "  --stop          Stop all containers and clean up"
+  echo "  --demo-data     Create demo data (runs demo-data-generator service)"
   echo "  --build         Build containers before starting (can be combined with other flags)"
   echo "  --debug         Enable debug mode (verbose output) (can be combined with other flags)"
   echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
@@ -330,6 +331,40 @@ stop_containers() {
   cmd=$(get_docker_compose_cmd)
   $cmd down
   echo "✅ All containers stopped and cleaned up!"
+}
+
+create_demo_data() {
+  check_docker_status
+  echo "📊 Creating demo data..."
+  
+  # Determine the correct PYTHON_BACKEND_URL based on mode
+  local python_backend_url
+  if [[ "$LOCAL_BE" == "true" ]]; then
+    # In local-be mode, python-backend is in Docker but exposed on localhost
+    python_backend_url="http://localhost:8000"
+  else
+    # In other modes, use the internal Docker network name
+    python_backend_url="http://python-backend:8000"
+  fi
+  
+  debugLog "[DEBUG] Using PYTHON_BACKEND_URL: $python_backend_url"
+  
+  # Export the URL for docker-compose
+  export PYTHON_BACKEND_URL="$python_backend_url"
+  export CREATE_DEMO_DATA=true
+  
+  local cmd
+  cmd=$(get_docker_compose_cmd)
+  
+  # Run the demo-data-generator service (it will exit after completion)
+  debugLog "[DEBUG] Running: $cmd up demo-data-generator"
+  if $cmd up demo-data-generator; then
+    echo "✅ Demo data created successfully!"
+    return 0
+  else
+    echo "❌ Failed to create demo data"
+    return 1
+  fi
 }
 
 print_banner() {
@@ -589,6 +624,10 @@ case "$1" in
   --stop)
     stop_containers
     exit 0
+    ;;
+  --demo-data)
+    create_demo_data
+    exit $?
     ;;
   --help)
     print_usage
