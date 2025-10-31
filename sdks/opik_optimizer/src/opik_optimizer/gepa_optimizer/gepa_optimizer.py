@@ -1,6 +1,5 @@
 import logging
-from contextlib import nullcontext
-from typing import Any, ContextManager
+from typing import Any
 from collections.abc import Callable
 
 import opik
