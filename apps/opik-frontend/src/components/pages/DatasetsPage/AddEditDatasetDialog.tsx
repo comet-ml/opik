@@ -21,7 +21,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import UploadField from "@/components/shared/UploadField/UploadField";
 import Loader from "@/components/shared/Loader/Loader";
@@ -53,7 +52,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
 
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
-  const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
     undefined,
   );
@@ -65,8 +63,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
   );
 
   const isEdit = Boolean(dataset);
-  const isValid = Boolean(name.length);
   const hasValidCsvData = csvData && csvData.length > 0;
+  // Validation: name is required, and CSV is required for new datasets (unless hideUpload is true)
+  const isValid =
+    Boolean(name.length) && (isEdit || hideUpload || hasValidCsvData);
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
@@ -245,11 +245,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV (optional)</Label>
+              <Label>Upload a CSV</Label>
               <Description className="tracking-normal">
                 Your CSV file can contain up to 1,000 rows, for larger datasets
-                use the SDK instead. You can also skip this step and add dataset
-                items manually later.
+                use the SDK instead.
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
@@ -282,22 +281,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </DialogClose>
           <Button
             type="submit"
-            disabled={!isValid}
-            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
+            disabled={!isValid || csvError !== undefined}
+            onClick={submitHandler}
           >
             {buttonText}
           </Button>
         </DialogFooter>
       </DialogContent>
-      <ConfirmDialog
-        open={confirmOpen}
-        setOpen={setConfirmOpen}
-        onCancel={submitHandler}
-        title="File can’t be uploaded"
-        description="This file cannot be uploaded because it does not pass validation. If you continue, the dataset will be created without any items. You can add items manually later, or go back and upload a valid file."
-        cancelText="Create empty dataset"
-        confirmText="Go back"
-      />
     </Dialog>
   );
 };
