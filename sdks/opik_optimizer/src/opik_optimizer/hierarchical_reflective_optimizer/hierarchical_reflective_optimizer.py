@@ -1,10 +1,6 @@
-import os
 import logging
 
 import opik
-import litellm
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
@@ -16,6 +12,7 @@ from .. import _throttle
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
+from ..cache_config import initialize_cache
 
 from opik_optimizer.task_evaluator import _create_metric_class
 from opik_optimizer.optimization_result import OptimizationResult
@@ -28,9 +25,8 @@ from .types import (
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
+# Using shared cache configuration for LLM calls
+initialize_cache()
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
