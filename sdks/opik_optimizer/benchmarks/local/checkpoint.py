@@ -4,7 +4,6 @@ import time
 from typing import Any
 
 from benchmark_task import TaskResult
-
 from opik_optimizer.optimization_config import chat_prompt
 
 
