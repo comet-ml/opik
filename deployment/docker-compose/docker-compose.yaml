@@ -29,6 +29,8 @@ services:
       timeout: 4s
       retries: 20
       start_period: 30s
+    volumes:
+      - redis-data:/data
 
   clickhouse-init:
     image: alpine:latest
@@ -97,6 +99,8 @@ services:
       timeout: 10s
       retries: 30
       start_period: 5s
+    volumes:
+      - minio-data:/data
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
@@ -179,6 +183,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    tmpfs:
+      - /tmp
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
@@ -283,3 +289,5 @@ volumes:
   clickhouse-config:
   mysql:
   zookeeper:
+  redis-data:
+  minio-data:
