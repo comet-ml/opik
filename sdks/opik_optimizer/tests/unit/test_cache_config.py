@@ -15,7 +15,7 @@ def _reset_cache() -> None:
     cache_config.enable_cache()
     try:
         cache_config.clear_cache()
-    except Exception:
+    except AttributeError:
         pass
     litellm.cache = None  # type: ignore[assignment]
 

@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 import litellm
 from litellm.caching import Cache
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_CACHE_TYPES = {"disk", "memory"}
 _ENV_PREFIX = "OPIK_CACHE_"
@@ -16,12 +19,12 @@ def _get_env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(f"{_ENV_PREFIX}{name}", default)
 
 
-_CACHE_DISABLED = ((_get_env("DISABLED", "") or "").strip().lower()) in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+def _env_truthy(value: str | None) -> bool:
+    normalized = (value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
+_CACHE_DISABLED = _env_truthy(_get_env("DISABLED", ""))
 
 
 def get_cache_directory() -> str:
@@ -41,6 +44,9 @@ def _load_additional_cache_config() -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
+        logger.warning(
+            "Invalid JSON in OPIK_CACHE_CONFIG_JSON; ignoring override", exc_info=True
+        )
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -56,7 +62,9 @@ def _resolve_cache_type(extra_config: dict[str, Any]) -> str:
         cache_type = str(raw).lower()
 
     if cache_type not in _ALLOWED_CACHE_TYPES:
-        # Allow LiteLLM to decide for advanced backends while still supporting legacy defaults.
+        logger.warning(
+            "Unrecognized cache type '%s'; passing through to LiteLLM", cache_type
+        )
         return cache_type
     return cache_type
 
@@ -68,6 +76,7 @@ def _resolve_cache_ttl() -> float | None:
     try:
         parsed = float(raw_value)
     except ValueError:
+        logger.warning("Invalid OPIK_CACHE_TTL='%s'; ignoring TTL override", raw_value)
         return None
     return parsed if parsed > 0 else None
 
@@ -126,12 +135,7 @@ def initialize_cache() -> Cache | None:
     """Configure LiteLLM caching using repo defaults and environment overrides."""
     global _CACHE_DISABLED
 
-    disable_env = ((_get_env("DISABLED", "") or "").strip().lower()) in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    disable_env = _env_truthy(_get_env("DISABLED", ""))
     if disable_env:
         _CACHE_DISABLED = True
 
@@ -149,7 +153,7 @@ def disable_cache(*, persist: bool = False) -> None:
     Disable LiteLLM caching for the current process.
 
     Args:
-        persist: When True, set `LITELLM_CACHE_DISABLED=1` so child processes inherit the setting.
+        persist: When True, set `OPIK_CACHE_DISABLED=1` so child processes inherit the setting.
     """
     global _CACHE_DISABLED
     _CACHE_DISABLED = True
