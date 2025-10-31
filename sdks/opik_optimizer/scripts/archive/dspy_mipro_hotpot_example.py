@@ -6,16 +6,11 @@ In this example, we show how to use DSPy's MIPROv2 with:
 * Opik's optimization infrastructure
 """
 
-import os
-
 import dspy
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any
 
-# Setup cache on disk:
-import litellm
 import opik
-from litellm.caching import Cache
 from opik.evaluation.metrics import Equals
 from opik.integrations.dspy.callback import OpikCallback
 
@@ -33,10 +28,10 @@ from opik_optimizer.mipro_optimizer.utils import (
 )
 from opik_optimizer.utils import optimization_context
 from opik_optimizer.utils import get_optimization_run_url_by_id
+from opik_optimizer.cache_config import initialize_cache
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
+# Using configured cache for LLM calls
+initialize_cache()
 search_wikipedia = opik.track(type="tool")(search_wikipedia)
 
 # First, we set the Opik callback for all dspy calls:
