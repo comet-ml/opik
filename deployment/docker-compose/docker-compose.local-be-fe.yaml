@@ -1,0 +1,50 @@
+name: opik
+
+# Override for local backend + frontend development mode
+
+services:
+
+  # Expose infrastructure ports for local backend and frontend to connect
+  mysql:
+    ports:
+      - "3306:3306"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  clickhouse:
+    ports:
+      - "8123:8123" # ClickHouse HTTP port
+      - "9000:9000" # ClickHouse Native Protocol port
+
+  minio:
+    ports:
+      - "9001:9000"   # MinIO API Port
+      - "9090:9090"   # MinIO Web UI Console
+
+  # Disable the backend service entirely, meant to be run as local process
+  backend:
+    profiles: !override
+      - disabled
+
+  python-backend:
+    profiles: !override
+      - local-be-fe
+    ports:
+      - "8000:8000" # Python backend HTTP port
+    environment:
+      # Point to local backend process (not Docker)
+      OPIK_REVERSE_PROXY_URL: http://host.docker.internal:8080
+
+  demo-data-generator:
+    profiles: !override
+      - local-be-fe
+    depends_on: !override
+      python-backend:
+        condition: service_healthy
+
+  # Disable the frontend service entirely, meant to be run as local process
+  frontend:
+    profiles: !override
+      - disabled

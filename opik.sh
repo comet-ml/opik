@@ -6,6 +6,7 @@ BACKEND_CONTAINERS=("opik-python-backend-1" "opik-backend-1")
 OPIK_CONTAINERS=("opik-frontend-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 LOCAL_BE_CONTAINERS=("opik-python-backend-1" "opik-frontend-1")
+LOCAL_BE_FE_CONTAINERS=("opik-python-backend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=()
@@ -17,6 +18,8 @@ set_containers_for_profile() {
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}")
   elif [[ "$LOCAL_BE" == "true" ]]; then
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_BE_CONTAINERS[@]}")
+  elif [[ "$LOCAL_BE_FE" == "true" ]]; then
+    CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_BE_FE_CONTAINERS[@]}")
   else
     # Full Opik (default)
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}" "${OPIK_CONTAINERS[@]}")
@@ -36,6 +39,8 @@ get_verify_cmd() {
     cmd="$cmd --backend"
   elif [[ "$LOCAL_BE" == "true" ]]; then
     cmd="$cmd --local-be"
+  elif [[ "$LOCAL_BE_FE" == "true" ]]; then
+    cmd="$cmd --local-be-fe"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
@@ -60,6 +65,8 @@ get_start_cmd() {
     cmd="$cmd --backend"
   elif [[ "$LOCAL_BE" == "true" ]]; then
     cmd="$cmd --local-be"
+  elif [[ "$LOCAL_BE_FE" == "true" ]]; then
+    cmd="$cmd --local-be-fe"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
@@ -146,6 +153,9 @@ get_docker_compose_cmd() {
   elif [[ "$LOCAL_BE" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be.yaml"
     cmd="$cmd --profile local-be"
+  elif [[ "$LOCAL_BE_FE" == "true" ]]; then
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be-fe.yaml"
+    cmd="$cmd --profile local-be-fe"
   else
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"
@@ -191,12 +201,15 @@ print_usage() {
   echo "  --verify        Check if all containers are healthy"
   echo "  --info          Display welcome system status, only if all containers are running"
   echo "  --stop          Stop all containers and clean up"
+  echo "  --clean         Stop all containers and remove all Opik data volumes (WARNING: ALL OPIK DATA WILL BE LOST)"
+  echo "  --demo-data     Create demo data independently, assumes all required services (backend, python-backend, frontend etc.) are already running"
   echo "  --build         Build containers before starting (can be combined with other flags)"
   echo "  --debug         Enable debug mode (verbose output) (can be combined with other flags)"
   echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
   echo "  --infra         Start only infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)"
   echo "  --backend       Start only infrastructure + backend services (Backend, Python Backend etc.)"
   echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
+  echo "  --local-be-fe   Start only infrastructure + Python backend (for local backend + frontend development)"
   echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
   echo "  --help          Show this help message"
   echo ""
@@ -332,6 +345,39 @@ stop_containers() {
   echo "✅ All containers stopped and cleaned up!"
 }
 
+clean_data() {
+  check_docker_status
+  echo "⚠️  WARNING: This will remove ALL Opik data including:"
+  echo "   - MySQL (projects, datasets etc.)"
+  echo "   - ClickHouse (traces, spans, etc."
+  echo "   - Etc."
+  echo ""
+  echo "🗑️  Stopping all containers and removing volumes..."
+  local cmd
+  cmd=$(get_docker_compose_cmd)
+  $cmd down -v
+  echo "✅ All containers stopped and data volumes removed!"
+}
+
+create_demo_data() {
+  check_docker_status
+  echo "📊 Creating demo data..."
+
+  # Run the demo-data-generator service independently (--no-deps)
+  # Assumes all required services (python-backend, frontend) are already running
+  local cmd
+  cmd=$(get_docker_compose_cmd) up --no-deps -d demo-data-generator
+
+  debugLog "[DEBUG] Running: $cmd"
+  if $cmd ; then
+    echo "✅ Demo data created successfully!"
+    return 0
+  else
+    echo "❌ Failed to create demo data"
+    return 1
+  fi
+}
+
 print_banner() {
   check_docker_status
   ui_url=$(get_ui_url)
@@ -351,6 +397,9 @@ print_banner() {
     echo "║                                                                 ║"
   elif [[ "$BACKEND" == "true" ]]; then
     echo "║  ✅ Backend services started successfully!                      ║"
+    echo "║                                                                 ║"
+  elif [[ "$LOCAL_BE_FE" == "true" ]]; then
+    echo "║  ✅ Local backend + frontend mode services started!             ║"
     echo "║                                                                 ║"
   elif [[ "$LOCAL_BE" == "true" ]]; then
     echo "║  ✅ Local backend mode services started successfully!           ║"
@@ -495,6 +544,7 @@ export OPIK_FRONTEND_FLAVOR=default
 INFRA=false
 BACKEND=false
 LOCAL_BE=false
+LOCAL_BE_FE=false
 
 if [[ "$*" == *"--build"* ]]; then
   BUILD_MODE=true
@@ -530,6 +580,13 @@ if [[ "$*" == *"--backend"* ]]; then
   set -- ${@/--backend/}
 fi
 
+# Check --local-be-fe BEFORE --local-be (more specific first)
+if [[ "$*" == *"--local-be-fe"* ]]; then
+  LOCAL_BE_FE=true
+  # Remove the flag from arguments
+  set -- ${@/--local-be-fe/}
+fi
+
 if [[ "$*" == *"--local-be"* ]]; then
   LOCAL_BE=true
   export OPIK_FRONTEND_FLAVOR=local_be
@@ -554,15 +611,17 @@ PROFILE_COUNT=0
 [[ "$INFRA" == "true" ]] && ((PROFILE_COUNT++))
 [[ "$BACKEND" == "true" ]] && ((PROFILE_COUNT++))
 [[ "$LOCAL_BE" == "true" ]] && ((PROFILE_COUNT++))
+[[ "$LOCAL_BE_FE" == "true" ]] && ((PROFILE_COUNT++))
 
 # Validate mutually exclusive profile flags
 if [[ $PROFILE_COUNT -gt 1 ]]; then
-  echo "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
+  echo "❌ Error: --infra, --backend, --local-be, and --local-be-fe flags are mutually exclusive."
   echo "   Choose one of the following:"
-  echo "   • ./opik.sh --infra      (infrastructure services only)"
-  echo "   • ./opik.sh --backend    (infrastructure + backend services)"
-  echo "   • ./opik.sh --local-be   (all services except backend - for local backend development)"
-  echo "   • ./opik.sh              (full Opik suite - default)"
+  echo "   • ./opik.sh --infra        (infrastructure services only)"
+  echo "   • ./opik.sh --backend      (infrastructure + backend services)"
+  echo "   • ./opik.sh --local-be     (all services except backend - for local backend development)"
+  echo "   • ./opik.sh --local-be-fe  (infrastructure + Python backend - for local BE+FE development)"
+  echo "   • ./opik.sh                (full Opik suite - default)"
   exit 1
 fi
 
@@ -589,6 +648,14 @@ case "$1" in
   --stop)
     stop_containers
     exit 0
+    ;;
+  --clean)
+    clean_data
+    exit 0
+    ;;
+  --demo-data)
+    create_demo_data
+    exit $?
     ;;
   --help)
     print_usage
