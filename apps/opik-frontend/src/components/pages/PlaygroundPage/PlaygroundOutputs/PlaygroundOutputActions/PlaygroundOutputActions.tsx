@@ -2,14 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
-import {
-  Database,
-  ExternalLink,
-  FlaskConical,
-  Pause,
-  Play,
-  X,
-} from "lucide-react";
+import { Database, FlaskConical, Pause, Play, Plus, X } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 import {
@@ -461,8 +454,8 @@ const PlaygroundOutputActions = ({
                   }}
                 >
                   <div className="comet-body-s flex items-center gap-2 text-primary">
+                    <Plus className="size-3.5 shrink-0" />
                     <span>Create a new dataset</span>
-                    <ExternalLink className="size-3.5 shrink-0" />
                   </div>
                 </div>
               </div>

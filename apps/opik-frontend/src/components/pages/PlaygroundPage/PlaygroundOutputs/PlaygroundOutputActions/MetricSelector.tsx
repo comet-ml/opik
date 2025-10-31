@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -273,8 +273,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                 }}
               >
                 <div className="comet-body-s flex items-center gap-2 text-primary">
+                  <Plus className="size-3.5 shrink-0" />
                   <span>Create a new rule</span>
-                  <ExternalLink className="size-3.5 shrink-0" />
                 </div>
               </div>
             </>

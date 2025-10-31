@@ -223,9 +223,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
             />
           )}
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="datasetName">
-              Name <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="datasetName">Name</Label>
             <Input
               id="datasetName"
               placeholder="Dataset name"
@@ -247,9 +245,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>
-                Upload a CSV <span className="text-destructive">*</span>
-              </Label>
+              <Label>Upload a CSV</Label>
               <Description className="tracking-normal">
                 Your CSV file can contain up to 1,000 rows, for larger datasets
                 use the SDK instead.
