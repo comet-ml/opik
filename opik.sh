@@ -201,7 +201,8 @@ print_usage() {
   echo "  --verify        Check if all containers are healthy"
   echo "  --info          Display welcome system status, only if all containers are running"
   echo "  --stop          Stop all containers and clean up"
-  echo "  --demo-data     Create demo data (runs demo-data-generator service)"
+  echo "  --clean         Stop all containers and remove all data volumes (WARNING: ALL DATA WILL BE LOST)"
+  echo "  --demo-data     Create demo data independently, assumes all required services (backend, python-backend, frontend etc.) are already running"
   echo "  --build         Build containers before starting (can be combined with other flags)"
   echo "  --debug         Enable debug mode (verbose output) (can be combined with other flags)"
   echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
@@ -344,14 +345,26 @@ stop_containers() {
   echo "✅ All containers stopped and cleaned up!"
 }
 
+clean_data() {
+  check_docker_status
+  echo "⚠️  WARNING: This will remove ALL Opik data including:"
+  echo "   - MySQL database (traces, projects, experiments)"
+  echo "   - ClickHouse analytics data"
+  echo "   - MinIO storage (artifacts, files)"
+  echo "   - Redis cache"
+  echo "   - ZooKeeper data"
+  echo ""
+  echo "🗑️  Stopping all containers and removing volumes..."
+  local cmd
+  cmd=$(get_docker_compose_cmd)
+  $cmd down -v
+  echo "✅ All containers stopped and data volumes removed!"
+}
+
 create_demo_data() {
   check_docker_status
   echo "📊 Creating demo data..."
-  
-  # demo-data-generator runs as a Docker container on the Docker network
-  # It will use the default PYTHON_BACKEND_URL from docker-compose.yaml: http://python-backend:8000
-  export CREATE_DEMO_DATA=true
-  
+
   local cmd
   cmd=$(get_docker_compose_cmd)
   
@@ -632,6 +645,10 @@ case "$1" in
     ;;
   --stop)
     stop_containers
+    exit 0
+    ;;
+  --clean)
+    clean_data
     exit 0
     ;;
   --demo-data)
