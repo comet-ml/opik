@@ -1,0 +1,52 @@
+---
+description: Core architecture and design patterns for Opik Optimizer SDK
+globs: sdks/opik_optimizer/src/opik_optimizer/**/*
+alwaysApply: false
+---
+# Opik Optimizer Architecture
+
+The optimizer SDK layers iterative search algorithms on top of Opik's evaluation stack. Keep orchestration, evaluation, and presentation concerns separate so optimizers stay composable and easy to extend.
+
+## Core Modules
+
+- `base_optimizer.BaseOptimizer` implements the reusable optimization loop: seeding state, configuring LiteLLM caching and throttling, evaluating prompts through `task_evaluator`, tracking history, and emitting `OptimizationResult`.
+- `optimization_config/` defines prompt representations (`chat_prompt.ChatPrompt`), parameter schemas, and mapper utilities used to feed Opik experiments.
+- `optimizable_agent.OptimizableAgent` wraps LiteLLM agents and injects Opik tracing metadata; most optimizers rely on `create_litellm_agent_class` to obtain a per-run agent.
+- `task_evaluator.evaluate` bridges to `opik.evaluation.evaluator`, guaranteeing scoring, threading, sampling, and optimisation-id tagging stay consistent.
+- `optimization_result.OptimizationResult` captures the normalised result of an optimisation run and exposes helpers for chaining optimizers.
+- Shared utilities (`_throttle`, `cache_config`, `reporting_utils`, `logging_config`, `multi_metric_objective`) provide rate limiting, disk caching, console output, logging, and multi-metric support.
+
+## Optimizer Packages
+
+Each algorithm lives in its own package under `src/opik_optimizer/` (for example `evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `mipro_optimizer/`, `parameter_optimizer/`). Keep algorithm-specific helpers, prompts, and operators co-located with the optimizer to avoid cross-package coupling.
+
+## Execution Flow
+
+1. `optimize_prompt` (or `optimize_mcp`) validates inputs via `_validate_optimization_inputs`, resets counters, and may start an Opik optimization run through `self.opik_client.create_optimization`, storing the returned id on `self.current_optimization_id`.
+2. Subclasses generate candidate prompts or parameter sets by delegating to helper modules (mutation operators, stage planners, tool workflows, etc.).
+3. Candidate scoring routes through `_evaluate_prompt` -> `evaluate_prompt` -> `task_evaluator.evaluate`. The evaluator respects `n_samples`, `num_threads`, LiteLLM throttling, and tags traces with the optimization id using `opik_context`.
+4. Progress is emitted via `reporting_utils` context managers and `_add_to_history` captures round-level data for later reporting.
+5. When the loop terminates, subclasses construct an `OptimizationResult` (or call helper methods that do so) including baseline metrics, final scores, history, and LiteLLM/tool counters before returning to the caller.
+
+Keep iteration logic side-effect free beyond the explicit history, reporting, and Opik telemetry calls; this makes the run resumable and simplifies testing.
+
+## Boundaries and Dependencies
+
+- Optimizer packages may import from `base_optimizer`, shared utilities, and other modules inside the same package. Avoid reaching into unrelated optimizer packages.
+- Provider-specific glue belongs in `integrations/` and must guard imports so the base installation stays lightweight.
+- `datasets/` exposes deterministic sample datasets for demos and tests. Do not ship benchmark-only assets in production modules.
+- Production code must not import from `tests/`.
+
+## Caching, Throttling, and Telemetry
+
+- Use `_throttle.get_rate_limiter_for_current_opik_installation` and the decorators in `_throttle.py` (for example `@rate_limited`) for outbound LiteLLM calls. Do not roll bespoke sleep loops.
+- `cache_config.initialize_cache()` configures a shared LiteLLM disk cache under `~/.litellm_cache`. If an optimizer needs different behaviour, expose configuration knobs rather than mutating global state.
+- Tag Opik traces through `opik_context.update_current_trace` so optimization ids appear in Opik UI and logs.
+
+## Adding a New Optimizer
+
+1. Create a new package under `src/opik_optimizer/` with an `__init__.py` that re-exports the public class.
+2. Subclass `BaseOptimizer` and implement `optimize_prompt` (and optionally `optimize_mcp`). Extract helper modules for mutation, selection, or reporting logic to keep the main loop readable.
+3. Reuse `reporting_utils` context managers for console output and populate `OptimizationResult` with baseline scores, final results, history, and metadata.
+4. Document configuration knobs under `optimization_config/` and update README/docs/notebooks so users understand how to run the new optimizer.
+5. Add unit tests for new helpers and a lightweight e2e test that exercises the optimizer against a tiny dataset with reduced populations/iterations.
