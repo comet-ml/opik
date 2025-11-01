@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import UploadField from "@/components/shared/UploadField/UploadField";
 import Loader from "@/components/shared/Loader/Loader";
@@ -60,6 +61,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
 
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
+  const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
     undefined,
   );
@@ -297,6 +299,15 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </Button>
         </DialogFooter>
       </DialogContent>
+      <ConfirmDialog
+        open={confirmOpen}
+        setOpen={setConfirmOpen}
+        onCancel={submitHandler}
+        title="File can’t be uploaded"
+        description="This file cannot be uploaded because it does not pass validation. If you continue, the dataset will be created without any items. You can add items manually later, or go back and upload a valid file."
+        cancelText="Create empty dataset"
+        confirmText="Go back"
+      />
     </Dialog>
   );
 };
