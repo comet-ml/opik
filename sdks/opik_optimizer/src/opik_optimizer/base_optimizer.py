@@ -20,7 +20,11 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class
+from .utils import (
+    ValidationSplitConfig,
+    create_litellm_agent_class,
+    resolve_dataset_splits,
+)
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -177,6 +181,32 @@ class BaseOptimizer(ABC):
             return create_litellm_agent_class(prompt, optimizer_ref=self)
         else:
             return agent_class
+
+    def _prepare_dataset_split(
+        self,
+        dataset: "Dataset",
+        *,
+        n_samples: int | None = None,
+        validation_config: ValidationSplitConfig | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """
+        Combine training and optional validation splits for downstream optimizers.
+
+        Args:
+            dataset: Primary dataset used for optimization.
+            n_samples: Optional limit used to cap retrieved examples when no
+                validation split is provided.
+            validation_config: Optional validation split configuration.
+
+        Returns:
+            Tuple containing train item dictionaries and validation item dictionaries.
+        """
+        limit = n_samples if n_samples is not None else None
+        return resolve_dataset_splits(
+            dataset,
+            validation_config,
+            limit=limit,
+        )
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
