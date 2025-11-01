@@ -25,7 +25,7 @@ from .parameter_optimizer import (
     ParameterSpec,
     ParameterType,
 )
-from .utils.validation_split import ValidationSplitConfig
+from .utils import ValidationSplit
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
@@ -52,5 +52,5 @@ __all__ = [
     "ParameterSearchSpace",
     "ParameterSpec",
     "ParameterType",
-    "ValidationSplitConfig",
+    "ValidationSplit",
 ]

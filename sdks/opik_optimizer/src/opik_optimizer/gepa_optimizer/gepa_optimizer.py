@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Sequence
+from typing import Any
 from collections.abc import Callable
 
 import opik
@@ -21,6 +21,7 @@ from ..utils import (
 from ..task_evaluator import _create_metric_class
 from ..reporting_utils import suppress_opik_logs
 from .. import task_evaluator
+from ..utils import ValidationSplit
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
@@ -153,13 +154,7 @@ class GepaOptimizer(BaseOptimizer):
         metric: Callable,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        validation_dataset: Dataset | None = None,
-        validation_item_ids: Sequence[str] | None = None,
-        validation_column: str | None = None,
-        validation_value: str = "validation",
-        train_value: str = "train",
-        validation_ratio: float | None = None,
-        validation_seed: int | None = None,
+        validation: ValidationSplit | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
@@ -186,13 +181,7 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config: Optional configuration for the experiment
             max_trials: Maximum number of different prompts to test (default: 10)
             n_samples: Optional number of items to test in the dataset
-            validation_dataset: Optional dataset to use as validation set.
-            validation_item_ids: Explicit item IDs to reserve for validation.
-            validation_column: Dataset field or metadata key containing split labels.
-            validation_value: Value inside ``validation_column`` treated as validation.
-            train_value: Value inside ``validation_column`` treated as training.
-            validation_ratio: Random split ratio (0 < ratio < 1) for validation sampling.
-            validation_seed: Seed used when sampling via ``validation_ratio``.
+            validation: Optional :class:`ValidationSplit` describing the validation subset.
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
             reflection_minibatch_size: Size of reflection minibatches (default: 3)
@@ -225,13 +214,7 @@ class GepaOptimizer(BaseOptimizer):
         train_items, validation_items = self._prepare_dataset_split(
             dataset,
             n_samples=n_samples,
-            validation_dataset=validation_dataset,
-            validation_item_ids=list(validation_item_ids) if validation_item_ids else None,
-            validation_split_field=validation_column,
-            validation_ratio=validation_ratio,
-            validation_seed=validation_seed,
-            train_label=train_value,
-            validation_label=validation_value,
+            validation=validation,
         )
         if not train_items:
             raise ValueError("Dataset must contain at least one training example.")

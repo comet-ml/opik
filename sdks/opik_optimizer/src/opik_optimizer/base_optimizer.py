@@ -20,8 +20,7 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class
-from .utils.dataset_utils import resolve_dataset_split
+from .utils import create_litellm_agent_class, ValidationSplit
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -184,44 +183,32 @@ class BaseOptimizer(ABC):
         dataset: "Dataset",
         *,
         n_samples: int | None = None,
-        validation_dataset: "Dataset" | None = None,
-        validation_item_ids: list[str] | None = None,
-        validation_split_field: str | None = None,
-        validation_ratio: float | None = None,
-        validation_seed: int | None = None,
-        train_label: str = "train",
-        validation_label: str = "validation",
+        validation: ValidationSplit | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """
         Combine training and optional validation splits for downstream optimizers.
 
         Args:
             dataset: Primary dataset used for optimization.
-            n_samples: Optional limit used to cap retrieved examples when no
-                validation split is provided.
-            validation_dataset: Optional dataset dedicated to validation.
-            validation_item_ids: Explicit dataset item IDs to reserve for validation.
-            validation_split_field: Dataset field or metadata key storing split labels.
-            validation_ratio: Ratio (0 < ratio < 1) for random validation sampling.
-            validation_seed: Seed used when sampling by ratio.
-            train_label: Label representing training examples when using ``validation_split_field``.
-            validation_label: Label representing validation examples under ``validation_split_field``.
+            n_samples: Optional limit applied when sampling examples for the run.
+            validation: Optional :class:`ValidationSplit` describing how to build
+                a validation subset.
 
         Returns:
             Tuple containing train item dictionaries and validation item dictionaries.
         """
         limit = n_samples if n_samples is not None else None
-        return resolve_dataset_split(
+
+        if validation is None or not validation.is_configured():
+            items = dataset.get_items(limit) if limit is not None else dataset.get_items()
+            return list(items), []
+
+        train_items, validation_items = validation.resolve(
             dataset,
-            validation_dataset=validation_dataset,
-            validation_item_ids=validation_item_ids,
-            split_field=validation_split_field,
-            training_label=train_label,
-            validation_label=validation_label,
-            validation_ratio=validation_ratio,
-            seed=validation_seed if validation_seed is not None else self.seed,
-            limit=limit,
+            n_samples=limit,
+            default_seed=self.seed,
         )
+        return train_items, validation_items
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
