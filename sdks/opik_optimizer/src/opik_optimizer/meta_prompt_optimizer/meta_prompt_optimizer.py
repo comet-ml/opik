@@ -594,6 +594,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
         tool_panel_style: str = "bright_magenta",
+        validation: ValidationSplit | None = None,
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset

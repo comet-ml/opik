@@ -13,10 +13,13 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ResolvedSplit:
+class DatasetSplitResult:
+    """Outcome of applying a :class:`ValidationSplit` to a dataset."""
+
+    train_dataset: "Dataset"
+    validation_dataset: "Dataset | None"
     train_items: list[dict[str, Any]]
     validation_items: list[dict[str, Any]]
-    validation_dataset: "Dataset | None"
 
     def train_ids(self) -> list[str]:
         return [
@@ -112,12 +115,12 @@ class ValidationSplit:
         *,
         n_samples: int | None,
         default_seed: int,
-    ) -> ResolvedSplit:
+    ) -> DatasetSplitResult:
         """Resolve training and validation collections for the given dataset."""
         if not self.is_configured():
             limit = self.limit if self.limit is not None else n_samples
             items = dataset.get_items(limit)
-            return ResolvedSplit(list(items), [], None)
+            return DatasetSplitResult(dataset, None, list(items), [])
 
         strategies_selected = sum(
             1
@@ -157,7 +160,7 @@ class ValidationSplit:
             train_items = train_items[:limit]
             validation_dataset = None
 
-        return ResolvedSplit(train_items, validation_items, validation_dataset)
+        return DatasetSplitResult(dataset, validation_dataset, train_items, validation_items)
 
 
-__all__ = ["ValidationSplit", "ResolvedSplit"]
+__all__ = ["ValidationSplit", "DatasetSplitResult"]

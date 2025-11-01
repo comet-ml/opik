@@ -20,7 +20,7 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import ResolvedSplit, ValidationSplit, create_litellm_agent_class
+from .utils import DatasetSplitResult, ValidationSplit, create_litellm_agent_class
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -184,7 +184,7 @@ class BaseOptimizer(ABC):
         *,
         n_samples: int | None = None,
         validation: ValidationSplit | None = None,
-    ) -> ResolvedSplit:
+    ) -> DatasetSplitResult:
         """
         Combine training and optional validation splits for downstream optimizers.
 
@@ -201,7 +201,7 @@ class BaseOptimizer(ABC):
 
         if validation is None or not validation.is_configured():
             items = dataset.get_items(limit) if limit is not None else dataset.get_items()
-            return ResolvedSplit(list(items), [], None)
+            return DatasetSplitResult(dataset, None, list(items), [])
 
         return validation.resolve(
             dataset,
@@ -255,12 +255,12 @@ class BaseOptimizer(ABC):
         return random.sample(ids, n_samples), None
 
     def _select_train_eval_params(
-        self, split: ResolvedSplit, n_samples: int | None
+        self, split: DatasetSplitResult, n_samples: int | None
     ) -> tuple[list[str] | None, int | None]:
         return self._select_ids_for_eval(split.train_ids(), n_samples)
 
     def _select_validation_eval_params(
-        self, split: ResolvedSplit, n_samples: int | None
+        self, split: DatasetSplitResult, n_samples: int | None
     ) -> tuple[list[str] | None, int | None]:
         return self._select_ids_for_eval(split.validation_ids(), n_samples)
 

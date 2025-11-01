@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from opik_optimizer.utils.validation import ResolvedSplit, ValidationSplit
+from opik_optimizer.utils.validation import DatasetSplitResult, ValidationSplit
 
 
 class DummyDataset:
@@ -71,8 +71,9 @@ def test_validation_split_ratio_resolves_datasets() -> None:
 
     result = split.resolve(dataset, n_samples=None, default_seed=0)
 
-    assert isinstance(result, ResolvedSplit)
+    assert isinstance(result, DatasetSplitResult)
     assert len(result.validation_items) == 2
+    assert result.train_dataset is dataset
     assert len(result.train_items) == 2
     assert {item["id"] for item in result.train_items}.isdisjoint(
         {item["id"] for item in result.validation_items}
@@ -90,6 +91,7 @@ def test_validation_split_dataset_pass_through() -> None:
     result = split.resolve(dataset, n_samples=None, default_seed=0)
 
     assert dataset.call_kwargs is not None
+    assert result.train_dataset is dataset
     assert result.validation_dataset is validation_dataset
     assert [item["id"] for item in result.train_items] == ["t1", "t2"]
     assert [item["id"] for item in result.validation_items] == ["v1", "v2"]

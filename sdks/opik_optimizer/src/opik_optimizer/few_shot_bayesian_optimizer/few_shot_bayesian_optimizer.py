@@ -18,7 +18,7 @@ from opik_optimizer import base_optimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
-from ..utils import ResolvedSplit
+from ..utils import DatasetSplitResult
 from . import reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -203,7 +203,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        split: ResolvedSplit | None = None,
+        split: DatasetSplitResult | None = None,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
