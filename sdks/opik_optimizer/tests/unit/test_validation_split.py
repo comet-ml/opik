@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from opik_optimizer.utils.validation import ValidationSplit
+from opik_optimizer.utils.validation import ResolvedSplit, ValidationSplit
 
 
 class DummyDataset:
@@ -69,12 +69,13 @@ def test_validation_split_ratio_resolves_datasets() -> None:
     dataset = DummyDataset([{"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "4"}])
     split = ValidationSplit.from_ratio(0.5, seed=123)
 
-    train_items, val_items = split.resolve(dataset, n_samples=None, default_seed=0)
+    result = split.resolve(dataset, n_samples=None, default_seed=0)
 
-    assert len(val_items) == 2
-    assert len(train_items) == 2
-    assert {item["id"] for item in train_items}.isdisjoint(
-        {item["id"] for item in val_items}
+    assert isinstance(result, ResolvedSplit)
+    assert len(result.validation_items) == 2
+    assert len(result.train_items) == 2
+    assert {item["id"] for item in result.train_items}.isdisjoint(
+        {item["id"] for item in result.validation_items}
     )
 
 
@@ -86,11 +87,12 @@ def test_validation_split_dataset_pass_through() -> None:
     )
 
     split = ValidationSplit.from_dataset(validation_dataset)
-    train_items, val_items = split.resolve(dataset, n_samples=None, default_seed=0)
+    result = split.resolve(dataset, n_samples=None, default_seed=0)
 
     assert dataset.call_kwargs is not None
-    assert [item["id"] for item in train_items] == ["t1", "t2"]
-    assert [item["id"] for item in val_items] == ["v1", "v2"]
+    assert result.validation_dataset is validation_dataset
+    assert [item["id"] for item in result.train_items] == ["t1", "t2"]
+    assert [item["id"] for item in result.validation_items] == ["v1", "v2"]
 
 
 def test_validation_split_rejects_multiple_strategies() -> None:
@@ -107,10 +109,10 @@ def test_validation_split_without_configuration_returns_training_only() -> None:
     dataset = DummyDataset([{"id": "1"}, {"id": "2"}])
     split = ValidationSplit()
 
-    train_items, val_items = split.resolve(dataset, n_samples=1, default_seed=0)
+    result = split.resolve(dataset, n_samples=1, default_seed=0)
 
-    assert len(train_items) == 1
-    assert val_items == []
+    assert len(result.train_items) == 1
+    assert result.validation_items == []
 
 
 def test_validation_split_ratio_bounds() -> None:

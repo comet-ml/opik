@@ -17,6 +17,7 @@ from opik_optimizer import task_evaluator
 
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
+from ..utils import ValidationSplit
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
@@ -433,6 +434,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             print(f"Best prompt: {result.best_prompt}")
             ```
         """
+        validation = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -496,6 +502,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 mcp_config=mcp_config,
                 candidate_generator=candidate_generator,
                 candidate_generator_kwargs=candidate_generator_kwargs,
+                validation=validation,
             )
             if optimization:
                 self._update_optimization(optimization, status="completed")
@@ -525,7 +532,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         allow_tool_use_on_second_pass: bool = False,
         **kwargs: Any,
     ) -> OptimizationResult:
+        validation = self._pop_validation_split(kwargs)
         panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
 
         if prompt.tools is None or not prompt.tools:
             raise ValueError("Prompt must include tools for MCP optimization")
@@ -566,6 +577,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "panel_style": panel_style,
             },
             tool_panel_style=panel_style,
+            validation=validation,
         )
 
     def _optimize_prompt(
@@ -606,15 +618,26 @@ class MetaPromptOptimizer(BaseOptimizer):
             additional_metadata={"meta_prompt": meta_metadata},
         )
 
+        split = self._prepare_dataset_split(
+            dataset,
+            n_samples=n_samples,
+            validation=validation,
+        )
+        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
+        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(split, None)
+        validation_dataset_source = split.validation_dataset or dataset
+        has_validation = bool(split.validation_items)
+
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             initial_score = self._evaluate_prompt(
                 prompt,
                 optimization_id=optimization_id,
                 dataset=dataset,
                 metric=metric,
-                n_samples=n_samples,
+                n_samples=train_eval_n,
+                dataset_item_ids=train_eval_ids,
                 experiment_config=experiment_config,
-                use_full_dataset=n_samples is None,
+                use_full_dataset=(train_eval_ids is None and train_eval_n is None),
                 verbose=self.verbose,
                 mcp_config=mcp_config,
             )
@@ -683,7 +706,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 optimization_id=optimization_id,
                                 dataset=dataset,
                                 metric=metric,
-                                n_samples=n_samples,
+                                n_samples=train_eval_n,
+                                dataset_item_ids=train_eval_ids,
                                 use_full_dataset=False,
                                 experiment_config=experiment_config,
                                 verbose=self.verbose,
@@ -752,7 +776,33 @@ class MetaPromptOptimizer(BaseOptimizer):
             tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
 
-        return self._create_result(
+        validation_summary: dict[str, Any] | None = None
+        if has_validation:
+            validation_score = self._evaluate_prompt(
+                best_prompt,
+                optimization_id=optimization_id,
+                dataset=validation_dataset_source,
+                metric=metric,
+                n_samples=validation_eval_n,
+                dataset_item_ids=validation_eval_ids,
+                experiment_config=self._drop_none(
+                    {
+                        "evaluation": {
+                            "phase": "validation",
+                            "prompt_messages": best_prompt.get_messages(),
+                        }
+                    }
+                ),
+                use_full_dataset=(validation_eval_ids is None and validation_eval_n is None),
+                verbose=self.verbose,
+                mcp_config=mcp_config,
+            )
+            validation_summary = {
+                "validation_score": validation_score,
+                "validation_dataset_id": getattr(validation_dataset_source, "id", None),
+            }
+
+        result = self._create_result(
             metric,
             initial_prompt=(
                 initial_prompt.get_messages() if initial_prompt is not None else []
@@ -765,6 +815,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=optimization_id,
             best_tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
+
+        if validation_summary is not None:
+            result.details.update(validation_summary)
+
+        return result
 
     def _calculate_improvement(
         self, current_score: float, previous_score: float

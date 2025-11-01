@@ -604,7 +604,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     messages,  # type: ignore
                     dataset=dataset,
                     metric=metric,
-                    n_samples=n_samples,
+                    n_samples=train_eval_n,
+                    dataset_item_ids=list(train_eval_ids) if train_eval_ids else None,
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self.current_optimization_id,
                     verbose=0,
@@ -632,7 +633,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     messages,  # type: ignore
                     dataset=dataset,
                     metric=metric,
-                    n_samples=n_samples,
+                    n_samples=train_eval_n,
+                    dataset_item_ids=list(train_eval_ids) if train_eval_ids else None,
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self.current_optimization_id,
                     verbose=0,
@@ -695,6 +697,22 @@ class EvolutionaryOptimizer(BaseOptimizer):
         deap_population = deap_population[: self.population_size]
 
         # Step 5. Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
+        validation = self._pop_validation_split(kwargs)
+
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
+        split = self._prepare_dataset_split(
+            dataset,
+            n_samples=n_samples,
+            validation=validation,
+        )
+        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
+        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(split, None)
+        validation_dataset_source = split.validation_dataset or dataset
+has_validation = bool(split.validation_items)
+
         if self.enable_moo:
             hof = tools.ParetoFront()
         else:
@@ -1004,6 +1022,25 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose,
             tools=getattr(final_best_prompt, "tools", None),
         )
+
+        if has_validation:
+            validation_score = self._evaluate_prompt(
+                final_best_prompt,
+                final_best_prompt.get_messages(),
+                dataset=validation_dataset_source,
+                metric=metric,
+                n_samples=validation_eval_n,
+                dataset_item_ids=list(validation_eval_ids)
+                if validation_eval_ids is not None
+                else None,
+                experiment_config=(experiment_config or {}).copy(),
+                optimization_id=self.current_optimization_id,
+                verbose=0,
+            )
+            final_details["validation_score"] = validation_score
+            final_details["validation_dataset_id"] = getattr(
+                validation_dataset_source, "id", None
+            )
 
         final_tools = getattr(final_best_prompt, "tools", None)
         if final_tools:

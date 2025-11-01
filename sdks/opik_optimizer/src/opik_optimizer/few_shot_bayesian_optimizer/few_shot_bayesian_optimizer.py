@@ -18,6 +18,7 @@ from opik_optimizer import base_optimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
+from ..utils import ResolvedSplit
 from . import reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -202,17 +203,30 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        split: ResolvedSplit | None = None,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
         random.seed(self.seed)
 
+        train_ids = split.train_ids() if split else []
+
         # Load the dataset
-        dataset_items = dataset.get_items()
-        all_dataset_item_ids = [item["id"] for item in dataset_items]
-        eval_dataset_item_ids = all_dataset_item_ids
-        if n_samples is not None and n_samples < len(dataset_items):
-            eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
+        if split and split.train_items:
+            dataset_items = list(split.train_items)
+        else:
+            dataset_items = dataset.get_items()
+
+        all_dataset_item_ids = train_ids if train_ids else [
+            item["id"] for item in dataset_items if isinstance(item, dict) and "id" in item
+        ]
+        eval_dataset_item_ids = list(all_dataset_item_ids)
+        if (
+            n_samples is not None
+            and eval_dataset_item_ids
+            and n_samples < len(eval_dataset_item_ids)
+        ):
+            eval_dataset_item_ids = random.sample(eval_dataset_item_ids, n_samples)
 
         configuration_updates = self._drop_none(
             {
@@ -470,6 +484,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
+        validation = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -513,6 +532,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         utils.disable_experiment_reporting()
 
+        split = self._prepare_dataset_split(
+            dataset,
+            n_samples=n_samples,
+            validation=validation,
+        )
+        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
+        validation_eval_ids, _ = self._select_validation_eval_params(split, None)
+        validation_dataset_source = split.validation_dataset or dataset
+        has_validation = bool(split.validation_items)
+
         # Step 1. Compute the baseline evaluation
         with reporting.display_evaluation(
             message="First we will establish the baseline performance:",
@@ -522,7 +551,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 prompt,
                 dataset=dataset,
                 metric=metric,
-                n_samples=n_samples,
+                n_samples=train_eval_n,
+                dataset_item_ids=train_eval_ids,
                 optimization_id=(optimization.id if optimization is not None else None),
             )
 
@@ -532,12 +562,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         with reporting.creation_few_shot_prompt_template(
             verbose=self.verbose
         ) as fewshot_template_report:
+            few_shot_source = (
+                split.train_items[:10]
+                if split.train_items
+                else dataset.get_items(nb_samples=10)
+            )
             fewshot_template = self._create_fewshot_prompt_template(
                 model=self.model,
                 prompt=prompt,
                 few_shot_examples=[
                     {k: v for k, v in item.items() if k != "id"}
-                    for item in dataset.get_items(nb_samples=10)
+                    for item in few_shot_source
                 ],
             )
 
@@ -554,7 +589,24 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             n_trials=max_trials,
             n_samples=n_samples,
+            split=split,
         )
+        if has_validation:
+            final_prompt = prompt.copy()
+            final_prompt.set_messages(result.prompt)
+            validation_score = self._evaluate_prompt(
+                final_prompt,
+                dataset=validation_dataset_source,
+                metric=metric,
+                n_samples=None,
+                dataset_item_ids=validation_eval_ids,
+                experiment_config=experiment_config,
+                optimization_id=optimization.id if optimization else None,
+            )
+            result.details["validation_score"] = validation_score
+            result.details["validation_dataset_id"] = getattr(
+                validation_dataset_source, "id", None
+            )
         if optimization:
             self._update_optimization(optimization, status="completed")
 

@@ -13,6 +13,27 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolvedSplit:
+    train_items: list[dict[str, Any]]
+    validation_items: list[dict[str, Any]]
+    validation_dataset: "Dataset | None"
+
+    def train_ids(self) -> list[str]:
+        return [
+            item["id"]
+            for item in self.train_items
+            if isinstance(item, dict) and "id" in item
+        ]
+
+    def validation_ids(self) -> list[str]:
+        return [
+            item["id"]
+            for item in self.validation_items
+            if isinstance(item, dict) and "id" in item
+        ]
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationSplit:
     """Describe how to build a validation subset from an Opik dataset.
 
@@ -91,12 +112,12 @@ class ValidationSplit:
         *,
         n_samples: int | None,
         default_seed: int,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> ResolvedSplit:
         """Resolve training and validation collections for the given dataset."""
         if not self.is_configured():
             limit = self.limit if self.limit is not None else n_samples
             items = dataset.get_items(limit)
-            return list(items), []
+            return ResolvedSplit(list(items), [], None)
 
         strategies_selected = sum(
             1
@@ -130,10 +151,13 @@ class ValidationSplit:
         train_items = list(split.train)
         validation_items = list(split.test)
 
+        validation_dataset = self.dataset if self.dataset is not None else dataset
+
         if not validation_items and limit is not None:
             train_items = train_items[:limit]
+            validation_dataset = None
 
-        return train_items, validation_items
+        return ResolvedSplit(train_items, validation_items, validation_dataset)
 
 
-__all__ = ["ValidationSplit"]
+__all__ = ["ValidationSplit", "ResolvedSplit"]

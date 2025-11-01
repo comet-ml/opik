@@ -20,7 +20,7 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class, ValidationSplit
+from .utils import ResolvedSplit, ValidationSplit, create_litellm_agent_class
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -184,7 +184,7 @@ class BaseOptimizer(ABC):
         *,
         n_samples: int | None = None,
         validation: ValidationSplit | None = None,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> ResolvedSplit:
         """
         Combine training and optional validation splits for downstream optimizers.
 
@@ -200,17 +200,14 @@ class BaseOptimizer(ABC):
         limit = n_samples if n_samples is not None else None
 
         if validation is None or not validation.is_configured():
-            items = (
-                dataset.get_items(limit) if limit is not None else dataset.get_items()
-            )
-            return list(items), []
+            items = dataset.get_items(limit) if limit is not None else dataset.get_items()
+            return ResolvedSplit(list(items), [], None)
 
-        train_items, validation_items = validation.resolve(
+        return validation.resolve(
             dataset,
             n_samples=limit,
             default_seed=self.seed,
         )
-        return train_items, validation_items
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -233,6 +230,39 @@ class BaseOptimizer(ABC):
             ).get("description", "")
             for idx, tool in enumerate(tools)
         }
+
+    def _pop_validation_split(
+        self, kwargs: dict[str, Any]
+    ) -> ValidationSplit | None:
+        """Extract a validation split from keyword arguments, enforcing type checks."""
+        if "validation" not in kwargs:
+            return None
+
+        candidate = kwargs.pop("validation")
+        if candidate is None:
+            return None
+        if not isinstance(candidate, ValidationSplit):
+            raise TypeError("validation must be a ValidationSplit or None")
+        return candidate
+
+    def _select_ids_for_eval(
+        self, ids: list[str], n_samples: int | None
+    ) -> tuple[list[str] | None, int | None]:
+        if not ids:
+            return None, n_samples
+        if n_samples is None or n_samples >= len(ids):
+            return ids, None
+        return random.sample(ids, n_samples), None
+
+    def _select_train_eval_params(
+        self, split: ResolvedSplit, n_samples: int | None
+    ) -> tuple[list[str] | None, int | None]:
+        return self._select_ids_for_eval(split.train_ids(), n_samples)
+
+    def _select_validation_eval_params(
+        self, split: ResolvedSplit, n_samples: int | None
+    ) -> tuple[list[str] | None, int | None]:
+        return self._select_ids_for_eval(split.validation_ids(), n_samples)
 
     # ------------------------------------------------------------------
     # LLM call methods
