@@ -1,6 +1,9 @@
 import logging
 import functools
 import time
+import random
+import warnings
+from dataclasses import dataclass
 from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING, Callable
 
 from opik.api_objects import rest_stream_parser
@@ -19,6 +22,19 @@ if TYPE_CHECKING:
     import pandas as pd
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class DatasetSplit:
+    """Representation of a dataset split with train/test partitions."""
+
+    train: List[Dict[str, Any]]
+    test: List[Dict[str, Any]]
+
+    @property
+    def validation(self) -> List[Dict[str, Any]]:
+        """Alias for backward compatibility."""
+        return self.test
 
 
 def _ensure_rest_api_call_respecting_rate_limit(
@@ -255,6 +271,142 @@ class Dataset:
 
         return converters.to_json(dataset_items, keys_mapping={})
 
+    def train_test_split(
+        self,
+        *,
+        test_dataset: "Dataset" | None = None,
+        test_item_ids: Sequence[str] | None = None,
+        split_field: str | None = None,
+        train_label: str = "train",
+        test_label: str = "test",
+        test_size: float | None = None,
+        seed: int | None = None,
+        limit: int | None = None,
+    ) -> DatasetSplit:
+        """
+        Create a train/test split from the dataset (HuggingFace style).
+
+        Exactly one of the following strategies may be provided: ``test_dataset``,
+        ``test_item_ids``, ``split_field`` or ``test_size``. When no strategy
+        is set, all items are returned in the training split and the test split is empty.
+
+        Args:
+            test_dataset: External dataset that should act as the test split.
+            test_item_ids: Explicit item IDs to include in the test split.
+            split_field: Field name that stores split labels either on the item or under ``metadata``.
+            train_label: Label that represents the training split when ``split_field`` is used.
+            test_label: Label representing test items when ``split_field`` is used.
+            test_size: Ratio (0 < ratio < 1) of items to allocate to the test split.
+            seed: Optional random seed used when ``test_size`` is provided.
+            limit: Maximum number of items to retrieve from the dataset(s).
+
+        Returns:
+            DatasetSplit: Two lists of dataset items for training and test splits.
+        """
+        strategies_selected = sum(
+            1
+            for condition in (
+                test_dataset is not None,
+                bool(test_item_ids),
+                split_field is not None,
+                test_size is not None,
+            )
+            if condition
+        )
+        if strategies_selected > 1:
+            raise ValueError(
+                "Only one test split strategy can be provided at a time."
+            )
+
+        items = (
+            self.get_items(limit)
+            if limit is not None
+            else self.get_items()
+        )
+        train_items = list(items)
+        test_items: List[Dict[str, Any]] = []
+
+        if test_dataset is not None:
+            test_items = (
+                test_dataset.get_items(limit)
+                if limit is not None
+                else test_dataset.get_items()
+            )
+            return DatasetSplit(
+                train=train_items,
+                test=list(test_items),
+            )
+
+        if test_item_ids:
+            test_id_set = set(test_item_ids)
+            test_items = [
+                item for item in train_items if item.get("id") in test_id_set
+            ]
+            train_items = [
+                item for item in train_items if item.get("id") not in test_id_set
+            ]
+            return DatasetSplit(train=train_items, test=test_items)
+
+        if split_field:
+            train_split: List[Dict[str, Any]] = []
+            test_split: List[Dict[str, Any]] = []
+            for item in train_items:
+                value = self._extract_split_value(item, split_field)
+                if value == test_label:
+                    test_split.append(item)
+                elif value == train_label or value is None:
+                    train_split.append(item)
+                else:
+                    train_split.append(item)
+            return DatasetSplit(train=train_split, test=test_split)
+
+        if test_size is not None:
+            if not 0 < test_size < 1:
+                raise ValueError("test_size must be between 0 and 1 (exclusive).")
+            if len(train_items) <= 1:
+                return DatasetSplit(train=train_items, test=[])
+
+            rng = random.Random(seed)
+            shuffled = train_items[:]
+            rng.shuffle(shuffled)
+            test_count = max(1, int(round(len(shuffled) * test_size)))
+            if test_count >= len(shuffled):
+                test_count = len(shuffled) - 1
+            test_items = shuffled[:test_count]
+            train_items = shuffled[test_count:]
+            return DatasetSplit(train=train_items, test=test_items)
+
+        return DatasetSplit(train=train_items, test=test_items)
+
+    def get_split(
+        self,
+        *,
+        validation_dataset: "Dataset" | None = None,
+        validation_item_ids: Sequence[str] | None = None,
+        split_field: str | None = None,
+        train_label: str = "train",
+        validation_label: str = "validation",
+        validation_ratio: float | None = None,
+        seed: int | None = None,
+        limit: int | None = None,
+    ) -> DatasetSplit:
+        """Deprecated compatibility wrapper for ``train_test_split``."""
+        warnings.warn(
+            "`Dataset.get_split` is deprecated. Use `Dataset.train_test_split` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.train_test_split(
+            test_dataset=validation_dataset,
+            test_item_ids=validation_item_ids,
+            split_field=split_field,
+            train_label=train_label,
+            test_label=validation_label,
+            test_size=validation_ratio,
+            seed=seed,
+            limit=limit,
+        )
+
     def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Retrieve a fixed set number of dataset items dictionaries.
@@ -274,6 +426,16 @@ class Dataset:
         ]
 
         return dataset_items_as_dicts
+
+    @staticmethod
+    def _extract_split_value(item: Dict[str, Any], key: str) -> Any:
+        """Extract a field from an item or its nested metadata."""
+        if key in item:
+            return item[key]
+        metadata = item.get("metadata")
+        if isinstance(metadata, dict):
+            return metadata.get(key)
+        return None
 
     @retry_decorator.opik_rest_retry
     def __internal_api__get_items_as_dataclasses__(
