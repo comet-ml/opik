@@ -23,6 +23,12 @@ from .utils import get_optimization_run_url_by_id
 PANEL_WIDTH = 70
 
 
+def _supports_inline_link(console: Console) -> bool:
+    if getattr(console, "is_jupyter", False):
+        return True
+    return bool(getattr(console, "is_terminal", False) and console.color_system)
+
+
 class PrefixedRenderable:
     """Render helper that preserves Rich metadata while prefixing each line."""
 
@@ -226,16 +232,22 @@ def get_link_text(
 ) -> Text:
     if optimization_id is not None and dataset_id is not None:
         optimization_url = get_optimization_run_url_by_id(
-            optimization_id=optimization_id, dataset_id=dataset_id
+            optimization_id=optimization_id,
+            dataset_id=dataset_id,
         )
-
-        # Create a visually appealing panel with an icon and ensure link doesn't wrap
-        link_text = Text(pre_text + link_text)
-        link_text.stylize(f"link {optimization_url}", len(pre_text), len(link_text))  # type: ignore
     else:
-        link_text = Text("No optimization run link available", style="dim")
+        return Text("No optimization run link available", style="dim")
 
-    return link_text
+    console = Console()
+    rich_text = Text(pre_text + link_text)
+    if _supports_inline_link(console):
+        rich_text.stylize(f"link {optimization_url}", len(pre_text), len(rich_text))
+        return rich_text
+
+    return Text(
+        f"{pre_text}{link_text}: {optimization_url}",
+        style="cyan",
+    )
 
 
 def display_header(
@@ -254,9 +266,10 @@ def display_header(
         dataset_id=dataset_id,
     )
 
-    content = Text.assemble(
-        ("● ", "green"), "Running Opik Evaluation - ", (algorithm, "blue"), "\n\n"
-    ).append(link_text)
+    header_text = Text.assemble(
+        ("● ", "green"), "Running Opik Evaluation - ", (algorithm, "blue"), "\n"
+    )
+    content = Group(header_text, link_text)
 
     panel = Panel(content, box=box.ROUNDED, width=PANEL_WIDTH)
 
