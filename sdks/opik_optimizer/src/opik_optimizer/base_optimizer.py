@@ -200,17 +200,16 @@ class BaseOptimizer(ABC):
         Returns:
             Tuple containing train item dictionaries and validation item dictionaries.
         """
-        limit = n_samples if n_samples is not None else None
-
         if validation is None or not validation.is_configured():
-            items = (
-                dataset.get_items(limit) if limit is not None else dataset.get_items()
-            )
-            return DatasetSplitResult(dataset, None, list(items), [])
+            items = list(dataset.get_items())
+            if n_samples is not None and n_samples < len(items):
+                rng = random.Random(self.seed)
+                items = rng.sample(items, n_samples)
+            return DatasetSplitResult(dataset, None, items, [])
 
         return validation.build(
             dataset,
-            n_samples=limit,
+            n_samples=None,
             default_seed=self.seed,
         )
 

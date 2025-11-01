@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from opik_optimizer.utils.validation import DatasetSplitResult, ValidationSplit
+from opik_optimizer.utils.dataset_utils import DatasetSplitResult, ValidationSplit
 
 
 class DatasetProtocol(Protocol):
