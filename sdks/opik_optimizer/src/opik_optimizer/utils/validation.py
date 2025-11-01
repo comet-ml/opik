@@ -109,14 +109,14 @@ class ValidationSplit:
             )
         )
 
-    def resolve(
+    def build(
         self,
         dataset: Dataset,
         *,
         n_samples: int | None,
         default_seed: int,
     ) -> DatasetSplitResult:
-        """Resolve training and validation collections for the given dataset."""
+        """Return training and validation collections for the given dataset."""
         if not self.is_configured():
             limit = self.limit if self.limit is not None else n_samples
             items = dataset.get_items(limit)
@@ -162,6 +162,21 @@ class ValidationSplit:
 
         return DatasetSplitResult(
             dataset, validation_dataset, train_items, validation_items
+        )
+
+    # Backwards-compatibility helper for older call sites
+    def resolve(
+        self,
+        dataset: Dataset,
+        *,
+        n_samples: int | None,
+        default_seed: int,
+    ) -> DatasetSplitResult:
+        """Deprecated alias for :meth:`build`."""
+        return self.build(
+            dataset,
+            n_samples=n_samples,
+            default_seed=default_seed,
         )
 
 

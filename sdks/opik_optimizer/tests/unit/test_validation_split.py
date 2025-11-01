@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Protocol
 from collections.abc import Sequence
 
 import pytest
@@ -10,7 +10,13 @@ import pytest
 from opik_optimizer.utils.validation import DatasetSplitResult, ValidationSplit
 
 
-class DummyDataset:
+class DatasetProtocol(Protocol):
+    def get_items(self, limit: int | None = None) -> list[dict[str, Any]]: ...
+
+    def train_test_split(self, **kwargs: Any) -> SimpleNamespace: ...
+
+
+class DummyDataset(DatasetProtocol):
     def __init__(
         self,
         train_items: Sequence[dict[str, Any]],
@@ -65,11 +71,11 @@ class RecordingDataset(DummyDataset):
         return super().train_test_split(**kwargs)
 
 
-def test_validation_split_ratio_resolves_datasets() -> None:
+def test_validation_split_ratio_builds_datasets() -> None:
     dataset = DummyDataset([{"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "4"}])
     split = ValidationSplit.from_ratio(0.5, seed=123)
 
-    result = split.resolve(dataset, n_samples=None, default_seed=0)
+    result = split.build(dataset, n_samples=None, default_seed=0)
 
     assert isinstance(result, DatasetSplitResult)
     assert len(result.validation_items) == 2
@@ -88,7 +94,7 @@ def test_validation_split_dataset_pass_through() -> None:
     )
 
     split = ValidationSplit.from_dataset(validation_dataset)
-    result = split.resolve(dataset, n_samples=None, default_seed=0)
+    result = split.build(dataset, n_samples=None, default_seed=0)
 
     assert dataset.call_kwargs is not None
     assert result.train_dataset is dataset
@@ -104,14 +110,14 @@ def test_validation_split_rejects_multiple_strategies() -> None:
     )
 
     with pytest.raises(ValueError, match="Only one validation split strategy"):
-        split.resolve(DummyDataset([]), n_samples=None, default_seed=0)
+        split.build(DummyDataset([]), n_samples=None, default_seed=0)
 
 
 def test_validation_split_without_configuration_returns_training_only() -> None:
     dataset = DummyDataset([{"id": "1"}, {"id": "2"}])
     split = ValidationSplit()
 
-    result = split.resolve(dataset, n_samples=1, default_seed=0)
+    result = split.build(dataset, n_samples=1, default_seed=0)
 
     assert len(result.train_items) == 1
     assert result.validation_items == []
@@ -122,4 +128,4 @@ def test_validation_split_ratio_bounds() -> None:
     split = ValidationSplit.from_ratio(1.2)
 
     with pytest.raises(ValueError):
-        split.resolve(dataset, n_samples=None, default_seed=0)
+        split.build(dataset, n_samples=None, default_seed=0)

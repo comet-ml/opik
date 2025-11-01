@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -6,6 +8,7 @@ import inspect
 import logging
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import random
 import importlib.metadata
 
@@ -42,10 +45,10 @@ class OptimizationRound(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     round_number: int
-    current_prompt: "chat_prompt.ChatPrompt"
+    current_prompt: chat_prompt.ChatPrompt
     current_score: float
     generated_prompts: Any
-    best_prompt: "chat_prompt.ChatPrompt"
+    best_prompt: chat_prompt.ChatPrompt
     best_score: float
     improvement: float
 
@@ -136,7 +139,7 @@ class BaseOptimizer(ABC):
         return self._opik_client
 
     def _validate_optimization_inputs(
-        self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
+        self, prompt: chat_prompt.ChatPrompt, dataset: Dataset, metric: Callable
     ) -> None:
         """
         Validate common optimization inputs.
@@ -161,7 +164,7 @@ class BaseOptimizer(ABC):
             )
 
     def _setup_agent_class(
-        self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
+        self, prompt: chat_prompt.ChatPrompt, agent_class: Any = None
     ) -> Any:
         """
         Setup agent class for optimization.
@@ -180,7 +183,7 @@ class BaseOptimizer(ABC):
 
     def _prepare_dataset_split(
         self,
-        dataset: "Dataset",
+        dataset: Dataset,
         *,
         n_samples: int | None = None,
         validation: ValidationSplit | None = None,
@@ -205,7 +208,7 @@ class BaseOptimizer(ABC):
             )
             return DatasetSplitResult(dataset, None, list(items), [])
 
-        return validation.resolve(
+        return validation.build(
             dataset,
             n_samples=limit,
             default_seed=self.seed,
@@ -245,24 +248,47 @@ class BaseOptimizer(ABC):
             raise TypeError("validation must be a ValidationSplit or None")
         return candidate
 
-    def _select_ids_for_eval(
-        self, ids: list[str], n_samples: int | None
-    ) -> tuple[list[str] | None, int | None]:
-        if not ids:
-            return None, n_samples
-        if n_samples is None or n_samples >= len(ids):
-            return ids, None
-        return random.sample(ids, n_samples), None
+    def _build_eval_spec(
+        self, dataset: Dataset, ids: list[str], n_samples: int | None
+    ) -> EvaluationSpec:
+        if ids:
+            rng = random.Random(self.seed)
+            population = list(ids)
+            if n_samples is not None and 0 < n_samples < len(population):
+                sampled_ids = tuple(rng.sample(population, n_samples))
+            else:
+                sampled_ids = tuple(population)
+            return EvaluationSpec(dataset, sampled_ids, None)
+        return EvaluationSpec(dataset, None, n_samples)
 
-    def _select_train_eval_params(
+    def _build_evaluation_plan(
         self, split: DatasetSplitResult, n_samples: int | None
-    ) -> tuple[list[str] | None, int | None]:
-        return self._select_ids_for_eval(split.train_ids(), n_samples)
+    ) -> EvaluationPlan:
+        train_spec = self._build_eval_spec(
+            split.train_dataset, split.train_ids(), n_samples
+        )
+        validation_spec: EvaluationSpec | None = None
+        if split.validation_items:
+            validation_dataset = split.validation_dataset or split.train_dataset
+            validation_spec = self._build_eval_spec(
+                validation_dataset, split.validation_ids(), None
+            )
+        return EvaluationPlan(split=split, train=train_spec, validation=validation_spec)
 
-    def _select_validation_eval_params(
-        self, split: DatasetSplitResult, n_samples: int | None
-    ) -> tuple[list[str] | None, int | None]:
-        return self._select_ids_for_eval(split.validation_ids(), n_samples)
+    def _evaluate_with_spec(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        metric: Callable,
+        spec: EvaluationSpec,
+        **kwargs: Any,
+    ) -> Any:
+        payload = {**spec.kwargs(), **kwargs}
+        return self._evaluate_prompt(
+            prompt,
+            dataset=spec.dataset,
+            metric=metric,
+            **payload,
+        )
 
     # ------------------------------------------------------------------
     # LLM call methods
@@ -550,7 +576,7 @@ class BaseOptimizer(ABC):
         return result
 
     @staticmethod
-    def _serialize_tools(prompt: "chat_prompt.ChatPrompt") -> list[dict[str, Any]]:
+    def _serialize_tools(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
         tools_obj = getattr(prompt, "tools", None)
         if not isinstance(tools_obj, list):
             return []
@@ -573,7 +599,7 @@ class BaseOptimizer(ABC):
         return str(annotation)
 
     def _summarize_tool_signatures(
-        self, prompt: "chat_prompt.ChatPrompt"
+        self, prompt: chat_prompt.ChatPrompt
     ) -> list[dict[str, Any]]:
         signatures: list[dict[str, Any]] = []
         for name, func in getattr(prompt, "function_map", {}).items():
@@ -614,7 +640,7 @@ class BaseOptimizer(ABC):
             )
         return signatures
 
-    def _build_agent_config(self, prompt: "chat_prompt.ChatPrompt") -> dict[str, Any]:
+    def _build_agent_config(self, prompt: chat_prompt.ChatPrompt) -> dict[str, Any]:
         agent_config: dict[str, Any] = dict(prompt.to_dict())
         agent_config["project_name"] = getattr(prompt, "project_name", None)
         agent_config["model"] = getattr(prompt, "model", None) or self.model
@@ -652,7 +678,7 @@ class BaseOptimizer(ABC):
     def _prepare_experiment_config(
         self,
         *,
-        prompt: "chat_prompt.ChatPrompt",
+        prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
         experiment_config: dict[str, Any] | None = None,
@@ -708,7 +734,7 @@ class BaseOptimizer(ABC):
     @abstractmethod
     def optimize_prompt(
         self,
-        prompt: "chat_prompt.ChatPrompt",
+        prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
         experiment_config: dict | None = None,
@@ -838,3 +864,29 @@ class BaseOptimizer(ABC):
             verbose=verbose,
         )
         return score
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationSpec:
+    dataset: Dataset
+    item_ids: tuple[str, ...] | None
+    sample_count: int | None
+
+    def kwargs(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if self.item_ids is not None:
+            payload["dataset_item_ids"] = list(self.item_ids)
+        if self.sample_count is not None:
+            payload["n_samples"] = self.sample_count
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationPlan:
+    split: DatasetSplitResult
+    train: EvaluationSpec
+    validation: EvaluationSpec | None
+
+    @property
+    def has_validation(self) -> bool:
+        return self.validation is not None

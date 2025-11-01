@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import os
+import sqlite3
 import textwrap
 from typing import Any, cast
 from collections.abc import Callable
@@ -34,12 +35,19 @@ from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segmen
 
 tqdm = get_tqdm_for_current_environment()
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
-
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
+
+# Using disk cache for LLM calls
+_cache_dir = os.environ.get("LITELLM_CACHE_DIR", os.path.expanduser("~/.litellm_cache"))
+try:
+    litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=_cache_dir)
+except (PermissionError, sqlite3.OperationalError, OSError) as cache_error:
+    logger.debug(
+        "Disk cache unavailable at %s (%s); continuing without persistent cache.",
+        _cache_dir,
+        cache_error,
+    )
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -619,28 +627,28 @@ class MetaPromptOptimizer(BaseOptimizer):
             additional_metadata={"meta_prompt": meta_metadata},
         )
 
-        split = self._prepare_dataset_split(
-            dataset,
-            n_samples=n_samples,
-            validation=validation,
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation,
+            ),
+            n_samples,
         )
-        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
-            split, None
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+        train_uses_full_dataset = (
+            train_spec.item_ids is None and train_spec.sample_count is None
         )
-        validation_dataset_source = split.validation_dataset or dataset
-        has_validation = bool(split.validation_items)
 
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
-            initial_score = self._evaluate_prompt(
+            initial_score = self._evaluate_with_spec(
                 prompt,
+                metric,
+                train_spec,
                 optimization_id=optimization_id,
-                dataset=dataset,
-                metric=metric,
-                n_samples=train_eval_n,
-                dataset_item_ids=train_eval_ids,
                 experiment_config=experiment_config,
-                use_full_dataset=(train_eval_ids is None and train_eval_n is None),
+                use_full_dataset=train_uses_full_dataset,
                 verbose=self.verbose,
                 mcp_config=mcp_config,
             )
@@ -704,15 +712,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                         candidate_prompt = prompt.copy()
 
                         try:
-                            prompt_score = self._evaluate_prompt(
+                            prompt_score = self._evaluate_with_spec(
                                 prompt=candidate_prompt,
-                                optimization_id=optimization_id,
-                                dataset=dataset,
                                 metric=metric,
-                                n_samples=train_eval_n,
-                                dataset_item_ids=train_eval_ids,
-                                use_full_dataset=False,
+                                optimization_id=optimization_id,
                                 experiment_config=experiment_config,
+                                use_full_dataset=False,
                                 verbose=self.verbose,
                                 mcp_config=mcp_config,
                             )
@@ -780,14 +785,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
         validation_summary: dict[str, Any] | None = None
-        if has_validation:
-            validation_score = self._evaluate_prompt(
+        if validation_spec is not None:
+            validation_score = self._evaluate_with_spec(
                 best_prompt,
+                metric,
+                validation_spec,
                 optimization_id=optimization_id,
-                dataset=validation_dataset_source,
-                metric=metric,
-                n_samples=validation_eval_n,
-                dataset_item_ids=validation_eval_ids,
                 experiment_config=self._drop_none(
                     {
                         "evaluation": {
@@ -797,14 +800,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                     }
                 ),
                 use_full_dataset=(
-                    validation_eval_ids is None and validation_eval_n is None
+                    validation_spec.item_ids is None
+                    and validation_spec.sample_count is None
                 ),
                 verbose=self.verbose,
                 mcp_config=mcp_config,
             )
             validation_summary = {
                 "validation_score": validation_score,
-                "validation_dataset_id": getattr(validation_dataset_source, "id", None),
+                "validation_dataset_id": getattr(validation_spec.dataset, "id", None),
             }
 
         result = self._create_result(

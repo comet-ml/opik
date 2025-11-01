@@ -585,6 +585,40 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._current_population = []
         self._generations_without_overall_improvement = 0
 
+        validation = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation,
+            ),
+            n_samples,
+        )
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+
+        train_eval_ids = (
+            list(train_spec.item_ids) if train_spec.item_ids is not None else None
+        )
+        train_eval_n = train_spec.sample_count
+
+        validation_eval_ids = (
+            list(validation_spec.item_ids)
+            if validation_spec is not None and validation_spec.item_ids is not None
+            else None
+        )
+        validation_eval_n = (
+            validation_spec.sample_count if validation_spec is not None else None
+        )
+        validation_dataset_source = (
+            validation_spec.dataset if validation_spec is not None else dataset
+        )
+        has_validation = validation_spec is not None
+
         if self.enable_moo:
 
             def _deap_evaluate_individual_fitness(
@@ -697,24 +731,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         deap_population = deap_population[: self.population_size]
 
         # Step 5. Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
-        validation = self._pop_validation_split(kwargs)
-
-        if kwargs:
-            unexpected = ", ".join(sorted(kwargs.keys()))
-            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
-
-        split = self._prepare_dataset_split(
-            dataset,
-            n_samples=n_samples,
-            validation=validation,
-        )
-        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
-            split, None
-        )
-        validation_dataset_source = split.validation_dataset or dataset
-        has_validation = bool(split.validation_items)
-
         if self.enable_moo:
             hof = tools.ParetoFront()
         else:

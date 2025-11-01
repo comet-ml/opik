@@ -217,17 +217,33 @@ class GepaOptimizer(BaseOptimizer):
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
 
-        split = self._prepare_dataset_split(
-            dataset,
-            n_samples=n_samples,
-            validation=validation_value,
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation_value,
+            ),
+            n_samples,
         )
+        split = evaluation_plan.split
         train_items = list(split.train_items)
         validation_items = list(split.validation_items)
-        validation_dataset_source = split.validation_dataset or dataset
-        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
-            split, None
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+        train_eval_ids = (
+            list(train_spec.item_ids) if train_spec.item_ids is not None else None
+        )
+        train_eval_n = train_spec.sample_count
+        validation_eval_ids = (
+            list(validation_spec.item_ids)
+            if validation_spec is not None and validation_spec.item_ids is not None
+            else None
+        )
+        validation_eval_n = (
+            validation_spec.sample_count if validation_spec is not None else None
+        )
+        validation_dataset_source = (
+            validation_spec.dataset if validation_spec is not None else dataset
         )
         if not train_items:
             raise ValueError("Dataset must contain at least one training example.")

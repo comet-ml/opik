@@ -1,5 +1,6 @@
 import os
 import logging
+import sqlite3
 
 import opik
 import litellm
@@ -28,12 +29,19 @@ from .types import (
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
-
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
+
+# Using disk cache for LLM calls
+_cache_dir = os.environ.get("LITELLM_CACHE_DIR", os.path.expanduser("~/.litellm_cache"))
+try:
+    litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=_cache_dir)
+except (PermissionError, sqlite3.OperationalError, OSError) as cache_error:
+    logger.debug(
+        "Disk cache unavailable at %s (%s); continuing without persistent cache.",
+        _cache_dir,
+        cache_error,
+    )
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -460,16 +468,31 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             unexpected = ", ".join(sorted(kwargs.keys()))
             raise TypeError(f"Unexpected keyword arguments: {unexpected}")
 
-        split = self._prepare_dataset_split(
-            dataset,
-            n_samples=n_samples,
-            validation=validation,
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation,
+            ),
+            n_samples,
         )
-        train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
-            split, None
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+        train_eval_ids = (
+            list(train_spec.item_ids) if train_spec.item_ids is not None else None
         )
-        validation_dataset_source = split.validation_dataset or dataset
+        train_eval_n = train_spec.sample_count
+        validation_eval_ids = (
+            list(validation_spec.item_ids)
+            if validation_spec is not None and validation_spec.item_ids is not None
+            else None
+        )
+        validation_eval_n = (
+            validation_spec.sample_count if validation_spec is not None else None
+        )
+        validation_dataset_source = (
+            validation_spec.dataset if validation_spec is not None else dataset
+        )
 
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self._evaluate_prompt(
@@ -700,7 +723,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "trials_used": trials_used,
         }
 
-        if split.validation_items:
+        if validation_spec is not None:
             validation_experiment = self._evaluate_prompt(
                 prompt=best_prompt,
                 dataset=validation_dataset_source,
