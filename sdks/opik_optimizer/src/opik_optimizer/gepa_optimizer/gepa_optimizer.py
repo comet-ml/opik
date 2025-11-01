@@ -23,7 +23,6 @@ from ..reporting_utils import suppress_opik_logs
 from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
-from ..utils.validation_split import ValidationSplitConfig
 
 logger = logging.getLogger(__name__)
 
