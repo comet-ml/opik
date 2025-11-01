@@ -20,6 +20,26 @@ export interface DatasetData {
   id?: string;
 }
 
+export interface DatasetSplitResult<
+  T extends DatasetItemData = DatasetItemData
+> {
+  train: (T & { id: string })[];
+  validation: (T & { id: string })[];
+}
+
+export interface DatasetSplitOptions<
+  T extends DatasetItemData = DatasetItemData
+> {
+  validationDataset?: Dataset<T>;
+  validationIds?: string[];
+  splitField?: string;
+  trainLabel?: string;
+  validationLabel?: string;
+  validationRatio?: number;
+  seed?: number;
+  limit?: number;
+}
+
 export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public readonly id: string;
   public readonly name: string;
@@ -162,6 +182,106 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     return datasetItems.map((item) => item.getContent(true));
   }
 
+  public async getSplit(
+    options: DatasetSplitOptions<T> = {}
+  ): Promise<DatasetSplitResult<T>> {
+    const {
+      validationDataset,
+      validationIds,
+      splitField,
+      trainLabel = "train",
+      validationLabel = "validation",
+      validationRatio,
+      seed,
+      limit,
+    } = options;
+
+    const strategiesSelected = [
+      validationDataset,
+      validationIds && validationIds.length > 0,
+      splitField,
+      typeof validationRatio === "number",
+    ].filter(Boolean).length;
+
+    if (strategiesSelected > 1) {
+      throw new Error(
+        "Only one validation split strategy can be provided at a time."
+      );
+    }
+
+    const trainItems = await this.getItems(limit);
+    let validationItems: (T & { id: string })[] = [];
+
+    if (validationDataset) {
+      validationItems = await validationDataset.getItems(limit);
+      return { train: trainItems, validation: validationItems };
+    }
+
+    if (validationIds && validationIds.length > 0) {
+      const idSet = new Set(validationIds);
+      validationItems = trainItems.filter(
+        (item) => item.id && idSet.has(item.id)
+      );
+      const filteredTrain = trainItems.filter(
+        (item) => !item.id || !idSet.has(item.id)
+      );
+      return { train: filteredTrain, validation: validationItems };
+    }
+
+    if (splitField) {
+      const trainSplit: (T & { id: string })[] = [];
+      const validationSplit: (T & { id: string })[] = [];
+
+      for (const item of trainItems) {
+        const value =
+          (item as Record<string, unknown>)[splitField] ??
+          Dataset.extractSplitValue(item as Record<string, unknown>, splitField);
+
+        if (value === validationLabel) {
+          validationSplit.push(item);
+        } else if (value === trainLabel || value === undefined) {
+          trainSplit.push(item);
+        } else {
+          trainSplit.push(item);
+        }
+      }
+
+      return { train: trainSplit, validation: validationSplit };
+    }
+
+    if (typeof validationRatio === "number") {
+      if (!(validationRatio > 0 && validationRatio < 1)) {
+        throw new Error(
+          "validationRatio must be between 0 and 1 (exclusive)."
+        );
+      }
+
+      if (trainItems.length <= 1) {
+        return { train: trainItems, validation: [] };
+      }
+
+      const rng = createSeededRandom(seed ?? 0);
+      const shuffled = [...trainItems];
+      for (let i = shuffled.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(rng() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      let validationCount = Math.round(shuffled.length * validationRatio);
+      if (validationCount <= 0) {
+        validationCount = 1;
+      } else if (validationCount >= shuffled.length) {
+        validationCount = shuffled.length - 1;
+      }
+
+      const validationSplit = shuffled.slice(0, validationCount);
+      const trainSplit = shuffled.slice(validationCount);
+      return { train: trainSplit, validation: validationSplit };
+    }
+
+    return { train: trainItems, validation: [] };
+  }
+
   private async getItemsAsDataclasses(
     nbSamples?: number,
     lastRetrievedId?: string
@@ -272,6 +392,17 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    *
    * @returns A list of deduplicated dataset items
    */
+  private static extractSplitValue(
+    item: Record<string, unknown>,
+    key: string
+  ): unknown {
+    const metadata = (item as { metadata?: unknown }).metadata;
+    if (metadata && typeof metadata === "object") {
+      return (metadata as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }
+
   private async getDeduplicatedItems(items: T[]): Promise<DatasetItemWrite[]> {
     const deduplicatedItems: DatasetItemWrite[] = [];
 
@@ -332,4 +463,14 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       throw error;
     }
   }
+}
+
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), state | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
