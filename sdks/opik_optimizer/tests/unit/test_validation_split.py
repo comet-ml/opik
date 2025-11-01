@@ -1,9 +1,10 @@
+import random
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from opik_optimizer.utils import ValidationSplit
+from opik_optimizer.utils.validation import ValidationSplit
 
 
 class DummyDataset:
@@ -16,9 +17,26 @@ class DummyDataset:
         return items[:limit] if limit is not None else items
 
     def train_test_split(self, **kwargs):
-        if self._test is None:
-            return SimpleNamespace(train=list(self._train), test=[])
-        return SimpleNamespace(train=list(self._train), test=list(self._test))
+        ratio = kwargs.get("test_size")
+        limit = kwargs.get("limit")
+        seed = kwargs.get("seed", 0)
+
+        items = list(self._train)
+        if limit is not None:
+            items = items[:limit]
+
+        if ratio is None:
+            test_items = list(self._test) if self._test is not None else []
+            return SimpleNamespace(train=items, test=test_items)
+
+        rng = random.Random(seed)
+        shuffled = items[:]
+        rng.shuffle(shuffled)
+        count = max(1, int(round(len(shuffled) * ratio)))
+        count = min(count, max(0, len(shuffled) - 1))
+        test_items = shuffled[:count]
+        train_items = shuffled[count:]
+        return SimpleNamespace(train=train_items, test=test_items)
 
 
 def test_validation_split_ratio_resolves_datasets() -> None:
@@ -77,3 +95,11 @@ def test_validation_split_without_configuration_returns_training_only() -> None:
 
     assert len(train_items) == 1
     assert val_items == []
+
+
+def test_validation_split_ratio_bounds() -> None:
+    dataset = DummyDataset([{"id": "1"}, {"id": "2"}])
+    split = ValidationSplit.from_ratio(1.2)
+
+    with pytest.raises(ValueError):
+        split.resolve(dataset, n_samples=None, default_seed=0)
