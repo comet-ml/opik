@@ -5,8 +5,10 @@ import secrets
 import time
 from functools import lru_cache
 from importlib import resources
-from typing import Any
+from typing import Any, Sequence
 from collections.abc import Iterable
+
+from opik import Dataset
 
 
 @lru_cache(maxsize=None)
@@ -46,4 +48,37 @@ def attach_uuids(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return payload
 
 
-__all__ = ["dataset_suffix", "generate_uuid7_str", "attach_uuids"]
+def resolve_dataset_split(
+    dataset: Dataset,
+    *,
+    validation_dataset: Dataset | None = None,
+    validation_item_ids: Sequence[str] | None = None,
+    split_field: str | None = None,
+    training_label: str = "train",
+    validation_label: str = "validation",
+    validation_ratio: float | None = None,
+    seed: int | None = None,
+    limit: int | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Produce training and validation item lists for the provided dataset.
+
+    Args mirror HuggingFace's ``train_test_split`` style while adding support
+    for explicit validation datasets and id lists.
+    """
+    split = dataset.train_test_split(
+        test_dataset=validation_dataset,
+        test_item_ids=validation_item_ids,
+        split_field=split_field,
+        train_label=training_label,
+        test_label=validation_label,
+        test_size=validation_ratio,
+        seed=seed,
+        limit=limit,
+    )
+    train_items = list(split.train)
+    validation_items = list(split.test)
+    return train_items, validation_items
+
+
+__all__ = ["dataset_suffix", "generate_uuid7_str", "attach_uuids", "resolve_dataset_split"]
