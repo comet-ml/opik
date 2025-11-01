@@ -200,7 +200,9 @@ class BaseOptimizer(ABC):
         limit = n_samples if n_samples is not None else None
 
         if validation is None or not validation.is_configured():
-            items = dataset.get_items(limit) if limit is not None else dataset.get_items()
+            items = (
+                dataset.get_items(limit) if limit is not None else dataset.get_items()
+            )
             return DatasetSplitResult(dataset, None, list(items), [])
 
         return validation.resolve(
@@ -231,9 +233,7 @@ class BaseOptimizer(ABC):
             for idx, tool in enumerate(tools)
         }
 
-    def _pop_validation_split(
-        self, kwargs: dict[str, Any]
-    ) -> ValidationSplit | None:
+    def _pop_validation_split(self, kwargs: dict[str, Any]) -> ValidationSplit | None:
         """Extract a validation split from keyword arguments, enforcing type checks."""
         if "validation" not in kwargs:
             return None

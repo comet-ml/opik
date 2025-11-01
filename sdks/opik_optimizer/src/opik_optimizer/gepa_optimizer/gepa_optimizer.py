@@ -21,7 +21,6 @@ from ..utils import (
 from ..task_evaluator import _create_metric_class
 from ..reporting_utils import suppress_opik_logs
 from .. import task_evaluator
-from ..utils import ValidationSplit
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
@@ -227,7 +226,9 @@ class GepaOptimizer(BaseOptimizer):
         validation_items = list(split.validation_items)
         validation_dataset_source = split.validation_dataset or dataset
         train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(split, None)
+        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
+            split, None
+        )
         if not train_items:
             raise ValueError("Dataset must contain at least one training example.")
 
@@ -242,7 +243,9 @@ class GepaOptimizer(BaseOptimizer):
         if validation_eval_ids:
             val_id_set = set(validation_eval_ids)
             validation_items_for_gepa = [
-                item for item in validation_items_for_gepa if item.get("id") in val_id_set
+                item
+                for item in validation_items_for_gepa
+                if item.get("id") in val_id_set
             ]
 
         evaluation_items = (

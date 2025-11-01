@@ -217,9 +217,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         else:
             dataset_items = dataset.get_items()
 
-        all_dataset_item_ids = train_ids if train_ids else [
-            item["id"] for item in dataset_items if isinstance(item, dict) and "id" in item
-        ]
+        all_dataset_item_ids = (
+            train_ids
+            if train_ids
+            else [
+                item["id"]
+                for item in dataset_items
+                if isinstance(item, dict) and "id" in item
+            ]
+        )
         eval_dataset_item_ids = list(all_dataset_item_ids)
         if (
             n_samples is not None

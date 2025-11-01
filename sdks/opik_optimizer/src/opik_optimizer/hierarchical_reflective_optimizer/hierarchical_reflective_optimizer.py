@@ -14,7 +14,6 @@ from collections.abc import Callable
 from pydantic import BaseModel
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer
-from ..utils import ValidationSplit
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 
@@ -238,7 +237,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Use dataset's get_items with limit for sampling
         logger.debug(
             "Starting evaluation with %s for metric %s",
-            f"{len(dataset_item_ids)} ids" if dataset_item_ids else (n_samples or "all"),
+            f"{len(dataset_item_ids)} ids"
+            if dataset_item_ids
+            else (n_samples or "all"),
             getattr(metric, "__name__", str(metric)),
         )
         result = opik_evaluator.evaluate_optimization_trial(
@@ -465,7 +466,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             validation=validation,
         )
         train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(split, None)
+        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
+            split, None
+        )
         validation_dataset_source = split.validation_dataset or dataset
 
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
@@ -707,8 +710,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 dataset_item_ids=validation_eval_ids,
             )
             validation_avg_score = sum(
-                x.score_results[0].value
-                for x in validation_experiment.test_results
+                x.score_results[0].value for x in validation_experiment.test_results
             ) / max(1, len(validation_experiment.test_results))
             details["validation_score"] = validation_avg_score
             details["validation_dataset_id"] = getattr(

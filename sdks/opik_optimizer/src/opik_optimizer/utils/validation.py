@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 class DatasetSplitResult:
     """Outcome of applying a :class:`ValidationSplit` to a dataset."""
 
-    train_dataset: "Dataset"
-    validation_dataset: "Dataset | None"
+    train_dataset: Dataset
+    validation_dataset: Dataset | None
     train_items: list[dict[str, Any]]
     validation_items: list[dict[str, Any]]
 
@@ -160,7 +160,9 @@ class ValidationSplit:
             train_items = train_items[:limit]
             validation_dataset = None
 
-        return DatasetSplitResult(dataset, validation_dataset, train_items, validation_items)
+        return DatasetSplitResult(
+            dataset, validation_dataset, train_items, validation_items
+        )
 
 
 __all__ = ["ValidationSplit", "DatasetSplitResult"]
