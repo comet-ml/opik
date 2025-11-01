@@ -154,7 +154,6 @@ class GepaOptimizer(BaseOptimizer):
         metric: Callable,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        validation: ValidationSplit | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
@@ -170,6 +169,8 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
+        *args: Any,
+        **kwargs: Any,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
@@ -181,7 +182,8 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config: Optional configuration for the experiment
             max_trials: Maximum number of different prompts to test (default: 10)
             n_samples: Optional number of items to test in the dataset
-            validation: Optional :class:`ValidationSplit` describing the validation subset.
+            validation: Optional :class:`ValidationSplit` describing the validation subset
+                (pass as a keyword argument).
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
             reflection_minibatch_size: Size of reflection minibatches (default: 3)
@@ -199,6 +201,16 @@ class GepaOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
+        validation_value: ValidationSplit | None = None
+        if "validation" in kwargs:
+            candidate = kwargs.pop("validation")
+            if candidate is not None and not isinstance(candidate, ValidationSplit):
+                raise TypeError("validation must be a ValidationSplit or None")
+            validation_value = candidate
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
 
@@ -214,7 +226,7 @@ class GepaOptimizer(BaseOptimizer):
         train_items, validation_items = self._prepare_dataset_split(
             dataset,
             n_samples=n_samples,
-            validation=validation,
+            validation=validation_value,
         )
         if not train_items:
             raise ValueError("Dataset must contain at least one training example.")
@@ -229,7 +241,9 @@ class GepaOptimizer(BaseOptimizer):
             train_items_for_gepa = train_items_for_gepa[:n_samples]
 
         evaluation_items = (
-            validation_items_for_gepa if validation_items_for_gepa else train_items_for_gepa
+            validation_items_for_gepa
+            if validation_items_for_gepa
+            else train_items_for_gepa
         )
         items = evaluation_items
 

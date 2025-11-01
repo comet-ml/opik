@@ -200,7 +200,9 @@ class BaseOptimizer(ABC):
         limit = n_samples if n_samples is not None else None
 
         if validation is None or not validation.is_configured():
-            items = dataset.get_items(limit) if limit is not None else dataset.get_items()
+            items = (
+                dataset.get_items(limit) if limit is not None else dataset.get_items()
+            )
             return list(items), []
 
         train_items, validation_items = validation.resolve(

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import random
 from types import SimpleNamespace
-from unittest.mock import Mock
+from typing import Any
+from collections.abc import Sequence
 
 import pytest
 
@@ -8,18 +11,24 @@ from opik_optimizer.utils.validation import ValidationSplit
 
 
 class DummyDataset:
-    def __init__(self, train_items, test_items=None):
-        self._train = train_items
-        self._test = test_items
+    def __init__(
+        self,
+        train_items: Sequence[dict[str, Any]],
+        test_items: Sequence[dict[str, Any]] | None = None,
+    ) -> None:
+        self._train: list[dict[str, Any]] = list(train_items)
+        self._test: list[dict[str, Any]] | None = (
+            list(test_items) if test_items else None
+        )
 
-    def get_items(self, limit=None):
+    def get_items(self, limit: int | None = None) -> list[dict[str, Any]]:
         items = list(self._train)
         return items[:limit] if limit is not None else items
 
-    def train_test_split(self, **kwargs):
-        ratio = kwargs.get("test_size")
-        limit = kwargs.get("limit")
-        seed = kwargs.get("seed", 0)
+    def train_test_split(self, **kwargs: Any) -> SimpleNamespace:
+        ratio: float | None = kwargs.get("test_size")
+        limit: int | None = kwargs.get("limit")
+        seed: int = kwargs.get("seed", 0)
 
         items = list(self._train)
         if limit is not None:
@@ -28,6 +37,9 @@ class DummyDataset:
         if ratio is None:
             test_items = list(self._test) if self._test is not None else []
             return SimpleNamespace(train=items, test=test_items)
+
+        if not 0 < ratio < 1:
+            raise ValueError("ratio must be between 0 and 1.")
 
         rng = random.Random(seed)
         shuffled = items[:]
@@ -39,15 +51,25 @@ class DummyDataset:
         return SimpleNamespace(train=train_items, test=test_items)
 
 
+class RecordingDataset(DummyDataset):
+    def __init__(
+        self,
+        train_items: Sequence[dict[str, Any]],
+        test_items: Sequence[dict[str, Any]],
+    ) -> None:
+        super().__init__(train_items, test_items)
+        self.call_kwargs: dict[str, Any] | None = None
+
+    def train_test_split(self, **kwargs: Any) -> SimpleNamespace:
+        self.call_kwargs = dict(kwargs)
+        return super().train_test_split(**kwargs)
+
+
 def test_validation_split_ratio_resolves_datasets() -> None:
-    dataset = DummyDataset(
-        [{"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "4"}]
-    )
+    dataset = DummyDataset([{"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "4"}])
     split = ValidationSplit.from_ratio(0.5, seed=123)
 
-    train_items, val_items = split.resolve(
-        dataset, n_samples=None, default_seed=0
-    )
+    train_items, val_items = split.resolve(dataset, n_samples=None, default_seed=0)
 
     assert len(val_items) == 2
     assert len(train_items) == 2
@@ -58,28 +80,22 @@ def test_validation_split_ratio_resolves_datasets() -> None:
 
 def test_validation_split_dataset_pass_through() -> None:
     validation_dataset = DummyDataset([{"id": "v1"}, {"id": "v2"}])
-    dataset = DummyDataset([{"id": "t1"}, {"id": "t2"}])
+    dataset = RecordingDataset(
+        [{"id": "t1"}, {"id": "t2"}],
+        [{"id": "v1"}, {"id": "v2"}],
+    )
 
     split = ValidationSplit.from_dataset(validation_dataset)
-    dataset.train_test_split = Mock(  # type: ignore[attr-defined]
-        return_value=SimpleNamespace(
-            train=[{"id": "t1"}, {"id": "t2"}],
-            test=[{"id": "v1"}, {"id": "v2"}],
-        )
-    )
+    train_items, val_items = split.resolve(dataset, n_samples=None, default_seed=0)
 
-    train_items, val_items = split.resolve(
-        dataset, n_samples=None, default_seed=0
-    )
-
-    dataset.train_test_split.assert_called_once()
+    assert dataset.call_kwargs is not None
     assert [item["id"] for item in train_items] == ["t1", "t2"]
     assert [item["id"] for item in val_items] == ["v1", "v2"]
 
 
 def test_validation_split_rejects_multiple_strategies() -> None:
     split = ValidationSplit(
-        dataset=Mock(),
+        dataset=DummyDataset([]),
         item_ids=("1",),
     )
 

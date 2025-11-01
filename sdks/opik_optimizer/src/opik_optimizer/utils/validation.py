@@ -5,7 +5,8 @@ Validation split helpers shared across optimizers.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable, Sequence
 
 if TYPE_CHECKING:
     from opik import Dataset
@@ -19,7 +20,7 @@ class ValidationSplit:
     convenience constructors such as :meth:`ValidationSplit.from_ratio`.
     """
 
-    dataset: "Dataset | None" = None
+    dataset: Dataset | None = None
     item_ids: Sequence[str] | None = None
     column: str | None = None
     train_label: str = "train"
@@ -29,7 +30,9 @@ class ValidationSplit:
     limit: int | None = None
 
     @classmethod
-    def from_dataset(cls, dataset: "Dataset", *, limit: int | None = None) -> "ValidationSplit":
+    def from_dataset(
+        cls, dataset: Dataset, *, limit: int | None = None
+    ) -> ValidationSplit:
         """Use another dataset as the validation source."""
         return cls(dataset=dataset, limit=limit)
 
@@ -39,7 +42,7 @@ class ValidationSplit:
         item_ids: Iterable[str],
         *,
         limit: int | None = None,
-    ) -> "ValidationSplit":
+    ) -> ValidationSplit:
         """Reserve specific dataset item IDs for validation."""
         return cls(item_ids=tuple(item_ids), limit=limit)
 
@@ -51,7 +54,7 @@ class ValidationSplit:
         validation_label: str = "validation",
         train_label: str = "train",
         limit: int | None = None,
-    ) -> "ValidationSplit":
+    ) -> ValidationSplit:
         """Use a dataset column (or metadata field) that already stores split labels."""
         return cls(
             column=column,
@@ -67,7 +70,7 @@ class ValidationSplit:
         *,
         seed: int | None = None,
         limit: int | None = None,
-    ) -> "ValidationSplit":
+    ) -> ValidationSplit:
         """Sample a random validation subset using ``ratio`` of the examples."""
         return cls(ratio=ratio, seed=seed, limit=limit)
 
@@ -84,7 +87,7 @@ class ValidationSplit:
 
     def resolve(
         self,
-        dataset: "Dataset",
+        dataset: Dataset,
         *,
         n_samples: int | None,
         default_seed: int,
