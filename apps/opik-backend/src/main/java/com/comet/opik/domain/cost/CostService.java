@@ -1,6 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.llm.ModelNameMatcher;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,7 +30,10 @@ public class CostService {
             "vertex_ai-anthropic_models", "anthropic_vertexai",
             "bedrock", "bedrock",
             "bedrock_converse", "bedrock",
-            "groq", "groq");
+            "groq", "groq",
+            "openrouter", "openrouter",
+            "deepinfra", "deepinfra");
+
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
@@ -52,15 +56,49 @@ public class CostService {
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
-        ModelPrice modelPrice = Optional.ofNullable(modelName)
-                .flatMap(mn -> Optional.ofNullable(provider).map(p -> createModelProviderKey(mn, p)))
-                .map(modelProviderPrices::get)
-                .orElse(DEFAULT_COST);
+        ModelPrice modelPrice = findModelPrice(modelName, provider);
 
         BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice,
                 Optional.ofNullable(usage).orElse(Map.of()));
 
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+    }
+
+    /**
+     * Find model price with sophisticated matching including suffix matching.
+     * This handles cases like "qwen/qwen2.5-vl-32b-instruct" matching "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct".
+     */
+    private static ModelPrice findModelPrice(@Nullable String modelName, @Nullable String provider) {
+        if (modelName == null || provider == null) {
+            return DEFAULT_COST;
+        }
+
+        // Generate candidate keys for model+provider combinations
+        var modelCandidates = ModelNameMatcher.generateCandidateKeys(modelName);
+        var normalizedProvider = ModelNameMatcher.normalize(provider);
+
+        // Try each candidate with the provider
+        for (var modelCandidate : modelCandidates) {
+            var key = createModelProviderKey(modelCandidate, normalizedProvider);
+            var found = modelProviderPrices.get(key);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        // Second pass: try suffix matching against stored keys
+        for (var modelCandidate : modelCandidates) {
+            var key = createModelProviderKey(modelCandidate, normalizedProvider);
+            for (var entry : modelProviderPrices.entrySet()) {
+                var storedKey = entry.getKey();
+                if (storedKey.endsWith("/" + key) || storedKey.equals(key)) {
+                    return entry.getValue();
+                }
+            }
+        }
+
+        log.debug("Model price not found for model='{}', provider='{}'", modelName, provider);
+        return DEFAULT_COST;
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
@@ -112,7 +150,8 @@ public class CostService {
                 }
 
                 parsedModelPrices.put(
-                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
+                        ModelNameMatcher.normalize(
+                                createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider))),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
                                 cacheReadInputTokenPrice, calculator));
             }
