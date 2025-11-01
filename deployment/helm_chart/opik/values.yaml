@@ -510,6 +510,22 @@ clickhouse:
         export backupname=backup$(date +'%Y%m%d%H%M')
         echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
         clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+    restore:
+      # Set to true to create the restore job (does not run by default)
+      createJob: false
+      backupName: ""
+      image: "amazon/aws-cli:2.27.49"  
+      extraEnv: {}
+      resources:
+        limits:
+          cpu: 10m
+          memory: 64Mi
+        requests:
+          cpu: 10m
+          memory: 32Mi
+      nodeSelector: {}  # Defaults to .Values.clickhouse.nodeSelector if not specified
+      affinity: {}  # Defaults to .Values.clickhouse.affinity if not specified
+      tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
     image: altinity/clickhouse-backup:2.6.23
