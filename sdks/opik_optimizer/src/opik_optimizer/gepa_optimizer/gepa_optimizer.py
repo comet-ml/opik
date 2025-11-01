@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Sequence
 from collections.abc import Callable
 
 import opik
@@ -153,7 +153,13 @@ class GepaOptimizer(BaseOptimizer):
         metric: Callable,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        validation_config: ValidationSplitConfig | None = None,
+        validation_dataset: Dataset | None = None,
+        validation_item_ids: Sequence[str] | None = None,
+        validation_column: str | None = None,
+        validation_value: str = "validation",
+        train_value: str = "train",
+        validation_ratio: float | None = None,
+        validation_seed: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
@@ -180,8 +186,13 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config: Optional configuration for the experiment
             max_trials: Maximum number of different prompts to test (default: 10)
             n_samples: Optional number of items to test in the dataset
-            validation_config: Optional validation split configuration controlling
-                how the dataset is divided between training and validation.
+            validation_dataset: Optional dataset to use as validation set.
+            validation_item_ids: Explicit item IDs to reserve for validation.
+            validation_column: Dataset field or metadata key containing split labels.
+            validation_value: Value inside ``validation_column`` treated as validation.
+            train_value: Value inside ``validation_column`` treated as training.
+            validation_ratio: Random split ratio (0 < ratio < 1) for validation sampling.
+            validation_seed: Seed used when sampling via ``validation_ratio``.
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
             reflection_minibatch_size: Size of reflection minibatches (default: 3)
