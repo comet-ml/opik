@@ -225,7 +225,13 @@ class GepaOptimizer(BaseOptimizer):
         train_items, validation_items = self._prepare_dataset_split(
             dataset,
             n_samples=n_samples,
-            validation_config=validation_config,
+            validation_dataset=validation_dataset,
+            validation_item_ids=list(validation_item_ids) if validation_item_ids else None,
+            validation_split_field=validation_column,
+            validation_ratio=validation_ratio,
+            validation_seed=validation_seed,
+            train_label=train_value,
+            validation_label=validation_value,
         )
         if not train_items:
             raise ValueError("Dataset must contain at least one training example.")
