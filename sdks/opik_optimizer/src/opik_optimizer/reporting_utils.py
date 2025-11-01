@@ -5,14 +5,60 @@ from contextlib import contextmanager
 from typing import Any
 
 from rich import box
-from rich.console import Console, Group
+from rich.console import (
+    Console,
+    ConsoleOptions,
+    Group,
+    RenderResult,
+    RenderableType,
+)
+from rich.measure import Measurement
 from rich.panel import Panel
 from rich.progress import track
+from rich.segment import Segment
 from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
 
 PANEL_WIDTH = 70
+
+
+class PrefixedRenderable:
+    """Render helper that preserves Rich metadata while prefixing each line."""
+
+    def __init__(self, renderable: RenderableType, prefix: str) -> None:
+        self._renderable = renderable
+        self._prefix = prefix
+
+    def __rich_measure__(
+        self, console: Console, options: ConsoleOptions
+    ) -> Measurement:
+        if not self._prefix:
+            return Measurement.get(console, options, self._renderable)
+
+        prefix_measure = Measurement.get(console, options, Text(self._prefix))
+        body_measure = Measurement.get(console, options, self._renderable)
+        return Measurement(
+            body_measure.minimum + prefix_measure.minimum,
+            body_measure.maximum + prefix_measure.maximum,
+        )
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        if not self._prefix:
+            yield from console.render(self._renderable, options)
+            return
+
+        prefix_segments = list(console.render(Text(self._prefix), options))
+        lines = console.render_lines(self._renderable, options, pad=False)
+        line_count = len(lines)
+
+        for index, line in enumerate(lines):
+            yield from prefix_segments
+            yield from line
+            if index < line_count - 1:
+                yield Segment.line()
 
 
 def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
@@ -34,9 +80,7 @@ def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool
 
 
 def get_console(*args: Any, **kwargs: Any) -> Console:
-    console = Console(*args, **kwargs)
-    console.is_jupyter = False
-    return console
+    return Console(*args, **kwargs)
 
 
 @contextmanager
@@ -113,6 +157,8 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
 
 
 def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:
+    console = get_console()
+
     for i, msg in enumerate(messages):
         panel = Panel(
             Text(msg.get("content", ""), overflow="fold"),
@@ -123,17 +169,11 @@ def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:
             padding=(1, 2),
         )
 
-        # Capture the panel as rendered text with ANSI styles
-        console = get_console()
-        with console.capture() as capture:
-            console.print(panel)
+        renderable: RenderableType = panel
+        if prefix:
+            renderable = PrefixedRenderable(panel, prefix)
 
-        # Retrieve the rendered string (with ANSI)
-        rendered_panel = capture.get()
-
-        # Prefix each line with '| ', preserving ANSI styles
-        for line in rendered_panel.splitlines():
-            console.print(Text(prefix) + Text.from_ansi(line))
+        console.print(renderable)
 
 
 def _format_tool_panel(tool: dict[str, Any]) -> Panel:
