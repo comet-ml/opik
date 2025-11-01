@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from opik.exceptions import MetricComputationError
@@ -10,6 +12,24 @@ from opik.evaluation.metrics.heuristics import (
 from opik.evaluation.metrics.heuristics.contains import Contains
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
+from opik.evaluation.metrics.heuristics.distribution_metrics import (
+    JSDivergence,
+    JSDistance,
+    KLDivergence,
+)
+from opik.evaluation.metrics.heuristics.meteor import METEOR
+from opik.evaluation.metrics.heuristics.gleu import GLEU
+from opik.evaluation.metrics.heuristics.bertscore import BERTScore
+from opik.evaluation.metrics.heuristics.chrf import ChrF
+from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
+from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
+from opik.evaluation.metrics.heuristics.readability import Readability
+from opik.evaluation.metrics.heuristics.tone import Tone
+
+# NLTK emits a noisy warning for BLEU test cases with zero higher-order overlaps.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:\\nThe hypothesis contains 0 counts of 2-gram overlaps\\.:UserWarning"
+)
 
 
 class CustomTokenizer:
@@ -276,6 +296,255 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
     assert "empty" in str(exc_info.value).lower()
 
 
+def test_js_divergence_identical_text():
+    metric = JSDivergence(track=False)
+    result = metric.score(
+        output="The quick brown fox jumps over the lazy dog",
+        reference="The quick brown fox jumps over the lazy dog",
+    )
+
+    assert isinstance(result, ScoreResult)
+    assert result.value == pytest.approx(1.0, abs=1e-6)
+    assert result.metadata is not None
+    assert result.metadata["divergence"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_js_divergence_different_text():
+    metric = JSDivergence(track=False)
+    result = metric.score(output="apple pear", reference="zebra quokka")
+
+    assert isinstance(result, ScoreResult)
+    # Divergence in log base 2 should be close to 1 for disjoint vocab
+    assert 0.0 <= result.value < 0.1
+    assert 0.9 < result.metadata["divergence"] <= 1.0
+
+
+def test_js_divergence_requires_non_empty():
+    metric = JSDivergence(track=False)
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="", reference="non empty")
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="non empty", reference="   ")
+
+
+def test_js_distance_matches_metadata():
+    metric = JSDistance(track=False)
+    result = metric.score(output="token token", reference="token other")
+    assert 0.0 <= result.value <= 1.0
+
+
+def test_kl_divergence_avg_direction():
+    metric = KLDivergence(direction="avg", smoothing=1e-6, track=False)
+    result = metric.score(output="cat cat", reference="cat dog")
+    assert result.value >= 0.0
+
+
+def test_meteor_metric_with_custom_fn():
+    captured = []
+
+    def meteor_fn(references, hypothesis):
+        captured.append((tuple(references), hypothesis))
+        return 0.88
+
+    metric = METEOR(meteor_fn=meteor_fn, track=False)
+    res = metric.score(output="hello world", reference="hello world")
+
+    assert res.value == pytest.approx(0.88)
+    assert captured == [(("hello world",), "hello world")]
+
+
+def test_meteor_rejects_empty_inputs():
+    metric = METEOR(meteor_fn=lambda refs, hyp: 1.0, track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output="", reference="ref")
+    with pytest.raises(MetricComputationError):
+        metric.score(output="hyp", reference="   ")
+
+
+def test_gleu_metric_with_custom_fn():
+    def gleu_fn(references, hypothesis):
+        return 0.5
+
+    metric = GLEU(gleu_fn=gleu_fn, track=False)
+    res = metric.score(output="a b", reference="a b")
+    assert res.value == pytest.approx(0.5)
+
+
+def test_gleu_rejects_empty_inputs():
+    metric = GLEU(gleu_fn=lambda refs, hyp: 0.0, track=False)
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="", reference="text")
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="summary", reference=[""])
+
+
+class _Scalar:
+    def __init__(self, value: float) -> None:
+        self._value = value
+
+    def item(self) -> float:
+        return self._value
+
+
+def test_bertscore_with_stubbed_fn():
+    def scorer(cands, refs):
+        assert cands == ["hello"]
+        assert refs == ["hello"]
+        return ([_Scalar(0.8)], [_Scalar(0.75)], [_Scalar(0.77)])
+
+    metric = BERTScore(scorer_fn=scorer, track=False)
+    result = metric.score(output="hello", reference="hello")
+
+    assert result.value == pytest.approx(0.77)
+    assert result.metadata is not None
+    assert result.metadata["precision"] == pytest.approx(0.8)
+    assert result.metadata["recall"] == pytest.approx(0.75)
+
+
+def test_bertscore_rejects_empty_candidate():
+    metric = BERTScore(scorer_fn=lambda c, r: ([0.0], [0.0], [0.0]), track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output="   ", reference="ref")
+
+
+def test_chrf_metric_uses_custom_fn():
+    def chrf_fn(candidate, references):
+        assert candidate == "hello world"
+        assert references == ["hello world"]
+        return 0.72
+
+    metric = ChrF(chrf_fn=chrf_fn, track=False)
+    result = metric.score(output="hello world", reference="hello world")
+
+    assert result.value == pytest.approx(0.72)
+
+
+def test_spearman_ranking_metric():
+    metric = SpearmanRanking(track=False)
+    result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
+
+    assert result.metadata["rho"] == pytest.approx(0.5)
+    assert result.value == pytest.approx((0.5 + 1) / 2)
+
+
+def test_vader_sentiment_metric_uses_custom_analyzer():
+    class StubAnalyzer:
+        def polarity_scores(self, text: str) -> dict:
+            assert text == "hello"
+            return {"compound": -0.4, "pos": 0.2}
+
+    metric = VADERSentiment(analyzer=StubAnalyzer(), track=False)
+    result = metric.score(output="hello")
+
+    assert result.value == pytest.approx((-0.4 + 1) / 2)
+    assert result.metadata["vader"]["compound"] == -0.4
+
+
+def test_readability_metric_and_guard_behaviour():
+    class StubTextStat:
+        def sentence_count(self, text: str) -> int:
+            count = sum(text.count(mark) for mark in ".!?")
+            return count or 1
+
+        def lexicon_count(self, text: str, removepunct: bool = True) -> int:
+            if removepunct:
+                text = text.translate({ord(ch): " " for ch in ",;:()[]"})
+            return len([word for word in text.split() if word])
+
+        def syllable_count(self, text: str, lang: str = "en_US") -> int:
+            def syllables(word: str) -> int:
+                cleaned = re.sub(r"[^a-z]", "", word.lower())
+                if not cleaned:
+                    return 1
+                vowels = "aeiouy"
+                count = 0
+                prev_is_vowel = False
+                for char in cleaned:
+                    is_vowel = char in vowels
+                    if is_vowel and not prev_is_vowel:
+                        count += 1
+                    prev_is_vowel = is_vowel
+                if cleaned.endswith("e") and count > 1:
+                    count -= 1
+                return max(1, count)
+
+            return sum(syllables(word) for word in text.split())
+
+        def _reading_stats(self, text: str) -> tuple[float, float]:
+            sentences = self.sentence_count(text)
+            words = self.lexicon_count(text)
+            syllables = self.syllable_count(text)
+            words_per_sentence = words / sentences if sentences else 0
+            syllables_per_word = syllables / words if words else 0
+            reading_ease = (
+                206.835 - 1.015 * words_per_sentence - 84.6 * syllables_per_word
+            )
+            fk_grade = 0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59
+            return reading_ease, fk_grade
+
+        def flesch_reading_ease(self, text: str) -> float:
+            return self._reading_stats(text)[0]
+
+        def flesch_kincaid_grade(self, text: str) -> float:
+            return self._reading_stats(text)[1]
+
+    readability = Readability(track=False, textstat_module=StubTextStat())
+    easy_text = (
+        "We processed your insurance claim and scheduled an adjuster visit for tomorrow "
+        "morning."
+    )
+    hard_text = (
+        "Pursuant to the aforementioned clause, fiduciary responsibilities"
+        " shall be irrevocably devolved."
+    )
+
+    easy_result = readability.score(output=easy_text)
+    hard_result = readability.score(output=hard_text)
+
+    assert 0.0 <= easy_result.value <= 1.0
+    assert 0.0 <= hard_result.value <= 1.0
+    assert easy_result.value > hard_result.value
+    assert easy_result.metadata is not None
+    assert hard_result.metadata is not None
+    assert (
+        hard_result.metadata["flesch_kincaid_grade"]
+        > easy_result.metadata["flesch_kincaid_grade"]
+    )
+    assert easy_result.metadata["within_grade_bounds"] is True
+    assert hard_result.metadata["within_grade_bounds"] is True
+
+    threshold = easy_result.metadata["flesch_kincaid_grade"] + 1.0
+    guard = Readability(
+        max_grade=threshold,
+        enforce_bounds=True,
+        track=False,
+        textstat_module=StubTextStat(),
+    )
+    strict_guard = Readability(
+        min_grade=threshold,
+        enforce_bounds=True,
+        track=False,
+        textstat_module=StubTextStat(),
+    )
+
+    assert guard.score(output=easy_text).value == 1.0
+    assert strict_guard.score(output=easy_text).value == 0.0
+
+
+def test_tone_metric_detects_shouting_and_negativity():
+    metric = Tone(track=False, max_exclamations=1, max_upper_ratio=0.2)
+
+    polite = "Thanks for your patience. I'm happy to help you resolve this."
+    rude = "THIS IS TERRIBLE!!! YOU ARE USELESS!!!"
+
+    assert metric.score(output=polite).value == 1.0
+    assert metric.score(output=rude).value == 0.0
+
+
 # ROUGE score tests
 
 
@@ -308,6 +577,12 @@ def test_rouge_score_for_empty_inputs(candidate, reference):
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
     assert "empty" in str(exc_info.value).lower()
+
+
+def test_rouge_lsum_available():
+    metric = rouge.ROUGE(rouge_type="rougeLsum", track=False)
+    result = metric.score(output="foo\nbar", reference="foo\nqux")
+    assert 0.0 <= result.value <= 1.0
 
 
 @pytest.mark.parametrize(

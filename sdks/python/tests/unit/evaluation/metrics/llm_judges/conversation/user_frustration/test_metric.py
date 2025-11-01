@@ -4,8 +4,8 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
-from opik.evaluation.metrics.conversation.user_frustration import schema
-from opik.evaluation.metrics.conversation.user_frustration.metric import (
+from opik.evaluation.metrics.llm_judges.conversation.user_frustration import schema
+from opik.evaluation.metrics.llm_judges.conversation.user_frustration.metric import (
     UserFrustrationMetric,
 )
 from opik.evaluation.models import base_model

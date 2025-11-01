@@ -1,16 +1,6 @@
-from typing import Optional
+from ...llm_judges.conversation.user_frustration.schema import (
+    EvaluateUserFrustrationResponse,
+    ScoreReasonResponse,
+)
 
-import pydantic
-
-
-class EvaluateUserFrustrationResponse(pydantic.BaseModel):
-    verdict: str
-    reason: Optional[str] = pydantic.Field(default=None)
-
-    __hash__ = object.__hash__
-
-
-class ScoreReasonResponse(pydantic.BaseModel):
-    reason: str
-
-    __hash__ = object.__hash__
+__all__ = ["EvaluateUserFrustrationResponse", "ScoreReasonResponse"]

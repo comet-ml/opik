@@ -494,7 +494,10 @@ class Hallucination(BaseMetric):
 
 **Pattern**: Evaluate multi-turn conversations.
 
-**Location**: `opik/evaluation/metrics/conversation/`
+**Location**:
+- Base class: `opik/evaluation/metrics/conversation_metric_base.py`
+- Heuristic implementations: `opik/evaluation/metrics/heuristics/conversation/`
+- LLM-based implementations: `opik/evaluation/metrics/llm_judges/conversation/`
 
 ```python
 class ConversationThreadMetric(BaseMetric):
@@ -866,7 +869,8 @@ User calls evaluate_threads(project_name, filter, metrics)
 │       └─► conversation: List[Turn]           │
 │                                              │
 │    C. Apply Metrics                          │
-│       [evaluation/metrics/conversation/]     │
+│       [evaluation/metrics/heuristics/conversation/]│
+│       [evaluation/metrics/llm_judges/conversation/]│
 │       ├─► For each metric:                   │
 │       │   └─► metric.score_conversation(     │
 │       │          conversation                │

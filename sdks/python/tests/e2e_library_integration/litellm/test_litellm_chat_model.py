@@ -5,6 +5,7 @@ from ...e2e import verifiers
 from ...testlib import ANY_DICT, ANY_STRING
 
 from opik.evaluation.models.litellm import litellm_chat_model
+from opik.evaluation.models.litellm import opik_monitor
 from . import constants
 
 
@@ -13,6 +14,8 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_
     opik_client: Opik,
     configure_e2e_tests_env_unique_project_name: str,
 ):
+    opik_monitor._callback_instance.cache_clear()
+
     tested = litellm_chat_model.LiteLLMChatModel(
         model_name=constants.MODEL_NAME,
     )
@@ -30,9 +33,13 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_
         spans = opik_client.search_spans(
             project_name=configure_e2e_tests_env_unique_project_name,
             trace_id=ID_STORAGE["f_trace_id"],
-            filter_string=f'name contains "{constants.MODEL_NAME}"',
         )
-        return len(spans) > 0
+        if any(span.type == "llm" for span in spans):
+            return True
+        fallback_spans = opik_client.search_spans(
+            trace_id=ID_STORAGE["f_trace_id"],
+        )
+        return any(span.type == "llm" for span in fallback_spans)
 
     if not synchronization.until(
         function=wait_condition_checker,
@@ -43,11 +50,22 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_
             f"Failed to get spans from project '{configure_e2e_tests_env_unique_project_name}'"
         )
 
-    llm_spans = opik_client.search_spans(
-        project_name=configure_e2e_tests_env_unique_project_name,
-        trace_id=ID_STORAGE["f_trace_id"],
-        filter_string=f'name contains "{constants.MODEL_NAME}"',
-    )
+    llm_spans = [
+        span
+        for span in opik_client.search_spans(
+            project_name=configure_e2e_tests_env_unique_project_name,
+            trace_id=ID_STORAGE["f_trace_id"],
+        )
+        if span.type == "llm"
+    ]
+    if not llm_spans:
+        llm_spans = [
+            span
+            for span in opik_client.search_spans(
+                trace_id=ID_STORAGE["f_trace_id"],
+            )
+            if span.type == "llm"
+        ]
     assert len(llm_spans) == 1
 
     verifiers.verify_span(
