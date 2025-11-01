@@ -314,15 +314,9 @@ class Dataset:
             if condition
         )
         if strategies_selected > 1:
-            raise ValueError(
-                "Only one test split strategy can be provided at a time."
-            )
+            raise ValueError("Only one test split strategy can be provided at a time.")
 
-        items = (
-            self.get_items(limit)
-            if limit is not None
-            else self.get_items()
-        )
+        items = self.get_items(limit) if limit is not None else self.get_items()
         train_items = list(items)
         test_items: List[Dict[str, Any]] = []
 
@@ -339,9 +333,7 @@ class Dataset:
 
         if test_item_ids:
             test_id_set = set(test_item_ids)
-            test_items = [
-                item for item in train_items if item.get("id") in test_id_set
-            ]
+            test_items = [item for item in train_items if item.get("id") in test_id_set]
             train_items = [
                 item for item in train_items if item.get("id") not in test_id_set
             ]

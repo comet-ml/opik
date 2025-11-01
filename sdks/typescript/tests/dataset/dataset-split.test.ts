@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  Dataset,
-  DatasetItemData,
-  DatasetSplitOptions,
-} from "@/dataset/Dataset";
 import type { OpikClient } from "@/client/Client";
+import { Dataset, DatasetSplitOptions } from "@/dataset/Dataset";
+import type { DatasetItemData } from "@/dataset";
 
 describe("Dataset.getSplit", () => {
   afterEach(() => {
@@ -13,12 +10,13 @@ describe("Dataset.getSplit", () => {
   });
 
   function makeDataset<T extends DatasetItemData>(items: (T & { id: string })[]) {
-    const stubClient: Pick<OpikClient, "datasetBatchQueue" | "api"> = {
-      datasetBatchQueue: { flush: vi.fn() },
-      api: { datasets: {} },
-    };
-
-    const dataset = new Dataset<T>({ name: "test", id: "ds" }, stubClient as OpikClient);
+    const dataset = new Dataset<T>(
+      { name: "test", id: "ds" },
+      {
+        datasetBatchQueue: { flush: vi.fn() },
+        api: { datasets: {} },
+      } as unknown as OpikClient
+    );
     vi.spyOn(dataset, "getItems").mockResolvedValue(items);
     return dataset;
   }
