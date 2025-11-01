@@ -168,6 +168,8 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
+        *args: Any,
+        **kwargs: Any,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
@@ -179,6 +181,8 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config: Optional configuration for the experiment
             max_trials: Maximum number of different prompts to test (default: 10)
             n_samples: Optional number of items to test in the dataset
+            validation: Optional :class:`ValidationSplit` describing the validation subset
+                (pass as a keyword argument).
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
             reflection_minibatch_size: Size of reflection minibatches (default: 3)
@@ -196,6 +200,11 @@ class GepaOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
+        validation_value = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
 
@@ -208,12 +217,57 @@ class GepaOptimizer(BaseOptimizer):
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
 
-        items = dataset.get_items()
-        if n_samples and 0 < n_samples < len(items):
-            items = items[:n_samples]
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation_value,
+            ),
+            n_samples,
+        )
+        split = evaluation_plan.split
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+
+        train_selection = self._select_items_for_spec(train_spec, split.train_items)
+        validation_selection = (
+            self._select_items_for_spec(validation_spec, split.validation_items)
+            if validation_spec is not None
+            else None
+        )
+        train_eval_ids = train_selection.dataset_item_ids
+        train_eval_n = (
+            None if train_eval_ids is not None else train_selection.sample_count
+        )
+        validation_eval_ids = (
+            validation_selection.dataset_item_ids if validation_selection else None
+        )
+        validation_eval_n = (
+            None
+            if validation_selection
+            and validation_selection.dataset_item_ids is not None
+            else (validation_selection.sample_count if validation_selection else None)
+        )
+        validation_dataset_source = (
+            validation_spec.dataset if validation_spec is not None else dataset
+        )
+        if not train_selection.items:
+            raise ValueError("Dataset must contain at least one training example.")
+
+        train_items_for_gepa = list(train_selection.items)
+        validation_items_for_gepa = (
+            list(validation_selection.items) if validation_selection else []
+        )
+
+        evaluation_items = (
+            validation_items_for_gepa
+            if validation_items_for_gepa
+            else train_items_for_gepa
+        )
+        items = evaluation_items
 
         # Calculate max_metric_calls from max_trials and effective samples
-        effective_n_samples = len(items)
+        effective_n_samples = len(evaluation_items)
         max_metric_calls = max_trials * effective_n_samples
         budget_limited_trials = (
             max_metric_calls // effective_n_samples if effective_n_samples else 0
@@ -235,7 +289,15 @@ class GepaOptimizer(BaseOptimizer):
                 budget_limited_trials,
             )
 
-        data_insts = self._build_data_insts(items, input_key, output_key)
+        train_insts = self._build_data_insts(
+            train_items_for_gepa, input_key, output_key
+        )
+        if validation_items_for_gepa:
+            val_insts = self._build_data_insts(
+                validation_items_for_gepa, input_key, output_key
+            )
+        else:
+            val_insts = train_insts
 
         self._gepa_live_metric_calls = 0
 
@@ -297,7 +359,8 @@ class GepaOptimizer(BaseOptimizer):
                         prompt=prompt,
                         dataset=dataset,
                         metric=metric,
-                        n_samples=n_samples,
+                        n_samples=train_eval_n,
+                        dataset_item_ids=train_eval_ids,
                         optimization_id=opt_id,
                         extra_metadata={"phase": "baseline"},
                         verbose=0,
@@ -350,8 +413,8 @@ class GepaOptimizer(BaseOptimizer):
 
                 kwargs_gepa: dict[str, Any] = {
                     "seed_candidate": {"system_prompt": seed_prompt_text},
-                    "trainset": data_insts,
-                    "valset": data_insts,
+                    "trainset": train_insts,
+                    "valset": val_insts,
                     "adapter": adapter,
                     "task_lm": None,
                     "reflection_lm": self.model,
@@ -441,9 +504,10 @@ class GepaOptimizer(BaseOptimizer):
 
                     eval_kwargs = dict(
                         prompt=prompt_variant,
-                        dataset=dataset,
+                        dataset=validation_dataset_source,
                         metric=metric,
-                        n_samples=n_samples,
+                        n_samples=validation_eval_n,
+                        dataset_item_ids=validation_eval_ids,
                         optimization_id=opt_id,
                         extra_metadata={"phase": "rescoring", "candidate_index": idx},
                         verbose=0,
@@ -570,10 +634,10 @@ class GepaOptimizer(BaseOptimizer):
                 if opt_id:
                     final_eval_result = opik_evaluator.evaluate_optimization_trial(
                         optimization_id=opt_id,
-                        dataset=dataset,
+                        dataset=validation_dataset_source,
                         task=final_llm_task,
                         project_name=final_experiment_config.get("project_name"),
-                        dataset_item_ids=None,
+                        dataset_item_ids=validation_eval_ids,
                         scoring_metrics=[metric_class],
                         task_threads=self.n_threads,
                         nb_samples=n_samples,
@@ -582,10 +646,10 @@ class GepaOptimizer(BaseOptimizer):
                     )
                 else:
                     final_eval_result = opik_evaluator.evaluate(
-                        dataset=dataset,
+                        dataset=validation_dataset_source,
                         task=final_llm_task,
                         project_name=final_experiment_config.get("project_name"),
-                        dataset_item_ids=None,
+                        dataset_item_ids=validation_eval_ids,
                         scoring_metrics=[metric_class],
                         task_threads=self.n_threads,
                         nb_samples=n_samples,

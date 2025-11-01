@@ -585,6 +585,51 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._current_population = []
         self._generations_without_overall_improvement = 0
 
+        validation = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation,
+            ),
+            n_samples,
+        )
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+
+        train_selection = self._select_items_for_spec(
+            train_spec, evaluation_plan.split.train_items
+        )
+        train_eval_ids = train_selection.dataset_item_ids
+        train_eval_n = (
+            None if train_eval_ids is not None else train_selection.sample_count
+        )
+
+        validation_selection = (
+            self._select_items_for_spec(
+                validation_spec, evaluation_plan.split.validation_items
+            )
+            if validation_spec is not None
+            else None
+        )
+        validation_eval_ids = (
+            validation_selection.dataset_item_ids if validation_selection else None
+        )
+        validation_eval_n = (
+            None
+            if validation_selection
+            and validation_selection.dataset_item_ids is not None
+            else (validation_selection.sample_count if validation_selection else None)
+        )
+        validation_dataset_source = (
+            validation_spec.dataset if validation_spec is not None else dataset
+        )
+        has_validation = validation_spec is not None
+
         if self.enable_moo:
 
             def _deap_evaluate_individual_fitness(
@@ -604,7 +649,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     messages,  # type: ignore
                     dataset=dataset,
                     metric=metric,
-                    n_samples=n_samples,
+                    n_samples=train_eval_n,
+                    dataset_item_ids=train_eval_ids,
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self.current_optimization_id,
                     verbose=0,
@@ -632,7 +678,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     messages,  # type: ignore
                     dataset=dataset,
                     metric=metric,
-                    n_samples=n_samples,
+                    n_samples=train_eval_n,
+                    dataset_item_ids=train_eval_ids,
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self.current_optimization_id,
                     verbose=0,
@@ -1004,6 +1051,23 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose,
             tools=getattr(final_best_prompt, "tools", None),
         )
+
+        if has_validation:
+            validation_score = self._evaluate_prompt(
+                final_best_prompt,
+                final_best_prompt.get_messages(),
+                dataset=validation_dataset_source,
+                metric=metric,
+                n_samples=validation_eval_n,
+                dataset_item_ids=validation_eval_ids,
+                experiment_config=(experiment_config or {}).copy(),
+                optimization_id=self.current_optimization_id,
+                verbose=0,
+            )
+            final_details["validation_score"] = validation_score
+            final_details["validation_dataset_id"] = getattr(
+                validation_dataset_source, "id", None
+            )
 
         final_tools = getattr(final_best_prompt, "tools", None)
         if final_tools:

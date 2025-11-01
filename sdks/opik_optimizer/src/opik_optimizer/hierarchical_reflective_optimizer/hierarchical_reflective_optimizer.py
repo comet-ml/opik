@@ -1,5 +1,6 @@
 import os
 import logging
+import sqlite3
 
 import opik
 import litellm
@@ -28,12 +29,19 @@ from .types import (
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
-
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
+
+# Using disk cache for LLM calls
+_cache_dir = os.environ.get("LITELLM_CACHE_DIR", os.path.expanduser("~/.litellm_cache"))
+try:
+    litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=_cache_dir)
+except (PermissionError, sqlite3.OperationalError, OSError) as cache_error:
+    logger.debug(
+        "Disk cache unavailable at %s (%s); continuing without persistent cache.",
+        _cache_dir,
+        cache_error,
+    )
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -167,6 +175,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         metric: Callable,
         optimization_id: str,
         n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
         **kwargs: Any,
     ) -> EvaluationResult:
@@ -235,7 +244,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Use dataset's get_items with limit for sampling
         logger.debug(
-            f"Starting evaluation with {n_samples if n_samples else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
+            "Starting evaluation with %s for metric %s",
+            f"{len(dataset_item_ids)} ids"
+            if dataset_item_ids
+            else (n_samples or "all"),
+            getattr(metric, "__name__", str(metric)),
         )
         result = opik_evaluator.evaluate_optimization_trial(
             optimization_id=optimization_id,
@@ -243,7 +256,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             task=llm_task,
             scoring_metrics=[_create_metric_class(metric)],
             task_threads=self.n_threads,
-            nb_samples=n_samples,
+            nb_samples=n_samples if dataset_item_ids is None else None,
+            dataset_item_ids=dataset_item_ids,
             experiment_config=experiment_config,
             verbose=self.verbose,
             project_name=self.project_name,
@@ -322,6 +336,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None,
         attempt: int,
         max_attempts: int,
+        dataset_item_ids: list[str] | None,
     ) -> tuple[chat_prompt.ChatPrompt, float, EvaluationResult]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
@@ -381,6 +396,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 metric=metric,
                 optimization_id=optimization_id,
                 n_samples=n_samples,
+                dataset_item_ids=dataset_item_ids,
             )
 
             improved_score = sum(
@@ -447,13 +463,56 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
         # First we will evaluate the prompt on the dataset
+        validation = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation,
+            ),
+            n_samples,
+        )
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+        train_selection = self._select_items_for_spec(
+            train_spec, evaluation_plan.split.train_items
+        )
+        train_eval_ids = train_selection.dataset_item_ids
+        train_eval_n = (
+            None if train_eval_ids is not None else train_selection.sample_count
+        )
+        validation_selection = (
+            self._select_items_for_spec(
+                validation_spec, evaluation_plan.split.validation_items
+            )
+            if validation_spec is not None
+            else None
+        )
+        validation_eval_ids = (
+            validation_selection.dataset_item_ids if validation_selection else None
+        )
+        validation_eval_n = (
+            None
+            if validation_selection
+            and validation_selection.dataset_item_ids is not None
+            else (validation_selection.sample_count if validation_selection else None)
+        )
+        validation_dataset_source = (
+            validation_spec.dataset if validation_spec is not None else dataset
+        )
+
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self._evaluate_prompt(
                 prompt=prompt,
                 dataset=dataset,
                 metric=metric,
                 optimization_id=optimization.id,
-                n_samples=n_samples,
+                n_samples=train_eval_n,
+                dataset_item_ids=train_eval_ids,
             )
 
             avg_scores = sum(
@@ -553,9 +612,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             dataset=dataset,
                             metric=metric,
                             optimization_id=optimization.id,
-                            n_samples=n_samples,
+                            n_samples=train_eval_n,
                             attempt=attempt,
                             max_attempts=max_attempts,
+                            dataset_item_ids=train_eval_ids,
                         )
                         trials_used += 1
 
@@ -666,13 +726,30 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_retries": max_retries,
-            "n_samples": n_samples,
+            "n_samples": len(train_eval_ids) if train_eval_ids else train_eval_n,
             "auto_continue": auto_continue,
             "max_trials": max_trials,
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
             "trials_used": trials_used,
         }
+
+        if validation_spec is not None:
+            validation_experiment = self._evaluate_prompt(
+                prompt=best_prompt,
+                dataset=validation_dataset_source,
+                metric=metric,
+                optimization_id=optimization.id,
+                n_samples=validation_eval_n,
+                dataset_item_ids=validation_eval_ids,
+            )
+            validation_avg_score = sum(
+                x.score_results[0].value for x in validation_experiment.test_results
+            ) / max(1, len(validation_experiment.test_results))
+            details["validation_score"] = validation_avg_score
+            details["validation_dataset_id"] = getattr(
+                validation_dataset_source, "id", None
+            )
 
         # Extract tool prompts if tools exist
         final_tools = getattr(best_prompt, "tools", None)
