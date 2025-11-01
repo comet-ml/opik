@@ -146,7 +146,7 @@ const PlaygroundOutputTable = ({
 
     retVal.push(
       columnHelper.group({
-        id: "output",
+        id: "playground-output",
         meta: {
           header: "Output",
         },
