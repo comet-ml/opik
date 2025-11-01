@@ -226,43 +226,38 @@ class GepaOptimizer(BaseOptimizer):
             n_samples,
         )
         split = evaluation_plan.split
-        train_items = list(split.train_items)
-        validation_items = list(split.validation_items)
         train_spec = evaluation_plan.train
         validation_spec = evaluation_plan.validation
-        train_eval_ids = (
-            list(train_spec.item_ids) if train_spec.item_ids is not None else None
-        )
-        train_eval_n = train_spec.sample_count
-        validation_eval_ids = (
-            list(validation_spec.item_ids)
-            if validation_spec is not None and validation_spec.item_ids is not None
+
+        train_selection = self._select_items_for_spec(train_spec, split.train_items)
+        validation_selection = (
+            self._select_items_for_spec(validation_spec, split.validation_items)
+            if validation_spec is not None
             else None
         )
+        train_eval_ids = train_selection.dataset_item_ids
+        train_eval_n = (
+            None if train_eval_ids is not None else train_selection.sample_count
+        )
+        validation_eval_ids = (
+            validation_selection.dataset_item_ids if validation_selection else None
+        )
         validation_eval_n = (
-            validation_spec.sample_count if validation_spec is not None else None
+            None
+            if validation_selection
+            and validation_selection.dataset_item_ids is not None
+            else (validation_selection.sample_count if validation_selection else None)
         )
         validation_dataset_source = (
             validation_spec.dataset if validation_spec is not None else dataset
         )
-        if not train_items:
+        if not train_selection.items:
             raise ValueError("Dataset must contain at least one training example.")
 
-        train_items_for_gepa = list(train_items)
-        validation_items_for_gepa = list(validation_items)
-
-        if train_eval_ids:
-            train_id_set = set(train_eval_ids)
-            train_items_for_gepa = [
-                item for item in train_items_for_gepa if item.get("id") in train_id_set
-            ]
-        if validation_eval_ids:
-            val_id_set = set(validation_eval_ids)
-            validation_items_for_gepa = [
-                item
-                for item in validation_items_for_gepa
-                if item.get("id") in val_id_set
-            ]
+        train_items_for_gepa = list(train_selection.items)
+        validation_items_for_gepa = (
+            list(validation_selection.items) if validation_selection else []
+        )
 
         evaluation_items = (
             validation_items_for_gepa

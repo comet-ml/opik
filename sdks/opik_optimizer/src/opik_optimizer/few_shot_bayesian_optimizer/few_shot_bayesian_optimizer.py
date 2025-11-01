@@ -214,36 +214,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         train_spec = (
             plan.train if plan is not None else EvaluationSpec(dataset, None, n_samples)
         )
-        dataset_items = (
+        train_items_source = (
             plan.split.train_items
             if plan is not None and plan.split.train_items
-            else dataset.get_items()
+            else list(dataset.get_items())
         )
-
-        if train_spec.item_ids is not None:
-            eval_dataset_item_ids = list(train_spec.item_ids)
-        else:
-            candidate_ids = [
-                item.get("id")
-                for item in dataset_items
-                if isinstance(item, dict) and item.get("id")
-            ]
-            eval_dataset_item_ids = [id_ for id_ in candidate_ids if id_]
-            if (
-                train_spec.sample_count is not None
-                and eval_dataset_item_ids
-                and train_spec.sample_count < len(eval_dataset_item_ids)
-            ):
-                rng = random.Random(self.seed)
-                eval_dataset_item_ids = rng.sample(
-                    eval_dataset_item_ids, train_spec.sample_count
-                )
-
-        effective_samples = (
-            len(eval_dataset_item_ids)
-            if eval_dataset_item_ids and train_spec.item_ids is not None
-            else train_spec.sample_count
+        selection = self._select_items_for_spec(train_spec, train_items_source)
+        dataset_items = selection.items
+        eval_dataset_item_ids = selection.dataset_item_ids
+        eval_n_samples = (
+            None if eval_dataset_item_ids is not None else selection.sample_count
         )
+        effective_samples = selection.sample_count
         configuration_updates = self._drop_none(
             {
                 "n_trials": n_trials,
@@ -333,9 +315,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 trial_reporter.start_trial(messages_for_reporting)
                 score = task_evaluator.evaluate(
                     dataset=dataset,
-                    dataset_item_ids=eval_dataset_item_ids
-                    if eval_dataset_item_ids
-                    else None,
+                    dataset_item_ids=eval_dataset_item_ids,
                     metric=metric,
                     evaluated_task=llm_task,
                     num_threads=self.n_threads,
@@ -343,9 +323,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     experiment_config=trial_config,
                     optimization_id=optimization_id,
                     verbose=self.verbose,
-                    n_samples=None
-                    if eval_dataset_item_ids
-                    else train_spec.sample_count,
+                    n_samples=eval_n_samples,
                 )
                 trial_reporter.set_score(baseline_score, score)
             logger.debug(f"Trial {trial.number} score: {score:.4f}")

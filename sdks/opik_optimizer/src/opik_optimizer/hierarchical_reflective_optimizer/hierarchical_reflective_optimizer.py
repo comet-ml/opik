@@ -478,17 +478,28 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
         train_spec = evaluation_plan.train
         validation_spec = evaluation_plan.validation
-        train_eval_ids = (
-            list(train_spec.item_ids) if train_spec.item_ids is not None else None
+        train_selection = self._select_items_for_spec(
+            train_spec, evaluation_plan.split.train_items
         )
-        train_eval_n = train_spec.sample_count
-        validation_eval_ids = (
-            list(validation_spec.item_ids)
-            if validation_spec is not None and validation_spec.item_ids is not None
+        train_eval_ids = train_selection.dataset_item_ids
+        train_eval_n = (
+            None if train_eval_ids is not None else train_selection.sample_count
+        )
+        validation_selection = (
+            self._select_items_for_spec(
+                validation_spec, evaluation_plan.split.validation_items
+            )
+            if validation_spec is not None
             else None
         )
+        validation_eval_ids = (
+            validation_selection.dataset_item_ids if validation_selection else None
+        )
         validation_eval_n = (
-            validation_spec.sample_count if validation_spec is not None else None
+            None
+            if validation_selection
+            and validation_selection.dataset_item_ids is not None
+            else (validation_selection.sample_count if validation_selection else None)
         )
         validation_dataset_source = (
             validation_spec.dataset if validation_spec is not None else dataset

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, cast
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import copy
 import inspect
@@ -207,11 +207,21 @@ class BaseOptimizer(ABC):
                 items = rng.sample(items, n_samples)
             return DatasetSplitResult(dataset, None, items, [])
 
-        return validation.build(
+        split = validation.build(
             dataset,
-            n_samples=None,
+            n_samples=n_samples,
             default_seed=self.seed,
         )
+        if n_samples is not None and n_samples < len(split.train_items):
+            rng = random.Random(self.seed)
+            sampled_train = rng.sample(split.train_items, n_samples)
+            split = DatasetSplitResult(
+                split.train_dataset,
+                split.validation_dataset,
+                sampled_train,
+                split.validation_items,
+            )
+        return split
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -287,6 +297,50 @@ class BaseOptimizer(ABC):
             dataset=spec.dataset,
             metric=metric,
             **payload,
+        )
+
+    def _select_items_for_spec(
+        self,
+        spec: EvaluationSpec,
+        items: Sequence[dict[str, Any]],
+    ) -> SpecSelection:
+        available = list(items)
+        if spec.item_ids is not None:
+            lookup = {
+                item.get("id"): item
+                for item in available
+                if isinstance(item, dict) and item.get("id")
+            }
+            ordered_items: list[dict[str, Any]] = []
+            resolved_ids: list[str] = []
+            for item_id in spec.item_ids:
+                candidate = lookup.get(item_id)
+                if candidate is not None:
+                    ordered_items.append(candidate)
+                    resolved_ids.append(item_id)
+            return SpecSelection(
+                items=ordered_items,
+                dataset_item_ids=resolved_ids if resolved_ids else None,
+                sample_count=len(resolved_ids),
+            )
+
+        if not available:
+            return SpecSelection([], None, spec.sample_count)
+
+        if spec.sample_count is not None and spec.sample_count < len(available):
+            rng = random.Random(self.seed)
+            chosen = rng.sample(available, spec.sample_count)
+        else:
+            chosen = available
+
+        resolved_ids = [
+            item["id"] for item in chosen if isinstance(item, dict) and item.get("id")
+        ]
+        effective_count = len(resolved_ids) if resolved_ids else spec.sample_count
+        return SpecSelection(
+            items=chosen,
+            dataset_item_ids=resolved_ids if resolved_ids else None,
+            sample_count=effective_count,
         )
 
     def _evaluate_prompt(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
@@ -895,3 +949,10 @@ class EvaluationPlan:
     @property
     def has_validation(self) -> bool:
         return self.validation is not None
+
+
+@dataclass(frozen=True, slots=True)
+class SpecSelection:
+    items: list[dict[str, Any]]
+    dataset_item_ids: list[str] | None
+    sample_count: int | None
