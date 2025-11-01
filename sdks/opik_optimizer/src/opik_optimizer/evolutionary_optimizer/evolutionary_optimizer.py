@@ -709,7 +709,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             validation=validation,
         )
         train_eval_ids, train_eval_n = self._select_train_eval_params(split, n_samples)
-        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(split, None)
+        validation_eval_ids, validation_eval_n = self._select_validation_eval_params(
+            split, None
+        )
         validation_dataset_source = split.validation_dataset or dataset
         has_validation = bool(split.validation_items)
 
