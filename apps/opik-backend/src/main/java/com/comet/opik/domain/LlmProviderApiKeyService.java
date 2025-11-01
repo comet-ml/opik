@@ -89,6 +89,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             template.inTransaction(WRITE, handle -> {
 
                 var repository = handle.attach(LlmProviderApiKeyDAO.class);
+
                 repository.save(workspaceId, newProviderApiKey);
 
                 return newProviderApiKey;
@@ -97,6 +98,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             return find(apiKeyId, workspaceId);
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                log.warn("Attempted to create duplicate provider: workspace='{}', provider='{}', providerName='{}'",
+                        workspaceId, newProviderApiKey.provider(), newProviderApiKey.providerName());
                 throw newConflict();
             } else {
                 throw e;

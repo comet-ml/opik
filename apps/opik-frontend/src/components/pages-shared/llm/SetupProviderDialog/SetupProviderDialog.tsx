@@ -46,10 +46,6 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     defaultValues: {
       provider: PROVIDER_TYPE.OPEN_AI,
       apiKey: "",
-      // @ts-expect-error - union type compatibility
-      url: "",
-      models: "",
-      location: "",
     },
   });
 
