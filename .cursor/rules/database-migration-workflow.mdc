@@ -1,0 +1,588 @@
+---
+description: Liquibase database migration workflow, naming conventions, and best practices for MySQL and ClickHouse schema changes
+---
+
+# Database Migration Workflow
+
+This rule documents the Liquibase migration workflow, file naming conventions, and best practices for evolving the database schema in Opik.
+
+## Migration Tool: Liquibase
+
+Opik uses Liquibase for database schema versioning and migrations across both MySQL and ClickHouse databases.
+
+**Key Concepts**:
+- **Changeset**: A single database change (CREATE TABLE, ALTER TABLE, etc.)
+- **Changelog**: XML file listing all migration files
+- **Migration File**: SQL file with one or more changesets
+- **Rollback**: Instructions to undo a migration
+
+## File Structure
+
+### MySQL Migrations
+**Location**: `apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/`
+
+**Changelog**: `apps/opik-backend/src/main/resources/liquibase/db-app-state/changelog.xml`
+
+### ClickHouse Migrations
+**Location**: `apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/`
+
+**Changelog**: `apps/opik-backend/src/main/resources/liquibase/db-app-analytics/changelog.xml`
+
+## Naming Convention
+
+### File Naming Pattern
+```
+{sequence_number}_{description}.sql
+```
+
+**Format Rules**:
+- **Sequence Number**: 6 digits, zero-padded (e.g., `000027`, `000028`)
+- **Description**: Lowercase, underscore-separated, descriptive
+- **Extension**: Always `.sql`
+
+**Examples**:
+```
+000027_add_dashboard_tables.sql
+000028_add_trace_threads_table.sql
+000029_add_thread_enum_value_to_feedback_scores.sql
+000030_add_project_configs_table.sql
+```
+
+### Sequence Number Management
+
+**Finding Next Number**:
+```bash
+# List existing migrations
+ls -1 apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/ | tail -5
+
+# Output:
+# 000023_add_enabled_to_automation_rules.sql
+# 000024_add_description_field_to_feedback_definitions.sql
+# 000024_create_alerts_webhooks_tables.sql
+# 000025_add_filters_to_automation_rules.sql
+# 000026_change_webhooks_secret_token_as_nullable.sql
+
+# Next number: 000027
+```
+
+**Conflict Resolution**:
+- If two migrations have same number, both must be merged or one renamed
+- Check with team before creating migration to avoid conflicts
+- See [check_backend_migration_conflicts.sh](mdc:scripts/check_backend_migration_conflicts.sh)
+
+## Migration File Structure
+
+### Basic Template
+
+```sql
+--liquibase formatted sql
+--changeset {author}:{changeset_id}
+
+{SQL statements}
+
+--rollback {rollback SQL statements};
+```
+
+### Example: Add Column
+
+**File**: `000027_add_visibility_to_projects.sql`
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000027_add_visibility_to_projects
+
+ALTER TABLE projects ADD COLUMN visibility ENUM('private', 'public') NOT NULL DEFAULT 'private';
+
+--rollback ALTER TABLE projects DROP COLUMN visibility;
+```
+
+### Example: Create Table (MySQL)
+
+**File**: `000028_create_dashboards_table.sql`
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000028_create_dashboards_table
+
+CREATE TABLE dashboards (
+    id CHAR(36) NOT NULL,
+    project_id CHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description VARCHAR(255),
+    workspace_id VARCHAR(150) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
+    last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin',
+    CONSTRAINT `dashboards_pk` PRIMARY KEY (id),
+    CONSTRAINT `dashboards_workspace_id_name_uk` UNIQUE (workspace_id, name),
+    KEY idx_dashboards_project (project_id)
+);
+
+--rollback DROP TABLE IF EXISTS dashboards;
+```
+
+### Example: Create Table (ClickHouse)
+
+**File**: `000044_create_dashboard_metrics_table.sql`
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000044_create_dashboard_metrics_table
+
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dashboard_metrics ON CLUSTER '{cluster}'
+(
+    id                  FixedString(36),
+    dashboard_id        FixedString(36),
+    project_id          FixedString(36),
+    workspace_id        String,
+    metric_name         String,
+    metric_value        Decimal64(8),
+    timestamp           DateTime64(9, 'UTC') DEFAULT now64(9),
+    created_at          DateTime64(9, 'UTC') DEFAULT now64(9),
+    last_updated_at     DateTime64(6, 'UTC') DEFAULT now64(6),
+    created_by          String DEFAULT '',
+    last_updated_by     String DEFAULT ''
+)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/dashboard_metrics', '{replica}', last_updated_at)
+ORDER BY (workspace_id, project_id, dashboard_id, metric_name, id);
+
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dashboard_metrics ON CLUSTER '{cluster}';
+```
+
+### Example: Add Multiple Columns
+
+**File**: `000029_add_audit_fields_to_webhooks.sql`
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000029_add_audit_fields_to_webhooks
+
+ALTER TABLE webhooks 
+    ADD COLUMN retry_count INT NOT NULL DEFAULT 0,
+    ADD COLUMN last_retry_at TIMESTAMP(6) NULL,
+    ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+--rollback ALTER TABLE webhooks DROP COLUMN retry_count, DROP COLUMN last_retry_at, DROP COLUMN enabled;
+```
+
+### Example: Modify Enum
+
+**File**: `000030_extend_automation_rule_evaluator_types.sql`
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000030_extend_automation_rule_evaluator_types
+
+ALTER TABLE automation_rule_evaluators 
+MODIFY COLUMN type ENUM(
+    'llm_as_judge',
+    'user_defined_metric_python',
+    'code',
+    'regex',
+    'equals',
+    'contains',
+    'is_json',
+    'levenshtein_distance',
+    'heuristic',
+    'custom_metric'  -- New value
+) NOT NULL;
+
+--rollback ALTER TABLE automation_rule_evaluators 
+--rollback MODIFY COLUMN type ENUM(
+--rollback     'llm_as_judge',
+--rollback     'user_defined_metric_python',
+--rollback     'code',
+--rollback     'regex',
+--rollback     'equals',
+--rollback     'contains',
+--rollback     'is_json',
+--rollback     'levenshtein_distance',
+--rollback     'heuristic'
+--rollback ) NOT NULL;
+```
+
+### Example: Data Migration
+
+**File**: `000031_migrate_old_visibility_values.sql`
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000031_migrate_old_visibility_values
+
+-- Update legacy visibility values
+UPDATE projects 
+SET visibility = 'private' 
+WHERE visibility IS NULL;
+
+UPDATE projects 
+SET visibility = 'public' 
+WHERE name LIKE 'public_%';
+
+--rollback -- No rollback for data migration
+```
+
+## Rollback Statements
+
+### Rollback Best Practices
+
+**1. Always Provide Rollback**
+```sql
+-- ✅ GOOD: Clear rollback
+ALTER TABLE projects ADD COLUMN tags JSON;
+
+--rollback ALTER TABLE projects DROP COLUMN tags;
+```
+
+**2. Multiple Statement Rollback**
+```sql
+CREATE TABLE items (...);
+CREATE INDEX idx_items_name ON items(name);
+
+--rollback DROP INDEX idx_items_name ON items;
+--rollback DROP TABLE IF EXISTS items;
+```
+
+**3. No Rollback for Data Migrations**
+```sql
+UPDATE projects SET status = 'active' WHERE status IS NULL;
+
+--rollback -- Data migration: no rollback possible
+```
+
+**4. Rollback for ClickHouse**
+```sql
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.new_table ON CLUSTER '{cluster}' (...);
+
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.new_table ON CLUSTER '{cluster}';
+```
+
+## ClickHouse-Specific Patterns
+
+### Cluster Support
+
+```sql
+-- Always include ON CLUSTER for production
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.table_name ON CLUSTER '{cluster}'
+(
+    -- columns
+)
+ENGINE = ReplicatedReplacingMergeTree(
+    '/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/table_name',
+    '{replica}',
+    last_updated_at
+)
+ORDER BY (workspace_id, project_id, id);
+```
+
+### Adding Columns to Existing Table
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000045_add_tags_to_traces
+
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
+    ADD COLUMN tags Array(String) DEFAULT [];
+
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP COLUMN tags;
+```
+
+### Modifying Table Engine
+
+```sql
+--liquibase formatted sql
+--changeset YourName:000046_change_traces_to_replicated
+
+-- Note: Changing engine requires recreating table
+-- 1. Rename old table
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_old ON CLUSTER '{cluster}';
+
+-- 2. Create new table with new engine
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
+(
+    -- all columns
+)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/traces', '{replica}', last_updated_at)
+ORDER BY (workspace_id, project_id, id);
+
+-- 3. Copy data
+INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces SELECT * FROM ${ANALYTICS_DB_DATABASE_NAME}.traces_old;
+
+-- 4. Drop old table
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_old ON CLUSTER '{cluster}';
+
+--rollback -- Complex rollback - coordinate with team
+```
+
+## Testing Migrations
+
+### Local Testing
+
+```bash
+# 1. Start local environment
+./opik.sh start
+
+# 2. Run migrations (automatic on startup)
+# Check logs for migration success:
+docker-compose logs opik-backend | grep -i liquibase
+
+# 3. Verify schema changes
+# MySQL:
+docker-compose exec mysql mysql -u opik -popik opik -e "DESCRIBE projects;"
+
+# ClickHouse:
+docker-compose exec clickhouse clickhouse-client --query "DESCRIBE TABLE opik.traces"
+```
+
+### Rollback Testing
+
+```bash
+# Test rollback locally before pushing
+docker-compose exec opik-backend java -jar app.jar db rollback \
+    --count 1 config.yml
+```
+
+### Migration Validation
+
+```bash
+# Check for conflicts before committing
+./scripts/check_backend_migration_conflicts.sh
+
+# Verify migration file syntax
+cat apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/000027_*.sql
+```
+
+## Common Migration Patterns
+
+### Adding a Required Column
+
+```sql
+-- ✅ SAFE: Add as nullable first, then make required
+--liquibase formatted sql
+--changeset YourName:add_email_column
+
+-- Step 1: Add nullable column
+ALTER TABLE users ADD COLUMN email VARCHAR(255);
+
+-- Step 2: Populate with default values
+UPDATE users SET email = CONCAT('user_', id, '@example.com') WHERE email IS NULL;
+
+-- Step 3: Make NOT NULL (in next migration if needed)
+-- ALTER TABLE users MODIFY COLUMN email VARCHAR(255) NOT NULL;
+
+--rollback ALTER TABLE users DROP COLUMN email;
+```
+
+### Renaming a Column
+
+```sql
+-- ✅ SAFE: MySQL supports RENAME
+ALTER TABLE projects RENAME COLUMN description TO project_description;
+
+--rollback ALTER TABLE projects RENAME COLUMN project_description TO description;
+```
+
+### Changing Column Type
+
+```sql
+-- ⚠️ CAREFUL: May lose data or fail if incompatible
+ALTER TABLE projects MODIFY COLUMN description TEXT;
+
+--rollback ALTER TABLE projects MODIFY COLUMN description VARCHAR(255);
+```
+
+### Adding an Index
+
+```sql
+-- ✅ SAFE: Add index
+CREATE INDEX idx_projects_created_at ON projects(created_at);
+
+--rollback DROP INDEX idx_projects_created_at ON projects;
+```
+
+### Dropping a Table
+
+```sql
+-- ⚠️ DANGEROUS: Backup data first!
+DROP TABLE IF EXISTS deprecated_table;
+
+--rollback CREATE TABLE deprecated_table (...);
+--rollback -- Add INSERT statements to restore data
+```
+
+## Migration Workflow
+
+### 1. Create Migration File
+
+```bash
+# Determine next sequence number
+NEXT_NUM=$(ls -1 apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/ | \
+    grep -oE '^[0-9]+' | sort -n | tail -1 | awk '{printf "%06d\n", $1+1}')
+
+echo "Next migration number: $NEXT_NUM"
+
+# Create file
+touch "apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/${NEXT_NUM}_your_description.sql"
+```
+
+### 2. Write Migration
+
+Follow templates above, include:
+- Liquibase formatted header
+- Changeset with your name
+- SQL statements
+- Rollback statements
+
+### 3. Update Changelog (if needed)
+
+Usually automatic, but verify in `changelog.xml`:
+
+```xml
+<include file="migrations/000027_add_dashboard_tables.sql" relativeToChangelogFile="true"/>
+```
+
+### 4. Test Locally
+
+```bash
+# Start environment
+./opik.sh start
+
+# Check migration ran successfully
+docker-compose logs opik-backend | grep "000027"
+
+# Verify schema
+docker-compose exec mysql mysql -u opik -popik opik -e "SHOW TABLES;"
+```
+
+### 5. Commit and PR
+
+```bash
+git add apps/opik-backend/src/main/resources/liquibase/
+git commit -m "[OPIK-1234] [BE] Add dashboards tables"
+git push origin username/OPIK-1234-add-dashboards
+```
+
+### 6. Code Review Checklist
+
+- [ ] Correct sequence number
+- [ ] Descriptive filename
+- [ ] Proper changeset format
+- [ ] SQL follows schema patterns
+- [ ] Rollback statements included
+- [ ] Tested locally
+- [ ] No conflicts with other PRs
+
+## Common Pitfalls
+
+### ❌ Missing Workspace Isolation
+
+```sql
+-- ❌ WRONG: No workspace_id
+CREATE TABLE items (
+    id CHAR(36),
+    name VARCHAR(255),
+    PRIMARY KEY (id)
+);
+
+-- ✅ CORRECT: Include workspace_id
+CREATE TABLE items (
+    id CHAR(36),
+    name VARCHAR(255),
+    workspace_id VARCHAR(150) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (workspace_id, name)
+);
+```
+
+### ❌ Missing Audit Fields
+
+```sql
+-- ❌ WRONG: No audit trail
+CREATE TABLE items (
+    id CHAR(36),
+    name VARCHAR(255)
+);
+
+-- ✅ CORRECT: Include audit fields
+CREATE TABLE items (
+    id CHAR(36),
+    name VARCHAR(255),
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
+    last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin'
+);
+```
+
+### ❌ Unsafe Column Changes
+
+```sql
+-- ❌ DANGEROUS: May fail or lose data
+ALTER TABLE projects MODIFY COLUMN id INT;  -- Was CHAR(36)!
+
+-- ✅ SAFE: Add new column, migrate data, drop old
+ALTER TABLE projects ADD COLUMN id_new INT;
+UPDATE projects SET id_new = CAST(SUBSTRING(id, 1, 10) AS INT);
+-- ... then drop id and rename id_new
+```
+
+### ❌ Missing Rollback
+
+```sql
+-- ❌ WRONG: No rollback
+ALTER TABLE projects ADD COLUMN tags JSON;
+
+-- ✅ CORRECT: Include rollback
+ALTER TABLE projects ADD COLUMN tags JSON;
+
+--rollback ALTER TABLE projects DROP COLUMN tags;
+```
+
+### ❌ Direct Table Modification in Production
+
+**Never** modify production tables directly. Always use migrations.
+
+```bash
+# ❌ NEVER DO THIS:
+mysql -h prod-db -u admin -p
+mysql> ALTER TABLE projects ADD COLUMN ...  # WRONG!
+
+# ✅ CORRECT: Create migration, test, deploy
+```
+
+## Emergency Rollback Procedure
+
+### If Migration Fails in Production
+
+```bash
+# 1. Check error in logs
+kubectl logs deployment/opik-backend | grep -i liquibase
+
+# 2. Rollback last migration
+kubectl exec -it deployment/opik-backend -- \
+    java -jar app.jar db rollback --count 1 config.yml
+
+# 3. Fix migration file
+
+# 4. Redeploy with fixed migration
+```
+
+## Best Practices Summary
+
+1. **Sequential Numbering**: Always use next available number
+2. **Descriptive Names**: Clear, lowercase, underscore-separated
+3. **Include Rollback**: Every migration must have rollback
+4. **Test Locally**: Run migration before committing
+5. **Workspace Isolation**: All tables need `workspace_id`
+6. **Audit Fields**: Include created/updated timestamps and users
+7. **Atomic Changes**: One logical change per migration
+8. **Backup First**: For risky changes, backup data
+9. **Team Coordination**: Check for number conflicts
+10. **Follow Patterns**: Match existing schema conventions
+
+## Related Rules
+
+- [Database Overview](mdc:.cursor/rules/database-overview.mdc)
+- [MySQL Schema Patterns](mdc:.cursor/rules/mysql-schema-patterns.mdc)
+- [ClickHouse Schema Patterns](mdc:.cursor/rules/clickhouse-schema-patterns.mdc)
+- [Database Query Best Practices](mdc:.cursor/rules/database-query-best-practices.mdc)
