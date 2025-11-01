@@ -274,14 +274,14 @@ class Dataset:
     def train_test_split(
         self,
         *,
-        test_dataset: "Dataset" | None = None,
-        test_item_ids: Sequence[str] | None = None,
-        split_field: str | None = None,
+        test_dataset: Optional["Dataset"] = None,
+        test_item_ids: Optional[Sequence[str]] = None,
+        split_field: Optional[str] = None,
         train_label: str = "train",
         test_label: str = "test",
-        test_size: float | None = None,
-        seed: int | None = None,
-        limit: int | None = None,
+        test_size: Optional[float] = None,
+        seed: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> DatasetSplit:
         """
         Create a train/test split from the dataset (HuggingFace style).
@@ -381,14 +381,14 @@ class Dataset:
     def get_split(
         self,
         *,
-        validation_dataset: "Dataset" | None = None,
-        validation_item_ids: Sequence[str] | None = None,
-        split_field: str | None = None,
+        validation_dataset: Optional["Dataset"] = None,
+        validation_item_ids: Optional[Sequence[str]] = None,
+        split_field: Optional[str] = None,
         train_label: str = "train",
         validation_label: str = "validation",
-        validation_ratio: float | None = None,
-        seed: int | None = None,
-        limit: int | None = None,
+        validation_ratio: Optional[float] = None,
+        seed: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> DatasetSplit:
         """Deprecated compatibility wrapper for ``train_test_split``."""
         warnings.warn(
