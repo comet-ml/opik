@@ -714,6 +714,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         try:
                             prompt_score = self._evaluate_with_spec(
                                 prompt=candidate_prompt,
+                                spec=train_spec,
                                 metric=metric,
                                 optimization_id=optimization_id,
                                 experiment_config=experiment_config,

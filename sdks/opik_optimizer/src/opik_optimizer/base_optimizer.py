@@ -290,6 +290,12 @@ class BaseOptimizer(ABC):
             **payload,
         )
 
+    def _evaluate_prompt(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+        """Subclasses must implement evaluation logic used by `_evaluate_with_spec`."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _evaluate_prompt()"
+        )
+
     # ------------------------------------------------------------------
     # LLM call methods
     # ------------------------------------------------------------------
