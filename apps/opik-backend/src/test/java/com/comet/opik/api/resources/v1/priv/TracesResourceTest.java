@@ -6317,6 +6317,74 @@ class TracesResourceTest {
                     .containsExactly("cohere", "google");
         }
 
+        @Test
+        void createAndRetrieveTrace__providersInMetadata() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create trace with custom metadata
+            JsonNode customMetadata = JsonUtils.getJsonNodeFromString(
+                    "{\"custom_field\":\"custom_value\",\"another_field\":\"another_value\"}");
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .metadata(customMetadata)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .endTime(Instant.now())
+                    .comments(null)
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Create spans with different providers
+            List<String> expectedProviders = List.of("anthropic", "openai");
+            List<Span> spans = expectedProviders.stream()
+                    .map(provider -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .type(SpanType.llm)
+                            .provider(provider)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Retrieve trace from the API
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            Trace.TracePage resultPage = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), List.of(), 100, Map.of());
+            List<Trace> returnedTraces = resultPage.content();
+
+            // Verify trace has providers in metadata as first field
+            Trace returnedTrace = returnedTraces.stream()
+                    .filter(t -> t.id().equals(trace.id()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Trace should be present"));
+
+            // Verify providers array appears in metadata
+            assertThat(returnedTrace.metadata()).isNotNull();
+            assertThat(returnedTrace.metadata().has("providers")).isTrue();
+
+            // Verify providers in metadata matches top-level providers field
+            JsonNode providersInMetadata = returnedTrace.metadata().get("providers");
+            assertThat(providersInMetadata.isArray()).isTrue();
+            List<String> providersFromMetadata = new java.util.ArrayList<>();
+            providersInMetadata.forEach(node -> providersFromMetadata.add(node.asText()));
+            assertThat(providersFromMetadata).containsExactlyElementsOf(expectedProviders);
+
+            // Verify custom metadata fields are still present after providers
+            assertThat(returnedTrace.metadata().has("custom_field")).isTrue();
+            assertThat(returnedTrace.metadata().get("custom_field").asText()).isEqualTo("custom_value");
+            assertThat(returnedTrace.metadata().has("another_field")).isTrue();
+            assertThat(returnedTrace.metadata().get("another_field").asText()).isEqualTo("another_value");
+        }
+
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
 
             Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
