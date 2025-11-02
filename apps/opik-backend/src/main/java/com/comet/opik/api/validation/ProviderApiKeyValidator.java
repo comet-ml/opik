@@ -40,13 +40,6 @@ public class ProviderApiKeyValidator
             return true;
         }
 
-        if (providerName != null) {
-            context.buildConstraintViolationWithTemplate("provider_name should only be set for custom LLM providers")
-                    .addPropertyNode("providerName")
-                    .addConstraintViolation();
-            return false;
-        }
-
         // Validate API key for non-custom providers
         if (providerApiKey.apiKey() == null || isBlank(EncryptionUtils.decrypt(providerApiKey.apiKey()))) {
             context.buildConstraintViolationWithTemplate(constraintAnnotation.message())

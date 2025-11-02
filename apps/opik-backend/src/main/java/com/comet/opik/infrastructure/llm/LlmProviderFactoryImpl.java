@@ -17,7 +17,9 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -28,6 +30,7 @@ import java.util.function.Function;
 
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 
+@Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {
 
@@ -53,7 +56,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For custom LLM providers, add provider_name to configuration if present
-        if (providerConfig.provider() == LlmProvider.CUSTOM_LLM && providerConfig.providerName() != null) {
+        if (providerConfig.provider() == LlmProvider.CUSTOM_LLM
+                && StringUtils.isNotBlank(providerConfig.providerName())) {
             configuration = new HashMap<>(configuration);
             configuration.put("provider_name", providerConfig.providerName());
         }
@@ -169,6 +173,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         try {
             extractedModelName = CustomLlmModelNameChecker.extractModelName(model, providerApiKey.providerName());
         } catch (IllegalArgumentException e) {
+            log.warn("Failed to extract model name from '{}' for provider '{}' with providerName '{}': {}",
+                    model, providerApiKey.provider(), providerApiKey.providerName(), e.getMessage());
             return false;
         }
 

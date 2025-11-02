@@ -620,8 +620,8 @@ class LlmProviderApiKeyResourceTest {
 
     @ParameterizedTest
     @MethodSource
-    @DisplayName("Create non-custom provider with providerName should fail")
-    void createNonCustomProviderWithProviderNameShouldFail(LlmProvider provider) {
+    @DisplayName("Create non-custom provider with providerName should succeed (providerName is ignored)")
+    void createNonCustomProviderWithProviderNameShouldSucceed(LlmProvider provider) {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -630,18 +630,23 @@ class LlmProviderApiKeyResourceTest {
 
         var providerWithName = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
                 .provider(provider)
-                .providerName("should-not-be-set")
+                .providerName("should-be-ignored")
                 .build();
 
-        try (var actualResponse = llmProviderApiKeyResourceClient.createProviderApiKey(
-                JsonUtils.writeValueAsString(providerWithName), apiKey, workspaceName, 422)) {
-            var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
-            assertThat(actualError.errors())
-                    .contains("providerName provider_name should only be set for custom LLM providers");
-        }
+        // Should succeed - providerName is simply ignored for non-custom providers
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(providerWithName, apiKey, workspaceName,
+                201);
+
+        // Fetch the actual object from DB to verify providerName was set to null
+        var actual = llmProviderApiKeyResourceClient.getById(created.id(), workspaceName, apiKey, 200);
+
+        // Verify the provider was created but providerName was ignored (should be null for non-custom providers)
+        assertThat(actual.provider()).isEqualTo(provider);
+        // The providerName should be null since it's ignored for non-custom providers
+        assertThat(actual.providerName()).isNull();
     }
 
-    private Stream<Arguments> createNonCustomProviderWithProviderNameShouldFail() {
+    private Stream<Arguments> createNonCustomProviderWithProviderNameShouldSucceed() {
         return Stream.of(
                 arguments(LlmProvider.OPEN_AI),
                 arguments(LlmProvider.ANTHROPIC),
