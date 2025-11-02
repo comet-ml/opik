@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 
 import opik
 import litellm
@@ -13,7 +14,7 @@ from typing import Any, TypeVar
 from collections.abc import Callable
 from pydantic import BaseModel
 from .. import _throttle
-from ..base_optimizer import BaseOptimizer
+from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 
@@ -27,6 +28,8 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
+from . import checkpoint as checkpoint_utils
+from . import checkpoint as checkpoint_utils
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
@@ -405,9 +408,18 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         project_name: str = "Optimization",
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
+        resume_from: str | Path | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
+        # Prepare checkpointing
+        _, resume_state = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
+        )
+
         # Reset counters at the start of optimization
         self._reset_counters()
         self._should_stop_optimization = False  # Reset stop flag
@@ -474,6 +486,18 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         iteration = 0
         previous_iteration_score = initial_score
         trials_used = 0
+
+        if resume_state:
+            restored = checkpoint_utils.restore_state(resume_state)
+            iteration = restored.get("iteration", 0)
+            trials_used = restored.get("trials_used", 0)
+            best_score = restored.get("best_score", best_score)
+            best_messages = restored.get("best_prompt_messages", best_messages)
+            best_prompt = prompt.copy()
+            if best_messages:
+                best_prompt.set_messages(best_messages)
+            self._should_stop_optimization = restored.get("should_stop", False)
+            previous_iteration_score = best_score
 
         while trials_used < max_trials:
             iteration += 1
@@ -630,6 +654,19 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Improvement: {iteration_improvement:.2%}"
             )
 
+            self.maybe_checkpoint(
+                round_index=iteration,
+                optimizer_state=checkpoint_utils.capture_state(
+                    self,
+                    iteration=iteration,
+                    best_score=best_score,
+                    best_prompt_messages=best_prompt.get_messages(),
+                    history=[round_data.model_dump() for round_data in self.get_history()],
+                    should_stop=self._should_stop_optimization,
+                    trials_used=trials_used,
+                ),
+            )
+
             # Stop if improvement is below convergence threshold
             if abs(iteration_improvement) < self.convergence_threshold:
                 logger.info(
@@ -678,7 +715,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         final_tools = getattr(best_prompt, "tools", None)
         tool_prompts = self._extract_tool_prompts(final_tools)
 
-        return OptimizationResult(
+        result = OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_messages,
             score=best_score,
@@ -692,3 +729,5 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset_id=dataset.id,
             tool_prompts=tool_prompts,
         )
+        self._finalize_checkpoint_run()
+        return result
