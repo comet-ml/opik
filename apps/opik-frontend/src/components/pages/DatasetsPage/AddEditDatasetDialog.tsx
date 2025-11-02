@@ -292,8 +292,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </DialogClose>
           <Button
             type="submit"
-            disabled={!isValid || csvError !== undefined}
-            onClick={submitHandler}
+            disabled={!isValid}
+            onClick={csvError ? () => setConfirmOpen(true) : submitHandler}
           >
             {buttonText}
           </Button>

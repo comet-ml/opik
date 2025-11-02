@@ -109,7 +109,11 @@ const PlaygroundOutputActions = ({
 
   const rules = rulesData?.content || [];
 
-  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
+  const {
+    data: datasetsData,
+    isLoading: isLoadingDatasets,
+    isFetching: isFetchingDatasets,
+  } = useDatasetsList({
     workspaceName,
     page: 1,
     size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
@@ -129,13 +133,19 @@ const PlaygroundOutputActions = ({
 
   // Clear datasetId if the selected dataset no longer exists
   useEffect(() => {
-    if (datasetId && !isLoadingDatasets) {
+    if (datasetId && !isLoadingDatasets && !isFetchingDatasets) {
       const datasetExists = datasets.some((ds) => ds.id === datasetId);
       if (!datasetExists) {
         onChangeDatasetId(null);
       }
     }
-  }, [datasetId, datasets, isLoadingDatasets, onChangeDatasetId]);
+  }, [
+    datasetId,
+    datasets,
+    isLoadingDatasets,
+    isFetchingDatasets,
+    onChangeDatasetId,
+  ]);
 
   const {
     stopAll,
