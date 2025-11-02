@@ -16,7 +16,7 @@ describe("helpers.ts", () => {
       duration: 3600000,
       created_at: "2023-01-01T00:00:00Z",
       last_updated_at: "2023-01-01T00:00:00Z",
-      metadata: { environment: "test" },
+      metadata: { providers: ["openai", "anthropic"], environment: "test" },
       feedback_scores: [
         { name: "relevance", value: 0.8, source: "sdk" } as TraceFeedbackScore,
       ],
@@ -29,7 +29,6 @@ describe("helpers.ts", () => {
         completion_tokens: 50,
       },
       total_estimated_cost: 0.001,
-      providers: ["openai", "anthropic"],
     };
 
     const mockSpan: Span = {
@@ -46,7 +45,7 @@ describe("helpers.ts", () => {
       duration: 1800000,
       created_at: "2023-01-01T00:00:00Z",
       last_updated_at: "2023-01-01T00:00:00Z",
-      metadata: { model: "gpt-4" },
+      metadata: { provider: "openai", model: "gpt-4" },
       feedback_scores: [],
       comments: [],
       tags: ["llm"],
