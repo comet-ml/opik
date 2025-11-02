@@ -67,15 +67,9 @@ def verify_trace(
     assert trace.output == output, testlib.prepare_difference_report(
         trace.output, output
     )
-    
-    # Backend may inject 'providers' into metadata, so check that expected metadata
-    # is a subset of actual metadata (all expected key-value pairs are present)
-    if metadata is not mock.ANY:
-        actual_metadata = trace.metadata or {}
-        expected_metadata = metadata or {}
-        assert expected_metadata.items() <= actual_metadata.items(), testlib.prepare_difference_report(
-            actual_metadata, expected_metadata
-        )
+    assert trace.metadata == metadata, testlib.prepare_difference_report(
+        trace.metadata, metadata
+    )
 
     if tags is not mock.ANY:
         assert _try_build_set(trace.tags) == _try_build_set(
@@ -170,15 +164,9 @@ def verify_span(
 
     assert span.input == input, testlib.prepare_difference_report(span.input, input)
     assert span.output == output, testlib.prepare_difference_report(span.output, output)
-    
-    # Backend may inject 'provider' into metadata, so check that expected metadata
-    # is a subset of actual metadata (all expected key-value pairs are present)
-    if metadata is not mock.ANY:
-        actual_metadata = span.metadata or {}
-        expected_metadata = metadata or {}
-        assert expected_metadata.items() <= actual_metadata.items(), testlib.prepare_difference_report(
-            actual_metadata, expected_metadata
-        )
+    assert span.metadata == metadata, testlib.prepare_difference_report(
+        span.metadata, metadata
+    )
 
     if tags is not mock.ANY:
         assert _try_build_set(span.tags) == _try_build_set(
