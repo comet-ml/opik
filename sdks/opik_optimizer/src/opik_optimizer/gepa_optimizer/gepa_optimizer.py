@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Any
 from collections.abc import Callable
 
@@ -23,6 +24,7 @@ from ..reporting_utils import suppress_opik_logs
 from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
+from . import checkpoint as checkpoint_utils
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +170,7 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
+        resume_from: str | Path | None = None,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
@@ -243,6 +246,18 @@ class GepaOptimizer(BaseOptimizer):
 
         # Set project name from parameter
         self.project_name = project_name
+
+        _start_round, resume_state = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
+        )
+
+        if resume_state:
+            logger.warning(
+                "GEPA checkpoint resume not yet implemented; running from scratch (TODO)."
+            )
 
         opt_id: str | None = None
         ds_id: str | None = getattr(dataset, "id", None)
@@ -526,6 +541,22 @@ class GepaOptimizer(BaseOptimizer):
             best_candidate, seed_prompt_text
         )
 
+        adapter_state_payload = None  # TODO(opik): capture GEPA engine state for resume
+
+        self.maybe_checkpoint(
+            round_index=len(candidate_rows) or 1,
+            optimizer_state=checkpoint_utils.capture_state(
+                self,
+                adapter_state=adapter_state_payload,
+                best_prompt_system_text=best_prompt_text,
+                best_score=best_score,
+                history=history,
+                trials_completed=len(candidate_rows),
+                max_trials=max_trials,
+                reflection_enabled=reflection_minibatch_size > 0,
+            ),
+        )
+
         final_prompt = self._apply_system_text(prompt, best_prompt_text)
         final_prompt.model = self.model
         # Filter out GEPA-specific parameters that shouldn't be passed to LLM
@@ -703,7 +734,7 @@ class GepaOptimizer(BaseOptimizer):
                 best_score,
             )
 
-        return OptimizationResult(
+        result = OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=final_messages,
             score=best_score,
@@ -716,6 +747,8 @@ class GepaOptimizer(BaseOptimizer):
             history=history,
             llm_calls=None,
         )
+        self._finalize_checkpoint_run()
+        return result
 
     # ------------------------------------------------------------------
     # Helpers used by BaseOptimizer.evaluate_prompt
