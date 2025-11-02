@@ -138,10 +138,7 @@ const AIProvidersTab = () => {
           placeholder="Search by name"
           dimension="sm"
         />
-        <Button
-          onClick={handleAddConfigurationClick}
-          size="sm"
-        >
+        <Button onClick={handleAddConfigurationClick} size="sm">
           Add configuration
         </Button>
       </div>
