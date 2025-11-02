@@ -6,10 +6,10 @@ import api, {
 } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
-import { ProviderKeyWithAPIKey } from "@/types/providers";
+import { PartialProviderKeyUpdate } from "@/types/providers";
 
 type UseProviderKeysCreateMutationParams = {
-  providerKey: Partial<ProviderKeyWithAPIKey>;
+  providerKey: PartialProviderKeyUpdate;
 };
 
 const useProviderKeysCreateMutation = () => {
