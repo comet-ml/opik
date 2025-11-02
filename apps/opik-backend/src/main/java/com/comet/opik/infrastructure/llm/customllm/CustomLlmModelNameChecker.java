@@ -1,21 +1,18 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.LlmProvider;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 @Slf4j
 public class CustomLlmModelNameChecker {
     public static final String CUSTOM_LLM_MODEL_PREFIX = LlmProvider.CUSTOM_LLM.getValue() + "/";
     private static final String CUSTOM_LLM_SEPARATOR = "/";
 
-    public static boolean isCustomLlmModel(String model) {
-        try {
-            return model.startsWith(CUSTOM_LLM_MODEL_PREFIX);
-        } catch (Exception e) {
-            // Keeping this try catch just in case for the future
-            log.warn("Failed to check if model {} is a custom LLM: {}", model, e.getMessage());
-            return false;
-        }
+    public static boolean isCustomLlmModel(@NonNull String model) {
+        return model.startsWith(CUSTOM_LLM_MODEL_PREFIX);
     }
 
     /**
@@ -34,13 +31,19 @@ public class CustomLlmModelNameChecker {
      * @return The actual model name without prefixes
      * @throws IllegalArgumentException if the model is not a custom LLM model
      */
-    public static String extractModelName(String model, String providerName) {
+    public static String extractModelName(@NonNull String model, String providerName) {
         if (!isCustomLlmModel(model)) {
             throw new IllegalArgumentException("Not a custom LLM model: " + model);
         }
 
         // Remove "custom-llm/" prefix
         String withoutCustomPrefix = model.substring(CUSTOM_LLM_MODEL_PREFIX.length());
+
+        // Validate that we have a non-blank model name after removing the prefix
+        if (isBlank(withoutCustomPrefix)) {
+            throw new IllegalArgumentException(
+                    "Invalid custom LLM model format: model name is blank after prefix. Model: " + model);
+        }
 
         // If providerName is null (legacy), return the model as-is after stripping "custom-llm/"
         if (providerName == null) {

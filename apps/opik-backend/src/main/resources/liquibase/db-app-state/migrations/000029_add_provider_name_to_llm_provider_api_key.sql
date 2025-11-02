@@ -4,8 +4,9 @@
 
 -- Add provider_name column with '__NULL__' as default (sentinel value for NULL)
 -- This allows the unique constraint to work properly with NULL values
+-- Size (150) matches the name column for consistency
 ALTER TABLE llm_provider_api_key 
-    ADD COLUMN provider_name VARCHAR(100) DEFAULT '__NULL__';
+    ADD COLUMN provider_name VARCHAR(150) DEFAULT '__NULL__';
 
 -- Drop old unique constraint
 ALTER TABLE llm_provider_api_key 

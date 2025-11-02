@@ -44,7 +44,9 @@ public interface LlmProviderApiKeyDAO {
     @SqlUpdate("UPDATE llm_provider_api_key SET " +
             "api_key = CASE WHEN :bean.apiKey IS NULL THEN api_key ELSE :bean.apiKey END, " +
             "name = CASE WHEN :bean.name IS NULL THEN name ELSE :bean.name END, " +
-            "provider_name = CASE WHEN :bean.providerName IS NULL THEN provider_name ELSE :bean.providerName END, " +
+            "provider_name = CASE WHEN :bean.providerName IS NULL THEN provider_name " +
+            "WHEN provider_name = '" + NULL_SENTINEL + "' THEN :bean.providerName " +
+            "ELSE provider_name END, " +
             "headers = CASE WHEN :bean.headers IS NULL THEN headers ELSE :bean.headers END, " +
             "base_url = CASE WHEN :bean.baseUrl IS NULL THEN base_url ELSE :bean.baseUrl END, " +
             "configuration = CASE WHEN :bean.configuration IS NULL THEN configuration ELSE :bean.configuration END, " +

@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.LlmProvider.CUSTOM_LLM;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -79,8 +80,14 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             @NonNull String workspaceId) {
         UUID apiKeyId = idGenerator.generateId();
 
+        // For non-custom providers, explicitly set providerName to null (ignore user input)
+        String providerName = providerApiKey.provider() == CUSTOM_LLM
+                ? providerApiKey.providerName()
+                : null;
+
         var newProviderApiKey = providerApiKey.toBuilder()
                 .id(apiKeyId)
+                .providerName(providerName)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
