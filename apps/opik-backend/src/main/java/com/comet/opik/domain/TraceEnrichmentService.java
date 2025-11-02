@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -153,8 +154,9 @@ public class TraceEnrichmentService {
             enrichedData.set("metadata", objectMapper.valueToTree(trace.metadata()));
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, JsonNode> result = objectMapper.convertValue(enrichedData, Map.class);
+        // Convert ObjectNode to Map<String, JsonNode>
+        Map<String, JsonNode> result = new HashMap<>();
+        enrichedData.properties().forEach(entry -> result.put(entry.getKey(), entry.getValue()));
         return result;
     }
 

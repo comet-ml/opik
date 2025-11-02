@@ -4012,20 +4012,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
         }
 
         @Test
@@ -4052,22 +4041,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("size", 1)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, 1, API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+            List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
 
-                List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
-
-                assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
         }
 
         @Test
@@ -4108,20 +4086,9 @@ class DatasetsResourceTest {
 
             Set<Column> columns = getColumns(data);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
         }
 
         @Test
@@ -4166,20 +4133,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
 
         }
 
@@ -4213,21 +4169,10 @@ class DatasetsResourceTest {
                     .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
                     .toList().reversed();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("truncate", truncate)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("truncate", truncate), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
         }
 
         @Test
@@ -4271,22 +4216,12 @@ class DatasetsResourceTest {
             // Create filter for the new filter API
             var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("filters", toURLEncodedQueryParam(List.of(filter)))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+            List<DatasetItem> expectedContent = List.of(searchableItem);
 
-                List<DatasetItem> expectedContent = List.of(searchableItem);
-
-                assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
         }
 
         // Parameterized test scenarios for search functionality
@@ -7415,6 +7350,203 @@ class DatasetsResourceTest {
                         .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
                         .isEqualTo(1);
             });
+        }
+    }
+
+    @Nested
+    @DisplayName("Create dataset items from traces:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateDatasetItemsFromTraces {
+
+        @Test
+        @DisplayName("Success - create dataset items from traces with all enrichment options")
+        void createDatasetItemsFromTraces__success() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create traces with spans
+            String projectName = GENERATOR.generate().toString();
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt 1\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 1\"}"))
+                    .tags(Set.of("tag1", "tag2"))
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value1\"}"))
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt 2\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 2\"}"))
+                    .tags(Set.of("tag3"))
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value2\"}"))
+                    .build();
+
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            // Create spans for trace1
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace1.id())
+                    .name("span1")
+                    .input(JsonUtils.getJsonNodeFromString("{\"input\": \"span1 input\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"span1 output\"}"))
+                    .build();
+
+            var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace1.id())
+                    .parentSpanId(span1.id())
+                    .name("span2")
+                    .input(JsonUtils.getJsonNodeFromString("{\"input\": \"span2 input\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"span2 output\"}"))
+                    .build();
+
+            spanResourceClient.createSpan(span1, apiKey, workspaceName);
+            spanResourceClient.createSpan(span2, apiKey, workspaceName);
+
+            // Create request with all enrichment options
+            var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(trace1.id(), trace2.id()))
+                    .enrichmentOptions(com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder()
+                            .includeSpans(true)
+                            .includeTags(true)
+                            .includeFeedbackScores(true)
+                            .includeComments(true)
+                            .includeUsage(true)
+                            .includeMetadata(true)
+                            .build())
+                    .build();
+
+            // Call endpoint
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+
+            // Verify dataset items were created
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, apiKey, workspaceName);
+
+            assertThat(actualEntity.content()).hasSize(2);
+
+            // Verify enriched data
+            var item1 = actualEntity.content().stream()
+                    .filter(item -> item.traceId().equals(trace1.id()))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(item1.source()).isEqualTo(DatasetItemSource.TRACE);
+            assertThat(item1.data()).containsKey("input");
+            assertThat(item1.data()).containsKey("expected_output");
+            assertThat(item1.data()).containsKey("spans");
+            assertThat(item1.data()).containsKey("tags");
+            assertThat(item1.data()).containsKey("metadata");
+
+            // Verify spans are included
+            JsonNode spansNode = item1.data().get("spans");
+            assertThat(spansNode.isArray()).isTrue();
+            assertThat(spansNode).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("Success - create dataset items with no enrichment options")
+        void createDatasetItemsFromTraces__withNoEnrichmentOptions__success() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create trace
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response\"}"))
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Create request with no enrichment options
+            var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(trace.id()))
+                    .enrichmentOptions(
+                            com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder().build())
+                    .build();
+
+            // Call endpoint
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+
+            // Verify dataset item was created with only input and output
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, apiKey, workspaceName);
+
+            assertThat(actualEntity.content()).hasSize(1);
+
+            var item = actualEntity.content().get(0);
+            assertThat(item.data()).containsKey("input");
+            assertThat(item.data()).containsKey("expected_output");
+            assertThat(item.data()).doesNotContainKey("spans");
+            assertThat(item.data()).doesNotContainKey("tags");
+            assertThat(item.data()).doesNotContainKey("metadata");
+        }
+
+        @Test
+        @DisplayName("when dataset not found, then return 404")
+        void createDatasetItemsFromTraces__whenDatasetNotFound__thenReturn404() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            UUID nonExistentDatasetId = UUID.randomUUID();
+
+            var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(UUID.randomUUID()))
+                    .enrichmentOptions(
+                            com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder().build())
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(nonExistentDatasetId,
+                    request, apiKey, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+            }
+        }
+
+        @Test
+        @DisplayName("when trace IDs are empty, then return 422")
+        void createDatasetItemsFromTraces__whenTraceIdsAreEmpty__thenReturn422() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of())
+                    .enrichmentOptions(
+                            com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder().build())
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(datasetId, request, apiKey,
+                    workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
         }
     }
 }
