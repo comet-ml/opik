@@ -68,22 +68,13 @@ def verify_trace(
         trace.output, output
     )
     
-    # Backend injects 'providers' into metadata, so we check if expected metadata
-    # is a subset of actual metadata when metadata is specified
+    # Backend may inject 'providers' into metadata, so check that expected metadata
+    # is a subset of actual metadata (all expected key-value pairs are present)
     if metadata is not mock.ANY:
         actual_metadata = trace.metadata or {}
         expected_metadata = metadata or {}
-        
-        # Check that all expected keys are in actual metadata with matching values
-        for key, value in expected_metadata.items():
-            assert key in actual_metadata, f"Expected metadata key '{key}' not found in {actual_metadata}"
-            assert actual_metadata[key] == value, testlib.prepare_difference_report(
-                actual_metadata.get(key), value
-            )
-    else:
-        # If metadata is mock.ANY, do the original equality check
-        assert trace.metadata == metadata, testlib.prepare_difference_report(
-            trace.metadata, metadata
+        assert expected_metadata.items() <= actual_metadata.items(), testlib.prepare_difference_report(
+            actual_metadata, expected_metadata
         )
 
     if tags is not mock.ANY:
@@ -180,22 +171,13 @@ def verify_span(
     assert span.input == input, testlib.prepare_difference_report(span.input, input)
     assert span.output == output, testlib.prepare_difference_report(span.output, output)
     
-    # Backend injects 'provider' into metadata, so we check if expected metadata
-    # is a subset of actual metadata when metadata is specified
+    # Backend may inject 'provider' into metadata, so check that expected metadata
+    # is a subset of actual metadata (all expected key-value pairs are present)
     if metadata is not mock.ANY:
         actual_metadata = span.metadata or {}
         expected_metadata = metadata or {}
-        
-        # Check that all expected keys are in actual metadata with matching values
-        for key, value in expected_metadata.items():
-            assert key in actual_metadata, f"Expected metadata key '{key}' not found in {actual_metadata}"
-            assert actual_metadata[key] == value, testlib.prepare_difference_report(
-                actual_metadata.get(key), value
-            )
-    else:
-        # If metadata is mock.ANY, do the original equality check
-        assert span.metadata == metadata, testlib.prepare_difference_report(
-            span.metadata, metadata
+        assert expected_metadata.items() <= actual_metadata.items(), testlib.prepare_difference_report(
+            actual_metadata, expected_metadata
         )
 
     if tags is not mock.ANY:
