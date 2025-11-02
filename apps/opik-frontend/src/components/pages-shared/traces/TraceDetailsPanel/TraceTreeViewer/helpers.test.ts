@@ -558,7 +558,7 @@ describe("helpers.ts", () => {
       describe("metadata column (dictionary)", () => {
         it("should filter by metadata with all dictionary operators", () => {
           const filters = [
-            { operator: "=", value: '{"environment":"test"}', expected: true },
+            { operator: "=", value: '{"providers":["openai","anthropic"],"environment":"test"}', expected: true },
             { operator: "contains", value: "environment", expected: true },
             { operator: ">", value: 1, expected: false }, // metadata is not a number
             { operator: "<", value: 1, expected: false }, // metadata is not a number
