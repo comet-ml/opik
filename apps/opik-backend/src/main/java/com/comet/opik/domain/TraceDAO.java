@@ -2619,7 +2619,8 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Trace mapRowToTrace(Row row, RowMetadata rowMetadata, Set<Trace.TraceField> exclude) {
-        List<String> providers = row.get(Trace.TraceField.PROVIDERS.getValue(), List.class);
+        @SuppressWarnings("unchecked")
+        List<String> providers = (List<String>) row.get(Trace.TraceField.PROVIDERS.getValue(), List.class);
 
         JsonNode metadata = getMetadataWithProviders(row, exclude, providers);
 
