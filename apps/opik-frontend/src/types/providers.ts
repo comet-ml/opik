@@ -421,7 +421,7 @@ export interface ProviderKeyConfiguration {
 // Base interface for all provider keys
 export interface BaseProviderKey {
   id: string;
-  keyName: string;
+  keyName: string; // Display name - can be empty string for legacy providers
   created_at: string;
   provider: PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
@@ -437,7 +437,7 @@ export interface StandardProviderKey extends BaseProviderKey {
 // Custom provider key (vLLM, Ollama, etc.)
 export interface CustomProviderKey extends BaseProviderKey {
   provider: PROVIDER_TYPE.CUSTOM;
-  provider_name: string; // Required - unique identifier used in model names (e.g., "ollama", "vllm")
+  provider_name: string; // Unique identifier for model names - can be empty for legacy providers (pre-multi-provider support)
   base_url: string; // Required - OpenAI-compatible API endpoint
 }
 
