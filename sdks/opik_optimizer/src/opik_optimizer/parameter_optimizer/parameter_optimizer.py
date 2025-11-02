@@ -6,6 +6,7 @@ from typing import Any
 import copy
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import optuna
 from optuna import importance as optuna_importance
@@ -17,10 +18,12 @@ from ..base_optimizer import BaseOptimizer
 from ..optimizable_agent import OptimizableAgent
 from ..optimization_config import chat_prompt
 from ..optimization_result import OptimizationResult
+from ..utils.checkpoint import export_optuna_study, import_optuna_study
 from .parameter_search_space import ParameterSearchSpace
 from .search_space_types import ParameterType
 from .sensitivity_analysis import compute_sensitivity_from_trials
 from . import reporting
+from . import checkpoint as checkpoint_utils
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +111,7 @@ class ParameterOptimizer(BaseOptimizer):
         timeout: float | None = None,
         local_trials: int | None = None,
         local_search_scale: float | None = None,
+        resume_from: str | Path | None = None,
     ) -> OptimizationResult:
         """
         Optimize model parameters using Bayesian optimization.
@@ -140,6 +144,18 @@ class ParameterOptimizer(BaseOptimizer):
         local_search_scale_override = local_search_scale
 
         self._validate_optimization_inputs(prompt, dataset, metric)
+
+        start_trial_index, resume_payload = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
+        )
+        restored_state = (
+            checkpoint_utils.restore_state(resume_payload)
+            if resume_payload is not None
+            else None
+        )
 
         base_model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
         base_prompt = prompt.copy()
@@ -184,31 +200,37 @@ class ParameterOptimizer(BaseOptimizer):
         self.agent_class = self._setup_agent_class(base_prompt, agent_class)
 
         # Evaluate baseline with reporting
-        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
-            baseline_score = self.evaluate_prompt(
-                prompt=base_prompt,
-                dataset=dataset,
-                metric=metric,
-                n_threads=self.n_threads,
-                verbose=self.verbose,
-                experiment_config=experiment_config,
-                n_samples=n_samples,
-                agent_class=self.agent_class,
-            )
-            baseline_reporter.set_score(baseline_score)
+        if restored_state and restored_state.get("baseline_score") is not None:
+            baseline_score = restored_state["baseline_score"]
+        else:
+            with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+                baseline_score = self.evaluate_prompt(
+                    prompt=base_prompt,
+                    dataset=dataset,
+                    metric=metric,
+                    n_threads=self.n_threads,
+                    verbose=self.verbose,
+                    experiment_config=experiment_config,
+                    n_samples=n_samples,
+                    agent_class=self.agent_class,
+                )
+                baseline_reporter.set_score(baseline_score)
 
-        history: list[dict[str, Any]] = [
-            {
-                "iteration": 0,
-                "timestamp": datetime.utcnow().isoformat(),
-                "parameters": {},
-                "score": baseline_score,
-                "model_kwargs": copy.deepcopy(base_prompt.model_kwargs or {}),
-                "model": base_prompt.model,
-                "type": "baseline",
-                "stage": "baseline",
-            }
-        ]
+        baseline_entry = {
+            "iteration": 0,
+            "timestamp": datetime.utcnow().isoformat(),
+            "parameters": {},
+            "score": baseline_score,
+            "model_kwargs": copy.deepcopy(base_prompt.model_kwargs or {}),
+            "model": base_prompt.model,
+            "type": "baseline",
+            "stage": "baseline",
+        }
+        history: list[dict[str, Any]] = (
+            copy.deepcopy(restored_state.get("history"))
+            if restored_state and restored_state.get("history")
+            else [baseline_entry]
+        )
 
         try:
             optuna.logging.disable_default_handler()
@@ -219,7 +241,36 @@ class ParameterOptimizer(BaseOptimizer):
             logger.warning("Could not configure Optuna logging: %s", exc)
 
         sampler = sampler or optuna.samplers.TPESampler(seed=self.seed)
-        study = optuna.create_study(direction="maximize", sampler=sampler)
+        if restored_state and restored_state.get("study"):
+            study = import_optuna_study(restored_state["study"], sampler=sampler)
+        else:
+            study = optuna.create_study(direction="maximize", sampler=sampler)
+
+        def _serialize_state(current_stage_label: str) -> dict[str, Any]:
+            return checkpoint_utils.capture_state(
+                baseline_score=baseline_score,
+                history=history,
+                stage_records=stage_records,
+                search_ranges=search_ranges,
+                study_payload=export_optuna_study(study),
+                best_score=best_score,
+                best_parameters=best_parameters,
+                best_model_kwargs=best_model_kwargs,
+                best_model=best_model,
+                current_stage=current_stage_label,
+                trials_completed=len(study.trials),
+                max_trials=total_trials,
+                local_search_scale=(
+                    local_search_scale_override
+                    if local_search_scale_override is not None
+                    else self.local_search_scale
+                ),
+            )
+
+        self.maybe_checkpoint(
+            round_index=len(study.trials),
+            optimizer_state=_serialize_state(current_stage),
+        )
 
         total_trials = self.default_n_trials if max_trials is None else max_trials
         if total_trials < 0:
@@ -237,9 +288,24 @@ class ParameterOptimizer(BaseOptimizer):
 
         current_space = parameter_space
         current_stage = "global"
-        stage_records: list[dict[str, Any]] = []
-        search_ranges: dict[str, dict[str, Any]] = {}
-        current_best_score = baseline_score
+        stage_records: list[dict[str, Any]] = (
+            copy.deepcopy(restored_state.get("stage_records", []))
+            if restored_state
+            else []
+        )
+        search_ranges: dict[str, dict[str, Any]] = copy.deepcopy(
+            restored_state.get("search_ranges", {})
+        ) if restored_state else {}
+        current_best_score = (
+            restored_state.get("best_score", baseline_score)
+            if restored_state
+            else baseline_score
+        )
+        current_stage = (
+            restored_state.get("current_stage", "global")
+            if restored_state
+            else "global"
+        )
 
         def objective(trial: Trial) -> float:
             nonlocal current_best_score
@@ -287,18 +353,19 @@ class ParameterOptimizer(BaseOptimizer):
             return float(score)
 
         global_range = parameter_space.describe()
-        stage_records.append(
-            {
-                "stage": "global",
-                "trials": global_trials,
-                "scale": 1.0,
-                "parameters": global_range,
-            }
-        )
-        search_ranges["global"] = global_range
+        if not any(record.get("stage") == "global" for record in stage_records):
+            stage_records.append(
+                {
+                    "stage": "global",
+                    "trials": global_trials,
+                    "scale": 1.0,
+                    "parameters": global_range,
+                }
+            )
+        search_ranges.setdefault("global", global_range)
 
         if global_trials > 0:
-            if self.verbose >= 1:
+            if self.verbose >= 1 and (not restored_state or current_stage == "global"):
                 from rich.text import Text
                 from rich.console import Console
 
@@ -312,21 +379,44 @@ class ParameterOptimizer(BaseOptimizer):
                 )
                 console.print("")
 
-            study.optimize(
-                objective,
-                n_trials=global_trials,
-                timeout=timeout,
-                callbacks=callbacks,
-                show_progress_bar=False,
+            completed_global = sum(
+                1
+                for trial in study.trials
+                if trial.state == TrialState.COMPLETE
+                and trial.user_attrs.get("stage", "global") == "global"
             )
+            remaining_global = max(0, global_trials - completed_global)
+            if remaining_global > 0:
+                current_stage = "global"
 
-        for trial in study.trials:
+                def _checkpoint_callback(
+                    study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+                ) -> None:
+                    self.maybe_checkpoint(
+                        round_index=len(study.trials),
+                        optimizer_state=_serialize_state(current_stage),
+                    )
+
+                user_callbacks = list(callbacks or [])
+                user_callbacks.append(_checkpoint_callback)
+
+                study.optimize(
+                    objective,
+                    n_trials=remaining_global,
+                    timeout=timeout,
+                    callbacks=user_callbacks,
+                    show_progress_bar=False,
+                )
+
+        baseline_entry_record = history[0] if history else baseline_entry
+        rebuilt_history: list[dict[str, Any]] = [baseline_entry_record]
+        for trial in sorted(study.trials, key=lambda t: t.number):
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
             timestamp = (
                 trial.datetime_complete or trial.datetime_start or datetime.utcnow()
             )
-            history.append(
+            rebuilt_history.append(
                 {
                     "iteration": trial.number + 1,
                     "timestamp": timestamp.isoformat(),
@@ -337,11 +427,20 @@ class ParameterOptimizer(BaseOptimizer):
                     "stage": trial.user_attrs.get("stage", "global"),
                 }
             )
+        history = rebuilt_history
 
-        best_score = baseline_score
-        best_parameters: dict[str, Any] = {}
-        best_model_kwargs = copy.deepcopy(base_prompt.model_kwargs or {})
-        best_model = base_prompt.model
+        best_score = (
+            restored_state.get("best_score", baseline_score)
+            if restored_state
+            else baseline_score
+        )
+        best_parameters: dict[str, Any] = copy.deepcopy(
+            restored_state.get("best_parameters", {})
+        ) if restored_state else {}
+        best_model_kwargs = copy.deepcopy(
+            restored_state.get("best_model_kwargs", base_prompt.model_kwargs or {})
+        )
+        best_model = restored_state.get("best_model", base_prompt.model) if restored_state else base_prompt.model
 
         completed_trials = [
             trial
@@ -382,15 +481,16 @@ class ParameterOptimizer(BaseOptimizer):
                 current_stage = "local"
                 local_space = parameter_space.narrow_around(center_values, local_scale)
                 local_range = local_space.describe()
-                stage_records.append(
-                    {
-                        "stage": "local",
-                        "trials": local_trials,
-                        "scale": local_scale,
-                        "parameters": local_range,
-                    }
-                )
-                search_ranges["local"] = local_range
+                if not any(record.get("stage") == "local" for record in stage_records):
+                    stage_records.append(
+                        {
+                            "stage": "local",
+                            "trials": local_trials,
+                            "scale": local_scale,
+                            "parameters": local_range,
+                        }
+                    )
+                search_ranges.setdefault("local", local_range)
 
                 if self.verbose >= 1:
                     from rich.text import Text
@@ -409,13 +509,34 @@ class ParameterOptimizer(BaseOptimizer):
                     console.print("")
 
                 current_space = local_space
-                study.optimize(
-                    objective,
-                    n_trials=local_trials,
-                    timeout=timeout,
-                    callbacks=callbacks,
-                    show_progress_bar=False,
+                completed_local = sum(
+                    1
+                    for trial in study.trials
+                    if trial.state == TrialState.COMPLETE
+                    and trial.user_attrs.get("stage") == "local"
                 )
+                remaining_local = max(0, local_trials - completed_local)
+                if remaining_local > 0:
+                    current_stage = "local"
+
+                    def _checkpoint_callback_local(
+                        study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+                    ) -> None:
+                        self.maybe_checkpoint(
+                            round_index=len(study.trials),
+                            optimizer_state=_serialize_state(current_stage),
+                        )
+
+                    user_callbacks_local = list(callbacks or [])
+                    user_callbacks_local.append(_checkpoint_callback_local)
+
+                    study.optimize(
+                        objective,
+                        n_trials=remaining_local,
+                        timeout=timeout,
+                        callbacks=user_callbacks_local,
+                        show_progress_bar=False,
+                    )
 
                 completed_trials = [
                     trial
@@ -430,27 +551,31 @@ class ParameterOptimizer(BaseOptimizer):
                         best_model_kwargs = new_best.user_attrs.get("model_kwargs", {})
                         best_model = new_best.user_attrs.get("model", prompt.model)
 
-        else:
-            local_trials = 0
-
-        for trial in study.trials:
+        baseline_entry_record = history[0] if history else baseline_entry
+        rebuilt_history = [baseline_entry_record]
+        for trial in sorted(study.trials, key=lambda t: t.number):
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
             timestamp = (
                 trial.datetime_complete or trial.datetime_start or datetime.utcnow()
             )
-            if not any(entry["iteration"] == trial.number + 1 for entry in history):
-                history.append(
-                    {
-                        "iteration": trial.number + 1,
-                        "timestamp": timestamp.isoformat(),
-                        "parameters": trial.user_attrs.get("parameters", {}),
-                        "score": float(trial.value),
-                        "model_kwargs": trial.user_attrs.get("model_kwargs"),
-                        "model": trial.user_attrs.get("model"),
-                        "stage": trial.user_attrs.get("stage", current_stage),
-                    }
-                )
+            rebuilt_history.append(
+                {
+                    "iteration": trial.number + 1,
+                    "timestamp": timestamp.isoformat(),
+                    "parameters": trial.user_attrs.get("parameters", {}),
+                    "score": float(trial.value),
+                    "model_kwargs": trial.user_attrs.get("model_kwargs"),
+                    "model": trial.user_attrs.get("model"),
+                    "stage": trial.user_attrs.get("stage", "global"),
+                }
+            )
+        history = rebuilt_history
+
+        self.maybe_checkpoint(
+            round_index=len(study.trials),
+            optimizer_state=_serialize_state(current_stage),
+        )
 
         rounds_summary = [
             {
@@ -512,7 +637,7 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_precision": 6,
         }
 
-        return OptimizationResult(
+        result = OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=prompt.get_messages() if hasattr(prompt, "get_messages") else [],
             initial_prompt=prompt.get_messages()
@@ -528,3 +653,5 @@ class ParameterOptimizer(BaseOptimizer):
             optimization_id=optimization.id,
             dataset_id=dataset.id,
         )
+        self._finalize_checkpoint_run()
+        return result
