@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import textwrap
+from pathlib import Path
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -30,6 +31,7 @@ from ..mcp_utils.mcp_workflow import (
     extract_tool_arguments,
 )
 from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
+from . import checkpoint as checkpoint_utils
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -367,6 +369,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
+        resume_from: str | Path | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -482,6 +485,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             tools=getattr(prompt, "tools", None),
         )
 
+        start_round_index, resume_state = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
+        )
+
         try:
             optimization_id = optimization.id if optimization is not None else None
             result = self._optimize_prompt(
@@ -496,6 +506,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 mcp_config=mcp_config,
                 candidate_generator=candidate_generator,
                 candidate_generator_kwargs=candidate_generator_kwargs,
+                start_round=start_round_index,
+                resume_state=resume_state,
             )
             if optimization:
                 self._update_optimization(optimization, status="completed")
@@ -507,6 +519,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 self._update_optimization(optimization, status="cancelled")
                 logger.debug("Optimization marked as cancelled")
             raise e
+        finally:
+            self._finalize_checkpoint_run()
 
     def optimize_mcp(
         self,
@@ -523,9 +537,20 @@ class MetaPromptOptimizer(BaseOptimizer):
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
+        resume_from: str | Path | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
+
+        project_name_value = getattr(prompt, "project_name", None) or self.project_name
+        self.project_name = project_name_value
+
+        start_round_index, resume_state = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name_value,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
+        )
 
         if prompt.tools is None or not prompt.tools:
             raise ValueError("Prompt must include tools for MCP optimization")
@@ -549,24 +574,29 @@ class MetaPromptOptimizer(BaseOptimizer):
         if tool_segment_id not in {segment.segment_id for segment in segments}:
             raise ValueError(f"Tool '{tool_name}' not present in prompt tools")
 
-        return self._optimize_prompt(
-            optimization_id=None,
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            experiment_config=experiment_config,
-            max_trials=10,
-            n_samples=n_samples,
-            auto_continue=auto_continue,
-            mcp_config=mcp_config,
-            candidate_generator=self._generate_mcp_candidate_prompts,
-            candidate_generator_kwargs={
-                "tool_segment_id": tool_segment_id,
-                "tool_name": tool_name,
-                "panel_style": panel_style,
-            },
-            tool_panel_style=panel_style,
-        )
+        try:
+            return self._optimize_prompt(
+                optimization_id=None,
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                experiment_config=experiment_config,
+                max_trials=10,
+                n_samples=n_samples,
+                auto_continue=auto_continue,
+                mcp_config=mcp_config,
+                candidate_generator=self._generate_mcp_candidate_prompts,
+                candidate_generator_kwargs={
+                    "tool_segment_id": tool_segment_id,
+                    "tool_name": tool_name,
+                    "panel_style": panel_style,
+                },
+                tool_panel_style=panel_style,
+                start_round=start_round_index,
+                resume_state=resume_state,
+            )
+        finally:
+            self._finalize_checkpoint_run()
 
     def _optimize_prompt(
         self,
@@ -582,11 +612,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
         tool_panel_style: str = "bright_magenta",
+        start_round: int = 0,
+        resume_state: dict[str, Any] | None = None,
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset
         self.prompt = prompt
-        self._reset_counters()  # Reset counters for run
+        if resume_state is None:
+            self._reset_counters()
         initial_prompt = prompt
 
         current_prompt = prompt
@@ -606,23 +639,36 @@ class MetaPromptOptimizer(BaseOptimizer):
             additional_metadata={"meta_prompt": meta_metadata},
         )
 
-        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
-            initial_score = self._evaluate_prompt(
-                prompt,
-                optimization_id=optimization_id,
-                dataset=dataset,
-                metric=metric,
-                n_samples=n_samples,
-                experiment_config=experiment_config,
-                use_full_dataset=n_samples is None,
-                verbose=self.verbose,
-                mcp_config=mcp_config,
-            )
-            best_score = initial_score
-            best_prompt = current_prompt
-            rounds: list[OptimizationRound] = []
+        rounds: list[OptimizationRound]
+        if resume_state is None:
+            with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+                initial_score = self._evaluate_prompt(
+                    prompt,
+                    optimization_id=optimization_id,
+                    dataset=dataset,
+                    metric=metric,
+                    n_samples=n_samples,
+                    experiment_config=experiment_config,
+                    use_full_dataset=n_samples is None,
+                    verbose=self.verbose,
+                    mcp_config=mcp_config,
+                )
+                best_score = initial_score
+                best_prompt = current_prompt
+                rounds = []
 
-            baseline_reporter.set_score(initial_score)
+                baseline_reporter.set_score(initial_score)
+            round_num = start_round
+            trials_used = 0
+        else:
+            best_prompt, best_score, initial_score, trials_used, restored_auto = (
+                checkpoint_utils.restore_state(self, resume_state, prompt)
+            )
+            if restored_auto is not None:
+                self.auto_continue = restored_auto
+            rounds = list(self.get_history())
+            current_prompt = best_prompt
+            round_num = start_round
 
         reporting.display_optimization_start_message(verbose=self.verbose)
 
@@ -633,9 +679,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         with reporting.display_round_progress(
             estimated_rounds, verbose=self.verbose
         ) as round_reporter:
-            round_num = 0
-            trials_used = 0
-
             while trials_used < max_trials:
                 round_reporter.round_start(round_num)
                 previous_best_score = best_score
@@ -727,6 +770,20 @@ class MetaPromptOptimizer(BaseOptimizer):
                 if improvement > 0:
                     best_score = best_cand_score_avg
                     best_prompt = best_candidate_this_round
+
+                self.maybe_checkpoint(
+                    round_index=round_num,
+                    optimizer_state=checkpoint_utils.capture_state(
+                        self,
+                        initial_score=initial_score,
+                        best_score=best_score,
+                        best_prompt=best_prompt,
+                        trials_used=trials_used,
+                        round_number=round_num,
+                        max_trials=max_trials,
+                        auto_continue=self.auto_continue,
+                    ),
+                )
 
                 # Increment counters
                 round_num += 1
