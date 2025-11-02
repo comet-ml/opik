@@ -30,6 +30,8 @@ type ProviderSelectProps = {
 };
 
 // Helper function to get display name for custom providers
+// Fallback chain: provider_name > keyName > default constant
+// Note: Legacy providers (pre-multi-provider) may have empty provider_name and keyName
 const getCustomProviderDisplayName = (provider: ProviderKey): string => {
   return provider.provider_name || provider.keyName || CUSTOM_PROVIDER_DEFAULT_NAME;
 };
