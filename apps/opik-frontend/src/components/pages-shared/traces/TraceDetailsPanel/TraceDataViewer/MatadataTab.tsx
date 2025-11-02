@@ -19,28 +19,6 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
 }) => {
   const hasTokenUsage = Boolean(data.usage);
 
-  const usageData = useMemo(() => {
-    const previousUsageData = data.usage ?? {};
-
-    // For Spans, include provider information if available
-    if ("provider" in data && data.provider) {
-      return {
-        ...previousUsageData,
-        provider: data.provider,
-      };
-    }
-
-    // For Traces, include providers array
-    if ("providers" in data && data.providers) {
-      return {
-        ...previousUsageData,
-        providers: data.providers,
-      };
-    }
-
-    return previousUsageData;
-  }, [data]);
-
   const openSections = useMemo(() => {
     return hasTokenUsage ? ["metadata", "usage"] : ["metadata"];
   }, [hasTokenUsage]);
@@ -58,7 +36,7 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
           <AccordionTrigger>Token usage</AccordionTrigger>
           <AccordionContent>
             <SyntaxHighlighter
-              data={usageData as object}
+              data={data.usage as object}
               withSearch
               search={search}
             />

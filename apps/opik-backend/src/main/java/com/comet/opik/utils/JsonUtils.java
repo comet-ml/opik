@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -144,5 +146,59 @@ public class JsonUtils {
 
     public <T> T convertValue(@NonNull Object fromValue, @NonNull TypeReference<T> toValueTypeRef) {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
+    }
+
+    /**
+     * Injects provider information at the beginning of metadata JsonNode.
+     * Creates a new ObjectNode with provider field(s) first, followed by all existing metadata fields.
+     *
+     * @param metadata existing metadata JsonNode (can be null)
+     * @param provider provider string to inject (can be null)
+     * @return new JsonNode with provider information injected at the beginning, or original metadata if provider is null
+     */
+    public static JsonNode injectProviderIntoMetadata(JsonNode metadata, String provider) {
+        if (provider == null || provider.isBlank()) {
+            return metadata;
+        }
+
+        ObjectNode result = MAPPER.createObjectNode();
+        result.put("provider", provider);
+
+        // Copy existing metadata fields
+        if (metadata != null && metadata.isObject()) {
+            metadata.fields().forEachRemaining(entry -> {
+                result.set(entry.getKey(), entry.getValue());
+            });
+        }
+
+        return result;
+    }
+
+    /**
+     * Injects providers array at the beginning of metadata JsonNode.
+     * Creates a new ObjectNode with providers field first, followed by all existing metadata fields.
+     *
+     * @param metadata existing metadata JsonNode (can be null)
+     * @param providers list of provider strings to inject (can be null or empty)
+     * @return new JsonNode with providers information injected at the beginning, or original metadata if providers is null/empty
+     */
+    public static JsonNode injectProvidersIntoMetadata(JsonNode metadata, java.util.List<String> providers) {
+        if (providers == null || providers.isEmpty()) {
+            return metadata;
+        }
+
+        ObjectNode result = MAPPER.createObjectNode();
+        ArrayNode providersArray = MAPPER.createArrayNode();
+        providers.forEach(providersArray::add);
+        result.set("providers", providersArray);
+
+        // Copy existing metadata fields
+        if (metadata != null && metadata.isObject()) {
+            metadata.fields().forEachRemaining(entry -> {
+                result.set(entry.getKey(), entry.getValue());
+            });
+        }
+
+        return result;
     }
 }

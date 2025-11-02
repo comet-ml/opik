@@ -2614,82 +2614,94 @@ class TraceDAOImpl implements TraceDAO {
 
     private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
 
-        return result.map((row, rowMetadata) -> Trace.builder()
-                .id(row.get("id", UUID.class))
-                .projectId(row.get("project_id", UUID.class))
-                .name(StringUtils.defaultIfBlank(
-                        getValue(exclude, Trace.TraceField.NAME, row, "name", String.class), null))
-                .startTime(getValue(exclude, Trace.TraceField.START_TIME, row, "start_time", Instant.class))
-                .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
-                .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
-                                value))
-                        .orElse(null))
-                .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
-                                value))
-                        .orElse(null))
-                .metadata(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                        .orElse(null))
-                .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
-                        .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
-                        .filter(set -> !set.isEmpty())
-                        .orElse(null))
-                .comments(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.COMMENTS, row, "comments", List[].class))
-                        .map(CommentResultMapper::getComments)
-                        .filter(not(List::isEmpty))
-                        .orElse(null))
-                .feedbackScores(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.FEEDBACK_SCORES, row, "feedback_scores_list",
-                                List.class))
-                        .filter(not(List::isEmpty))
-                        .map(FeedbackScoreMapper::mapFeedbackScores)
-                        .filter(not(List::isEmpty))
-                        .orElse(null))
-                .guardrailsValidations(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.GUARDRAILS_VALIDATIONS, row,
-                                "guardrails_validations", List.class))
-                        .map(this::mapGuardrails)
-                        .filter(not(List::isEmpty))
-                        .orElse(null))
-                .spanCount(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
-                        .orElse(0))
-                .llmSpanCount(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
-                                Integer.class))
-                        .orElse(0))
-                .providers(row.get("providers", List.class))
-                .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
-                .totalEstimatedCost(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
-                                "total_estimated_cost", BigDecimal.class))
-                        .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                        .orElse(null))
-                .errorInfo(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.ERROR_INFO, row, "error_info", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
-                        .orElse(null))
-                .createdAt(getValue(exclude, Trace.TraceField.CREATED_AT, row, "created_at", Instant.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdBy(getValue(exclude, Trace.TraceField.CREATED_BY, row, "created_by", String.class))
-                .lastUpdatedBy(
-                        getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
-                .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
-                .threadId(StringUtils.defaultIfBlank(
-                        getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
-                .visibilityMode(Optional.ofNullable(
-                        getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
-                        .flatMap(VisibilityMode::fromString)
-                        .orElse(null))
-                .build());
+        return result.map((row, rowMetadata) -> {
+            // Extract providers first so we can inject them into metadata
+            List<String> providers = row.get("providers", List.class);
+
+            // Extract base metadata and inject providers into it
+            JsonNode metadata = Optional
+                    .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
+                    .filter(str -> !str.isBlank())
+                    .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                    .map(baseMetadata -> JsonUtils.injectProvidersIntoMetadata(baseMetadata, providers))
+                    .orElseGet(() -> JsonUtils.injectProvidersIntoMetadata(null, providers));
+
+            return Trace.builder()
+                    .id(row.get("id", UUID.class))
+                    .projectId(row.get("project_id", UUID.class))
+                    .name(StringUtils.defaultIfBlank(
+                            getValue(exclude, Trace.TraceField.NAME, row, "name", String.class), null))
+                    .startTime(getValue(exclude, Trace.TraceField.START_TIME, row, "start_time", Instant.class))
+                    .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
+                    .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
+                                    row,
+                                    value))
+                            .orElse(null))
+                    .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated",
+                                    row,
+                                    value))
+                            .orElse(null))
+                    .metadata(metadata)
+                    .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
+                            .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                            .filter(set -> !set.isEmpty())
+                            .orElse(null))
+                    .comments(Optional
+                            .ofNullable(getValue(exclude, Trace.TraceField.COMMENTS, row, "comments", List[].class))
+                            .map(CommentResultMapper::getComments)
+                            .filter(not(List::isEmpty))
+                            .orElse(null))
+                    .feedbackScores(Optional
+                            .ofNullable(getValue(exclude, Trace.TraceField.FEEDBACK_SCORES, row, "feedback_scores_list",
+                                    List.class))
+                            .filter(not(List::isEmpty))
+                            .map(FeedbackScoreMapper::mapFeedbackScores)
+                            .filter(not(List::isEmpty))
+                            .orElse(null))
+                    .guardrailsValidations(Optional
+                            .ofNullable(getValue(exclude, Trace.TraceField.GUARDRAILS_VALIDATIONS, row,
+                                    "guardrails_validations", List.class))
+                            .map(this::mapGuardrails)
+                            .filter(not(List::isEmpty))
+                            .orElse(null))
+                    .spanCount(Optional
+                            .ofNullable(
+                                    getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
+                            .orElse(0))
+                    .llmSpanCount(Optional
+                            .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
+                                    Integer.class))
+                            .orElse(0))
+                    .providers(providers)
+                    .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
+                    .totalEstimatedCost(Optional
+                            .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
+                                    "total_estimated_cost", BigDecimal.class))
+                            .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                            .orElse(null))
+                    .errorInfo(Optional
+                            .ofNullable(getValue(exclude, Trace.TraceField.ERROR_INFO, row, "error_info", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
+                            .orElse(null))
+                    .createdAt(getValue(exclude, Trace.TraceField.CREATED_AT, row, "created_at", Instant.class))
+                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                    .createdBy(getValue(exclude, Trace.TraceField.CREATED_BY, row, "created_by", String.class))
+                    .lastUpdatedBy(
+                            getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
+                    .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
+                    .threadId(StringUtils.defaultIfBlank(
+                            getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
+                    .visibilityMode(Optional.ofNullable(
+                            getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
+                            .flatMap(VisibilityMode::fromString)
+                            .orElse(null))
+                    .build();
+        });
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
