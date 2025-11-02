@@ -89,7 +89,7 @@ export const LEGACY_CUSTOM_PROVIDER_NAME = "default";
  * Get display label for a provider key
  * For custom providers: returns keyName with fallback to default
  * For standard providers: returns the provider's label from PROVIDERS constant
- * 
+ *
  * Note: Handles legacy custom providers that may have empty keyName
  */
 export const getProviderKeyLabel = (
