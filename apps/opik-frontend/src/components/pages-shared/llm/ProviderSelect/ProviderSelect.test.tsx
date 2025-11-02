@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import ProviderSelect from "./ProviderSelect";
-import { PROVIDER_TYPE, ProviderKey, CustomProviderKey } from "@/types/providers";
+import {
+  PROVIDER_TYPE,
+  ProviderKey,
+  CustomProviderKey,
+} from "@/types/providers";
 
 describe("ProviderSelect - Multiple Custom Providers", () => {
   const mockProviders: ProviderKey[] = [
@@ -169,7 +173,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         // Should render the button but with empty span (no placeholder shown for invalid IDs)
         const button = container.querySelector('button[role="combobox"]');
         expect(button).toBeInTheDocument();
-        const span = button?.querySelector('span');
+        const span = button?.querySelector("span");
         expect(span).toBeInTheDocument();
         expect(span).toBeEmptyDOMElement();
       });
@@ -188,7 +192,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         // Should render the button but with empty span (no placeholder shown for invalid types)
         const button = container.querySelector('button[role="combobox"]');
         expect(button).toBeInTheDocument();
-        const span = button?.querySelector('span');
+        const span = button?.querySelector("span");
         expect(span).toBeInTheDocument();
         expect(span).toBeEmptyDOMElement();
       });
@@ -342,7 +346,9 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         );
 
         // Check if the component has error border class
-        const selectBox = container.querySelector('[class*="border-destructive"]');
+        const selectBox = container.querySelector(
+          '[class*="border-destructive"]',
+        );
         expect(selectBox).toBeInTheDocument();
       });
 
@@ -359,7 +365,9 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         );
 
         // Check that error border class is not present
-        const selectBox = container.querySelector('[class*="border-destructive"]');
+        const selectBox = container.querySelector(
+          '[class*="border-destructive"]',
+        );
         expect(selectBox).not.toBeInTheDocument();
       });
     });

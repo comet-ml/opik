@@ -207,7 +207,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         // Set the value - this will update the watched value
         form.setValue("provider", PROVIDER_TYPE.CUSTOM);
         // Give React time to process the state update
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
         // Reset the flag
         isProgrammaticChangeRef.current = false;
         // Then manually trigger validation for all fields
@@ -315,7 +315,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             if (isProgrammaticChangeRef.current) {
                               return;
                             }
-                            
+
                             // Reset isAddingCustomProvider when user manually selects a provider
                             if (isAddingCustomProvider) {
                               // User manually selected a different provider, exit add mode
