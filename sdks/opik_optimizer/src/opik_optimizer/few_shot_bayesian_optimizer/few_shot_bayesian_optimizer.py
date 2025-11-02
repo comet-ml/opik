@@ -6,6 +6,7 @@ import json
 import logging
 import random
 from datetime import datetime
+from pathlib import Path
 
 import optuna
 import optuna.samplers
@@ -18,7 +19,9 @@ from opik_optimizer import base_optimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
+from ..utils.checkpoint import export_optuna_study, import_optuna_study
 from . import reporting
+from . import checkpoint as checkpoint_utils
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -202,10 +205,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        resume_state: dict[str, Any] | None = None,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
         random.seed(self.seed)
+
+        restored = resume_state or {}
 
         # Load the dataset
         dataset_items = dataset.get_items()
@@ -213,6 +219,21 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         eval_dataset_item_ids = all_dataset_item_ids
         if n_samples is not None and n_samples < len(dataset_items):
             eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
+
+        stored_eval_ids = restored.get("eval_dataset_item_ids") if restored else None
+        if stored_eval_ids:
+            missing_ids = set(stored_eval_ids) - set(all_dataset_item_ids)
+            if missing_ids:
+                logger.warning(
+                    "Some dataset items referenced by checkpoint are missing; using available items."
+                )
+            eval_dataset_item_ids = [
+                item_id for item_id in stored_eval_ids if item_id in all_dataset_item_ids
+            ]
+            if not eval_dataset_item_ids:
+                eval_dataset_item_ids = all_dataset_item_ids
+        if restored:
+            baseline_score = restored.get("baseline_score", baseline_score)
 
         configuration_updates = self._drop_none(
             {
@@ -340,10 +361,48 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Explicitly create and seed the sampler for Optuna
         sampler = optuna.samplers.TPESampler(seed=self.seed)
-        study = optuna.create_study(direction="maximize", sampler=sampler)
+        if restored and restored.get("study"):
+            study = import_optuna_study(restored["study"], sampler=sampler)
+        else:
+            study = optuna.create_study(direction="maximize", sampler=sampler)
 
-        study.optimize(
-            optimization_objective, n_trials=n_trials, show_progress_bar=False
+        def _serialize_state() -> dict[str, Any]:
+            return checkpoint_utils.capture_state(
+                template=fewshot_prompt_template.model_dump(),
+                eval_dataset_item_ids=eval_dataset_item_ids,
+                study_payload=export_optuna_study(study),
+                baseline_score=baseline_score,
+                trials_completed=len(study.trials),
+                max_trials=n_trials,
+            )
+
+        self.maybe_checkpoint(
+            round_index=len(study.trials),
+            optimizer_state=_serialize_state(),
+        )
+
+        def _checkpoint_callback(
+            study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+        ) -> None:
+            self.maybe_checkpoint(
+                round_index=len(study.trials),
+                optimizer_state=_serialize_state(),
+            )
+
+        trials_completed = len(study.trials)
+        remaining_trials = max(0, n_trials - trials_completed)
+
+        if remaining_trials > 0:
+            study.optimize(
+                optimization_objective,
+                n_trials=remaining_trials,
+                callbacks=[_checkpoint_callback],
+                show_progress_bar=False,
+            )
+
+        self.maybe_checkpoint(
+            round_index=len(study.trials),
+            optimizer_state=_serialize_state(),
         )
 
         optuna_history_processed = []
@@ -452,6 +511,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         max_trials: int = 10,
+        resume_from: str | Path | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -513,6 +573,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         utils.disable_experiment_reporting()
 
+        restored_checkpoint_state = (
+            checkpoint_utils.restore_state(resume_payload)
+            if resume_payload is not None
+            else None
+        )
+
+        start_trial_index, resume_payload = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
+        )
+
         # Step 1. Compute the baseline evaluation
         with reporting.display_evaluation(
             message="First we will establish the baseline performance:",
@@ -529,19 +602,27 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             eval_report.set_score(baseline_score)
 
         # Step 2. Create the few-shot prompt template
-        with reporting.creation_few_shot_prompt_template(
-            verbose=self.verbose
-        ) as fewshot_template_report:
-            fewshot_template = self._create_fewshot_prompt_template(
-                model=self.model,
-                prompt=prompt,
-                few_shot_examples=[
-                    {k: v for k, v in item.items() if k != "id"}
-                    for item in dataset.get_items(nb_samples=10)
-                ],
+        if restored_checkpoint_state and restored_checkpoint_state.get("template"):
+            fewshot_template = FewShotPromptTemplate.model_validate(
+                restored_checkpoint_state["template"]
             )
+            baseline_score = restored_checkpoint_state.get(
+                "baseline_score", baseline_score
+            )
+        else:
+            with reporting.creation_few_shot_prompt_template(
+                verbose=self.verbose
+            ) as fewshot_template_report:
+                fewshot_template = self._create_fewshot_prompt_template(
+                    model=self.model,
+                    prompt=prompt,
+                    few_shot_examples=[
+                        {k: v for k, v in item.items() if k != "id"}
+                        for item in dataset.get_items(nb_samples=10)
+                    ],
+                )
 
-            fewshot_template_report.set_fewshot_template(fewshot_template)
+                fewshot_template_report.set_fewshot_template(fewshot_template)
 
         # Step 3. Start the optimization process
         result = self._run_optimization(
@@ -554,11 +635,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             n_trials=max_trials,
             n_samples=n_samples,
+            resume_state=restored_checkpoint_state,
         )
         if optimization:
             self._update_optimization(optimization, status="completed")
 
         utils.enable_experiment_reporting()
+        self._finalize_checkpoint_run()
         return result
 
     def _evaluate_prompt(
