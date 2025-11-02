@@ -2623,8 +2623,10 @@ class TraceDAOImpl implements TraceDAO {
                     .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
                     .filter(str -> !str.isBlank())
                     .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                    .map(baseMetadata -> JsonUtils.injectProvidersIntoMetadata(baseMetadata, providers))
-                    .orElseGet(() -> JsonUtils.injectProvidersIntoMetadata(null, providers));
+                    .map(baseMetadata -> JsonUtils.injectArrayFieldIntoMetadata(baseMetadata,
+                            Trace.TraceField.PROVIDERS.getValue(), providers))
+                    .orElseGet(() -> JsonUtils.injectArrayFieldIntoMetadata(null,
+                            Trace.TraceField.PROVIDERS.getValue(), providers));
 
             return Trace.builder()
                     .id(row.get("id", UUID.class))

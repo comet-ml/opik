@@ -32,8 +32,6 @@ import java.util.Optional;
 @UtilityClass
 @Slf4j
 public class JsonUtils {
-    public static final String PROVIDER_KEY = "provider"; // TODO: Check if this is defined elsewhere
-    public static final String PROVIDERS_KEY = "providers"; // TODO: Check if this is defined elsewhere
 
     public static final ObjectMapper MAPPER = new ObjectMapper()
             .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
@@ -151,40 +149,55 @@ public class JsonUtils {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
     }
 
-    public static JsonNode injectProviderIntoMetadata(JsonNode metadata, String provider) {
-        if (provider == null || provider.isBlank()) {
+    /**
+     * Injects a field at the beginning of metadata JsonNode.
+     * Creates a new ObjectNode with the field first, followed by existing metadata fields.
+     *
+     * @param metadata existing metadata JsonNode (can be null)
+     * @param fieldName name of the field to inject
+     * @param fieldValue value to inject (String)
+     * @return new JsonNode with field at the beginning, or original metadata if fieldValue is null/blank
+     */
+    public static JsonNode injectStringFieldIntoMetadata(JsonNode metadata, String fieldName, String fieldValue) {
+        if (fieldValue == null || fieldValue.isBlank()) {
             return metadata;
         }
 
-        TextNode providerNode = MAPPER.getNodeFactory().textNode(provider); // Create the value node
-
-        return injectFieldIntoMetadata(metadata, PROVIDER_KEY, providerNode);
+        TextNode valueNode = MAPPER.getNodeFactory().textNode(fieldValue);
+        return injectFieldIntoMetadata(metadata, fieldName, valueNode);
     }
-    
-    public static JsonNode injectProvidersIntoMetadata(JsonNode metadata, List<String> providers) {
-        if (providers == null || providers.isEmpty()) {
+
+    /**
+     * Injects a field with array value at the beginning of metadata JsonNode.
+     * Creates a new ObjectNode with the field first, followed by existing metadata fields.
+     *
+     * @param metadata existing metadata JsonNode (can be null)
+     * @param fieldName name of the field to inject
+     * @param fieldValues list of strings to inject as array
+     * @return new JsonNode with field at the beginning, or original metadata if fieldValues is null/empty
+     */
+    public static JsonNode injectArrayFieldIntoMetadata(JsonNode metadata, String fieldName, List<String> fieldValues) {
+        if (fieldValues == null || fieldValues.isEmpty()) {
             return metadata;
         }
 
-        ArrayNode providersArray = MAPPER.createArrayNode();
+        ArrayNode arrayNode = MAPPER.createArrayNode();
+        fieldValues.forEach(arrayNode::add);
 
-        providers.forEach(providersArray::add); // Build the array value node
-
-        return injectFieldIntoMetadata(metadata, PROVIDERS_KEY, providersArray);
+        return injectFieldIntoMetadata(metadata, fieldName, arrayNode);
     }
 
     private static JsonNode injectFieldIntoMetadata(
-        JsonNode metadata, 
-        String fieldKey, 
-        JsonNode fieldValue) 
-    {
+            JsonNode metadata,
+            String fieldKey,
+            JsonNode fieldValue) {
         // 1. Create result and inject the payload field
         ObjectNode result = MAPPER.createObjectNode();
-        result.set(fieldKey, fieldValue); 
-    
+        result.set(fieldKey, fieldValue);
+
         // 2. Delegate copying the common metadata fields
         return copyMetadataFields(metadata, result);
-    }    
+    }
 
     /**
      * Copies existing fields from metadata into the 'result' ObjectNode,

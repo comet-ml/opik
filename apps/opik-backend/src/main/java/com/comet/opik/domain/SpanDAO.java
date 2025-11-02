@@ -1752,8 +1752,10 @@ class SpanDAO {
                     .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
                     .filter(str -> !str.isBlank())
                     .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                    .map(baseMetadata -> JsonUtils.injectProviderIntoMetadata(baseMetadata, provider))
-                    .orElseGet(() -> JsonUtils.injectProviderIntoMetadata(null, provider));
+                    .map(baseMetadata -> JsonUtils.injectStringFieldIntoMetadata(baseMetadata,
+                            SpanField.PROVIDER.getValue(), provider))
+                    .orElseGet(() -> JsonUtils.injectStringFieldIntoMetadata(null,
+                            SpanField.PROVIDER.getValue(), provider));
 
             return Span.builder()
                     .id(row.get("id", UUID.class))
