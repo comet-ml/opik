@@ -593,6 +593,59 @@ describe("helpers.ts", () => {
 
           expect(filterFunction(mockTrace, filter)).toBe(true);
         });
+
+        it("should filter by span metadata with all dictionary operators", () => {
+          const filters = [
+            { operator: "=", value: '{"provider":"openai","model":"gpt-4"}', expected: true },
+            { operator: "contains", value: "model", expected: true },
+            { operator: ">", value: 1, expected: false }, // metadata is not a number
+            { operator: "<", value: 1, expected: false }, // metadata is not a number
+          ] as const;
+
+          filters.forEach(({ operator, value, expected }) => {
+            const filter: Filters = [
+              {
+                id: "filter-1",
+                field: "metadata",
+                operator,
+                value,
+                type: COLUMN_TYPE.dictionary,
+              },
+            ];
+
+            expect(filterFunction(mockSpan, filter)).toBe(expected);
+          });
+        });
+
+        it("should filter by provider in span metadata with key", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: "metadata",
+              operator: "=",
+              value: "openai",
+              type: COLUMN_TYPE.dictionary,
+              key: "provider",
+            },
+          ];
+
+          expect(filterFunction(mockSpan, filter)).toBe(true);
+        });
+
+        it("should filter by providers in trace metadata with key", () => {
+          const filter: Filters = [
+            {
+              id: "filter-1",
+              field: "metadata",
+              operator: "contains",
+              value: "openai",
+              type: COLUMN_TYPE.dictionary,
+              key: "providers",
+            },
+          ];
+
+          expect(filterFunction(mockTrace, filter)).toBe(true);
+        });
       });
 
       // Test tags (list) column
