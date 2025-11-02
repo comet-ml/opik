@@ -1743,18 +1743,10 @@ class SpanDAO {
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
 
         return result.map((row, rowMetadata) -> {
-            // Parse metadata, then inject provider at the beginning
-            JsonNode baseMetadata = Optional
-                    .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
-                    .filter(str -> !str.isBlank())
-                    .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                    .orElse(null);
-
             String provider = StringUtils.defaultIfBlank(
                     getValue(exclude, SpanField.PROVIDER, row, SpanField.PROVIDER.getValue(), String.class), null);
 
-            JsonNode metadata = JsonUtils.injectStringFieldIntoMetadata(
-                    baseMetadata, SpanField.PROVIDER.getValue(), provider);
+            JsonNode metadata = getMetadataWithProvider(row, exclude, provider);
 
             return Span.builder()
                     .id(row.get("id", UUID.class))
@@ -2193,5 +2185,18 @@ class SpanDAO {
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
+    }
+
+    private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
+        // Parse base metadata from database
+        JsonNode baseMetadata = Optional
+                .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
+                .filter(str -> !str.isBlank())
+                .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                .orElse(null);
+
+        // Inject provider as first field in metadata
+        return JsonUtils.injectStringFieldIntoMetadata(
+                baseMetadata, SpanField.PROVIDER.getValue(), provider);
     }
 }

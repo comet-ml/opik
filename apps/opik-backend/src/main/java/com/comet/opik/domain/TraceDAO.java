@@ -2615,17 +2615,9 @@ class TraceDAOImpl implements TraceDAO {
     private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
 
         return result.map((row, rowMetadata) -> {
-            // Parse metadata, then inject providers at the beginning
-            JsonNode baseMetadata = Optional
-                    .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
-                    .filter(str -> !str.isBlank())
-                    .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                    .orElse(null);
-
             List<String> providers = row.get(Trace.TraceField.PROVIDERS.getValue(), List.class);
 
-            JsonNode metadata = JsonUtils.injectArrayFieldIntoMetadata(
-                    baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
+            JsonNode metadata = getMetadataWithProviders(row, exclude, providers);
 
             return Trace.builder()
                     .id(row.get("id", UUID.class))
@@ -3492,5 +3484,18 @@ class TraceDAOImpl implements TraceDAO {
                     log.info("Closing trace search stream");
                     endSegment(segment);
                 });
+    }
+
+    private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {
+        // Parse base metadata from database
+        JsonNode baseMetadata = Optional
+                .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
+                .filter(str -> !str.isBlank())
+                .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                .orElse(null);
+
+        // Inject providers as first field in metadata
+        return JsonUtils.injectArrayFieldIntoMetadata(
+                baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
     }
 }
