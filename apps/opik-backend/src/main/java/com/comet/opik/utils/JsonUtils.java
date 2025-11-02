@@ -26,11 +26,14 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 @UtilityClass
 @Slf4j
 public class JsonUtils {
+    public static final String PROVIDER_KEY = "provider"; // TODO: Check if this is defined elsewhere
+    public static final String PROVIDERS_KEY = "providers"; // TODO: Check if this is defined elsewhere
 
     public static final ObjectMapper MAPPER = new ObjectMapper()
             .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
@@ -148,60 +151,52 @@ public class JsonUtils {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
     }
 
-    /**
-     * Injects provider information at the beginning of metadata JsonNode.
-     * Creates a new ObjectNode with provider field first, followed by existing metadata fields.
-     *
-     * Performance: Minimal overhead (~1-5% of JSON parsing cost) as we're already parsing metadata.
-     * Typical metadata with 5-10 fields adds only microseconds per operation.
-     *
-     * @param metadata existing metadata JsonNode (can be null)
-     * @param provider provider string to inject (can be null)
-     * @return new JsonNode with provider at the beginning, or original metadata if provider is null/blank
-     */
     public static JsonNode injectProviderIntoMetadata(JsonNode metadata, String provider) {
         if (provider == null || provider.isBlank()) {
             return metadata;
         }
 
-        ObjectNode result = MAPPER.createObjectNode();
-        result.put("provider", provider);
+        TextNode providerNode = MAPPER.getNodeFactory().textNode(provider); // Create the value node
 
-        // Copy existing metadata fields after provider
-        if (metadata != null && metadata.isObject()) {
-            metadata.fields().forEachRemaining(entry -> {
-                result.set(entry.getKey(), entry.getValue());
-            });
-        }
-
-        return result;
+        return injectFieldIntoMetadata(metadata, PROVIDER_KEY, providerNode);
     }
-
-    /**
-     * Injects providers array at the beginning of metadata JsonNode.
-     * Creates a new ObjectNode with providers field first, followed by existing metadata fields.
-     *
-     * Performance: Minimal overhead (~1-5% of JSON parsing cost) as we're already parsing metadata.
-     *
-     * @param metadata existing metadata JsonNode (can be null)
-     * @param providers list of provider strings to inject (can be null or empty)
-     * @return new JsonNode with providers at the beginning, or original metadata if providers is null/empty
-     */
-    public static JsonNode injectProvidersIntoMetadata(JsonNode metadata, java.util.List<String> providers) {
+    
+    public static JsonNode injectProvidersIntoMetadata(JsonNode metadata, List<String> providers) {
         if (providers == null || providers.isEmpty()) {
             return metadata;
         }
 
-        ObjectNode result = MAPPER.createObjectNode();
         ArrayNode providersArray = MAPPER.createArrayNode();
-        providers.forEach(providersArray::add);
-        result.set("providers", providersArray);
 
-        // Copy existing metadata fields after providers
+        providers.forEach(providersArray::add); // Build the array value node
+
+        return injectFieldIntoMetadata(metadata, PROVIDERS_KEY, providersArray);
+    }
+
+    private static JsonNode injectFieldIntoMetadata(
+        JsonNode metadata, 
+        String fieldKey, 
+        JsonNode fieldValue) 
+    {
+        // 1. Create result and inject the payload field
+        ObjectNode result = MAPPER.createObjectNode();
+        result.set(fieldKey, fieldValue); 
+    
+        // 2. Delegate copying the common metadata fields
+        return copyMetadataFields(metadata, result);
+    }    
+
+    /**
+     * Copies existing fields from metadata into the 'result' ObjectNode,
+     * maintaining insertion order after any fields already in 'result'.
+     *
+     * @param metadata The existing metadata to copy fields from (must be an object, or null)
+     * @param result The ObjectNode already containing the injected field(s).
+     * @return The final ObjectNode with all fields.
+     */
+    private static ObjectNode copyMetadataFields(JsonNode metadata, ObjectNode result) {
         if (metadata != null && metadata.isObject()) {
-            metadata.fields().forEachRemaining(entry -> {
-                result.set(entry.getKey(), entry.getValue());
-            });
+            result.setAll((ObjectNode) metadata);
         }
 
         return result;
