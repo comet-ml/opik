@@ -8354,6 +8354,7 @@ components:
           $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonListString"
+          description: "User-defined metadata. The backend automatically injects the 'provider' field as the first field when a provider is set on the span."
         model:
           type: string
         provider:
@@ -8435,6 +8436,7 @@ components:
           $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonListString"
+          description: "User-defined metadata. The backend automatically injects the 'providers' array as the first field, containing sorted and unique provider names from all spans in the trace."
         tags:
           uniqueItems: true
           type: array
@@ -8449,6 +8451,12 @@ components:
             format: int64
             readOnly: true
           readOnly: true
+        providers:
+          type: array
+          description: "Unique provider names from all spans in this trace, sorted alphabetically. Empty provider strings are filtered out."
+          readOnly: true
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
