@@ -139,6 +139,7 @@ const buildGroupPath = (
       createFilter({
         field: currentGroup.field,
         key: currentGroup.key,
+        type: currentGroup.type,
         operator: "=",
         value,
       }),
@@ -563,9 +564,15 @@ export default function useGroupedExperimentsList(
     ],
   );
 
+  // When groups are active, we're only pending if the initial groups/datasets queries are pending
+  // The individual experiment queries for expanded groups will load separately
+  // Only check isDatasetsPending if the datasets query is actually enabled
+  const groupedIsPending =
+    isGroupsPending || (isGroupingByDataset && isDatasetsPending);
+
   return {
     data: transformedData,
-    isPending: hasGroups ? isGroupsPending || isDatasetsPending : isPending,
+    isPending: hasGroups ? groupedIsPending : isPending,
     isPlaceholderData: hasGroups ? isGroupsPlaceholderData : isPlaceholderData,
     refetch: hasGroups ? groupedRefetch : refetch,
   };

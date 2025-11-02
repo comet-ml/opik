@@ -378,8 +378,10 @@ If migrations fail, you may need to clean up:
 # Stop all services
 scripts/dev-runner.sh --stop  # or ./opik.sh --stop
 
-# Remove Docker volumes (WARNING: ALL DATA WILL BE LOST)
-docker volume prune -a -f
+# Remove Opik Docker volumes (WARNING: DATA LOSS - removes Opik databases)
+cd deployment/docker-compose
+docker compose down -v
+cd ../..
 
 # Restart
 scripts/dev-runner.sh --restart
@@ -486,7 +488,9 @@ Get-Process | Where-Object {$_.Path -like "*opik-frontend*"} | Stop-Process -For
 ```bash
 # Complete cleanup and restart
 scripts/dev-runner.sh --stop
-docker volume prune -a -f  # WARNING: Deletes all data
+cd deployment/docker-compose
+docker compose down -v  # WARNING: Deletes Opik data
+cd ../..
 scripts/dev-runner.sh --restart
 ```
 
@@ -592,8 +596,13 @@ pytest tests/
 
 3. **Clean up regularly** to free disk space:
    ```bash
+   # Clean up Opik Docker resources (WARNING: DATA LOSS - removes Opik databases)
+   cd deployment/docker-compose
+   docker compose down -v  # Removes Opik containers and volumes
+   cd ../..
+   
+   # Or clean up dangling Docker containers, networks, images (affects all projects)
    docker system prune
-   docker volume prune  # Be careful - removes data
    ```
 
 4. **Use debug mode for troubleshooting**:

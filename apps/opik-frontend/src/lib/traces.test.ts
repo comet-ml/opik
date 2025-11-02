@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { prettifyMessage } from "./traces";
+import { convertConversationToMarkdown } from "./conversationMarkdown";
 
 /**
  * `prettifyMessage` takes a message object, string, or undefined, and transforms it
@@ -405,46 +406,73 @@ describe("prettifyMessage", () => {
     });
   });
 
-  it("handles tool call with array results and extracts correct tool name", () => {
-    const message = [
-      {
-        role: "system",
-        content:
-          "Answer the question with a direct phrase. Use the tool `search_wikipedia` if you need it.",
-      },
-      {
-        role: "user",
-        content:
-          "What magazine was established in 1988 by Frank Thomas and Keith White?",
-      },
-      {
-        content: null,
-        role: "assistant",
-        tool_calls: [
-          {
-            function: {
-              arguments:
-                '{"query":"magazine established in 1988 by Frank Thomas and Keith White"}',
-              name: "search_wikipedia",
+  it("handles malformed tool call data gracefully when function is undefined", () => {
+    const message = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_123",
+              type: "function",
+              // Intentionally omitting the 'function' property to test that prettifyMessage handles malformed tool call data gracefully.
+              // The absence of the 'function' property should be ignored and not cause a crash; only valid tool calls should be processed.
             },
-            id: "call_axmw0UjMugEay25lGwIlz1uV",
-            type: "function",
-          },
-        ],
-      },
-      {
-        role: "tool",
-        tool_call_id: "call_axmw0UjMugEay25lGwIlz1uV",
-        content:
-          "['The Baffler | The Baffler is a magazine of cultural, political, and business analysis. Established in 1988 by editors Thomas Frank and Keith White, it was headquartered in Chicago, Illinois until 2010, when it moved to Cambridge, Massachusetts. In 2016, it moved its headquarters to New York City. The first incarnation of \"The Baffler\" had up to 12,000 subscribers.', 'Movmnt | movmnt magazine is an urban-leaning lifestyle magazine which was co-founded in 2006 by David Benaym and Danny Tidwell. The magazine has featured columns by Mario Spinetti, Mia Michaels, Robert Battle, Debbie Allen, Alisan Porter, Rasta Thomas, and Frank Conway. Both Travis Wall and Ivan Koumaev have made guest contributions to the publication, which has published photographs by Gary Land, Dave Hill, James Archibald Houston, and Alison Jackson.', \"Fantasy Advertiser | Fantasy Advertiser, later abbreviated to FA, was a British fanzine which discussed comic books. The magazine was established in 1965. It was initially edited by Frank Dobson, essentially as an advertising service for comic collectors, and when Dobson emigrated to Australia in 1970 he handed it on to two contributors, Dez Skinn and Paul McCartney, to continue. Skinn and McCartney expanded the magazine to include more articles and artwork. Regular contributors included Dave Gibbons, Steve Parkhouse, Paul Neary, Jim Baikie and Kevin O'Neill. Skinn left in 1976.\"]",
-      },
-    ];
+            {
+              id: "call_456",
+              type: "function",
+              function: {
+                name: "valid_tool",
+                arguments: '{"param": "value"}',
+              },
+            },
+          ],
+        },
+      ],
+    };
     const result = prettifyMessage(message);
     expect(result).toEqual({
-      message: expect.stringContaining("**System**"),
+      message: expect.stringContaining("Assistant"),
       prettified: true,
       renderType: "text",
     });
+    // Should not contain the malformed tool call but should contain the valid one
+    expect(result.message).toContain("valid_tool");
+    expect(result.message).not.toContain("call_123");
+    // Should not crash - this is the main test
+    expect(result.message).toBeDefined();
+  });
+
+  it("handles tool call with undefined function name gracefully", () => {
+    const message = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_789",
+              type: "function",
+              function: {
+                // Missing name property
+                arguments: '{"param": "value"}',
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message: expect.stringContaining("Assistant"),
+      prettified: true,
+      renderType: "text",
+    });
+    // Should handle gracefully without crashing - tool call with missing name should show tool_call_id
+    expect(result.message).toBeDefined();
+    expect(result.message).toContain("Tool call: call_789");
+    expect(result.message).toContain("**Function:** call_789");
   });
 
   describe("config parameter behavior", () => {
@@ -603,5 +631,163 @@ describe("prettifyMessage", () => {
         });
       });
     });
+  });
+});
+
+describe("convertConversationToMarkdown", () => {
+  it("shows 'No information available' for empty role sections", () => {
+    const conversationData = {
+      messages: [
+        { role: "assistant" as const, content: "" },
+        { role: "user" as const, content: "" },
+        { role: "assistant" as const, content: "Hello there!" },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should contain "No information available" for empty sections
+    expect(result).toContain("*No information available*");
+
+    // Should still contain the content for non-empty sections
+    expect(result).toContain("Hello there!");
+
+    // Should contain role headers
+    expect(result).toContain("<summary><strong>Assistant</strong></summary>");
+    expect(result).toContain("<summary><strong>User</strong></summary>");
+  });
+
+  it("handles conversation with tool calls and content", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "I'll help you with that.",
+          tool_calls: [
+            {
+              id: "call_1",
+              function: {
+                name: "search_wikipedia",
+                arguments: '{"query": "test"}',
+              },
+            },
+          ],
+        },
+        { role: "user" as const, content: "What is the capital of France?" },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should contain the content
+    expect(result).toContain("I'll help you with that.");
+    expect(result).toContain("What is the capital of France?");
+
+    // Should contain tool call information
+    expect(result).toContain("Tool call: search_wikipedia");
+    expect(result).toContain("**Function:** search_wikipedia");
+    expect(result).toContain('**Arguments:** {"query": "test"}');
+  });
+
+  it("handles tool calls with missing function names", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [
+            {
+              id: "call_1",
+              function: {
+                // Missing name
+                arguments: '{"query": "test"}',
+              },
+            },
+            {
+              id: "call_2",
+              // Missing function entirely - should be skipped
+            },
+            {
+              function: {
+                // Missing both id and function name
+                arguments: '{"other": "data"}',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should show tool_call_id when function name is missing
+    expect(result).toContain("Tool call: call_1");
+    expect(result).toContain("**Function:** call_1");
+    expect(result).toContain('**Arguments:** {"query": "test"}');
+
+    // Should show "unknown name" for tool call with no id or function name
+    expect(result).toContain("Tool call: unknown name");
+    expect(result).toContain("**Function:** unknown name");
+    expect(result).toContain('**Arguments:** {"other": "data"}');
+
+    // Should NOT show tool calls without function property
+    expect(result).not.toContain("Tool call: call_2");
+  });
+
+  it("handles tool_calls as string instead of array", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: "ValidatorIterator(index=1, schema=Some(Union(...)))",
+        },
+        {
+          role: "assistant" as const,
+          content: "Some content",
+          tool_calls: "Another string tool call",
+        },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should show the string tool_calls as formatted content
+    expect(result).toContain("**Tool Call Details:**");
+    expect(result).toContain(
+      "ValidatorIterator(index=1, schema=Some(Union(...)))",
+    );
+    expect(result).toContain("Some content");
+    expect(result).toContain("**Tool Call:**");
+    expect(result).toContain("Another string tool call");
+
+    // Should NOT show "No information available" since there is content
+    expect(result).not.toContain("*No information available*");
+  });
+
+  it("formats ValidatorIterator strings nicely", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "",
+          tool_calls:
+            'ValidatorIterator(index=1, schema=Some(Union(UnionValidator { mode: Smart, choices: [(DefinitionRef(DefinitionRefValidator { definition: "typed-dict" }), None), (DefinitionRef(DefinitionRefValidator { definition: "typed-dict" }), None)], custom_error: None, strict: false, name: "union[typed-dict,typed-dict]" })))',
+        },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should format ValidatorIterator with proper markdown
+    expect(result).toContain("**Tool Call Details:**");
+    expect(result).toContain("```");
+    expect(result).toContain(
+      "ValidatorIterator(index=1, schema=Some(Union(UnionValidator",
+    );
+    expect(result).toContain("```");
+
+    // Should NOT show "No information available" since there is content
+    expect(result).not.toContain("*No information available*");
   });
 });

@@ -18,4 +18,8 @@ public interface StreamConfiguration {
     Duration getPoolingInterval();
 
     Duration getLongPollingDuration();
+
+    int getClaimIntervalRatio();
+
+    Duration getPendingMessageDuration();
 }

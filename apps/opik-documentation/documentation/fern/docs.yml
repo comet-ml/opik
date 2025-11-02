@@ -169,12 +169,18 @@ navigation:
           - page: Evaluate single prompts
             path: docs/evaluation/evaluate_prompt.mdx
             slug: evaluate_prompt
+          - page: Multimodal evaluations
+            path: docs/evaluation/evaluate_multimodal.mdx
+            slug: evaluate_multimodal
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm
-          - page: Evaluate multi-turn conversations
-            path: docs/evaluation/evaluate_threads.mdx
-            slug: evaluate_threads
+          - page: Evaluate agent trajectories
+            path: docs/evaluation/evaluate_agent_trajectory.mdx
+            slug: evaluate_agent_trajectory
+          - page: Evaluate multi-turn agents
+            path: docs/evaluation/evaluate_multi_turn_agents.mdx
+            slug: evaluate_multi_turn_agents
           - page: Manually logging experiments
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
@@ -236,6 +242,9 @@ navigation:
               - page: Best practices for evaluating agents
                 path: docs/evaluation/evaluate_agents.mdx
                 slug: evaluate_agents
+              - page: Evaluate threads
+                path: docs/evaluation/evaluate_threads.mdx
+                slug: evaluate_threads
               - page: Cookbook - Evaluate hallucination metric
                 path: docs/cookbook/evaluate_hallucination_metric.mdx
                 slug: evaluate_hallucination_metric
@@ -608,27 +617,31 @@ navigation:
       - section: Optimization Algorithms
         slug: /algorithms
         contents:
-          - page: Evolutionary Optimizer
+          - page: Evolutionary
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
             slug: evolutionary_optimizer
-          - page: Few-Shot Bayesian Optimizer
+          - page: Few-Shot Bayesian
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
             slug: fewshot_bayesian_optimizer
-          - page: MetaPrompt Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: Hierarchical Reflective Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
-            slug: hierarchical_reflective_optimizer
-          - page: GEPA Optimizer
+          - page: GEPA
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
             slug: gepa_optimizer
-          - page: Tool Optimization (MCP & Function Calling)
+          - page: Hierarchical Reflective
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
+            slug: hierarchical_reflective_optimizer
+          - page: MetaPrompt
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: Parameter
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/parameter_optimizer.mdx
+            slug: parameter_optimizer
+          - page: Tool Signature (MCP & Functions)
             icon: fa-regular fa-tools
             path: docs/agent_optimization/algorithms/tool_optimization.mdx
             slug: tool_optimization
@@ -780,6 +793,9 @@ navigation:
           - page: Evaluate your LLM Application
             path: docs/opik-university/3_evaluation/3.4-evaluation-evaluate-llm-application.mdx
             slug: evaluate-llm-app
+          - page: No-code LLM Evaluation Workflow
+            path: docs/opik-university/3_evaluation/3.5-evaluation-ui-workflow.mdx
+            slug: evaluation-ui-workflow
       - section: Prompt Engineering
         slug: /prompt-engineering
         contents:
@@ -1134,6 +1150,12 @@ redirects:
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/best_practices/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best_practices/multi_metric_optimization"
+    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/multi_metric_optimization"
     destination: "/docs/opik/agent_optimization/multi-metric-optimization"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/overview"
