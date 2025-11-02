@@ -169,13 +169,5 @@ public class TraceEnrichmentService {
             boolean includeComments,
             boolean includeUsage,
             boolean includeMetadata) {
-
-        public static TraceEnrichmentOptions all() {
-            return new TraceEnrichmentOptions(true, true, true, true, true, true);
-        }
-
-        public static TraceEnrichmentOptions none() {
-            return new TraceEnrichmentOptions(false, false, false, false, false, false);
-        }
     }
 }
