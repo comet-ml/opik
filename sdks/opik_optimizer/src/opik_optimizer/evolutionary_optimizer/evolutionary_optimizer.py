@@ -6,6 +6,7 @@ from typing import Any, cast, TYPE_CHECKING
 from collections.abc import Callable
 import sys
 import warnings
+from pathlib import Path
 
 import rapidfuzz.distance.Indel
 import numpy as np
@@ -27,6 +28,7 @@ from opik_optimizer.mcp_utils.mcp_workflow import (
     extract_tool_arguments,
 )
 from opik_optimizer.utils.prompt_segments import extract_prompt_segments
+from . import checkpoint as checkpoint_utils
 
 from .mcp import EvolutionaryMCPContext, finalize_mcp_result
 
@@ -517,6 +519,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         project_name: str = "Optimization",
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
+        resume_from: str | Path | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -573,6 +576,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
             },
             verbose=self.verbose,
             tools=getattr(prompt, "tools", None),
+        )
+
+        start_generation, resume_state = self._prepare_checkpoint_run(
+            dataset=dataset,
+            project_name=project_name,
+            resume_from=resume_from,
+            optimizer_version=self.optimizer_version(),
         )
 
         # Step 1. Step variables and define fitness function
@@ -642,24 +652,37 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
 
-        # Step 2. Compute the initial performance of the prompt
-        with reporting.baseline_performance(
-            verbose=self.verbose
-        ) as report_baseline_performance:
-            initial_eval_result = _deap_evaluate_individual_fitness(
-                prompt.get_messages()
-            )  # type: ignore
-            initial_primary_score = initial_eval_result[0]
-            initial_length = (
-                initial_eval_result[1]
-                if self.enable_moo
-                else float(len(json.dumps(prompt.get_messages())))
-            )
+        restored_state: dict[str, Any] | None = None
+        if resume_state is None:
+            # Step 2. Compute the initial performance of the prompt
+            with reporting.baseline_performance(
+                verbose=self.verbose
+            ) as report_baseline_performance:
+                initial_eval_result = _deap_evaluate_individual_fitness(
+                    prompt.get_messages()
+                )  # type: ignore
+                initial_primary_score = initial_eval_result[0]
+                initial_length = (
+                    initial_eval_result[1]
+                    if self.enable_moo
+                    else float(len(json.dumps(prompt.get_messages())))
+                )
 
-            trials_used[0] = 0
-            best_primary_score_overall = initial_primary_score
-            best_prompt_overall = prompt
-            report_baseline_performance.set_score(initial_primary_score)
+                trials_used[0] = 0
+                best_primary_score_overall = initial_primary_score
+                best_prompt_overall = prompt
+                report_baseline_performance.set_score(initial_primary_score)
+        else:
+            restored_state = checkpoint_utils.restore_state(
+                self, resume_state, base_prompt=prompt
+            )
+            best_prompt_overall = restored_state["best_prompt_overall"]
+            best_primary_score_overall = restored_state["best_primary_score_overall"]
+            initial_primary_score = restored_state["initial_primary_score"]
+            initial_length = restored_state.get("initial_length") or float(
+                len(json.dumps(prompt.get_messages()))
+            )
+            trials_used[0] = restored_state.get("trials_used", 0)
 
         # Step 3. Define the output style guide
         effective_output_style_guidance = self.output_style_guidance
@@ -684,99 +707,140 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # Fallback if still None
             self.output_style_guidance = self.DEFAULT_OUTPUT_STYLE_GUIDANCE
 
-        # Step 4. Initialize population
-        initial_prompts: list[chat_prompt.ChatPrompt] = self._initialize_population(
-            prompt=prompt
-        )
-
-        deap_population = [
-            self._create_individual_from_prompt(p) for p in initial_prompts
-        ]
-        deap_population = deap_population[: self.population_size]
-
-        # Step 5. Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
-        if self.enable_moo:
-            hof = tools.ParetoFront()
-        else:
-            # Single-objective
-            hof = tools.HallOfFame(self.DEFAULT_HALL_OF_FAME_SIZE)
-
-        # Step 6. Evaluate the initial population
-        with reporting.evaluate_initial_population(
-            verbose=self.verbose
-        ) as report_initial_population:
-            fitnesses: list[Any] = list(map(self.toolbox.evaluate, deap_population))
-            _best_score = max(
-                best_primary_score_overall, max([x[0] for x in fitnesses])
+        if restored_state is None:
+            # Step 4. Initialize population
+            initial_prompts: list[chat_prompt.ChatPrompt] = self._initialize_population(
+                prompt=prompt
             )
 
-            for i, ind, fit in zip(
-                range(len(deap_population)), deap_population, fitnesses
-            ):
-                if self.enable_moo:
-                    ind.fitness.values = fit
-                else:
-                    ind.fitness.values = tuple([fit[0]])
-                report_initial_population.set_score(i, fit[0], _best_score)
+            deap_population = [
+                self._create_individual_from_prompt(p) for p in initial_prompts
+            ]
+            deap_population = deap_population[: self.population_size]
 
-        hof.update(deap_population)
-
-        if hof and len(hof) > 0:
+            # Step 5. Initialize the hall of fame (Pareto front for MOO) and stats for MOO or SO
             if self.enable_moo:
-                current_best_for_primary: Any = max(
-                    hof, key=lambda ind: ind.fitness.values[0]
-                )
-                best_primary_score_overall = current_best_for_primary.fitness.values[0]
-                best_prompt_overall = chat_prompt.ChatPrompt(
-                    messages=current_best_for_primary,
-                    tools=getattr(current_best_for_primary, "tools", prompt.tools),
-                    function_map=getattr(
-                        current_best_for_primary, "function_map", prompt.function_map
-                    ),
-                )
+                hof = tools.ParetoFront()
             else:
                 # Single-objective
-                current_best_on_front = hof[0]
-                best_primary_score_overall = current_best_on_front.fitness.values[0]
-                best_prompt_overall = chat_prompt.ChatPrompt(
-                    messages=current_best_on_front,
-                    tools=getattr(current_best_on_front, "tools", prompt.tools),
-                    function_map=getattr(
-                        current_best_on_front, "function_map", prompt.function_map
-                    ),
+                hof = tools.HallOfFame(self.DEFAULT_HALL_OF_FAME_SIZE)
+
+            # Step 6. Evaluate the initial population
+            with reporting.evaluate_initial_population(
+                verbose=self.verbose
+            ) as report_initial_population:
+                fitnesses: list[Any] = list(map(self.toolbox.evaluate, deap_population))
+                _best_score = max(
+                    best_primary_score_overall, max([x[0] for x in fitnesses])
                 )
+
+                for i, ind, fit in zip(
+                    range(len(deap_population)), deap_population, fitnesses
+                ):
+                    if self.enable_moo:
+                        ind.fitness.values = fit
+                    else:
+                        ind.fitness.values = tuple([fit[0]])
+                    report_initial_population.set_score(i, fit[0], _best_score)
+
+            hof.update(deap_population)
+
+            if hof and len(hof) > 0:
+                if self.enable_moo:
+                    current_best_for_primary: Any = max(
+                        hof, key=lambda ind: ind.fitness.values[0]
+                    )
+                    best_primary_score_overall = current_best_for_primary.fitness.values[0]
+                    best_prompt_overall = chat_prompt.ChatPrompt(
+                        messages=current_best_for_primary,
+                        tools=getattr(current_best_for_primary, "tools", prompt.tools),
+                        function_map=getattr(
+                            current_best_for_primary, "function_map", prompt.function_map
+                        ),
+                    )
+                else:
+                    # Single-objective
+                    current_best_on_front = hof[0]
+                    best_primary_score_overall = current_best_on_front.fitness.values[0]
+                    best_prompt_overall = chat_prompt.ChatPrompt(
+                        messages=current_best_on_front,
+                        tools=getattr(current_best_on_front, "tools", prompt.tools),
+                        function_map=getattr(
+                            current_best_on_front, "function_map", prompt.function_map
+                        ),
+                    )
+
+                if self.enable_moo:
+                    logger.info(
+                        f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {json.dumps(best_prompt_overall.get_messages())[:100]}..."
+                    )
+                else:
+                    logger.info(
+                        f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
+                    )
+
+                # Simplified history logging for this transition
+                initial_round_data = OptimizationRound(
+                    round_number=0,
+                    current_prompt=best_prompt_overall,  # Representative best
+                    current_score=best_primary_score_overall,
+                    generated_prompts=[
+                        {
+                            "prompt": best_prompt_overall,
+                            "score": best_primary_score_overall,
+                            "trial_scores": [best_primary_score_overall],
+                        }
+                    ],
+                    best_prompt=best_prompt_overall,
+                    best_score=best_primary_score_overall,
+                    improvement=0.0,
+                )
+                self._add_to_history(initial_round_data)
+        else:
+            deap_population = restored_state.get("population", [])
+            if len(deap_population) > self.population_size:
+                deap_population = deap_population[: self.population_size]
+            if not deap_population:
+                initial_prompts = self._initialize_population(prompt=prompt)
+                deap_population = [
+                    self._create_individual_from_prompt(p) for p in initial_prompts
+                ][: self.population_size]
 
             if self.enable_moo:
-                logger.info(
-                    f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {json.dumps(best_prompt_overall.get_messages())[:100]}..."
-                )
+                hof = tools.ParetoFront()
+                restored_hof = restored_state.get("hall_of_fame", [])
+                if restored_hof:
+                    hof.update(restored_hof)
             else:
-                logger.info(
-                    f"Gen {0}: New best score: {best_primary_score_overall:.4f}"
-                )
+                hof = tools.HallOfFame(self.DEFAULT_HALL_OF_FAME_SIZE)
+                for ind in restored_state.get("hall_of_fame", []):
+                    hof.insert(ind)
 
-            # Simplified history logging for this transition
-            initial_round_data = OptimizationRound(
-                round_number=0,
-                current_prompt=best_prompt_overall,  # Representative best
-                current_score=best_primary_score_overall,
-                generated_prompts=[
-                    {
-                        "prompt": best_prompt_overall,
-                        "score": best_primary_score_overall,
-                        "trial_scores": [best_primary_score_overall],
-                    }
-                ],
-                best_prompt=best_prompt_overall,
-                best_score=best_primary_score_overall,
-                improvement=0.0,
+            self._best_fitness_history = restored_state.get(
+                "best_fitness_history", []
             )
-            self._add_to_history(initial_round_data)
+            self._best_primary_score_history = restored_state.get(
+                "best_primary_score_history", []
+            )
+            self._generations_without_improvement = restored_state.get(
+                "generations_without_improvement", 0
+            )
+            self._generations_without_overall_improvement = restored_state.get(
+                "generations_without_overall_improvement", 0
+            )
+            self._gens_since_pop_improvement = restored_state.get(
+                "gens_since_pop_improvement", 0
+            )
+
+        self._current_population = list(deap_population)
+        self._current_generation = max(0, start_generation - 1)
+
+        generation_start = max(1, start_generation if start_generation else 1)
 
         with reporting.start_evolutionary_algo(
             verbose=self.verbose
         ) as report_evolutionary_algo:
-            for generation_idx in range(1, self.num_generations + 1):
+            for generation_idx in range(generation_start, self.num_generations + 1):
                 # Check if we've exhausted our evaluation budget
                 if trials_used[0] >= max_trials:
                     logger.info(
@@ -806,6 +870,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     report_evolutionary_algo,
                     best_primary_score_overall,
                 )
+
+                self._current_population = list(deap_population)
+                self._current_generation = generation_idx
 
                 # -------- update best-prompt bookkeeping -------------------------
                 previous_best_primary_score_for_gen = best_primary_score_overall
@@ -864,6 +931,27 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     ),
                 )
                 self._add_to_history(gen_round_data)
+
+                self.maybe_checkpoint(
+                    round_index=generation_idx,
+                    optimizer_state=checkpoint_utils.capture_state(
+                        self,
+                        generation_idx=generation_idx,
+                        trials_used=trials_used[0],
+                        max_trials=max_trials,
+                        best_prompt_overall=best_prompt_overall,
+                        best_primary_score_overall=best_primary_score_overall,
+                        initial_primary_score=initial_primary_score,
+                        initial_length=initial_length,
+                        deap_population=deap_population,
+                        hall_of_fame=hof,
+                        best_fitness_history=self._best_fitness_history,
+                        best_primary_score_history=self._best_primary_score_history,
+                        generations_without_improvement=self._generations_without_improvement,
+                        generations_without_overall_improvement=self._generations_without_overall_improvement,
+                        gens_since_pop_improvement=self._gens_since_pop_improvement,
+                    ),
+                )
 
         stopped_early_flag = (
             self._generations_without_overall_improvement
@@ -1010,7 +1098,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             final_details["final_tools"] = final_tools
         tool_prompts = self._extract_tool_prompts(final_tools)
 
-        return OptimizationResult(
+        result = OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=final_best_prompt.get_messages(),
             score=final_primary_score,
@@ -1025,6 +1113,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             optimization_id=self.current_optimization_id,
             tool_prompts=tool_prompts,
         )
+
+        self._finalize_checkpoint_run()
+        return result
 
     def optimize_mcp(
         self,
