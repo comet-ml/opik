@@ -8,6 +8,8 @@ import time
 from abc import ABC, abstractmethod
 import random
 import importlib.metadata
+from pathlib import Path
+import uuid
 
 
 import litellm
@@ -22,6 +24,13 @@ from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
 from .utils import create_litellm_agent_class
 from . import task_evaluator
+from .utils.checkpoint import (
+    CheckpointConfig,
+    CheckpointHelper,
+    DEFAULT_CHECKPOINT_CONFIG,
+)
+from .utils.checkpoint.dataset import checksum_from_items
+from .utils.checkpoint.helper import CheckpointBundle
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -87,6 +96,17 @@ class BaseOptimizer(ABC):
         # Initialize shared cache
         initialize_cache()
 
+        # Checkpointing state
+        self.checkpoint_config: CheckpointConfig = copy.deepcopy(
+            DEFAULT_CHECKPOINT_CONFIG
+        )
+        self._checkpoint_helper: CheckpointHelper | None = None
+        self._run_id: str | None = None
+        self._dataset_id: str | None = None
+        self._dataset_name: str | None = None
+        self._dataset_checksum: str | None = None
+        self._resume_bundle: CheckpointBundle | None = None
+
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
         self.llm_call_counter = 0
@@ -117,6 +137,10 @@ class BaseOptimizer(ABC):
             self._opik_client = None
 
         logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
+        self._run_id = None
+        self._dataset_id = None
+        self._dataset_name = None
+        self._dataset_checksum = None
 
     def __del__(self) -> None:
         """Destructor to ensure cleanup is called."""
@@ -652,6 +676,7 @@ class BaseOptimizer(ABC):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        resume_from: str | Path | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -667,6 +692,7 @@ class BaseOptimizer(ABC):
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            project_name: Opik project name for logging traces (default: "Optimization")
+           resume_from: Optional checkpoint path to resume from
            **kwargs: Additional arguments for optimization
         """
         pass
@@ -774,3 +800,190 @@ class BaseOptimizer(ABC):
             verbose=verbose,
         )
         return score
+
+    # ------------------------------------------------------------------
+    # Checkpoint helpers
+    # ------------------------------------------------------------------
+
+    def configure_checkpointing(self, config: CheckpointConfig) -> None:
+        """Override the default checkpoint configuration."""
+        self.checkpoint_config = config
+        self._checkpoint_helper = None  # Force reinitialization with new config
+
+    def _get_checkpoint_helper(self) -> CheckpointHelper:
+        if self._checkpoint_helper is None:
+            self._checkpoint_helper = CheckpointHelper(self.checkpoint_config)
+        return self._checkpoint_helper
+
+    def _capture_base_state(self) -> dict[str, Any]:
+        return {
+            "run_id": self._run_id,
+            "history": [round_data.model_dump() for round_data in self._history],
+            "llm_call_counter": self.llm_call_counter,
+            "tool_call_counter": self.tool_call_counter,
+            "current_optimization_id": self.current_optimization_id,
+            "project_name": self.project_name,
+        }
+
+    def _restore_base_state(self, state: dict[str, Any]) -> None:
+        self._run_id = state.get("run_id")
+        self.llm_call_counter = state.get("llm_call_counter", 0)
+        self.tool_call_counter = state.get("tool_call_counter", 0)
+        self.current_optimization_id = state.get("current_optimization_id")
+        project_name = state.get("project_name")
+        if project_name:
+            self.project_name = project_name
+
+        history_payload = state.get("history", [])
+        self._history = [
+            OptimizationRound.model_validate(item) for item in history_payload
+        ]
+
+    def _prepare_checkpoint_run(
+        self,
+        *,
+        dataset: Dataset,
+        project_name: str,
+        resume_from: str | Path | None,
+        optimizer_version: str,
+    ) -> tuple[int, dict[str, Any] | None]:
+        helper = self._get_checkpoint_helper()
+        self.project_name = project_name or self.project_name
+        self._dataset_id = getattr(dataset, "id", None)
+        self._dataset_name = getattr(dataset, "name", None)
+
+        try:
+            dataset_items = dataset.get_items()
+        except Exception:  # pragma: no cover - defensive
+            dataset_items = []
+        try:
+            self._dataset_checksum = (
+                checksum_from_items(dataset_items) if dataset_items else None
+            )
+        except Exception:  # pragma: no cover - defensive
+            self._dataset_checksum = None
+
+        if resume_from:
+            resume_path = Path(resume_from)
+            bundle = helper.load(resume_path)
+            self._resume_bundle = bundle
+            self._restore_base_state(bundle.state.base_state)
+            self._run_id = bundle.metadata.run_id
+
+            if (
+                self._dataset_id
+                and bundle.metadata.dataset_id
+                and self._dataset_id != bundle.metadata.dataset_id
+            ):
+                raise ValueError(
+                    "Dataset ID mismatch between checkpoint and current dataset."
+                )
+            if (
+                self._dataset_checksum
+                and bundle.metadata.dataset_checksum
+                and self._dataset_checksum != bundle.metadata.dataset_checksum
+            ):
+                raise ValueError(
+                    "Dataset contents changed since checkpoint was created."
+                )
+
+            return bundle.metadata.round_index + 1, bundle.state.optimizer_state
+
+        # Fresh run
+        self._run_id = uuid.uuid4().hex  # type: ignore[attr-defined]
+        self._history = []
+        self._reset_counters()
+        self._resume_bundle = None
+        return 0, None
+
+    def _finalize_checkpoint_run(self) -> None:
+        self._resume_bundle = None
+
+    def _serialize_prompt(self, prompt: chat_prompt.ChatPrompt) -> dict[str, Any]:
+        return {
+            "name": prompt.name,
+            "system": prompt.system,
+            "user": prompt.user,
+            "messages": copy.deepcopy(prompt.messages),
+            "tools": copy.deepcopy(prompt.tools),
+            "model": prompt.model,
+            "model_kwargs": copy.deepcopy(prompt.model_kwargs),
+        }
+
+    def _deserialize_prompt(
+        self, prompt_data: dict[str, Any], base_prompt: chat_prompt.ChatPrompt
+    ) -> chat_prompt.ChatPrompt:
+        restored = base_prompt.copy()
+        if prompt_data.get("messages") is not None:
+            restored.set_messages(prompt_data["messages"])
+        if prompt_data.get("system") is not None:
+            restored.system = prompt_data["system"]
+        if prompt_data.get("user") is not None:
+            restored.user = prompt_data["user"]
+        restored.tools = copy.deepcopy(prompt_data.get("tools"))
+        restored.model = prompt_data.get("model", restored.model)
+        restored.model_kwargs = copy.deepcopy(prompt_data.get("model_kwargs", {}))
+        return restored
+
+    def _save_checkpoint(
+        self,
+        *,
+        round_index: int,
+        optimizer_state: dict[str, Any],
+        optimizer_version: str,
+    ) -> CheckpointBundle:
+        helper = self._get_checkpoint_helper()
+        base_state = self._capture_base_state()
+
+        bundle = helper.save(
+            optimizer_name=self.__class__.__name__,
+            optimizer_version=optimizer_version,
+            round_index=round_index,
+            base_state=base_state,
+            optimizer_state=optimizer_state,
+            project_name=self.project_name,
+            dataset_id=self._dataset_id,
+            dataset_name=self._dataset_name,
+            dataset_checksum=self._dataset_checksum,
+        )
+
+        # Enforce retention
+        if (
+            self.checkpoint_config.max_to_keep is not None
+            and self.checkpoint_config.max_to_keep > 0
+            and self._run_id is not None
+        ):
+            helper.prune_old_checkpoints(
+                optimizer_name=self.__class__.__name__,
+                run_id=self._run_id,
+                max_to_keep=self.checkpoint_config.max_to_keep,
+            )
+        return bundle
+
+    def maybe_checkpoint(
+        self, *, round_index: int, optimizer_state: dict[str, Any]
+    ) -> None:
+        if self.checkpoint_config.every_n_rounds <= 0:
+            return
+        if round_index % self.checkpoint_config.every_n_rounds != 0:
+            return
+        self._save_checkpoint(
+            round_index=round_index,
+            optimizer_state=optimizer_state,
+            optimizer_version=self.optimizer_version(),
+        )
+
+    def resume_state(self) -> dict[str, Any] | None:
+        """Return optimizer-specific state dict if loaded from checkpoint."""
+        if self._resume_bundle is None:
+            return None
+        return self._resume_bundle.state.optimizer_state
+
+    def resume_start_round(self) -> int:
+        if self._resume_bundle is None:
+            return 0
+        return self._resume_bundle.metadata.round_index + 1
+
+    def optimizer_version(self) -> str:
+        """Return optimizer package version string for checkpoint metadata."""
+        return _OPTIMIZER_VERSION
