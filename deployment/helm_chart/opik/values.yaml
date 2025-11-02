@@ -58,6 +58,15 @@ component:
         registry: docker.io
         repository: curlimages/curl
         tag: 8.12.1
+    waitForMysql:
+      enabled: true
+      mysql:
+        host: opik-mysql
+        port: 3306
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: 1.36
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
