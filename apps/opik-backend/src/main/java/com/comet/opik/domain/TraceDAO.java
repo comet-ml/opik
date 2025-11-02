@@ -2615,18 +2615,17 @@ class TraceDAOImpl implements TraceDAO {
     private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
 
         return result.map((row, rowMetadata) -> {
-            // Extract providers to inject into metadata
-            List<String> providers = row.get("providers", List.class);
-
-            // Parse metadata and inject providers at the beginning
-            JsonNode metadata = Optional
+            // Parse metadata, then inject providers at the beginning
+            JsonNode baseMetadata = Optional
                     .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
                     .filter(str -> !str.isBlank())
                     .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                    .map(baseMetadata -> JsonUtils.injectArrayFieldIntoMetadata(baseMetadata,
-                            Trace.TraceField.PROVIDERS.getValue(), providers))
-                    .orElseGet(() -> JsonUtils.injectArrayFieldIntoMetadata(null,
-                            Trace.TraceField.PROVIDERS.getValue(), providers));
+                    .orElse(null);
+
+            List<String> providers = row.get(Trace.TraceField.PROVIDERS.getValue(), List.class);
+
+            JsonNode metadata = JsonUtils.injectArrayFieldIntoMetadata(
+                    baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
 
             return Trace.builder()
                     .id(row.get("id", UUID.class))

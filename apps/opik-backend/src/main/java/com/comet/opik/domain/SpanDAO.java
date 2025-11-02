@@ -1743,19 +1743,18 @@ class SpanDAO {
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
 
         return result.map((row, rowMetadata) -> {
-            // Extract provider to inject into metadata
-            String provider = StringUtils.defaultIfBlank(
-                    getValue(exclude, SpanField.PROVIDER, row, "provider", String.class), null);
-
-            // Parse metadata and inject provider at the beginning
-            JsonNode metadata = Optional
+            // Parse metadata, then inject provider at the beginning
+            JsonNode baseMetadata = Optional
                     .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
                     .filter(str -> !str.isBlank())
                     .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                    .map(baseMetadata -> JsonUtils.injectStringFieldIntoMetadata(baseMetadata,
-                            SpanField.PROVIDER.getValue(), provider))
-                    .orElseGet(() -> JsonUtils.injectStringFieldIntoMetadata(null,
-                            SpanField.PROVIDER.getValue(), provider));
+                    .orElse(null);
+
+            String provider = StringUtils.defaultIfBlank(
+                    getValue(exclude, SpanField.PROVIDER, row, SpanField.PROVIDER.getValue(), String.class), null);
+
+            JsonNode metadata = JsonUtils.injectStringFieldIntoMetadata(
+                    baseMetadata, SpanField.PROVIDER.getValue(), provider);
 
             return Span.builder()
                     .id(row.get("id", UUID.class))
