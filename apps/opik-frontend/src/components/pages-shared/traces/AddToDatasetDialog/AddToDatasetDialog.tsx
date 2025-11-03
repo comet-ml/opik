@@ -17,9 +17,12 @@ import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
+import useAddTracesToDatasetMutation from "@/api/datasets/useAddTracesToDatasetMutation";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
@@ -53,7 +56,16 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
 
+  // Enrichment options state - all checked by default (opt-out design)
+  const [includeSpans, setIncludeSpans] = useState(true);
+  const [includeTags, setIncludeTags] = useState(true);
+  const [includeFeedbackScores, setIncludeFeedbackScores] = useState(true);
+  const [includeComments, setIncludeComments] = useState(true);
+  const [includeUsage, setIncludeUsage] = useState(true);
+  const [includeMetadata, setIncludeMetadata] = useState(true);
+
   const { mutate } = useDatasetItemBatchMutation();
+  const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
 
   const { data, isPending } = useDatasetsList(
     {
@@ -73,6 +85,16 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const validRows = useMemo(() => {
     return selectedRows.filter((r) => !isUndefined(r.input));
   }, [selectedRows]);
+
+  const validTraces = useMemo(() => {
+    return validRows.filter((r) => !isObjectSpan(r));
+  }, [validRows]);
+
+  const validSpans = useMemo(() => {
+    return validRows.filter((r) => isObjectSpan(r));
+  }, [validRows]);
+
+  const hasOnlyTraces = validTraces.length > 0 && validSpans.length === 0;
 
   const noValidRows = validRows.length === 0;
   const partialValid = validRows.length !== selectedRows.length;
@@ -112,32 +134,58 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         const rows = await getDataForExport();
         const validRowsFromFetch = rows.filter((r) => !isUndefined(r.input));
 
-        mutate(
-          {
-            workspaceName,
-            datasetId: dataset.id,
-            datasetItems: validRowsFromFetch.map((r) => {
-              const isSpan = isObjectSpan(r);
-              const spanId = isSpan ? r.id : "";
-              const traceId = isSpan ? get(r, "trace_id", "") : r.id;
+        const traces = validRowsFromFetch.filter((r) => !isObjectSpan(r));
+        const spans = validRowsFromFetch.filter((r) => isObjectSpan(r));
 
-              return {
-                data: {
-                  input: r.input,
-                  ...(r.output && { expected_output: r.output }),
-                },
-                source: isSpan
-                  ? DATASET_ITEM_SOURCE.span
-                  : DATASET_ITEM_SOURCE.trace,
-                trace_id: traceId,
-                ...(isSpan ? { span_id: spanId } : {}),
-              };
-            }),
-          },
-          {
-            onSuccess: () => onItemsAdded(dataset),
-          },
-        );
+        // If we have only traces, use the new enriched endpoint
+        if (traces.length > 0 && spans.length === 0) {
+          addTracesToDataset(
+            {
+              workspaceName,
+              datasetId: dataset.id,
+              traceIds: traces.map((t) => t.id),
+              enrichmentOptions: {
+                include_spans: includeSpans,
+                include_tags: includeTags,
+                include_feedback_scores: includeFeedbackScores,
+                include_comments: includeComments,
+                include_usage: includeUsage,
+                include_metadata: includeMetadata,
+              },
+            },
+            {
+              onSuccess: () => onItemsAdded(dataset),
+            },
+          );
+        } else {
+          // For spans or mixed content, use the old endpoint
+          mutate(
+            {
+              workspaceName,
+              datasetId: dataset.id,
+              datasetItems: validRowsFromFetch.map((r) => {
+                const isSpan = isObjectSpan(r);
+                const spanId = isSpan ? r.id : "";
+                const traceId = isSpan ? get(r, "trace_id", "") : r.id;
+
+                return {
+                  data: {
+                    input: r.input,
+                    ...(r.output && { expected_output: r.output }),
+                  },
+                  source: isSpan
+                    ? DATASET_ITEM_SOURCE.span
+                    : DATASET_ITEM_SOURCE.trace,
+                  trace_id: traceId,
+                  ...(isSpan ? { span_id: spanId } : {}),
+                };
+              }),
+            },
+            {
+              onSuccess: () => onItemsAdded(dataset),
+            },
+          );
+        }
       } catch (error) {
         const message = get(
           error,
@@ -153,7 +201,21 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         setFetching(false);
       }
     },
-    [getDataForExport, setOpen, mutate, workspaceName, onItemsAdded, toast],
+    [
+      getDataForExport,
+      setOpen,
+      mutate,
+      addTracesToDataset,
+      workspaceName,
+      onItemsAdded,
+      toast,
+      includeSpans,
+      includeTags,
+      includeFeedbackScores,
+      includeComments,
+      includeUsage,
+      includeMetadata,
+    ],
   );
 
   const renderListItems = () => {
@@ -230,17 +292,116 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg pb-8 sm:max-w-[560px]">
+        <DialogContent className="max-w-lg pb-8 sm:max-w-[560px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Add to dataset</DialogTitle>
           </DialogHeader>
-          <div className="w-full overflow-hidden">
+          <div className="w-full overflow-y-auto flex-1 min-h-0">
             <ExplainerDescription
               className="mb-4"
               {...EXPLAINERS_MAP[
                 EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
               ]}
             />
+            {hasOnlyTraces && (
+              <div className="mb-4 rounded-md border p-4">
+                <h4 className="comet-body-s-accented mb-3">
+                  Include trace metadata
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="include-spans"
+                      checked={includeSpans}
+                      onCheckedChange={(checked) =>
+                        setIncludeSpans(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-spans"
+                      className="comet-body-s cursor-pointer"
+                    >
+                      Nested spans
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="include-tags"
+                      checked={includeTags}
+                      onCheckedChange={(checked) =>
+                        setIncludeTags(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-tags"
+                      className="comet-body-s cursor-pointer"
+                    >
+                      Tags
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="include-feedback-scores"
+                      checked={includeFeedbackScores}
+                      onCheckedChange={(checked) =>
+                        setIncludeFeedbackScores(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-feedback-scores"
+                      className="comet-body-s cursor-pointer"
+                    >
+                      Feedback scores
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="include-comments"
+                      checked={includeComments}
+                      onCheckedChange={(checked) =>
+                        setIncludeComments(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-comments"
+                      className="comet-body-s cursor-pointer"
+                    >
+                      Comments
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="include-usage"
+                      checked={includeUsage}
+                      onCheckedChange={(checked) =>
+                        setIncludeUsage(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-usage"
+                      className="comet-body-s cursor-pointer"
+                    >
+                      Usage metrics
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="include-metadata"
+                      checked={includeMetadata}
+                      onCheckedChange={(checked) =>
+                        setIncludeMetadata(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="include-metadata"
+                      className="comet-body-s cursor-pointer"
+                    >
+                      Metadata
+                    </Label>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select a dataset</h3>
               <Button
@@ -262,7 +423,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               className="w-full"
             />
             {renderAlert()}
-            <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
+            <div className="my-4 flex max-h-[300px] sm:max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
             </div>
             {total > DEFAULT_SIZE && (
