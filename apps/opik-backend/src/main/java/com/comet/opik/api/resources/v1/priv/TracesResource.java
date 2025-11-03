@@ -11,6 +11,7 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
@@ -80,6 +81,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -90,6 +92,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchT
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
+import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
 @Path("/v1/private/traces")
 @Produces(MediaType.APPLICATION_JSON)
@@ -125,9 +128,12 @@ public class TracesResource {
             @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
-            @QueryParam("exclude") String exclude) {
+            @QueryParam("exclude") String exclude,
+            @QueryParam("from_time") Instant startTime,
+            @QueryParam("to_time") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceSortingFactory.newSorting(sorting);
 
@@ -149,8 +155,10 @@ public class TracesResource {
                 .filters(traceFilters)
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
-                .sortingFields(sortingFields)
+                .uuidFromTime(InstantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(InstantToUUIDMapper.toUpperBound(endTime))
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
+                .sortingFields(sortingFields)
                 .build();
 
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
@@ -353,15 +361,27 @@ public class TracesResource {
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("from_time") Instant startTime,
+            @QueryParam("to_time") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
-        var searchCriteria = TraceSearchCriteria.builder()
+
+        var searchCriteriaBuilder = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
-                .filters(traceFilters)
-                .build();
+                .filters(traceFilters);
+
+        // Apply UUID-based time filtering if both from_time and to_time are provided
+        if (startTime != null && endTime != null) {
+            searchCriteriaBuilder
+                    .uuidFromTime(InstantToUUIDMapper.toLowerBound(startTime))
+                    .uuidToTime(InstantToUUIDMapper.toUpperBound(endTime));
+        }
+
+        var searchCriteria = searchCriteriaBuilder.build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

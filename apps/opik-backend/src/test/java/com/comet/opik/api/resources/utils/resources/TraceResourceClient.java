@@ -520,6 +520,13 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             target = target.queryParam("project_id", projectId);
         }
 
+        // Add remaining queryParams (like from_time, to_time)
+        WebTarget finalTarget = target;
+        target = queryParams.entrySet()
+                .stream()
+                .filter(e -> !e.getKey().equals("page")) // Skip page as it's already handled
+                .reduce(finalTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
         var actualResponse = target
                 .queryParam("filters", toURLEncodedQueryParam(filters))
                 .request()
@@ -659,5 +666,34 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .cookie(RequestContext.SESSION_COOKIE, sessionToken)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(new TraceBatch(traces)));
+    }
+
+    public ProjectStats getStats(String projectName, UUID projectId, String apiKey, String workspaceName,
+            Map<String, String> queryParams) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stats");
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        // Add remaining queryParams (like from_time, to_time)
+        WebTarget finalTarget = webTarget;
+        webTarget = queryParams.entrySet()
+                .stream()
+                .reduce(finalTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(ProjectStats.class);
+        }
     }
 }
