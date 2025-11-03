@@ -13,7 +13,7 @@ The `ParameterOptimizer` uses Bayesian optimization to tune LLM call parameters 
 </Note>
 
 <Info>
-  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq)
+  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/faq)
   answers common questions, including when to use this optimizer, how parameters like `default_n_trials` and `local_search_ratio`
   work, and how to define custom parameter search spaces.
 </Info>
@@ -282,9 +282,6 @@ The ParameterOptimizer supports all models available through LiteLLM. This provi
 compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others,
 including locally hosted models.
 
-For detailed instructions on how to specify different models and configure providers, please refer
-to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
-
 ### Configuration Example using LiteLLM model string
 
 ```python
@@ -338,7 +335,6 @@ optimizer = ParameterOptimizer(
 
 ## Next Steps
 
-- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
-- Learn about [Dataset Requirements](/agent_optimization/opik_optimizer/datasets)
-- Try the [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart) for runnable examples
-- Read the [Optimizer Parameters Guide](/agent_optimization/algorithms/optimizer_parameters_guide) for detailed parameter tuning
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

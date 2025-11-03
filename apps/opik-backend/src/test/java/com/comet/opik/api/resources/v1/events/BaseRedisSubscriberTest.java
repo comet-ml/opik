@@ -13,7 +13,10 @@ import org.junit.jupiter.api.TestInstance;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
+import org.redisson.api.stream.StreamCreateGroupArgs;
+import org.redisson.api.stream.StreamReadGroupArgs;
 import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.Config;
 import reactor.core.publisher.Flux;
@@ -22,6 +25,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +60,7 @@ class BaseRedisSubscriberTest {
         redissonConfig.useSingleServer()
                 .setAddress(redis.getRedisURI())
                 .setDatabase(0);
-        redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.MAPPER));
+        redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
         redissonClient = Redisson.create(redissonConfig).reactive();
 
         config = TestStreamConfiguration.create();
@@ -136,6 +141,62 @@ class BaseRedisSubscriberTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(nullCount.get()).isEqualTo(otherPayloadMessages.size()));
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+
+        @Test
+        void shouldClaimAndProcessPendingMessages() {
+            var fastConfig = config.toBuilder()
+                    .claimIntervalRatio(2)
+                    .pendingMessageDuration(io.dropwizard.util.Duration.seconds(2))
+                    .build();
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            // No subscriber yet creating consumer group on start, so creating manually first
+            stream.createGroup(StreamCreateGroupArgs.name(fastConfig.getConsumerGroupName()).makeStream()).block();
+            // Messages will become orphaned quickly due to short pending duration and no subscriber to process them
+            publishMessagesToStream(messages);
+
+            // Manually read messages with ack, simulating crashed consumer, so they go to pending state
+            var crashedConsumerId = "crashed-consumer-%s".formatted(UUID.randomUUID());
+            var streamReadGroupArgs = StreamReadGroupArgs.neverDelivered()
+                    .count(messages.size())
+                    .timeout(fastConfig.getLongPollingDuration().toJavaDuration());
+            var readMessages = stream.readGroup(
+                    fastConfig.getConsumerGroupName(), crashedConsumerId, streamReadGroupArgs)
+                    .flatMapIterable(Map::entrySet)
+                    .map(Map.Entry::getValue)
+                    .map(value -> value.get(TestStreamConfiguration.PAYLOAD_FIELD))
+                    .collectList()
+                    .block();
+            assertThat(readMessages).containsExactlyInAnyOrderElementsOf(messages);
+
+            // Verify messages are in pending state (assigned to crashed consumer)
+            var pendingMessages = stream.pendingRange(
+                    fastConfig.getConsumerGroupName(), crashedConsumerId, StreamMessageId.MIN, StreamMessageId.MAX,
+                    messages.size())
+                    .flatMapIterable(Map::entrySet)
+                    .map(Map.Entry::getValue)
+                    .map(value -> value.get(TestStreamConfiguration.PAYLOAD_FIELD))
+                    .collectList()
+                    .block();
+            assertThat(pendingMessages).containsExactlyInAnyOrderElementsOf(messages);
+
+            // Wait enough time for messages to be considered orphaned
+            waitForMillis(fastConfig.getPendingMessageDuration().toMilliseconds() + 100);
+
+            // Start new subscriber that should claim orphaned messages
+            var processedMessages = new CopyOnWriteArraySet<String>();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient,
+                    message -> Mono.fromRunnable(() -> processedMessages.add(message))));
+            subscriber.start();
+
+            // Wait for claiming to happen
+            waitForMillis(fastConfig.getPoolingInterval().toMilliseconds() * (fastConfig.getClaimIntervalRatio() + 2));
+
+            // Verify messages were claimed and processed by subscriber
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+            assertThat(processedMessages).containsExactlyInAnyOrderElementsOf(messages);
         }
     }
 

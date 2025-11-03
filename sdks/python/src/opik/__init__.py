@@ -24,6 +24,8 @@ from .decorator.tracing_runtime_config import (
 )
 from .decorator.context_manager.span_context_manager import start_as_current_span
 from .decorator.context_manager.trace_context_manager import start_as_current_trace
+from .simulation import SimulatedUser, run_simulation
+from .api_objects.local_recording import record_traces_locally
 
 
 _logging.setup()
@@ -54,6 +56,9 @@ __all__ = [
     "is_tracing_active",
     "start_as_current_span",
     "start_as_current_trace",
+    "SimulatedUser",
+    "run_simulation",
+    "record_traces_locally",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()

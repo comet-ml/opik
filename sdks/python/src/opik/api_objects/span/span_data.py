@@ -7,6 +7,7 @@ import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
 from opik.types import (
+    DistributedTraceHeadersDict,
     ErrorInfoDict,
     FeedbackScoreDict,
     LLMProvider,
@@ -202,3 +203,9 @@ class SpanData:
             "total_cost": self.total_cost,
             "attachments": self.attachments,
         }
+
+    def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
+        return DistributedTraceHeadersDict(
+            opik_trace_id=self.trace_id,
+            opik_parent_span_id=self.id,
+        )

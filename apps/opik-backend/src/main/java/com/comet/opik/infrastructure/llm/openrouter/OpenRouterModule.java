@@ -20,8 +20,8 @@ public class OpenRouterModule extends AbstractModule {
     @Named("openrouterGenerator")
     public OpenAIClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) throws IOException {
-        LlmProviderClientConfig customConfig = JsonUtils.MAPPER.readValue(
-                JsonUtils.MAPPER.writeValueAsBytes(config), LlmProviderClientConfig.class);
+        LlmProviderClientConfig customConfig = JsonUtils.readValue(
+                JsonUtils.writeValueAsBytes(config), LlmProviderClientConfig.class);
         customConfig.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig(config.getOpenRouterUrl()));
         return new OpenAIClientGenerator(customConfig);
     }
