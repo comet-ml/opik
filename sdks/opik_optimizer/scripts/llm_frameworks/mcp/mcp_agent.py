@@ -36,7 +36,12 @@ def create_mcp_prompt(
     with them registered in the function_map.
 
     Args:
-        mcp_server: dict[str, Any] describing the MCP server configuration.
+        mcp_server: dict[str, Any]
+            Dictionary describing the MCP server configuration. Must contain the following fields:
+                - name (str): Name of the MCP server.
+                - command (str): Command to start the MCP server (e.g., "npx").
+                - args (list[str]): Arguments to pass to the command (e.g., ["-y", "@my-org/mcp-server"]).
+                - env (dict[str, str]): Environment variables for the MCP server process.
         tool_names: List of tool names to load from the MCP server.
             If None, all available tools will be loaded.
         system_prompt: Optional custom system prompt. If not provided,
