@@ -39,8 +39,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -91,7 +91,7 @@ class FeedbackDefinitionResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
