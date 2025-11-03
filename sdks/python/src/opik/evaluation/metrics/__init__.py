@@ -1,5 +1,3 @@
-from typing import Any
-
 from .aggregated_metric import AggregatedMetric
 
 # Keep the canonical import first for the new layout while still tolerating
