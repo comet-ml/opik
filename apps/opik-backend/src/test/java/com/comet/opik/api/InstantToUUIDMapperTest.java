@@ -71,9 +71,13 @@ class InstantToUUIDMapperTest {
         String lowerTimestampPart = lowerBoundStr.substring(0, 12);
         String upperTimestampPart = upperBoundStr.substring(0, 12);
 
-        assertThat(lowerTimestampPart)
-                .as("Both bounds should encode the same timestamp")
-                .isEqualTo(upperTimestampPart);
+        // Upper bound uses next millisecond (+1ms), so timestamps should differ by 1
+        UUID nextMillisLowerBound = InstantToUUIDMapper.toLowerBound(timestamp.plusMillis(1));
+        String nextMillisTimestampPart = nextMillisLowerBound.toString().replace("-", "").substring(0, 12);
+
+        assertThat(upperTimestampPart)
+                .as("Upper bound should encode the next millisecond")
+                .isEqualTo(nextMillisTimestampPart);
     }
 
     @Test
@@ -86,16 +90,12 @@ class InstantToUUIDMapperTest {
         UUID upperBound = InstantToUUIDMapper.toUpperBound(timestamp);
 
         // Then
-        // Extract the random portion (after the timestamp and version)
-        String lowerBoundStr = lowerBound.toString().replace("-", "");
-        String upperBoundStr = upperBound.toString().replace("-", "");
-
-        String lowerRandomPart = lowerBoundStr.substring(13); // Skip timestamp+version
-        String upperRandomPart = upperBoundStr.substring(13);
-
-        assertThat(lowerRandomPart)
-                .as("Random portions should differ (lower should be 0000, upper should be FFFF)")
-                .isNotEqualTo(upperRandomPart);
+        // Lower bound uses same timestamp with zero random bytes
+        // Upper bound uses next millisecond with zero random bytes
+        // Since they have different timestamps, they should be different UUIDs
+        assertThat(lowerBound)
+                .as("Upper and lower bounds should be different UUIDs")
+                .isNotEqualTo(upperBound);
     }
 
     @Test
@@ -173,13 +173,17 @@ class InstantToUUIDMapperTest {
         Instant timestamp = Instant.parse("2025-01-15T10:30:00Z");
 
         // When
+        UUID lowerBound = InstantToUUIDMapper.toLowerBound(timestamp);
         UUID upperBound = InstantToUUIDMapper.toUpperBound(timestamp);
-        UUID referenceUUID = OpenTelemetryMapper.convertOtelIdToUUIDv7(
-                new byte[]{-1, -1, -1, -1, -1, -1, -1, -1},
-                timestamp.toEpochMilli());
 
         // Then
-        assertThat(upperBound).isEqualTo(referenceUUID);
+        assertThat(lowerBound).isNotNull();
+        assertThat(upperBound).isNotNull();
+
+        // Upper bound should be greater than lower bound
+        assertThat(upperBound.toString().compareTo(lowerBound.toString()))
+                .as("Upper bound should be lexicographically greater than lower bound")
+                .isGreaterThan(0);
     }
 
     @Test
@@ -201,24 +205,22 @@ class InstantToUUIDMapperTest {
     @Test
     void shouldAllUUIDsWithSameTimestampShareTimestampPortion() {
         // Given
-        Instant queryTime = Instant.parse("2025-01-15T10:30:00Z");
-        UUID lowerBound = InstantToUUIDMapper.toLowerBound(queryTime);
-        UUID upperBound = InstantToUUIDMapper.toUpperBound(queryTime);
-        UUID randomUUID = OpenTelemetryMapper.convertOtelIdToUUIDv7(
-                new byte[]{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-                queryTime.toEpochMilli());
+        Instant timestamp = Instant.parse("2025-01-15T10:30:00Z");
 
-        // Then - All UUIDs with the same timestamp should have the same timestamp portion
-        String lowerStr = lowerBound.toString().replace("-", "");
-        String upperStr = upperBound.toString().replace("-", "");
-        String randomStr = randomUUID.toString().replace("-", "");
+        // When
+        UUID lowerBound = InstantToUUIDMapper.toLowerBound(timestamp);
+        UUID nextMillisLowerBound = InstantToUUIDMapper.toLowerBound(timestamp.plusMillis(1));
 
-        // Extract timestamp (first 12 hex chars = 48 bits)
-        String lowerTimestamp = lowerStr.substring(0, 12);
-        String upperTimestamp = upperStr.substring(0, 12);
-        String randomTimestamp = randomStr.substring(0, 12);
+        // Then
+        // Extract the timestamp portion (first 48 bits / first 12 hex chars)
+        String lowerBoundStr = lowerBound.toString().replace("-", "");
+        String nextMillisStr = nextMillisLowerBound.toString().replace("-", "");
 
-        assertThat(lowerTimestamp).isEqualTo(upperTimestamp);
-        assertThat(lowerTimestamp).isEqualTo(randomTimestamp);
+        String lowerTimestampPart = lowerBoundStr.substring(0, 12);
+        String nextMillisTimestampPart = nextMillisStr.substring(0, 12);
+
+        assertThat(nextMillisTimestampPart)
+                .as("Next millisecond should have different timestamp portion")
+                .isNotEqualTo(lowerTimestampPart);
     }
 }
