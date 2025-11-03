@@ -11,7 +11,7 @@ def extract_current_langgraph_span_data(
     runnable_config: Dict[str, Any],
 ) -> Optional[span.SpanData]:
     """
-    Extract current span data for async LangGraph nodes to enable distributed tracing.
+    Extract current span data for async LangGraph nodes.
 
     This helper function is specifically designed for async LangGraph execution using `ainvoke()`.
     Due to LangChain framework limitations in async scenarios, the execution context is not
