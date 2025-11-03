@@ -5,19 +5,22 @@ This coordinator script submits all benchmark tasks to the deployed Modal worker
 Use --detach flag to disconnect after submission without waiting for results.
 
 Usage:
-    # Submit tasks and disconnect (recommended)
-    modal run --detach benchmarks/submit_benchmarks.py --test-mode
+    # Recommended: Use the unified entry point
+    python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
+
+    # Alternative: Direct Modal execution (from benchmarks directory)
+    modal run --detach benchmarks/run_benchmark_modal.py --test-mode
 
     # Submit specific configuration
-    modal run --detach benchmarks/submit_benchmarks.py \
+    python run_benchmark.py --modal \
         --demo-datasets gsm8k hotpot_300 \
         --optimizers few_shot meta_prompt \
         --models openai/gpt-4o-mini \
         --max-concurrent 5
 
     # Resume or retry a previous run
-    modal run --detach benchmarks/submit_benchmarks.py --resume-run-id run_20250423_153045
-    modal run --detach benchmarks/submit_benchmarks.py --retry-failed-run-id run_20250423_153045
+    python run_benchmark.py --modal --resume-run-id run_20250423_153045
+    python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
 """
 
 import argparse
@@ -367,23 +370,24 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Submit with default config (use --detach to disconnect)
-  modal run --detach benchmarks/submit_benchmarks.py --test-mode
+  # Recommended: Use the unified entry point
+  python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
+
+  # Alternative: Direct Modal execution (use --detach to disconnect)
+  modal run --detach benchmarks/run_benchmark_modal.py --test-mode
 
   # Submit specific configuration
-  modal run --detach benchmarks/submit_benchmarks.py \\
+  python run_benchmark.py --modal \\
     --demo-datasets gsm8k hotpot_300 \\
     --optimizers few_shot meta_prompt \\
     --models openai/gpt-4o-mini \\
     --max-concurrent 10
 
   # Resume incomplete run
-  modal run --detach benchmarks/submit_benchmarks.py \\
-    --resume-run-id run_20250423_153045
+  python run_benchmark.py --modal --resume-run-id run_20250423_153045
 
   # Retry failed tasks
-  modal run --detach benchmarks/submit_benchmarks.py \\
-    --retry-failed-run-id run_20250423_153045
+  python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
         """,
     )
     parser.add_argument(
