@@ -93,14 +93,6 @@ public class DatasetResourceClient {
                 .post(Entity.json(request));
     }
 
-    public DatasetItemPage getDatasetItems(UUID datasetId, String apiKey, String workspaceName) {
-        return getDatasetItems(datasetId, Map.of(), apiKey, workspaceName);
-    }
-
-    public DatasetItemPage getDatasetItems(UUID datasetId, Integer pageSize, String apiKey, String workspaceName) {
-        return getDatasetItems(datasetId, Map.of("size", pageSize), apiKey, workspaceName);
-    }
-
     public DatasetItemPage getDatasetItems(UUID datasetId, Map<String, Object> queryParams, String apiKey,
             String workspaceName) {
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))

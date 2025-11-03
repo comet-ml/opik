@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,9 +16,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -89,9 +90,8 @@ public class TraceEnrichmentService {
 
         // Always include input and output
         enrichedData.set("input", objectMapper.valueToTree(trace.input()));
-        if (trace.output() != null) {
-            enrichedData.set("expected_output", objectMapper.valueToTree(trace.output()));
-        }
+        Optional.ofNullable(trace.output())
+                .ifPresent(output -> enrichedData.set("expected_output", objectMapper.valueToTree(output)));
 
         // Include spans if requested
         if (options.includeSpans() && !spans.isEmpty()) {
@@ -101,63 +101,65 @@ public class TraceEnrichmentService {
                 spanNode.put("id", span.id().toString());
                 spanNode.put("name", span.name());
                 spanNode.put("type", span.type().toString());
-                if (span.parentSpanId() != null) {
-                    spanNode.put("parent_span_id", span.parentSpanId().toString());
-                }
+                Optional.ofNullable(span.parentSpanId())
+                        .ifPresent(parentSpanId -> spanNode.put("parent_span_id", parentSpanId.toString()));
                 spanNode.set("input", objectMapper.valueToTree(span.input()));
-                if (span.output() != null) {
-                    spanNode.set("output", objectMapper.valueToTree(span.output()));
-                }
-                if (span.startTime() != null) {
-                    spanNode.put("start_time", span.startTime().toString());
-                }
-                if (span.endTime() != null) {
-                    spanNode.put("end_time", span.endTime().toString());
-                }
-                if (span.metadata() != null) {
-                    spanNode.set("metadata", objectMapper.valueToTree(span.metadata()));
-                }
-                if (span.feedbackScores() != null && !span.feedbackScores().isEmpty()) {
-                    spanNode.set("feedback_scores", buildFeedbackScoresNode(span.feedbackScores()));
-                }
-                if (span.comments() != null && !span.comments().isEmpty()) {
-                    spanNode.set("comments", buildCommentsNode(span.comments()));
-                }
+                Optional.ofNullable(span.output())
+                        .ifPresent(output -> spanNode.set("output", objectMapper.valueToTree(output)));
+                Optional.ofNullable(span.startTime())
+                        .ifPresent(startTime -> spanNode.put("start_time", startTime.toString()));
+                Optional.ofNullable(span.endTime())
+                        .ifPresent(endTime -> spanNode.put("end_time", endTime.toString()));
+                Optional.ofNullable(span.metadata())
+                        .ifPresent(metadata -> spanNode.set("metadata", objectMapper.valueToTree(metadata)));
+                Optional.ofNullable(span.feedbackScores())
+                        .filter(scores -> !scores.isEmpty())
+                        .ifPresent(scores -> spanNode.set("feedback_scores", buildFeedbackScoresNode(scores)));
+                Optional.ofNullable(span.comments())
+                        .filter(comments -> !comments.isEmpty())
+                        .ifPresent(comments -> spanNode.set("comments", buildCommentsNode(comments)));
                 spansArray.add(spanNode);
             }
             enrichedData.set("spans", spansArray);
         }
 
         // Include tags if requested
-        if (options.includeTags() && trace.tags() != null && !trace.tags().isEmpty()) {
-            enrichedData.set("tags", objectMapper.valueToTree(trace.tags()));
+        if (options.includeTags()) {
+            Optional.ofNullable(trace.tags())
+                    .filter(tags -> !tags.isEmpty())
+                    .ifPresent(tags -> enrichedData.set("tags", objectMapper.valueToTree(tags)));
         }
 
         // Include feedback scores if requested
-        if (options.includeFeedbackScores() && trace.feedbackScores() != null
-                && !trace.feedbackScores().isEmpty()) {
-            enrichedData.set("feedback_scores", buildFeedbackScoresNode(trace.feedbackScores()));
+        if (options.includeFeedbackScores()) {
+            Optional.ofNullable(trace.feedbackScores())
+                    .filter(scores -> !scores.isEmpty())
+                    .ifPresent(scores -> enrichedData.set("feedback_scores", buildFeedbackScoresNode(scores)));
         }
 
         // Include comments if requested
-        if (options.includeComments() && trace.comments() != null && !trace.comments().isEmpty()) {
-            enrichedData.set("comments", buildCommentsNode(trace.comments()));
+        if (options.includeComments()) {
+            Optional.ofNullable(trace.comments())
+                    .filter(comments -> !comments.isEmpty())
+                    .ifPresent(comments -> enrichedData.set("comments", buildCommentsNode(comments)));
         }
 
         // Include usage if requested
-        if (options.includeUsage() && trace.usage() != null && !trace.usage().isEmpty()) {
-            enrichedData.set("usage", objectMapper.valueToTree(trace.usage()));
+        if (options.includeUsage()) {
+            Optional.ofNullable(trace.usage())
+                    .filter(usage -> !usage.isEmpty())
+                    .ifPresent(usage -> enrichedData.set("usage", objectMapper.valueToTree(usage)));
         }
 
         // Include metadata if requested
-        if (options.includeMetadata() && trace.metadata() != null) {
-            enrichedData.set("metadata", objectMapper.valueToTree(trace.metadata()));
+        if (options.includeMetadata()) {
+            Optional.ofNullable(trace.metadata())
+                    .ifPresent(metadata -> enrichedData.set("metadata", objectMapper.valueToTree(metadata)));
         }
 
         // Convert ObjectNode to Map<String, JsonNode>
-        Map<String, JsonNode> result = new HashMap<>();
-        enrichedData.properties().forEach(entry -> result.put(entry.getKey(), entry.getValue()));
-        return result;
+        return enrichedData.properties().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
@@ -172,15 +174,13 @@ public class TraceEnrichmentService {
         for (var score : feedbackScores) {
             ObjectNode scoreNode = objectMapper.createObjectNode();
             scoreNode.put("name", score.name());
-            if (score.categoryName() != null) {
-                scoreNode.put("category_name", score.categoryName());
-            }
+            Optional.ofNullable(score.categoryName())
+                    .ifPresent(categoryName -> scoreNode.put("category_name", categoryName));
             scoreNode.put("value", score.value());
-            if (score.reason() != null) {
-                scoreNode.put("reason", score.reason());
-            }
+            Optional.ofNullable(score.reason())
+                    .ifPresent(reason -> scoreNode.put("reason", reason));
             scoreNode.put("source", score.source().toString());
-            // Omit createdAt, lastUpdatedAt, createdBy, lastUpdatedBy as they're not essential for dataset items
+
             scoresArray.add(scoreNode);
         }
         return scoresArray;
@@ -193,7 +193,7 @@ public class TraceEnrichmentService {
      * @param comments The comments to convert
      * @return An ArrayNode containing the comments without timestamps
      */
-    private ArrayNode buildCommentsNode(List<com.comet.opik.api.Comment> comments) {
+    private ArrayNode buildCommentsNode(List<Comment> comments) {
         ArrayNode commentsArray = objectMapper.createArrayNode();
         for (var comment : comments) {
             ObjectNode commentNode = objectMapper.createObjectNode();
