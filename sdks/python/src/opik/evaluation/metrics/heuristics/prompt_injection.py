@@ -27,7 +27,7 @@ _INJECTION_PATTERNS = [
     r"leak (?:the )?(?:prompt|instructions|system|system prompt|system message|developer message)",
     r"expose (?:the )?(?:system|hidden|initial|developer)? ?(?:prompt|instructions|message)?",
     r"can you share (?:your )?(?:system|developer|prompt|internal) (?:prompt|content|instructions|message)",
-    r"provide (?:the )?(?:system|prompt|hidden|developer)? ?(?:prompt|instructions|message)?",
+    r"provide (?:the )?(?:system|prompt|hidden|developer)? ?(?:prompt|instructions|message)",
     r"output (?:the )?(?:prompt|system message|instructions)",
     r"recite (?:the )?(?:system|prompt|instructions|message)",
     r"display (?:the )?(?:prompt|system message|instructions)",
