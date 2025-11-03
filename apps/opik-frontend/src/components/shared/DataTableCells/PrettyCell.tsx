@@ -127,14 +127,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
         {hasExceededLimit ? <TruncationLimitExceededMessage /> : displayMessage}
       </div>
     );
-  }, [
-    isSmall,
-    hasExceededLimit,
-    message,
-    rawValue,
-    maxDataLength,
-    response.prettified,
-  ]);
+  }, [isSmall, hasExceededLimit, message, response.prettified]);
 
   return (
     <CellWrapper
