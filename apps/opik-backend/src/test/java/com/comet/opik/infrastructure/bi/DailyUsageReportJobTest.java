@@ -38,7 +38,7 @@ import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
@@ -211,7 +211,7 @@ class DailyUsageReportJobTest {
     class CredentialsEnabledScenario {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-        private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+        private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
         private final Network NETWORK = Network.newNetwork();
         private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
                 NETWORK);
@@ -355,7 +355,7 @@ class DailyUsageReportJobTest {
     class NoCredentialsEnabledScenario {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-        private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+        private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
         private final Network NETWORK = Network.newNetwork();
         private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
                 NETWORK);
