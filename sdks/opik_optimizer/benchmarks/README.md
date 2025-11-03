@@ -72,6 +72,7 @@ All parameters work for both local and Modal execution:
 | `--optimizers` | Optimizer names (e.g., `few_shot`, `meta_prompt`) | All optimizers |
 | `--models` | Model names (e.g., `openai/gpt-4o-mini`) | All configured models |
 | `--test-mode` | Use only 5 examples per dataset (fast) | `false` |
+| `--seed` | Random seed for reproducibility | `42` |
 | `--max-concurrent` | Max concurrent workers/containers | `5` |
 | `--checkpoint-dir` | [Local only] Results directory | `./benchmark_results` |
 | `--resume-run-id` | Resume incomplete run | - |
@@ -192,19 +193,51 @@ This updates the deployed worker with your latest code changes.
 
 ## File Structure
 
-- **`run_benchmark.py`** - Main unified entry point (use with `--modal` flag for cloud)
+The benchmark system is organized into several modules:
+
+### Entry Points
+- **`run_benchmark.py`** - Main unified entry point (routes to local or Modal execution based on `--modal` flag)
+  - Calls `run_benchmark_local.py` for local execution
+  - Calls `run_benchmark_modal.py` for Modal execution
 - **`run_benchmark_local.py`** - Local execution logic
-- **`run_benchmark_modal.py`** - Modal submission logic
-- **`benchmark_worker.py`** - Modal worker (deploy with `modal deploy`)
+  - Imports `local.runner.BenchmarkRunner`
+  - Imports `utils.validation.ask_for_input_confirmation`
+- **`run_benchmark_modal.py`** - Modal submission and coordination logic
+  - Submits tasks to deployed `benchmark_worker.py` function
+- **`benchmark_worker.py`** - Modal worker function (deploy with `modal deploy benchmark_worker.py`)
+  - Imports `modal_utils.worker_core.run_optimization_task`
+  - Imports `modal_utils.storage.save_result_to_volume`
 - **`check_results.py`** - View Modal results with clickable logs links
+  - Imports `modal_utils.storage` for loading results
+  - Imports `modal_utils.display` for formatting
+
+### Configuration & Core Logic
 - **`benchmark_config.py`** - Dataset and optimizer configurations
 - **`benchmark_task.py`** - Core task execution logic
+
+### Local Execution (`local/`)
+- **`local/runner.py`** - Local benchmark runner implementation
+  - Imports `local.checkpoint` and `local.logging`
+- **`local/checkpoint.py`** - Checkpoint management for local runs
+- **`local/logging.py`** - Local logging utilities
+
+### Modal Execution (`modal_utils/`)
+- **`modal_utils/coordinator.py`** - Task coordination utilities (helper functions for task generation)
+- **`modal_utils/worker_core.py`** - Core worker execution logic (called by `benchmark_worker.py`)
+- **`modal_utils/storage.py`** - Modal Volume storage operations
+  - Used by `benchmark_worker.py` and `check_results.py`
+  - Imports `utils.serialization.make_serializable`
+- **`modal_utils/display.py`** - Results display and formatting (used by `check_results.py`)
+
+### Shared Utilities (`utils/`)
+- **`utils/validation.py`** - Input validation and confirmation (used by `run_benchmark_local.py`)
+- **`utils/serialization.py`** - Serialization helpers for results (used by `modal_utils/storage.py`)
 
 ## Notes
 
 - **Test mode** (`--test-mode`) uses only 5 examples per dataset for quick validation
-- **Local execution** runs tasks sequentially on your machine
-- **Modal execution** runs tasks in parallel on cloud infrastructure
+- **Local execution** runs tasks in parallel using local workers (controlled by `--max-concurrent`)
+- **Modal execution** runs tasks in parallel on cloud infrastructure (controlled by `--max-concurrent`)
 - Your machine can disconnect after Modal submission - tasks continue in the cloud
 - Results are persisted in Modal Volume indefinitely
-- See [MODAL_DEPLOYMENT.md](MODAL_DEPLOYMENT.md) for detailed Modal setup instructions
+- The unified `run_benchmark.py` entry point automatically routes to the appropriate execution mode

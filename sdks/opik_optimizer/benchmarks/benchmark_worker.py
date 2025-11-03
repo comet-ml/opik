@@ -89,10 +89,27 @@ def run_optimization_modal(
     sys.path.insert(0, "/root/benchmarks")
 
     # Import core logic modules
+    import time
+    from benchmark_task import TaskResult
     from modal_utils.worker_core import run_optimization_task
     from modal_utils.storage import save_result_to_volume
 
-    # Run the optimization task
+    # Save "Running" status at the start (before any long-running work)
+    timestamp_start = time.time()
+    running_result = TaskResult(
+        id=task_id,
+        dataset_name=dataset_name,
+        optimizer_name=optimizer_name,
+        model_name=model_name,
+        status="Running",
+        timestamp_start=timestamp_start,
+    )
+    # Save immediately so it's visible to check_results.py
+    print(f"[{task_id}] Saving Running status to volume...")
+    save_result_to_volume(running_result, run_id, results_volume)
+    print(f"[{task_id}] Running status saved, starting optimization...")
+
+    # Run the optimization task (it will set its own timestamp_start, but we'll preserve ours)
     result = run_optimization_task(
         task_id=task_id,
         dataset_name=dataset_name,
@@ -101,7 +118,10 @@ def run_optimization_modal(
         test_mode=test_mode,
     )
 
-    # Save result to Modal Volume and return
+    # Ensure the final result uses the same timestamp_start as the Running status
+    result.timestamp_start = timestamp_start
+
+    # Save final result to Modal Volume (overwrites the Running status)
     result_dict = save_result_to_volume(result, run_id, results_volume)
 
     return result_dict

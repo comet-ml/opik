@@ -24,11 +24,14 @@ def compute_summary(metadata: dict, tasks: list[dict], call_ids: list[dict]) -> 
     """
     total_tasks = metadata.get("total_tasks", len(call_ids))
     completed_tasks = len(tasks)
-    pending_tasks = total_tasks - completed_tasks
 
-    # Count success/failure
+    # Count by status
     success_count = sum(1 for task in tasks if task.get("status") == "Success")
     failed_count = sum(1 for task in tasks if task.get("status") == "Failed")
+    running_count = sum(1 for task in tasks if task.get("status") == "Running")
+
+    # Pending tasks are those not yet started (not in tasks list)
+    pending_tasks = total_tasks - completed_tasks
 
     # Compute metrics by dataset
     metrics_by_dataset: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(
@@ -68,6 +71,7 @@ def compute_summary(metadata: dict, tasks: list[dict], call_ids: list[dict]) -> 
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
         "pending_tasks": pending_tasks,
+        "running_count": running_count,
         "success_count": success_count,
         "failed_count": failed_count,
         "completion_rate": completed_tasks / total_tasks if total_tasks > 0 else 0,
@@ -131,6 +135,7 @@ def generate_results_display(
         f"  Completed:       {summary['completed_tasks']} ({summary['completion_rate']:.1%})"
     )
     content_parts.append(f"  Pending:         {summary['pending_tasks']}")
+    content_parts.append(f"  Running:         {summary['running_count']}")
     content_parts.append(
         f"  Success:         [green]{summary['success_count']}[/green]"
     )
@@ -166,6 +171,8 @@ def generate_results_display(
                 status_display = "[green]✓ Success[/green]"
             elif status == "Failed":
                 status_display = "[red]✗ Failed[/red]"
+            elif status == "Running":
+                status_display = "[yellow]▶ Running[/yellow]"
             else:
                 status_display = f"[yellow]{status}[/yellow]"
         else:
@@ -253,7 +260,7 @@ def generate_results_display(
             content_parts.append(f"  [dim]... and {len(failed_tasks) - 5} more[/dim]")
 
     # Status indicator
-    if summary["pending_tasks"] > 0:
+    if summary["pending_tasks"] > 0 or summary["running_count"] > 0:
         status_color = "yellow"
         status_icon = "⏳"
         status_text = "IN PROGRESS"
