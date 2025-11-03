@@ -1,8 +1,9 @@
 import pytest
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from opik.evaluation.metrics import score_result
 from opik.evaluation.scorers.scorer_function import validate_scorer_function
+from opik.message_processing.emulation import models
 
 
 def test_validate_scorer_function_valid_function():
@@ -37,7 +38,7 @@ def test_validate_scorer_function_not_callable__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must be a callable function that takes two arguments: *.",
+        match="scorer_function must be a callable function",
     ):
         validate_scorer_function(not_callable)
 
@@ -50,22 +51,9 @@ def test_validate_scorer_function_no_parameters__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must take at least two arguments:  *.",
+        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(no_params)
-
-
-def test_validate_scorer_function_one_parameter__raises_error():
-    """Test that function with only one parameter raises ValueError"""
-
-    def one_param(scoring_inputs: Dict[str, Any]):
-        return score_result.ScoreResult(name="test", value=1.0)
-
-    with pytest.raises(
-        ValueError,
-        match="scorer_function must take at least two arguments:  *.",
-    ):
-        validate_scorer_function(one_param)
 
 
 def test_validate_scorer_function_wrong_parameter_names__raises_error():
@@ -76,7 +64,7 @@ def test_validate_scorer_function_wrong_parameter_names__raises_error():
 
     with pytest.raises(
         ValueError,
-        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the scoring_inputs is not found in function parameters",
+        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(wrong_names)
 
@@ -89,7 +77,7 @@ def test_validate_scorer_function_missing_scoring_inputs__raises_error():
 
     with pytest.raises(
         ValueError,
-        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the scoring_inputs is not found in function parameters",
+        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(missing_scoring_inputs)
 
@@ -102,7 +90,7 @@ def test_validate_scorer_function_missing_task_outputs__raises_error():
 
     with pytest.raises(
         ValueError,
-        match=r"scorer_function must take at least two arguments: \['scoring_inputs', 'task_outputs'\] - the task_outputs is not found in function parameters",
+        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(missing_task_outputs)
 
@@ -129,3 +117,42 @@ def test_validate_scorer_function_with_args_and_kwargs():
 
     # Should not raise any exception
     validate_scorer_function(scorer_with_args_kwargs)
+
+
+def test_validate_scorer_function_with_task_span_only():
+    """Test that function with only task_span parameter passes validation"""
+
+    def scorer_with_task_span_only(
+        task_span: Optional[models.SpanModel],
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name="test", value=1.0)
+
+    # Should not raise any exception
+    validate_scorer_function(scorer_with_task_span_only)
+
+
+def test_validate_scorer_function_with_task_span_and_other_params():
+    """Test that function with task_span and other parameters passes validation"""
+
+    def scorer_with_task_span_and_extras(
+        task_span: Optional[models.SpanModel],
+        extra_param: str = "default",
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name="test", value=1.0)
+
+    # Should not raise any exception
+    validate_scorer_function(scorer_with_task_span_and_extras)
+
+
+def test_validate_scorer_function_with_all_params():
+    """Test that function with all parameters (scoring_inputs, task_outputs, task_span) passes validation"""
+
+    def scorer_with_all_params(
+        scoring_inputs: Dict[str, Any],
+        task_outputs: Dict[str, Any],
+        task_span: Optional[models.SpanModel] = None,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name="test", value=1.0)
+
+    # Should not raise any exception
+    validate_scorer_function(scorer_with_all_params)

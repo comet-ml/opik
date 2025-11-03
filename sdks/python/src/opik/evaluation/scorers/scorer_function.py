@@ -31,23 +31,24 @@ EXPECTED_SCORER_FUNCTION_PARAMETERS = ["scoring_inputs", "task_outputs"]
 
 def validate_scorer_function(scorer_function: ScorerFunction) -> None:
     if not callable(scorer_function):
-        raise ValueError(
-            f"scorer_function must be a callable function that takes two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS}"
-        )
+        raise ValueError("scorer_function must be a callable function")
 
     parameters = inspect.signature(scorer_function).parameters
-    if len(parameters) < 2:
-        raise ValueError(
-            f"scorer_function must take at least two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS}"
-        )
+    names = set(parameters.keys())
 
-    names = parameters.keys()
-    for expected_name in EXPECTED_SCORER_FUNCTION_PARAMETERS:
-        if expected_name not in names:
-            raise ValueError(
-                f"scorer_function must take at least two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS} - "
-                f"the {expected_name} is not found in function parameters: {names}"
-            )
+    # Check if it has both scoring_inputs and task_outputs
+    has_scoring_inputs_and_task_outputs = all(
+        param in names for param in EXPECTED_SCORER_FUNCTION_PARAMETERS
+    )
+
+    # Check if it has at least one task_span parameter
+    has_task_span = "task_span" in names
+
+    if not (has_scoring_inputs_and_task_outputs or has_task_span):
+        raise ValueError(
+            f"scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters "
+            f"or at least one 'task_span' parameter. Found parameters: {list(names)}"
+        )
 
 
 def has_task_span_in_parameters(scorer_function: ScorerFunction) -> bool:
