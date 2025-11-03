@@ -1,0 +1,34 @@
+---
+description: Documentation standards and code style for Opik Optimizer SDK
+globs: sdks/opik_optimizer/src/opik_optimizer/**/*
+alwaysApply: false
+---
+# Opik Optimizer Documentation Style
+
+Keep docs lightweight and point back to the architecture rule for shared signatures and component overviews. Use documentation to clarify behaviour, configuration, and examples rather than restating code.
+
+## Docstrings and Type Hints
+
+- Provide docstrings for public classes, lifecycle hooks (`optimize_prompt`, `_initialize_population`, `_evaluate_prompt`), and complex helpers. Start with a one-line summary followed by behaviour/side-effect details.
+- Rely on type hints to document parameters; docstrings should explain semantics, expected ranges, and side effects (for example, background evaluations or Opik trace tagging).
+- Use `pydantic` model field descriptions when exposing configuration objects to users.
+
+## Examples and Guides
+
+- Update `README.md`, notebooks under `notebooks/`, and docs under `docs/` whenever you add a new optimizer or surface area. Demonstrate minimal reproducible examples using datasets from `opik_optimizer.datasets`. Additionally, update the Fern docs in `apps/opik-documentation/documentation/fern/docs/agent_optimization` when public APIs change.
+- Keep code snippets executable: import from `opik_optimizer`, configure provider keys via environment variables, and run on small datasets to limit cost.
+- When features depend on optional extras, show the installation command (`pip install opik-optimizer[dev]`) alongside the example.
+
+## Rich Output and CLI Messaging
+
+- `OptimizationResult.__str__` and `reporting_utils` rely on Rich. When adding new console sections, use Rich markup strings and keep plain-text fallbacks sensible for notebook and CLI users.
+- Avoid direct `print` statements in optimizers; emit structured data through reporting helpers or logging.
+
+## Release Notes
+
+- Mention new configuration flags, dependency changes, and required environment variables in release notes or changelog entries.
+- Cross-link to relevant docs or notebooks so users can follow up with detailed examples.
+
+## API Spec
+
+- Run `scripts/generate_fern_docs.py` to refresh Fern docs when you add or modify public classes. Ensure imports stay valid so the doc build succeeds.
