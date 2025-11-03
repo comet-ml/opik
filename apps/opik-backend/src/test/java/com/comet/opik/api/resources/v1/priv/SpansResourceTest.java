@@ -1809,7 +1809,9 @@ class SpansResourceTest {
                                             .limit(pageSize)
                                             .build());
 
-                            SpanAssertions.assertSpan(actualSpans, trace, USER);
+                            // Prepare expected spans with provider injected into metadata
+                            var preparedExpectedTrace = SpanAssertions.prepareSpansForAssertion(trace);
+                            SpanAssertions.assertSpan(actualSpans, preparedExpectedTrace, USER);
 
                             lastId.set(actualSpans.getLast().id());
                         });
@@ -4979,7 +4981,12 @@ class SpansResourceTest {
                 exclude);
 
         SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
-        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, unexpectedSpans, USER);
+        
+        // Prepare expected spans with provider injected into metadata
+        var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
+        var preparedUnexpectedSpans = SpanAssertions.prepareSpansForAssertion(unexpectedSpans);
+        
+        SpanAssertions.assertSpan(actualPage.content(), preparedExpectedSpans, preparedUnexpectedSpans, USER);
     }
 
     private void createAndAssert(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
