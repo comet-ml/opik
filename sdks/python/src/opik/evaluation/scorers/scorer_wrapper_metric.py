@@ -1,7 +1,9 @@
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, List
 
 from opik.evaluation.metrics import base_metric, score_result
+
 from . import scorer_function
+from ...message_processing.emulation import models
 
 
 class ScorerWrapperMetric(base_metric.BaseMetric):
@@ -17,7 +19,7 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name for tracking.
 
-    Returns:
+    Raises:
         ValueError if the scorer function is invalid.
 
     Example:
@@ -31,13 +33,12 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
     def __init__(
         self,
         scorer: scorer_function.ScorerFunction,
-        name: Optional[str] = None,
+        name: str,
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
-        self.scorer = scorer
-        name = name if name is not None else self.scorer.__name__
         super().__init__(name=name, track=track, project_name=project_name)
+        self.scorer = scorer
 
         # validate scorer function
         scorer_function.validate_scorer_function(scorer)
@@ -59,4 +60,71 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        return self.scorer(scoring_inputs, task_outputs)
+        return self.scorer(scoring_inputs=scoring_inputs, task_outputs=task_outputs)
+
+
+class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
+    def __init__(
+        self,
+        scorer: scorer_function.ScorerFunction,
+        name: str,
+        track: bool = True,
+        project_name: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            scorer=scorer, name=name, track=track, project_name=project_name
+        )
+
+    def score(
+        self,
+        scoring_inputs: Dict[str, Any],
+        task_outputs: Dict[str, Any],
+        task_span: Optional[models.SpanModel] = None,
+        **kwargs: Any,
+    ) -> score_result.ScoreResult:
+        """
+        Score using the wrapped ScorerFunction.
+
+        Args:
+            scoring_inputs: The expected/reference dictionary to score against - can be the dataset item content
+            task_outputs: The output dictionary to be scored - can be the output of LLM task, etc.
+            task_span: The collected task span data.
+            **kwargs: Additional keyword arguments (ignored by the scorer function)
+
+        Returns:
+            ScoreResult from the wrapped scorer function
+        """
+        if task_span is not None and scorer_function.has_task_span_in_parameters(
+            self.scorer
+        ):
+            return self.scorer(
+                scoring_inputs=scoring_inputs,
+                task_outputs=task_outputs,
+                task_span=task_span,
+            )
+
+        return self.scorer(scoring_inputs=scoring_inputs, task_outputs=task_outputs)
+
+
+def _scorer_name(scorer: Callable) -> str:
+    return scorer.__name__
+
+
+def wrap_scorer_functions(
+    scorer_functions: List[scorer_function.ScorerFunction], project_name: Optional[str]
+) -> List[ScorerWrapperMetric]:
+    metrics = []
+    for f in scorer_functions:
+        name = _scorer_name(f)
+        if scorer_function.has_task_span_in_parameters(f):
+            metrics.append(
+                ScorerWrapperMetricTaskSpan(
+                    scorer=f, project_name=project_name, name=name
+                )
+            )
+        else:
+            metrics.append(
+                ScorerWrapperMetric(scorer=f, project_name=project_name, name=name)
+            )
+
+    return metrics
