@@ -5,6 +5,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.core.Response;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
@@ -30,6 +32,38 @@ public class TraceAssertions {
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
             "feedbackScores.valueByAuthor"};
+
+    /**
+     * Prepares a trace for assertion by injecting providers into metadata if providers are set.
+     * This mirrors the backend behavior where providers are automatically injected into metadata.
+     * 
+     * @param trace the trace to prepare
+     * @return a new trace with providers injected into metadata if providers are present
+     */
+    public static Trace prepareTraceForAssertion(Trace trace) {
+        if (trace.providers() == null || trace.providers().isEmpty()) {
+            return trace;
+        }
+
+        JsonNode metadataWithProviders = JsonUtils.injectArrayFieldIntoMetadata(
+                trace.metadata(), Trace.TraceField.PROVIDERS.getValue(), trace.providers());
+
+        return trace.toBuilder()
+                .metadata(metadataWithProviders)
+                .build();
+    }
+
+    /**
+     * Prepares a list of traces for assertion by injecting providers into metadata.
+     * 
+     * @param traces the traces to prepare
+     * @return a new list of traces with providers injected into metadata where applicable
+     */
+    public static List<Trace> prepareTracesForAssertion(List<Trace> traces) {
+        return traces.stream()
+                .map(TraceAssertions::prepareTraceForAssertion)
+                .toList();
+    }
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
