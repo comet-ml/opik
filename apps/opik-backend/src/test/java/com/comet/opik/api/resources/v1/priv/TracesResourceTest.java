@@ -5796,7 +5796,9 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
-            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
+            // Prepare expected traces with providers injected into metadata
+            var preparedExpectedTraces = TraceAssertions.prepareTracesForAssertion(expectedTraces);
+            TraceAssertions.assertTraces(actualTraces, preparedExpectedTraces, USER);
         }
 
         @ParameterizedTest
@@ -5842,7 +5844,9 @@ class TracesResourceTest {
                                             .limit(pageSize)
                                             .build());
 
-                            TraceAssertions.assertTraces(actualTraces, trace, USER);
+                            // Prepare expected traces with providers injected into metadata
+                            var preparedExpectedTrace = TraceAssertions.prepareTracesForAssertion(trace);
+                            TraceAssertions.assertTraces(actualTraces, preparedExpectedTrace, USER);
 
                             lastId.set(actualTraces.getLast().id());
                         });
@@ -5904,7 +5908,9 @@ class TracesResourceTest {
                             .build());
 
             if (stream) {
-                TraceAssertions.assertTraces(actualTraces, traces.reversed(), USER);
+                // Prepare expected traces with providers injected into metadata
+                var preparedExpectedTraces = TraceAssertions.prepareTracesForAssertion(traces.reversed());
+                TraceAssertions.assertTraces(actualTraces, preparedExpectedTraces, USER);
             } else {
                 getAndAssertPage(
                         1,
@@ -6807,7 +6813,11 @@ class TracesResourceTest {
         assertThat(actualPage.size()).isEqualTo(expectedTraces.size());
         assertThat(actualPage.total()).isEqualTo(total);
 
-        TraceAssertions.assertTraces(actualTraces, expectedTraces, unexpectedTraces, USER);
+        // Prepare expected traces with providers injected into metadata
+        var preparedExpectedTraces = TraceAssertions.prepareTracesForAssertion(expectedTraces);
+        var preparedUnexpectedTraces = TraceAssertions.prepareTracesForAssertion(unexpectedTraces);
+
+        TraceAssertions.assertTraces(actualTraces, preparedExpectedTraces, preparedUnexpectedTraces, USER);
     }
 
     private void getAndAssertPageSpans(
@@ -7546,7 +7556,9 @@ class TracesResourceTest {
             assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
         }
 
-        TraceAssertions.assertTraces(List.of(actualTrace), List.of(expectedTrace), USER);
+        // Prepare expected trace with providers injected into metadata (as backend does)
+        var preparedExpectedTrace = TraceAssertions.prepareTraceForAssertion(expectedTrace);
+        TraceAssertions.assertTraces(List.of(actualTrace), List.of(preparedExpectedTrace), USER);
 
         return actualTrace;
     }

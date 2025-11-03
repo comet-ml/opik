@@ -6483,7 +6483,7 @@ class SpansResourceTest {
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
             var updatedSpan = expectedSpan.toBuilder().metadata(metadata).build();
             var actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
-            
+
             // Prepare expected metadata with provider injected (if span has provider)
             var expectedMetadata = JsonUtils.injectStringFieldIntoMetadata(
                     metadata, Span.SpanField.PROVIDER.getValue(), expectedSpan.provider());
