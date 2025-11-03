@@ -109,6 +109,8 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
             fallback_score = 1.0 if self._contains_fallback_phrase(content) else 0.0
 
             normalized_entropy = 1.0 - entropy_norm
+            # Combine all four risk factors with equal weight; this keeps the
+            # heuristic interpretable and matches the legacy scoring behaviour.
             deg_score = min(
                 1.0,
                 (repetition_ratio + prev_overlap + fallback_score + normalized_entropy)
