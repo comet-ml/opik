@@ -689,6 +689,8 @@ $BUILD_MODE = $false
 $DEBUG_MODE = $false
 $PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
+# PowerShell persists environment variables across script runs, so we need to reset them
+$env:OPIK_REVERSE_PROXY_URL = ""
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
 # Default: full opik (all profiles)
@@ -798,8 +800,8 @@ switch ($option) {
         exit $LASTEXITCODE
     }
     '--demo-data' {
-        New-DemoData
-        exit $LASTEXITCODE
+        $exitCode = New-DemoData
+        exit $exitCode
     }
     '--help' {
         Show-Usage
