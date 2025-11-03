@@ -53,6 +53,7 @@ Opik supports integration with various AI providers, including:
 - Gemini
 - VertexAI
 - Azure OpenAI
+- Amazon Bedrock
 - LM Studio (coming soon)
 - vLLM / Ollama / any other OpenAI API-compliant provider
 
@@ -228,6 +229,44 @@ Step 4: Create and Download the Key
 - **Vertex AI API Key**: **Paste the full contents of the `opik-key.json` file here**
 
 4. Click **Add configuration**
+
+#### Amazon Bedrock
+
+Amazon Bedrock provides access to foundation models from leading AI companies through AWS. You can use Bedrock models in the Opik Playground by configuring it as a custom provider.
+
+##### Getting AWS Credentials
+
+1. Log into the [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
+2. Go to the **API Keys** section
+3. Generate or copy your API Key
+4. Keep this API Key secure - you'll need it for Opik configuration
+
+##### Configuring Bedrock in Opik
+
+1. In Opik, go to **Configuration → AI Providers**
+2. Click **"Add Configuration"**
+3. Select **"vLLM / Custom provider"** from the dropdown
+4. Enter your Bedrock endpoint URL in the URL field
+5. Add your AWS Bedrock API Key in the API Key field
+6. In the Models section, write the Bedrock models you want to use
+7. Click **Save** to store the configuration
+
+##### Bedrock URL Format by Region
+
+Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
+
+**Examples by Region:**
+
+- **US East 1**: `https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1`
+- **US West 2**: `https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1`
+- **Europe West 1 (Ireland)**: `https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1`
+- **Europe Central 1 (Frankfurt)**: `https://bedrock-runtime.eu-central-1.amazonaws.com/openai/v1`
+- **Asia Pacific (Tokyo)**: `https://bedrock-runtime.ap-northeast-1.amazonaws.com/openai/v1`
+- **Asia Pacific (Singapore)**: `https://bedrock-runtime.ap-southeast-1.amazonaws.com/openai/v1`
+
+<Tip>
+  Not all Bedrock models are available in all regions. Check the [AWS Bedrock model availability documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html) to verify model availability in your chosen region before configuring.
+</Tip>
 
 #### vLLM / Custom Provider
 
