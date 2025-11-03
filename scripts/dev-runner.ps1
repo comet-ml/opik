@@ -971,7 +971,7 @@ function Restart-Services {
 
 # Function for quick restart (only rebuild backend, keep infrastructure running)
 function Invoke-QuickRestart {
-    Write-LogInfo "=== Quick Restart (Backend Only) ==="
+    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend only) ==="
     Write-LogInfo "Step 1/6: Stopping frontend..."
     Stop-Frontend
     Write-LogInfo "Step 2/6: Stopping backend..."
