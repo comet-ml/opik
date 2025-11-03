@@ -210,11 +210,9 @@ result = app.invoke({"value": 21}, config={"callbacks": [opik_tracer]})
 
 For asynchronous graph execution using `ainvoke()`, you need to explicitly propagate the trace context to `@track`-decorated functions using the `extract_current_langgraph_span_data` helper:
 
-<Tip>
-**Why is this needed for async execution?**
-
+<Accordion title="Why is this needed for async execution?">
 This is due to a LangChain framework limitation that doesn't automatically share the execution context between callbacks (like `OpikTracer`) and node code in async scenarios. The explicit trace context propagation via distributed headers is required for seamless tracking across async boundaries.
-</Tip>
+</Accordion>
 
 ```python
 from opik import track
