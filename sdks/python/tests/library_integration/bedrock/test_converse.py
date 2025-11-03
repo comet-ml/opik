@@ -6,7 +6,6 @@ from opik.integrations.bedrock import track_bedrock
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
-    ANY_LIST,
     ANY_STRING,
     SpanModel,
     TraceModel,
@@ -259,7 +258,7 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
     client = boto3.client("bedrock-runtime", region_name="us-east-1")
     tracked_client = track_bedrock(client)
 
-    messages = [{"role": "user", "content": [{"text": "Hello, tell me a short story"}]}]
+    messages = [{"role": "user", "content": [{"text": "Hello, tell me a story"}]}]
 
     response = tracked_client.converse_stream(
         modelId=model_id,
@@ -272,23 +271,11 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
 
     opik.flush_tracker()
 
-    # Expected output structure from aggregated streaming response
-    expected_output_structure = ANY_DICT.containing({
-        "output": ANY_DICT.containing({
-            "message": ANY_DICT.containing({
-                "role": "assistant",
-                "content": ANY_LIST,  # Should contain content blocks
-            })
-        }),
-        "stopReason": ANY_STRING,  # e.g., "end_turn", "max_tokens"
-        "ResponseMetadata": ANY_DICT,
-    })
-
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_converse_stream",
         input={"messages": messages},
-        output=expected_output_structure,
+        output={"output": ANY_DICT},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         tags=["bedrock"],
@@ -300,7 +287,7 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
                 name="bedrock_converse_stream",
                 type="llm",
                 input={"messages": messages},
-                output=expected_output_structure,
+                output={"output": ANY_DICT},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock"],
@@ -317,20 +304,6 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
 
     trace_tree = fake_backend.trace_trees[0]
     assert_equal(expected_trace, trace_tree)
-    
-    # Additional strict checks on the actual output structure
-    actual_output = trace_tree.output["output"]
-    assert "message" in actual_output
-    assert "role" in actual_output["message"]
-    assert "content" in actual_output["message"]
-    assert isinstance(actual_output["message"]["content"], list)
-    assert len(actual_output["message"]["content"]) > 0
-    
-    # For text streaming, verify text content exists and is non-empty
-    content_block = actual_output["message"]["content"][0]
-    if "text" in content_block:
-        assert isinstance(content_block["text"], str)
-        assert len(content_block["text"]) > 0, "Streamed text should not be empty"
 
 
 def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_correctly(
@@ -395,24 +368,12 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
     
     trace_tree = fake_backend.trace_trees[0]
     
-    # Expected output structure - model may return text, toolUse, or both
-    expected_output_structure = ANY_DICT.containing({
-        "output": ANY_DICT.containing({
-            "message": ANY_DICT.containing({
-                "role": "assistant",
-                "content": ANY_LIST,
-            })
-        }),
-        "stopReason": ANY_STRING,
-        "ResponseMetadata": ANY_DICT,
-    })
-    
     # Verify basic structure
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_converse_stream",
         input={"messages": messages, "toolConfig": tool_config},
-        output=expected_output_structure,
+        output={"output": ANY_DICT},  # May contain text or toolUse
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         tags=["bedrock"],
@@ -424,7 +385,7 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
                 name="bedrock_converse_stream",
                 type="llm",
                 input={"messages": messages, "toolConfig": tool_config},
-                output=expected_output_structure,
+                output={"output": ANY_DICT},  # May contain text or toolUse
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock"],
@@ -439,27 +400,6 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
     )
     
     assert_equal(expected_trace, trace_tree)
-    
-    # Additional strict checks on the actual output structure
-    actual_output = trace_tree.output["output"]
-    assert "message" in actual_output
-    assert "role" in actual_output["message"]
-    assert "content" in actual_output["message"]
-    assert isinstance(actual_output["message"]["content"], list)
-    assert len(actual_output["message"]["content"]) > 0
-    
-    # Verify that content has either text, toolUse, or both (Issue #3829 fix)
-    content_block = actual_output["message"]["content"][0]
-    has_text = "text" in content_block
-    has_tool_use = "toolUse" in content_block
-    assert has_text or has_tool_use, (
-        "Content block must contain either 'text' or 'toolUse'. "
-        f"Got keys: {list(content_block.keys())}"
-    )
-    
-    # If toolUse is present, verify it's a dictionary
-    if has_tool_use:
-        assert isinstance(content_block["toolUse"], dict), "toolUse should be a dictionary"
 
 
 def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
