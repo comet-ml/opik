@@ -1,19 +1,42 @@
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 from collections.abc import Callable
 
 import copy
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from opik import track
 
 
-class Tool(BaseModel):
-    name: str = Field(..., description="Name of the tool")
-    description: str = Field(..., description="Description of the tool")
-    parameters: dict[str, Any] = Field(
-        ..., description="JSON Schema defining the input parameters for the tool"
-    )
+class FunctionDefinition(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, Any]  # JSON Schema object
+
+
+class ToolDict(TypedDict):
+    type: Literal["function"]
+    function: FunctionDefinition
+
+
+class TextPart(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class ImageUrlDict(TypedDict):
+    url: str
+    detail: Literal["auto", "low", "high"]
+
+
+class ImagePart(TypedDict):
+    type: Literal["image_url"]
+    image_url: ImageUrlDict
+
+
+class MessageDict(TypedDict):
+    role: str
+    content: str | list[TextPart | ImagePart]
 
 
 class ChatPrompt:
@@ -36,8 +59,8 @@ class ChatPrompt:
         name: str = "chat-prompt",
         system: str | None = None,
         user: str | None = None,
-        messages: list[dict[str, str]] | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        messages: list[MessageDict] | None = None,
+        tools: list[ToolDict] | None = None,
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",
         invoke: Callable | None = None,
@@ -60,24 +83,26 @@ class ChatPrompt:
         if user is not None and not isinstance(user, str):
             raise ValueError("`user` must be a string")
 
-        if messages is not None:
-            if not isinstance(messages, list):
-                raise ValueError("`messages` must be a list")
-            else:
-                for message in messages:
-                    if not isinstance(message, dict):
-                        raise ValueError("`messages` must be a dictionary")
-                    elif "role" not in message or "content" not in message:
-                        raise ValueError(
-                            "`message` must have 'role' and 'content' keys."
-                        )
         self.name = name
         self.system = system
         self.user = user
-        self.messages = messages
-        # ALl of the rest are just for the ChatPrompt LLM
+        self.messages: list[MessageDict] | None = None
+        # Normalize and validate messages to list[MessageDict]
+        if messages is not None:
+            if not isinstance(messages, list):
+                raise ValueError("`messages` must be a list")
+            normalised: list[MessageDict] = []
+            for message in messages:
+                # Expecting MessageDict; perform a shallow structural check
+                if not isinstance(message, dict):
+                    raise ValueError("Each item in `messages` must be a dictionary")
+                if "role" not in message or "content" not in message:
+                    raise ValueError("Each message must include 'role' and 'content'")
+                normalised.append(cast(MessageDict, message))
+            self.messages = normalised
+        # All of the rest are just for the ChatPrompt LLM
         # These are used from the prompt as controls:
-        self.tools = tools
+        self.tools: list[ToolDict] | None = tools
         if function_map:
             self.function_map = {
                 key: (
@@ -96,50 +121,117 @@ class ChatPrompt:
 
     def get_messages(
         self,
-        dataset_item: dict[str, str] | None = None,
-    ) -> list[dict[str, str]]:
+        dataset_item: dict[str, Any] | None = None,
+    ) -> list[MessageDict]:
         # This is a copy, so we can alter the messages:
         messages = self._standardize_prompts()
 
-        if dataset_item:
-            for key, value in dataset_item.items():
-                for message in messages:
-                    # Only replace user message content:
-                    label = "{" + key + "}"
-                    if label in message["content"]:
-                        message["content"] = message["content"].replace(
-                            label, str(value)
-                        )
+        if not dataset_item:
+            return messages
+
+        def _replace_in_text_part(
+            part: TextPart, label: str, replacement: str
+        ) -> TextPart:
+            if label in part["text"]:
+                return {
+                    "type": "text",
+                    "text": part["text"].replace(label, replacement),
+                }
+            return part
+
+        def _replace_in_image_part(
+            part: ImagePart, label: str, replacement: str
+        ) -> ImagePart:
+            url = part["image_url"]["url"].replace(label, replacement)
+            return {
+                "type": "image_url",
+                "image_url": {
+                    "url": url,
+                    "detail": part["image_url"]["detail"],
+                },
+            }
+
+        def _replace_in_content(
+            content: str | list[TextPart | ImagePart], label: str, replacement: str
+        ) -> str | list[TextPart | ImagePart]:
+            if isinstance(content, str):
+                return content.replace(label, replacement)
+            new_parts: list[TextPart | ImagePart] = []
+            for p in content:
+                if p["type"] == "text":
+                    new_parts.append(
+                        _replace_in_text_part(cast(TextPart, p), label, replacement)
+                    )
+                else:
+                    new_parts.append(
+                        _replace_in_image_part(cast(ImagePart, p), label, replacement)
+                    )
+            return new_parts
+
+        def _replace_in_message(
+            message: MessageDict, label: str, replacement: str
+        ) -> MessageDict:
+            new_message: MessageDict = {
+                "role": message["role"],
+                "content": message["content"],
+            }
+            new_message["content"] = _replace_in_content(
+                message["content"], label, replacement
+            )
+            return new_message
+
+        for key, value in dataset_item.items():
+            label = "{" + str(key) + "}"
+            replacement = str(value)
+            for i, message in enumerate(messages):
+                messages[i] = _replace_in_message(message, label, replacement)
         return messages
 
-    def _standardize_prompts(self, **kwargs: Any) -> list[dict[str, str]]:
-        standardize_messages: list[dict[str, str]] = []
+    def _standardize_prompts(self, **kwargs: Any) -> list[MessageDict]:
+        standardize_messages: list[MessageDict] = []
 
         if self.system is not None:
-            standardize_messages.append({"role": "system", "content": self.system})
+            standardize_messages.append(
+                cast(MessageDict, {"role": "system", "content": self.system})
+            )
 
         if self.messages is not None:
             for message in self.messages:
-                standardize_messages.append(message)
+                standardize_messages.append(cast(MessageDict, message))
 
         if self.user is not None:
-            standardize_messages.append({"role": "user", "content": self.user})
+            standardize_messages.append(
+                cast(MessageDict, {"role": "user", "content": self.user})
+            )
 
         return copy.deepcopy(standardize_messages)
 
-    def to_dict(self) -> dict[str, str | list[dict[str, str]]]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
+
+        Handles nested structures (e.g., in tools or external data) that may
+        contain Pydantic models, converting them to plain dicts.
 
         Returns:
             Dict containing the serializable representation of this ChatPrompt
         """
-        retval: dict[str, str | list[dict[str, str]]] = {}
+
+        def _to_plain(obj: Any) -> Any:
+            if isinstance(obj, BaseModel):
+                return obj.model_dump()
+            if isinstance(obj, list):
+                return [_to_plain(item) for item in obj]
+            if isinstance(obj, dict):
+                return {k: _to_plain(v) for k, v in obj.items()}
+            return obj
+
+        retval: dict[str, Any] = {}
         if self.system is not None:
-            retval["system"] = self.system
+            retval["system"] = _to_plain(self.system)
         if self.user is not None:
-            retval["user"] = self.user
+            retval["user"] = _to_plain(self.user)
         if self.messages is not None:
-            retval["messages"] = self.messages
+            retval["messages"] = _to_plain(self.messages)
         return retval
 
     def copy(self) -> "ChatPrompt":
@@ -162,7 +254,7 @@ class ChatPrompt:
             model_parameters=model_parameters,
         )
 
-    def set_messages(self, messages: list[dict[str, Any]]) -> None:
+    def set_messages(self, messages: list[MessageDict]) -> None:
         self.system = None
         self.user = None
         self.messages = copy.deepcopy(messages)
@@ -170,7 +262,7 @@ class ChatPrompt:
     # TODO(opik): remove this stop-gap once MetaPromptOptimizer supports MCP.
     # Provides a second-pass flow so tool results can be appended before
     # rerunning the model.
-    def with_messages(self, messages: list[dict[str, Any]]) -> "ChatPrompt":
+    def with_messages(self, messages: list[MessageDict]) -> "ChatPrompt":
         cloned = self.copy()
         cloned.set_messages(messages)
         return cloned
@@ -188,7 +280,11 @@ class ChatPrompt:
     ) -> "ChatPrompt":
         """Custom validation method to handle nested objects during deserialization."""
         return ChatPrompt(
+            name=obj.get("name", "chat-prompt"),
             system=obj.get("system", None),
             user=obj.get("user", None),
             messages=obj.get("messages", None),
+            tools=obj.get("tools", None),
+            model=obj.get("model", "gpt-4o-mini"),
+            model_parameters=obj.get("model_parameters", None),
         )
