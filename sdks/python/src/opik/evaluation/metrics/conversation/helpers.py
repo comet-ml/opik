@@ -71,8 +71,8 @@ def extract_turns_windows_from_conversation(
         raise ValueError("Conversation has no turns")
 
     turns_windows: List[types.Conversation] = [
-        merge_turns(turn_window)
-        for turn_window in get_turns_in_sliding_window(turns, window_size)
+        merge_turns(turns_window)
+        for turns_window in get_turns_in_sliding_window(turns, window_size)
     ]
     return turns_windows
 

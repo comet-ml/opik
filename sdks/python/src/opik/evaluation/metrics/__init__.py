@@ -8,10 +8,7 @@ from .aggregated_metric import AggregatedMetric
 # to the lazy getter below, letting legacy entry-points keep working.
 from .conversation.conversation_thread_metric import ConversationThreadMetric
 
-try:
-    from .conversation import types as conversation_types
-except ImportError:  # pragma: no cover - runtime compatibility
-    from . import conversation_types as conversation_types  # type: ignore
+from .conversation import types as conversation_types
 from .conversation.heuristics.degeneration.metric import ConversationDegenerationMetric
 from .conversation.heuristics.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
@@ -153,19 +150,3 @@ __all__ = [
     "ConversationThreadMetric",
     # "Factuality",
 ]
-
-
-def __getattr__(name: str) -> Any:
-    # Provide the legacy ``opik.evaluation.metrics.conversation_types`` symbol on
-    # demand so environments pinned to the old path keep working after the
-    # conversation module refactor.
-    if name == "conversation_types":
-        try:
-            from .conversation import types as conv_types
-        except ImportError:  # pragma: no cover - runtime compatibility
-            from . import conversation_types as conv_types  # type: ignore
-
-        globals()["conversation_types"] = conv_types
-        return conv_types
-
-    raise AttributeError(name)

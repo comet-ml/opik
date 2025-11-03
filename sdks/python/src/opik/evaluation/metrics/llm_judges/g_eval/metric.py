@@ -245,6 +245,10 @@ class GEval(base_metric.BaseMetric):
         output: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
+        """
+        Async variant of :meth:`score`, evaluating the provided LLM output using
+        the configured judge model and returning a ``ScoreResult``.
+        """
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
