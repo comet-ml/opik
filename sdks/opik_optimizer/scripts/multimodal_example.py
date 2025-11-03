@@ -12,7 +12,12 @@ dataset = driving_hazard_50(test_mode=True)
 # Define the metric to optimize on
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
-    return metric.score(reference=dataset_item["hazard"], output=llm_output)
+    metric_score = metric.score(reference=dataset_item["hazard"], output=llm_output)
+    return ScoreResult(
+        value=metric_score.value,
+        name=metric_score.name,
+        reason=f"Levenshtein ratio between `{dataset_item['hazard']}` and `{llm_output}` is `{metric_score.value}`.",
+    )
 
 
 # Define the prompt to optimize

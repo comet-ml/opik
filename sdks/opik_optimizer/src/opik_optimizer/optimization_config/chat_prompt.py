@@ -1,4 +1,5 @@
 from typing import Any, Literal, TypedDict, cast
+from typing_extensions import NotRequired
 from collections.abc import Callable
 
 import copy
@@ -26,7 +27,7 @@ class TextPart(TypedDict):
 
 class ImageUrlDict(TypedDict):
     url: str
-    detail: Literal["auto", "low", "high"]
+    detail: NotRequired[Literal["auto", "low", "high"]]
 
 
 class ImagePart(TypedDict):
@@ -191,13 +192,17 @@ class ChatPrompt:
             part: ImagePart, label: str, replacement: str
         ) -> ImagePart:
             url = part["image_url"]["url"].replace(label, replacement)
-            return {
-                "type": "image_url",
-                "image_url": {
-                    "url": url,
-                    "detail": part["image_url"]["detail"],
+            # Build the image_url dict, preserving detail if present
+            image_url: ImageUrlDict = {"url": url}
+            if "detail" in part["image_url"]:
+                image_url["detail"] = part["image_url"]["detail"]
+            return cast(
+                ImagePart,
+                {
+                    "type": "image_url",
+                    "image_url": image_url,
                 },
-            }
+            )
 
         def _replace_in_content(
             content: str | list[TextPart | ImagePart], label: str, replacement: str

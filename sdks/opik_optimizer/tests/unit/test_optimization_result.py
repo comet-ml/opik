@@ -77,11 +77,11 @@ class TestOptimizationResult:
 
     def test_optimization_result_invalid_prompt_format(self) -> None:
         """Test that invalid prompt format raises ValidationError."""
-        # Invalid prompt format - should be list[dict[str, str]]
+        # Invalid prompt format - should be list[MessageDict]
         with pytest.raises(ValidationError):
             OptimizationResult(
                 optimizer="TestOptimizer",
-                prompt="invalid string prompt",  # Should be list[dict[str, str]]
+                prompt="invalid string prompt",  # Should be list[MessageDict]
                 score=0.85,
                 metric_name="accuracy",
             )

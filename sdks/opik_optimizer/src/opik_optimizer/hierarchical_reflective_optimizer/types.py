@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel
 
+from ..optimization_config.chat_prompt import ImagePart, TextPart
+
 
 class FailureMode(BaseModel):
     """Model for a single failure mode identified in evaluation."""
@@ -36,10 +38,13 @@ class HierarchicalRootCauseAnalysis(BaseModel):
 
 
 class PromptMessage(BaseModel):
-    """Model for a single prompt message."""
+    """Model for a single prompt message.
+
+    Uses the same content type as MessageDict to maintain consistency.
+    """
 
     role: str
-    content: str
+    content: str | list[TextPart | ImagePart]
 
 
 class ImprovedPrompt(BaseModel):
