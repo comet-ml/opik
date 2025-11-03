@@ -11,7 +11,8 @@ To use this example:
 3. The agent will handle MCP tool calls automatically
 """
 
-from typing import Any
+from typing import Any, cast
+from collections.abc import Callable
 
 from opik_optimizer import OptimizableAgent, ChatPrompt
 from opik_optimizer.mcp_utils.mcp import (
@@ -152,7 +153,7 @@ Use these tools when appropriate to help answer user questions."""
         system=system_prompt,
         user=user_template,
         tools=tools,
-        function_map=tool_invocations,
+        function_map=cast(dict[str, Callable[..., Any]], tool_invocations),
         model=model,
     )
 
