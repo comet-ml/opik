@@ -252,22 +252,6 @@ prompt.format(text="Hello, world!")
 
 If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest-api/overview).
 
-### Viewing prompt history (all versions)
-
-You can fetch the complete version history for a prompt by its exact name using [`get_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt_history):
-
-```python
-import opik
-
-client = opik.Opik()
-
-history = client.get_prompt_history(name="prompt-summary")
-for version in history:
-    print(version.commit, version.prompt)
-```
-
-This returns a list of Prompt objects (each representing a specific version) for the given prompt name.
-
 ### Searching prompts
 
 To discover prompts by name substring and/or filters, use [`search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts). Filters are written in Opik Query Language (OQL):
@@ -312,14 +296,75 @@ The `filter_string` parameter uses Opik Query Language (OQL) with the format:
 
 `search_prompts` returns the **latest** version for each matching prompt.
 
-## Linking prompts to Experiments
+## Working with prompt versions
+
+### Viewing prompt history (all versions)
+
+You can fetch the complete version history for a prompt by its exact name using [`get_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt_history):
+
+```python maxLines=1000
+import opik
+
+opik.configure()
+client = opik.Opik()
+
+# Get the complete version history for a prompt
+prompt_history = client.get_prompt_history(name="prompt-summary")
+
+# Iterate through all versions
+for version in prompt_history:
+    print(f"Commit: {version.commit}")
+    print(f"Created at: {version.created_at}")
+    print(f"Prompt text: {version.prompt}")
+    print(f"Metadata: {version.metadata}")
+    print("-" * 50)
+```
+
+This returns a list of Prompt objects (each representing a specific version) for the given prompt name.
+
+You can use this information to:
+
+- **Audit changes** to understand how prompts evolved
+- **Identify the best performing version** by linking commit IDs to experiment results
+- **Document prompt changes** for compliance or review purposes
+- **Retrieve specific versions** by commit ID for testing or rollback
+
+### Accessing specific prompt versions
+
+When working with prompts, you may want to retrieve a specific version of a prompt rather than the latest version. You can do this by passing the `commit` parameter to the [`get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
+
+```python maxLines=1000
+import opik
+
+opik.configure()
+client = opik.Opik()
+
+# Get a specific version of a prompt by commit ID
+prompt = client.get_prompt(name="prompt-summary", commit="abc123def456")
+
+# Use the prompt in your application
+formatted_prompt = prompt.format(text="Hello, world!")
+print(formatted_prompt)
+```
+
+The `commit` parameter accepts the commit ID (also called commit hash) of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` method (see above).
+
+This is particularly useful when you want to:
+- **Pin to a specific version** in production to ensure consistent behavior
+- **Test different versions** side by side in experiments
+- **Roll back** to a previous version if issues are discovered
+- **Compare results** across different prompt versions
+
+## Using prompts in experiments
+
+### Linking prompts to experiments
 
 [Experiments](/evaluation/evaluate_your_llm) allow you to evaluate the performance
 of your LLM application on a set of examples. When evaluating different prompts,
 it can be useful to link the evaluation to a specific prompt version. This can
-be achieved by passing the `prompt` parameter when creating an Experiment:
+be achieved by passing the `prompts` parameter when creating an Experiment:
 
-```python
+```python maxLines=1000
 import opik
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Hallucination
@@ -342,7 +387,7 @@ evaluation = evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=evaluation_task,
-    prompt=prompt,
+    prompts=[prompt],
 )
 ```
 
@@ -351,3 +396,45 @@ The experiment will now be linked to the prompt allowing you to view all experim
 <Frame>
   <img src="/img/evaluation/linked_prompt.png" />
 </Frame>
+
+### Comparing prompt versions in experiments
+
+You can run experiments with different prompt versions to determine which performs best:
+
+```python maxLines=1000
+import opik
+from opik.evaluation import evaluate
+
+opik.configure()
+client = opik.Opik()
+
+# Get the dataset
+dataset = client.get_or_create_dataset("test_dataset")
+
+# Get different versions of the same prompt
+prompt_v1 = client.get_prompt(name="prompt-summary", commit="abc123")
+prompt_v2 = client.get_prompt(name="prompt-summary", commit="def456")
+
+# Define evaluation task
+def evaluation_task(dataset_item):
+    return {"output": "llm_response"}
+
+# Run experiments with different prompt versions
+experiment_v1 = evaluate(
+    experiment_name="My experiment - v1",
+    dataset=dataset,
+    task=evaluation_task,
+    prompts=[prompt_v1],
+)
+
+experiment_v2 = evaluate(
+    experiment_name="My experiment - v2",
+    dataset=dataset,
+    task=evaluation_task,
+    prompts=[prompt_v2],
+)
+
+# Compare results in the Opik UI
+```
+
+This workflow allows you to systematically test and compare different prompt versions to identify the most effective one for your use case.
