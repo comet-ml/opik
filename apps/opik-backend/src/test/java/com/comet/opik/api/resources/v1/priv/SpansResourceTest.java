@@ -4981,11 +4981,11 @@ class SpansResourceTest {
                 exclude);
 
         SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
-        
+
         // Prepare expected spans with provider injected into metadata
         var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
         var preparedUnexpectedSpans = SpanAssertions.prepareSpansForAssertion(unexpectedSpans);
-        
+
         SpanAssertions.assertSpan(actualPage.content(), preparedExpectedSpans, preparedUnexpectedSpans, USER);
     }
 

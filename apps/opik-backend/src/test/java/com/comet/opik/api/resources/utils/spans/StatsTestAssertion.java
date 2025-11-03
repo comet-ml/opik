@@ -38,7 +38,9 @@ public final class StatsTestAssertion implements SpanPageTestAssertion<ProjectSt
     @Override
     public TestArgs<ProjectStats.ProjectStatItem<?>> transformTestParams(List<Span> spans, List<Span> expected,
             List<Span> unexpected) {
-        return TestArgs.of(List.of(), getProjectSpanStatItems(expected),
+        // Prepare expected spans with provider injected into metadata before creating stats
+        var preparedExpected = SpanAssertions.prepareSpansForAssertion(expected);
+        return TestArgs.of(List.of(), getProjectSpanStatItems(preparedExpected),
                 List.of());
     }
 }
