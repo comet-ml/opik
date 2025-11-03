@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { Dataset, DatasetItem } from "@/types/datasets";
+import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
-import { Database, FlaskConical, Pause, Play, X } from "lucide-react";
+import { Database, FlaskConical, Pause, Play, Plus, X } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 import {
@@ -28,6 +28,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
 import { hasImagesInContent } from "@/lib/llm";
 import { supportsImageInput } from "@/lib/modelCapabilities";
+import DatasetEmptyState from "./DatasetEmptyState";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -36,6 +37,7 @@ interface PlaygroundOutputActionsProps {
   onChangeDatasetId: (id: string | null) => void;
   workspaceName: string;
   datasetItems: DatasetItem[];
+  datasetColumns: DatasetItemColumn[];
   loadingDatasetItems: boolean;
 }
 
@@ -49,6 +51,7 @@ const PlaygroundOutputActions = ({
   onChangeDatasetId,
   workspaceName,
   datasetItems,
+  datasetColumns,
   loadingDatasetItems,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -106,7 +109,11 @@ const PlaygroundOutputActions = ({
 
   const rules = rulesData?.content || [];
 
-  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
+  const {
+    data: datasetsData,
+    isLoading: isLoadingDatasets,
+    isFetching: isFetchingDatasets,
+  } = useDatasetsList({
     workspaceName,
     page: 1,
     size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
@@ -123,6 +130,22 @@ const PlaygroundOutputActions = ({
   }, [datasets]);
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
+
+  // Clear datasetId if the selected dataset no longer exists
+  useEffect(() => {
+    if (datasetId && !isLoadingDatasets && !isFetchingDatasets) {
+      const datasetExists = datasets.some((ds) => ds.id === datasetId);
+      if (!datasetExists) {
+        onChangeDatasetId(null);
+      }
+    }
+  }, [
+    datasetId,
+    datasets,
+    isLoadingDatasets,
+    isFetchingDatasets,
+    onChangeDatasetId,
+  ]);
 
   const {
     stopAll,
@@ -404,7 +427,7 @@ const PlaygroundOutputActions = ({
             placeholder={
               <div className="flex w-full items-center text-light-slate">
                 <Database className="mr-2 size-4" />
-                <span className="truncate font-normal">Test over dataset</span>
+                <span className="truncate font-normal">Select a dataset</span>
               </div>
             }
             onChange={handleChangeDatasetId}
@@ -429,20 +452,20 @@ const PlaygroundOutputActions = ({
                 </div>
               );
             }}
+            emptyState={<DatasetEmptyState />}
             actionPanel={
               <div className="sticky inset-x-0 bottom-0">
                 <Separator className="my-1" />
                 <div
-                  className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                  className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
                   onClick={() => {
                     setIsDatasetDropdownOpen(false);
                     setIsDatasetDialogOpen(true);
                   }}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate text-primary">
-                      Create a new dataset
-                    </div>
+                  <div className="comet-body-s flex items-center gap-2 text-primary">
+                    <Plus className="size-3.5 shrink-0" />
+                    <span>Create a new dataset</span>
                   </div>
                 </div>
               </div>
@@ -487,11 +510,14 @@ const PlaygroundOutputActions = ({
           }
         }}
         projectId={ruleDialogProjectId || playgroundProject?.id}
+        projectName="playground"
+        datasetColumnNames={datasetColumns.map((c) => c.name)}
       />
       <AddEditDatasetDialog
         open={isDatasetDialogOpen}
         setOpen={setIsDatasetDialogOpen}
         onDatasetCreated={handleDatasetCreated}
+        csvRequired
       />
     </>
   );

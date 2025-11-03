@@ -1,0 +1,61 @@
+---
+description: Import organization, module layout, and access control for Opik Optimizer SDK
+globs: sdks/opik_optimizer/src/opik_optimizer/**/*
+alwaysApply: false
+---
+# Opik Optimizer Code Structure
+
+Keep modules small, explicit, and aligned with the optimizer architecture so contributors can navigate the SDK quickly.
+
+## Imports
+
+- Order imports as: standard library -> third-party -> Opik/Opik Optimizer modules.
+- Use absolute imports when referencing other packages inside `opik_optimizer` (`from opik_optimizer.optimization_config import chat_prompt`). Reserve relative imports for local siblings within the same package.
+- Guard optional dependencies (for example, `gepa`, `langgraph`, `torch`) inside functions or `try/except ImportError` blocks so the base install works without extras.
+
+## Directory Layout
+
+```
+src/opik_optimizer/
+├── base_optimizer.py
+├── optimization_result.py
+├── optimizable_agent.py
+├── optimization_config/
+├── datasets/
+├── utils/
+├── metrics/
+├── integrations/
+├── {optimizer}/
+│   ├── __init__.py
+│   ├── {optimizer}.py
+│   ├── operators/
+│   ├── prompts.py
+│   └── reporting.py
+└── mcp_utils/
+```
+
+- Replace `{optimizer}` with concrete packages such as `evolutionary_optimizer`, `meta_prompt_optimizer`, `parameter_optimizer`, etc. A healthy default layout for each optimizer package is:
+  - `{optimizer}.py`: the public class that subclasses `BaseOptimizer` and orchestrates the run.
+  - `operators/`: submodules such as `mutation_ops.py`, `selection_ops.py`, `population_ops.py`, and `evaluation_ops.py` that keep genetic/search behaviours isolated.
+  - `prompts.py`: canned prompt templates or helpers used to seed candidates.
+  - `reporting.py`: helpers that wrap `reporting_utils` context managers to print progress, capture baselines, and surface final summaries. Keep console output centralised here so the optimizer file focuses on control flow.
+- Split new logic into focused modules when a file grows beyond ~300 lines or mixes concerns (for example, extraction of mutation operators, prompt planners, evaluation helpers, or style utilities). Prefer creating a dedicated submodule over adding yet another helper to the main optimizer file.
+
+- Keep algorithm-specific helpers (mutation ops, prompts, stage planners) inside the corresponding optimizer package.
+- Shared utilities that are reused across optimizers live in top-level directories (`utils/`, `optimization_config/`, `metrics/`, `mcp_utils/`). Do not introduce generic `helpers.py` dumps.
+
+## Public Surface
+
+- Re-export public optimizers from package `__init__.py` files so users can import with `from opik_optimizer import EvolutionaryOptimizer`.
+- Keep internal helpers private with a leading underscore or by omitting them from `__all__`.
+
+## Module State and Configuration
+
+- Avoid work at import time beyond constant definition and lightweight configuration (`initialize_cache()` is triggered inside `BaseOptimizer`, not at module load).
+- Store configurable defaults as uppercase constants near the top of the module (for example, `DEFAULT_POPULATION_SIZE`).
+- When you need mutable shared state (caches, counters), encapsulate it in a dedicated module (`cache_config`, `_throttle`) rather than scattering globals.
+
+## Typing and Data Structures
+
+- Type annotate public methods and helper functions. Use `pydantic.BaseModel`, dataclasses, or TypedDicts for structured data exchanged between modules (for example, `OptimizationResult`, prompt variants).
+- Prefer immutable structures (tuples, frozen dataclasses) for candidate representations passed between operators to avoid accidental mutation.

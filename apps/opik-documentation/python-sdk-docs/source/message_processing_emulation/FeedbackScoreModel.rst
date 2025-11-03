@@ -4,8 +4,6 @@ FeedbackScoreModel
 .. currentmodule:: opik.message_processing.emulation.models
 
 .. autoclass:: FeedbackScoreModel
-    :members:
-    :inherited-members:
     :special-members: __init__
 
 Description
@@ -20,28 +18,33 @@ Attributes
 
 .. attribute:: id
    :type: str
+   :noindex:
 
    Unique identifier for the feedback score.
 
 .. attribute:: name
    :type: str
+   :noindex:
 
    Name associated with the feedback score, typically describing the metric being measured.
 
 .. attribute:: value
    :type: float
+   :noindex:
 
    The numerical value of the feedback score. This represents the actual score or rating assigned.
 
 .. attribute:: category_name
    :type: Optional[str]
    :value: None
+   :noindex:
 
    Category to which the feedback score belongs, if any. This can be used to group related feedback scores together.
 
 .. attribute:: reason
    :type: Optional[str]
    :value: None
+   :noindex:
 
    Reason or explanation for the feedback score, if available. This provides context for why a particular score was assigned.
 
@@ -89,4 +92,4 @@ See Also
 
 - :class:`SpanModel` - Contains lists of feedback scores
 - :class:`TraceModel` - Also contains lists of feedback scores
-- :doc:`../evaluation/index` - For information about evaluation metrics that generate these scores
+- :doc:`../evaluation/evaluate` - For information about evaluation metrics that generate these scores

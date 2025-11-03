@@ -69,6 +69,8 @@ public interface TraceThreadService {
     Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
 
     Mono<Void> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
+
+    Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(List<UUID> threadModelIds);
 }
 
 @Slf4j
@@ -169,6 +171,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 scoredAt, threadIds, projectId, ex))
                         .then(),
                 LOCK_DURATION);
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(@NonNull List<UUID> threadModelIds) {
+        return traceThreadIdService.getTraceThreadIdsByThreadModelIds(threadModelIds);
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
