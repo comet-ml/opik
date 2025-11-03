@@ -75,48 +75,72 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
                 .setDescription("Metric view that includes workspace context attributes")
                 .setAttributeFilter(value -> true);
 
-        ViewBuilder viewHistogramBuilder = View.builder()
-                .setDescription("Metric view that includes explicit bucket attributes")
-                .setAttributeFilter(value -> true);
-
+        // Only apply custom aggregation if OTEL_BUCKET_HISTOGRAM_BOUNDARIES is set
         if (!histogramBoundaries.trim().isEmpty()) {
             try {
-                List<Double> bucketBoundaries = Arrays.stream(histogramBoundaries.split(","))
+                List<Double> baseBoundaries = Arrays.stream(histogramBoundaries.split(","))
                         .map(String::trim)
                         .map(Double::valueOf)
                         .toList();
 
-                viewHistogramBuilder.setAggregation(
-                        Aggregation.explicitBucketHistogram(bucketBoundaries)
-                );
+                // Register duration metrics with unit conversion (milliseconds to seconds)
+                registerDurationMetricsWithConversion(builder, baseBoundaries);
             } catch (NumberFormatException e) {
                 System.out.printf("Invalid OTEL_BUCKET_HISTOGRAM_BOUNDARIES: '%s': %s. Using defaults (no explicit buckets).%n", histogramBoundaries, e.getMessage());
             }
         }
 
         View workspaceView = viewBuilder.build();
-        View histogramView = viewHistogramBuilder.build();
         
-        // Register the view for all instruments to include workspace context
-        // Using a selector that matches all instruments by type
+        // Register workspace view for all other instruments (generic, matched after specific views)
         Arrays.stream(InstrumentType.values()).forEach(instrumentType -> {
-
-            if (instrumentType == InstrumentType.HISTOGRAM) {
-                builder.registerView(
-                        InstrumentSelector.builder()
-                                .setType(instrumentType)
-                                .build(),
-                        histogramView);
-            } else {
-                builder.registerView(
-                        InstrumentSelector.builder()
-                                .setType(instrumentType)
-                                .build(),
-                        workspaceView
-                );
-            }
+            builder.registerView(
+                    InstrumentSelector.builder()
+                            .setType(instrumentType)
+                            .build(),
+                    workspaceView);
         });
         System.out.println("Workspace metric view configured successfully for all instruments");
+    }
+
+    /**
+     * Registers histogram views for duration metrics with unit conversion.
+     * Duration metrics are in seconds, so boundaries provided in milliseconds
+     * are divided by 1000 to match the metric unit.
+     *
+     * @param builder the meter provider builder
+     * @param baseBoundaries the base boundaries (typically in milliseconds)
+     */
+    private void registerDurationMetricsWithConversion(SdkMeterProviderBuilder builder, List<Double> baseBoundaries) {
+        // Guard: ensure boundaries are provided and valid
+        if (baseBoundaries.isEmpty()) {
+            System.out.println("No histogram boundaries provided; skipping duration metric aggregation configuration");
+            return;
+        }
+
+        // List of metrics that represent durations in seconds
+        List<String> durationMetrics = Arrays.asList("http_server_request_duration");
+
+        // Convert boundaries from milliseconds to seconds for duration metrics
+        List<Double> convertedBoundaries = baseBoundaries.stream()
+                .map(boundary -> boundary / 1000.0)
+                .toList();
+
+        for (String metricName : durationMetrics) {
+            ViewBuilder histogramViewBuilder = View.builder()
+                    .setDescription("Histogram view for duration metric: " + metricName)
+                    .setAttributeFilter(value -> true)
+                    .setAggregation(Aggregation.explicitBucketHistogram(convertedBoundaries));
+
+            builder.registerView(
+                    InstrumentSelector.builder()
+                            .setType(InstrumentType.HISTOGRAM)
+                            .setName(metricName)
+                            .build(),
+                    histogramViewBuilder.build());
+        }
+
+        System.out.println("Duration metrics aggregation configured with converted boundaries");
     }
 
     @Override
