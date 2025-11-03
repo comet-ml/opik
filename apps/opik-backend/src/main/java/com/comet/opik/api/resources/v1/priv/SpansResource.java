@@ -12,6 +12,7 @@ import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -229,6 +230,28 @@ public class SpansResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Created spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/batch")
+    @Operation(operationId = "batchUpdateSpans", summary = "Batch update spans", description = "Update multiple spans", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatchUpdate.class))) @Valid @NotNull SpanBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' spans on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        spanService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' spans on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
         return Response.noContent().build();
     }
 

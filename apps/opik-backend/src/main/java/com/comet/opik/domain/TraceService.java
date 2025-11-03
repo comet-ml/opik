@@ -7,6 +7,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
@@ -78,6 +79,8 @@ public interface TraceService {
     Mono<Long> create(TraceBatch batch);
 
     Mono<Void> update(TraceUpdate trace, UUID id);
+
+    Mono<Void> batchUpdate(TraceBatchUpdate batchUpdate);
 
     Mono<Trace> get(UUID id);
 
@@ -380,6 +383,40 @@ class TraceServiceImpl implements TraceService {
                                         ctx.get(RequestContext.WORKSPACE_ID),
                                         ctx.get(RequestContext.USER_NAME)))))))
                 .then());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> batchUpdate(@NonNull TraceBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' traces", batchUpdate.ids().size());
+
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        Set<String> tags = batchUpdate.update().tags();
+
+        if (tags == null || tags.isEmpty()) {
+            log.info("No tags to update for '{}' traces", batchUpdate.ids().size());
+            return Mono.empty();
+        }
+
+        // Fetch minimal data (IDs + tags + metadata), merge/replace in memory, bulk update
+        return dao.getIdsTagsAndMetadata(batchUpdate.ids())
+                .collectMap(
+                        TraceDAO.TraceIdWithTagsAndMetadata::id,
+                        traceMeta -> {
+                            Set<String> finalTags = mergeTags
+                                    ? Set.copyOf(java.util.stream.Stream.concat(
+                                            traceMeta.tags().stream(),
+                                            tags.stream()).collect(Collectors.toSet()))
+                                    : Set.copyOf(tags);
+
+                            return TraceUpdate.builder()
+                                    .projectId(traceMeta.projectId())
+                                    .tags(finalTags)
+                                    .build();
+                        })
+                .flatMap(idToUpdateMap -> dao.bulkUpdateTags(idToUpdateMap))
+                .doOnSuccess(__ -> log.info("Bulk updated '{}' traces with {} tags",
+                        batchUpdate.ids().size(), mergeTags ? "merged" : "replaced"));
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
