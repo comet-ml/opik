@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
+import { HelpCircle } from "lucide-react";
 import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
@@ -10,10 +11,10 @@ import { stripImageTags } from "@/lib/llm";
 import useLocalStorageState from "use-local-storage-state";
 import sanitizeHtml from "sanitize-html";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import TruncationConfigPopover from "@/components/shared/TruncationConfigPopover/TruncationConfigPopover";
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
-const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
 
 /**
  * Strips HTML/Markdown tags from text to show clean plain text
@@ -39,6 +40,17 @@ const stripHtmlTags = (text: string): string => {
     .trim();
 
   return sanitized;
+};
+
+const TruncationLimitExceededMessage: React.FC = () => {
+  return (
+    <TruncationConfigPopover message="Data exceeds preview limit. You can disable truncation in preferences, but this may impact performance and limit pagination to 10 items per page.">
+      <span className="inline-flex cursor-help items-center gap-1">
+        Preview limit exceeded
+        <HelpCircle className="size-3 text-muted-foreground" />
+      </span>
+    </TruncationConfigPopover>
+  );
 };
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
@@ -96,22 +108,23 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     const displayMessage = hasValidHtmlTags ? stripHtmlTags(message) : message;
 
     if (isSmall) {
-      return (
-        <CellTooltipWrapper
-          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
-        >
+      if (hasExceededLimit) {
+        return (
           <span className="comet-code truncate">
-            {hasExceededLimit
-              ? rawValue.slice(0, maxDataLength) + "..."
-              : displayMessage}
+            <TruncationLimitExceededMessage />
           </span>
+        );
+      }
+      return (
+        <CellTooltipWrapper content={displayMessage}>
+          <span className="comet-code truncate">{displayMessage}</span>
         </CellTooltipWrapper>
       );
     }
 
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
+        {hasExceededLimit ? <TruncationLimitExceededMessage /> : displayMessage}
       </div>
     );
   }, [
