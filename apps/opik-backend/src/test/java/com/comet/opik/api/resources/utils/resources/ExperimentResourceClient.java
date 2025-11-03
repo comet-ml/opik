@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -11,6 +10,7 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -332,7 +332,7 @@ public class ExperimentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new DeleteIdsHolder(ids)))) {
+                .post(Entity.json(new IdsHolder(ids)))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }

@@ -18,6 +18,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.grouping.ExperimentGroupingFactory;
@@ -322,7 +323,7 @@ public class ExperimentsResource {
     })
     @RateLimited
     public Response finishExperiments(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid IdsHolder request) {
 
         log.info("Finishing experiments, count '{}'", request.ids().size());
         experimentService.finishExperiments(request.ids())
