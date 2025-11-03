@@ -10,6 +10,8 @@ export const DEMO_PROJECT_NAME = "Demo Project";
 export const USER_FEEDBACK_NAME = "User feedback";
 export const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
 
+export const TRUNCATION_DISABLED_MAX_PAGE_SIZE = 10;
+
 export const TABLE_HEADER_Z_INDEX = 2;
 export const TABLE_ROW_Z_INDEX = 0;
 
