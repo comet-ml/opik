@@ -2078,8 +2078,11 @@ class SpansResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            var expectedSpans = getExpectedSpans.apply(spans);
-            var unexpectedSpans = getUnexpectedSpans.apply(spans);
+            // Prepare spans with provider injected into metadata
+            var preparedSpans = SpanAssertions.prepareSpansForAssertion(spans);
+
+            var expectedSpans = getExpectedSpans.apply(preparedSpans);
+            var unexpectedSpans = getUnexpectedSpans.apply(preparedSpans);
 
             List<SpanFilter> filters = List.of(SpanFilter.builder()
                     .field(SpanField.TOTAL_ESTIMATED_COST)
@@ -2087,7 +2090,7 @@ class SpansResourceTest {
                     .value("0")
                     .build());
 
-            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(preparedSpans, expectedSpans.reversed(), unexpectedSpans);
 
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
@@ -5871,7 +5874,9 @@ class SpansResourceTest {
         } else {
             assertThat(actualSpan.projectId()).isEqualTo(expectedProjectId);
         }
-        SpanAssertions.assertSpan(List.of(actualSpan), List.of(expectedSpan), USER);
+        // Prepare expected span with provider injected into metadata (as backend does)
+        var preparedExpectedSpan = SpanAssertions.prepareSpanForAssertion(expectedSpan);
+        SpanAssertions.assertSpan(List.of(actualSpan), List.of(preparedExpectedSpan), USER);
         return actualSpan;
     }
 
@@ -6023,8 +6028,7 @@ class SpansResourceTest {
             var expectedSpanBuilder = expectedSpan.toBuilder()
                     .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
-            var preparedExpectedSpan = SpanAssertions.prepareSpanForAssertion(expectedSpanBuilder.build());
-            var actualSpan = getAndAssert(preparedExpectedSpan, API_KEY, TEST_WORKSPACE);
+            var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
 
             BigDecimal expectedCost;
             if (expectedSpanUpdate.totalEstimatedCost() != null) {
@@ -6534,9 +6538,8 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var preparedExpectedSpan = SpanAssertions.prepareSpanForAssertion(
-                    expectedSpan.toBuilder().provider(expectedProvider).build());
-            var actualSpan = getAndAssert(preparedExpectedSpan, null, API_KEY, TEST_WORKSPACE);
+            var actualSpan = getAndAssert(
+                    expectedSpan.toBuilder().provider(expectedProvider).build(), null, API_KEY, TEST_WORKSPACE);
             assertThat(actualSpan.provider()).isEqualTo(expectedProvider);
         }
 

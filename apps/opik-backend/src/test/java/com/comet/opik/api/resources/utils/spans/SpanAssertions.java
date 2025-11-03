@@ -30,7 +30,7 @@ public class SpanAssertions {
     /**
      * Prepares a span for assertion by injecting provider into metadata if provider is set.
      * This mirrors the backend behavior where provider is automatically injected into metadata.
-     * 
+     *
      * @param span the span to prepare
      * @return a new span with provider injected into metadata if provider is present
      */
@@ -49,7 +49,7 @@ public class SpanAssertions {
 
     /**
      * Prepares a list of spans for assertion by injecting provider into metadata.
-     * 
+     *
      * @param spans the spans to prepare
      * @return a new list of spans with provider injected into metadata where applicable
      */

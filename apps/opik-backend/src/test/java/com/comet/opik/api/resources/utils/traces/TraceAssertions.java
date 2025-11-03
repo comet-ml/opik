@@ -36,7 +36,7 @@ public class TraceAssertions {
     /**
      * Prepares a trace for assertion by injecting providers into metadata if providers are set.
      * This mirrors the backend behavior where providers are automatically injected into metadata.
-     * 
+     *
      * @param trace the trace to prepare
      * @return a new trace with providers injected into metadata if providers are present
      */
@@ -55,7 +55,7 @@ public class TraceAssertions {
 
     /**
      * Prepares a list of traces for assertion by injecting providers into metadata.
-     * 
+     *
      * @param traces the traces to prepare
      * @return a new list of traces with providers injected into metadata where applicable
      */
