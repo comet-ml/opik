@@ -191,6 +191,11 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         return filtered_params
 
     def _warn_about_unsupported_param(self, param: str, value: Any) -> None:
+        if param in {"logprobs", "top_logprobs"}:
+            # LiteLLM warns noisily when models like gpt-5-nano don't support these
+            # fields. We already drop them gracefully, so skip logging to avoid
+            # spamming GEval users with repeated warnings.
+            return
         if param == "temperature":
             _log_warning(
                 "Model %s only supports temperature=1. Dropping temperature=%s.",
