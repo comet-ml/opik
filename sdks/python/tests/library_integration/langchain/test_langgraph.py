@@ -433,8 +433,6 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
     Test that extract_current_langgraph_span_data correctly extracts span data
     from a LangGraph runnable config in an async node context.
     """
-    from typing import Dict, Any
-
     class State(TypedDict):
         messages: Annotated[list, langgraph_message.add_messages]
         extracted_trace_data: Dict[str, Any]

@@ -1,12 +1,8 @@
 import logging
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
 
-from opik.api_objects import span
-from opik.integrations.langchain import opik_tracer
-from opik import exceptions
-
-if TYPE_CHECKING:
-    pass
+import opik.api_objects.span as span
+import opik.integrations.langchain.opik_tracer as opik_tracer_module
 
 LOGGER = logging.getLogger(__name__)
 
@@ -15,88 +11,121 @@ def extract_current_langgraph_span_data(
     runnable_config: Dict[str, Any],
 ) -> Optional[span.SpanData]:
     """
-    Extract current span data for the current LangGraph run.
+    Extract current span data for async LangGraph nodes to enable distributed tracing.
 
-    This helper utility extracts the current span data from a LangGraph configuration
-    that contains an AsyncCallbackManager with OpikTracer handlers. It's specifically
-    designed for async LangGraph agents that need to access the current span context
-    for distributed tracing scenarios.
+    This helper function is specifically designed for async LangGraph execution using `ainvoke()`.
+    Due to LangChain framework limitations in async scenarios, the execution context is not
+    automatically shared between callbacks (like OpikTracer) and node code. This function
+    extracts the current span data from the LangGraph config, allowing you to propagate
+    trace context to @track-decorated functions via distributed headers.
+
+    For synchronous execution using `invoke()`, this function is not needed as the context
+    is automatically shared.
 
     Args:
-        runnable_config: The config dictionary containing an AsyncCallbackManager
-            in the "callbacks" key, automatically passed to LangGraph node functions.
+        runnable_config: The config dictionary automatically passed to LangGraph node functions,
+            containing an AsyncCallbackManager in the "callbacks" key.
 
     Returns:
-        The current span data, or None if not found.
-
-    Raises:
-        OpikException: If the config structure is invalid or required components are missing.
+        The current span data if found, None otherwise. Returns None if OpikTracer is not
+        configured in the callbacks or if the span data cannot be extracted.
 
     Example:
         ```python
-        from opik.integrations.langchain import extract_current_langgraph_span_data
+        from opik import track
+        from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
+        from langgraph.graph import StateGraph, START, END
 
-        @opik.track
-        def f(x):
-            return x * 2
+        @track
+        def process_data(value: int) -> int:
+            return value * 2
 
-        async def my_async_langgraph_node(state: dict, config: dict):
-            # Extract current span for distributed tracing
+        async def my_async_node(state, config):
+            # Extract current span data from LangGraph config
             span_data = extract_current_langgraph_span_data(config)
 
-            if span_data:
-                # Propagate trace context
-                result = f(
-                    42,
+            if span_data is not None:
+                # Propagate trace context to tracked function
+                result = process_data(
+                    state["value"],
                     opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
                 )
+                return {"value": result}
 
-            return {"result": result}
+            return {"value": None}
+
+        # Build and execute graph
+        graph = StateGraph(dict)
+        graph.add_node("processor", my_async_node)
+        graph.add_edge(START, "processor")
+        graph.add_edge("processor", END)
+
+        app = graph.compile()
+        opik_tracer = OpikTracer()
+
+        # Asynchronous execution requires explicit trace context propagation
+        result = await app.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
         ```
     """
     try:
-        # Get the AsyncCallbackManager from config
         callback_manager = runnable_config.get("callbacks")
         if callback_manager is None:
-            raise exceptions.OpikException(
-                "No langchain callback manager found in runnable config"
+            LOGGER.warning(
+                "Cannot extract span data: no callback manager found in LangGraph config. "
+                "Ensure OpikTracer is passed in the config: config={'callbacks': [opik_tracer]}"
             )
+            return None
 
-        # Extract parent_run_id from the callback manager
         parent_run_id = getattr(callback_manager, "parent_run_id", None)
-        if parent_run_id is None:
-            raise exceptions.OpikException(
-                "parent_run_id not found in langchain callback manager"
-            )
-
-        # Extract opik tracer from handlers
         handlers = getattr(callback_manager, "handlers", [])
-        if not handlers:
-            raise exceptions.OpikException("No handlers found in callback manager")
 
-        # Find the OpikTracer in the handlers
-        opik_tracer_instance: Optional[opik_tracer.OpikTracer] = None
-        for handler in handlers:
-            if hasattr(handler, "_span_data_map"):
-                opik_tracer_instance = handler
-                break
-
-        if opik_tracer_instance is None:
-            raise exceptions.OpikException("OpikTracer not found in handlers")
-
-        # Get the span data associated with this run id
-        span_data = opik_tracer_instance._span_data_map.get(parent_run_id)
-        if span_data is None:
-            raise exceptions.OpikException(
-                f"Span data not found for run_id: {parent_run_id}"
+        if parent_run_id is None or not handlers:
+            LOGGER.warning(
+                "Cannot extract span data: LangGraph callback manager is not properly initialized. "
+                "This may occur if the node is called outside of a LangGraph execution context."
             )
+            return None
+
+        opik_tracer_instance = _find_opik_tracer(handlers)
+        if opik_tracer_instance is None:
+            LOGGER.warning(
+                "Cannot extract span data: OpikTracer not found in LangGraph callbacks. "
+                "Ensure OpikTracer is passed in the config: config={'callbacks': [opik_tracer]}"
+            )
+            return None
+
+        span_data = opik_tracer_instance.get_current_span_data_for_run(parent_run_id)
+        if span_data is None:
+            LOGGER.warning(
+                "Cannot extract span data: no span found for the current LangGraph node. "
+                "This may occur if OpikTracer was not properly initialized or if the node "
+                "is executing in an unexpected context."
+            )
+            return None
 
         return span_data
 
     except Exception as exception:
-        LOGGER.error(
-            "Failed to extract Opik span data from runnable config: %s",
-            exception,
+        LOGGER.warning(
+            "Failed to extract span data from LangGraph config due to unexpected error",
             exc_info=exception,
         )
         return None
+
+
+def _find_opik_tracer(
+    handlers: list,
+) -> Optional[opik_tracer_module.OpikTracer]:
+    """
+    Find OpikTracer instance in the list of handlers.
+
+    Args:
+        handlers: List of callback handlers.
+
+    Returns:
+        OpikTracer instance if found, None otherwise.
+    """
+    for handler in handlers:
+        if isinstance(handler, opik_tracer_module.OpikTracer):
+            return handler
+    return None

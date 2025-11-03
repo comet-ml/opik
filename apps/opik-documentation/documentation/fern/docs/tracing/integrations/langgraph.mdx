@@ -262,7 +262,7 @@ async def my_async_node(state, config):
     # Use context manager with distributed headers
     with opik.start_as_current_span(
         name="custom_operation",
-        input={"input": state_value["value"]},
+        input={"input": state["value"]},
         opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
     ) as span_data:
         # Your custom logic here
@@ -271,7 +271,6 @@ async def my_async_node(state, config):
     
     return {"value": result}
 ```
-
 
 
 ## Logging threads
