@@ -315,6 +315,25 @@ public class ExperimentsResource {
     }
 
     @POST
+    @Path("/finish")
+    @Operation(operationId = "finishExperiments", summary = "Finish experiments", description = "Finish experiments and trigger alert events", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response finishExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
+
+        log.info("Finishing experiments, count '{}'", request.ids().size());
+        experimentService.finishExperiments(request.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Finished experiments, count '{}'", request.ids().size());
+
+        return Response.noContent().build();
+    }
+
+    @POST
     @Path("/stream")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
     @Operation(operationId = "streamExperiments", summary = "Stream experiments", description = "Stream experiments", responses = {

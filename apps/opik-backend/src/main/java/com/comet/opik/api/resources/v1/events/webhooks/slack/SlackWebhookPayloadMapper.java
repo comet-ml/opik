@@ -263,7 +263,8 @@ public class SlackWebhookPayloadMapper {
         }
 
         List<String> experimentLinks = metadata.stream()
-                .map(item -> (Experiment) item)
+                .map(item -> (List<Experiment>) item)
+                .flatMap(List::stream)
                 .map(experiment -> buildExperimentLink(experiment.id(), experiment.datasetId(), baseUrl))
                 .toList();
 
