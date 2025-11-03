@@ -254,6 +254,8 @@ def wait_for_items_count():
         time.sleep(0.5)
 
     return (
-        jsonify({"error": f"Items count did not reach {expected_count} within timeout"}),
+        jsonify(
+            {"error": f"Items count did not reach {expected_count} within timeout"}
+        ),
         400,
     )
