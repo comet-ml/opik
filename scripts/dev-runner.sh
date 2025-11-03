@@ -268,9 +268,8 @@ run_db_migrations() {
     log_success "All database migrations completed successfully"
 }
 
-# Function to wait for backend to be ready
-# Returns: 0 if backend is ready, 1 if timeout or backend died
 wait_for_backend_ready() {
+    require_command curl
     log_info "Waiting for backend to be ready..."
     local max_wait=60
     local count=0
@@ -284,7 +283,6 @@ wait_for_backend_ready() {
         sleep 1
         count=$((count + 1))
         
-        # Check if process is still alive
         if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
             log_error "Backend process died while waiting for it to be ready"
             log_error "Check logs: tail -f /tmp/opik-backend.log"
@@ -366,7 +364,6 @@ start_backend() {
         log_success "Backend process started (PID: $BACKEND_PID)"
         log_info "Backend logs: tail -f /tmp/opik-backend.log"
         
-        # Wait for backend to be fully ready and accepting connections
         if ! wait_for_backend_ready; then
             exit 1
         fi
@@ -611,7 +608,7 @@ create_demo_data() {
         log_success "Demo data created"
         return 0
     else
-        log_error "Failed to create demo data"
+        log_warning "Demo data creation failed, but services are running"
         return 1
     fi
 }
@@ -696,9 +693,7 @@ start_services() {
     log_info "Step 4/5: Starting frontend process..."
     start_frontend
     log_info "Step 5/5: Creating demo data..."
-    if ! create_demo_data "--local-be-fe"; then
-        log_warning "Demo data creation failed, but services are running"
-    fi
+    create_demo_data "--local-be-fe"
     log_success "=== Start Complete ==="
     verify_services
 }
@@ -749,9 +744,7 @@ restart_services() {
     log_info "Step 9/10: Starting frontend process..."
     start_frontend
     log_info "Step 10/10: Creating demo data..."
-    if ! create_demo_data "--local-be-fe"; then
-        log_warning "Demo data creation failed, but services are running"
-    fi
+    create_demo_data "--local-be-fe"
     log_success "=== Restart Complete ==="
     verify_services
 }
@@ -810,9 +803,7 @@ start_be_only_services() {
     log_info "Step 3/4: Starting backend process..."
     start_backend
     log_info "Step 4/4: Creating demo data..."
-    if ! create_demo_data "--local-be"; then
-        log_warning "Demo data creation failed, but services are running"
-    fi
+    create_demo_data "--local-be"
     log_success "=== BE-Only Start Complete ==="
     verify_be_only_services
 }
@@ -843,9 +834,7 @@ restart_be_only_services() {
     log_info "Step 6/7: Starting backend process..."
     start_backend
     log_info "Step 7/7: Creating demo data..."
-    if ! create_demo_data "--local-be"; then
-        log_warning "Demo data creation failed, but services are running"
-    fi
+    create_demo_data "--local-be"
     log_success "=== BE-Only Restart Complete ==="
     verify_be_only_services
 }

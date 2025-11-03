@@ -463,6 +463,7 @@ print_banner() {
     echo "║     Backend is NOT running in Docker                            ║"
     echo "║     Start your local backend on port 8080                       ║"
     echo "║     Frontend will proxy to: http://localhost:8080               ║"
+    echo "║     Port mapping: ENABLED (required for local processes)        ║"
     echo "║                                                                 ║"
     echo "║  📊 Access the UI (start backend first):                        ║"
     echo "║     $ui_url                                       ║"
