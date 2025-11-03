@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
+import { cn } from "@/lib/utils";
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
@@ -112,16 +113,16 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const displayValue = useMemo(() => {
     if (!datasetId) {
-      return "No metrics selected";
+      return "Select metrics";
     }
     if (rules.length === 0) {
-      return "No metrics";
+      return "Select metrics";
     }
     if (isAllSelected) {
       return "All selected";
     }
     if (selectedRules.length === 0) {
-      return "No metrics selected";
+      return "Select metrics";
     }
     return selectedRules.map((rule) => rule.name).join(", ");
   }, [isAllSelected, selectedRules, rules.length, datasetId]);
@@ -164,7 +165,12 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       disabled={isDisabled}
     >
       <span className="truncate">{displayValue}</span>
-      <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
+      <ChevronDown
+        className={cn(
+          "ml-2 size-4 shrink-0",
+          isDisabled ? "text-muted-gray" : "text-light-slate",
+        )}
+      />
     </Button>
   );
 
@@ -192,25 +198,24 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         hideWhenDetached
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        {!hasNoRules && (
-          <div className="absolute inset-x-1 top-0 h-12">
-            <SearchInput
-              searchText={search}
-              setSearchText={setSearch}
-              placeholder="Search metrics"
-              variant="ghost"
-            />
-            <Separator className="mt-1" />
-          </div>
-        )}
+        <div className="absolute inset-x-1 top-0 h-12">
+          <SearchInput
+            searchText={search}
+            setSearchText={setSearch}
+            placeholder="Search"
+            variant="ghost"
+          />
+          <Separator className="mt-1" />
+        </div>
         <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
           {hasNoRules ? (
-            <div className="flex h-20 flex-col items-center justify-center text-center text-muted-foreground">
-              <div className="px-4">
-                <div className="comet-body-s">No metrics configured</div>
-                <div className="comet-body-xs mt-1">
-                  Configure automation rules for the playground project
-                </div>
+            <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
+              <div className="comet-body-s-accented pb-1 text-foreground">
+                No metrics available
+              </div>
+              <div className="comet-body-s text-muted-slate">
+                Create an online evaluation rule for the Playground project to
+                generate metrics for your outputs.
               </div>
             </div>
           ) : filteredRules.length > 0 ? (
@@ -261,16 +266,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
             <>
               <Separator className="my-1" />
               <div
-                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
                 onClick={() => {
                   setOpen(false);
                   onCreateRuleClick();
                 }}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="comet-body-s truncate text-primary">
-                    Create a new rule
-                  </div>
+                <div className="comet-body-s flex items-center gap-2 text-primary">
+                  <Plus className="size-3.5 shrink-0" />
+                  <span>Create a new rule</span>
                 </div>
               </div>
             </>

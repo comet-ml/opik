@@ -90,6 +90,7 @@ const UploadField: React.FC<UploadFieldProps> = ({
         <div className="flex items-center gap-2">
           <span className="comet-body-s-accented">{description}</span>
           <Button
+            type="button"
             size="sm"
             variant="secondary"
             disabled={disabled}
