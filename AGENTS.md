@@ -5,6 +5,7 @@
 - Backend: `apps/opik-backend/.cursor/rules/` (e.g., `tech_stack.mdc`, `code_quality.mdc`, `api_design.mdc`).
 - Frontend: `apps/opik-frontend/.cursor/rules/` (`tech-stack.mdc`, `code-quality.mdc`, `unit-testing.mdc`).
 - Python SDK: `sdks/python/.cursor/rules/` (`code-structure.mdc`, `test-best-practices.mdc`, `documentation-style.mdc`).
+- Opik Optimizer SDK: `sdks/opik_optimizer/.cursor/rules/` (`architecture.mdc`, `code-structure.mdc`, `dependencies.mdc`, `documentation-style.mdc`, `error-handling.mdc`, `logging.mdc`, `test-best-practices.mdc`, `test-organization.mdc`).
 - TypeScript SDK: `sdks/typescript/.cursor/rules/` (`overview.mdc`, `code-structure.mdc`, `test-best-practices.mdc`).
 
 ## Project Structure & Module Organization
@@ -20,6 +21,7 @@
 - Backend build/tests: `mvn verify` in `apps/opik-backend`; respect `apps/opik-backend/.cursor/rules/code_quality.mdc`.
 - Frontend checks: `npm install`, `npm lint`, `npm test`, `npm build`; follow `apps/opik-frontend/.cursor/rules/code-quality.mdc`, `apps/opik-frontend/.cursor/rules/unit-testing.mdc`.
 - Python SDK: `pip install -e .[dev]`, `ruff check`, `pytest`; align with `sdks/python/.cursor/rules/test-best-practices.mdc`.
+- Opik Optimizer SDK: `make install-dev`, `make test`, `make precommit` from `sdks/opik_optimizer`; follow the optimizer rules in `sdks/opik_optimizer/.cursor/rules/` (architecture, code structure, dependencies, testing).
 - TypeScript SDK: `npm install`, `npm lint`, `npm test`; observe `sdks/typescript/.cursor/rules/code-structure.mdc`.
 
 ## Coding Style & Naming Conventions
