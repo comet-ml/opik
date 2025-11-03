@@ -5,6 +5,10 @@ import AddToDatasetDialog from "./AddToDatasetDialog";
 import { Trace, Span, SPAN_TYPE } from "@/types/traces";
 import { ReactNode } from "react";
 
+// Create mock functions that can be accessed in tests
+const mockBatchMutate = vi.fn();
+const mockAddTracesToDataset = vi.fn();
+
 // Mock the API hooks
 vi.mock("@/api/datasets/useDatasetsList", () => ({
   default: vi.fn(() => ({
@@ -28,15 +32,15 @@ vi.mock("@/api/datasets/useDatasetsList", () => ({
 }));
 
 vi.mock("@/api/datasets/useDatasetItemBatchMutation", () => ({
-  default: vi.fn(() => ({
-    mutate: vi.fn(),
-  })),
+  default: () => ({
+    mutate: mockBatchMutate,
+  }),
 }));
 
 vi.mock("@/api/datasets/useAddTracesToDatasetMutation", () => ({
-  default: vi.fn(() => ({
-    mutate: vi.fn(),
-  })),
+  default: () => ({
+    mutate: mockAddTracesToDataset,
+  }),
 }));
 
 // Mock the store
@@ -131,14 +135,17 @@ describe("AddToDatasetDialog", () => {
   it("should render the dialog when open", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Add to dataset")).toBeInTheDocument();
     expect(screen.getByText("Select a dataset")).toBeInTheDocument();
+    expect(screen.getByText("Test Dataset 1")).toBeInTheDocument();
   });
 
   it("should display enrichment checkboxes when only traces are selected", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("Include trace metadata")).toBeInTheDocument();
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Trace metadata configuration");
+    fireEvent.click(accordionButton);
+
     expect(screen.getByLabelText("Nested spans")).toBeInTheDocument();
     expect(screen.getByLabelText("Tags")).toBeInTheDocument();
     expect(screen.getByLabelText("Feedback scores")).toBeInTheDocument();
@@ -150,6 +157,10 @@ describe("AddToDatasetDialog", () => {
   it("should have all enrichment checkboxes checked by default", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Trace metadata configuration");
+    fireEvent.click(accordionButton);
+
     expect(screen.getByLabelText("Nested spans")).toBeChecked();
     expect(screen.getByLabelText("Tags")).toBeChecked();
     expect(screen.getByLabelText("Feedback scores")).toBeChecked();
@@ -160,6 +171,10 @@ describe("AddToDatasetDialog", () => {
 
   it("should allow unchecking enrichment options", async () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
+
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Trace metadata configuration");
+    fireEvent.click(accordionButton);
 
     const spansCheckbox = screen.getByLabelText("Nested spans");
     const tagsCheckbox = screen.getByLabelText("Tags");
@@ -183,8 +198,9 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
+    // Accordion should not be present when spans are selected
     expect(
-      screen.queryByText("Include trace metadata"),
+      screen.queryByText("Trace metadata configuration"),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nested spans")).not.toBeInTheDocument();
   });
@@ -198,8 +214,9 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithMixed} />, { wrapper });
 
+    // Accordion should not be present when mixed selection
     expect(
-      screen.queryByText("Include trace metadata"),
+      screen.queryByText("Trace metadata configuration"),
     ).not.toBeInTheDocument();
   });
 
@@ -271,33 +288,15 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should call addTracesToDataset mutation when clicking on dataset with only traces", async () => {
-    const mockAddTracesToDataset = vi.fn();
-    const useAddTracesToDatasetMutation = await import(
-      "@/api/datasets/useAddTracesToDatasetMutation"
-    );
-    vi.mocked(useAddTracesToDatasetMutation.default).mockReturnValue({
-      mutate: mockAddTracesToDataset,
-      mutateAsync: vi.fn(),
-      isPending: false,
-      isError: false,
-      isSuccess: false,
-      isIdle: true,
-      data: undefined,
-      error: null,
-      status: "idle",
-      reset: vi.fn(),
-      variables: undefined,
-      context: undefined,
-      failureCount: 0,
-      failureReason: null,
-      isPaused: false,
-      submittedAt: 0,
-    });
-
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
+    // Select the dataset
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
+
+    // Click the "Add to dataset" button
+    const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
+    fireEvent.click(addButton);
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -320,29 +319,6 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should call batch mutation when clicking on dataset with spans", async () => {
-    const mockBatchMutate = vi.fn();
-    const useDatasetItemBatchMutation = await import(
-      "@/api/datasets/useDatasetItemBatchMutation"
-    );
-    vi.mocked(useDatasetItemBatchMutation.default).mockReturnValue({
-      mutate: mockBatchMutate,
-      mutateAsync: vi.fn(),
-      isPending: false,
-      isError: false,
-      isSuccess: false,
-      isIdle: true,
-      data: undefined,
-      error: null,
-      status: "idle",
-      reset: vi.fn(),
-      variables: undefined,
-      context: undefined,
-      failureCount: 0,
-      failureReason: null,
-      isPaused: false,
-      submittedAt: 0,
-    });
-
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
@@ -351,8 +327,13 @@ describe("AddToDatasetDialog", () => {
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
 
+    // Select the dataset
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
+
+    // Click the "Add to dataset" button
+    const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
+    fireEvent.click(addButton);
 
     await waitFor(() => {
       expect(mockBatchMutate).toHaveBeenCalled();
@@ -360,38 +341,24 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should respect unchecked enrichment options when adding traces", async () => {
-    const mockAddTracesToDataset = vi.fn();
-    const useAddTracesToDatasetMutation = await import(
-      "@/api/datasets/useAddTracesToDatasetMutation"
-    );
-    vi.mocked(useAddTracesToDatasetMutation.default).mockReturnValue({
-      mutate: mockAddTracesToDataset,
-      mutateAsync: vi.fn(),
-      isPending: false,
-      isError: false,
-      isSuccess: false,
-      isIdle: true,
-      data: undefined,
-      error: null,
-      status: "idle",
-      reset: vi.fn(),
-      variables: undefined,
-      context: undefined,
-      failureCount: 0,
-      failureReason: null,
-      isPaused: false,
-      submittedAt: 0,
-    });
-
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
+
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Trace metadata configuration");
+    fireEvent.click(accordionButton);
 
     // Uncheck some options
     fireEvent.click(screen.getByLabelText("Nested spans"));
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Usage metrics"));
 
+    // Select the dataset
     const dataset = screen.getByText("Test Dataset 1");
     fireEvent.click(dataset);
+
+    // Click the "Add to dataset" button
+    const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
+    fireEvent.click(addButton);
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
