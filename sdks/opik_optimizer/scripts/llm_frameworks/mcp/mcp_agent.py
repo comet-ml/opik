@@ -221,4 +221,3 @@ class MCPAgent(OptimizableAgent):
                                         ),
                                         "parameters": func_entry.get("parameters", {}),
                                     }
-
