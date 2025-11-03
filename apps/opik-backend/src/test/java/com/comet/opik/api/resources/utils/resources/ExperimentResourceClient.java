@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -322,6 +323,17 @@ public class ExperimentResourceClient {
             String workspaceName, int expectedStatus) {
         try (Response response = updateExperiment(experimentId, experimentUpdate, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void finishExperiments(Set<UUID> ids, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("finish")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new DeleteIdsHolder(ids)))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 }

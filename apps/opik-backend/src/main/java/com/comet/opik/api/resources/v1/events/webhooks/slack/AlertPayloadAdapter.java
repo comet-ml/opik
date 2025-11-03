@@ -44,7 +44,7 @@ public class AlertPayloadAdapter {
     private static final TypeReference<List<Guardrail>> LIST_GUARDRAIL_TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    private static final TypeReference<Experiment> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
+    private static final TypeReference<List<Experiment>> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     public static WebhookEvent<Map<String, Object>> prepareWebhookPayload(
