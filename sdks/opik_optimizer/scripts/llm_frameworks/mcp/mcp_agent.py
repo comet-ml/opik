@@ -1,4 +1,5 @@
-"""Example OptimizableAgent that connects to running MCP servers.
+"""
+Example OptimizableAgent that connects to running MCP servers.
 
 This example demonstrates how to create an OptimizableAgent that can
 communicate with MCP (Model Context Protocol) servers to access external
@@ -220,14 +221,3 @@ class MCPAgent(OptimizableAgent):
                                         "parameters": func_entry.get("parameters", {}),
                                     }
 
-    def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
-        """Invoke the agent with messages, allowing tool use.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content'
-            seed: Optional seed for reproducibility
-
-        Returns:
-            str: The agent's response
-        """
-        return self.llm_invoke(messages=messages, seed=seed, allow_tool_use=True)
