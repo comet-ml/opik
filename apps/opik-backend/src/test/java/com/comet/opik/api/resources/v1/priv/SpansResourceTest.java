@@ -1887,9 +1887,12 @@ class SpansResourceTest {
                                 .build())
                         .toList();
 
+                // Prepare expected spans with provider injected into metadata
+                var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
+
                 assertThat(actualSpans)
                         .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(expectedSpans);
+                        .containsExactlyElementsOf(preparedExpectedSpans);
             }
         }
 
@@ -1933,7 +1936,9 @@ class SpansResourceTest {
 
             List<Span> actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
-            assertSpan(actualSpans, expectedSpans, USER);
+            // Prepare expected spans with provider injected into metadata
+            var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
+            assertSpan(actualSpans, preparedExpectedSpans, USER);
         }
 
         @ParameterizedTest
