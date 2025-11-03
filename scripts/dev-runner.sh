@@ -268,6 +268,44 @@ run_db_migrations() {
     log_success "All database migrations completed successfully"
 }
 
+# Function to wait for backend to be ready
+# Returns: 0 if backend is ready, 1 if timeout or backend died
+wait_for_backend_ready() {
+    log_info "Waiting for backend to be ready..."
+    local max_wait=60
+    local count=0
+    local backend_ready=false
+    
+    while [ $count -lt $max_wait ]; do
+        if curl -sf http://localhost:8080/health-check >/dev/null 2>&1; then
+            backend_ready=true
+            break
+        fi
+        sleep 1
+        count=$((count + 1))
+        
+        # Check if process is still alive
+        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            log_error "Backend process died while waiting for it to be ready"
+            log_error "Check logs: tail -f /tmp/opik-backend.log"
+            rm -f "$BACKEND_PID_FILE"
+            return 1
+        fi
+    done
+    
+    if [ "$backend_ready" = true ]; then
+        log_success "Backend is ready and accepting connections"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_debug "Debug mode enabled - check logs for detailed output"
+        fi
+        return 0
+    else
+        log_error "Backend failed to become ready after ${max_wait}s"
+        log_error "Check logs: tail -f /tmp/opik-backend.log"
+        return 1
+    fi
+}
+
 # Function to start backend
 start_backend() {
     require_command java
@@ -325,10 +363,12 @@ start_backend() {
     # Wait a bit and check if process is still running
     sleep 3
     if kill -0 "$BACKEND_PID" 2>/dev/null; then
-        log_success "Backend started successfully (PID: $BACKEND_PID)"
+        log_success "Backend process started (PID: $BACKEND_PID)"
         log_info "Backend logs: tail -f /tmp/opik-backend.log"
-        if [ "$DEBUG_MODE" = "true" ]; then
-            log_debug "Debug mode enabled - check logs for detailed output"
+        
+        # Wait for backend to be fully ready and accepting connections
+        if ! wait_for_backend_ready; then
+            exit 1
         fi
     else
         log_error "Backend failed to start. Check logs: cat /tmp/opik-backend.log"
