@@ -171,19 +171,18 @@ class MCPAgent(OptimizableAgent):
 
     Example:
         ```python
-        from opik_optimizer.mcp_utils.mcp import MCPManifest
         from scripts.llm_frameworks.mcp.mcp_agent import create_mcp_prompt, MCPAgent
 
-        # Configure your MCP server
-        manifest = MCPManifest.from_dict({
+        # Configure your MCP server as a dictionary
+        manifest = {
             "name": "my-mcp-server",
             "command": "npx",
             "args": ["-y", "@my-org/mcp-server"],
             "env": {}
-        })
+        }
 
         # Create prompt with MCP tools
-        prompt = create_mcp_prompt(manifest.to_dict(), tool_names=["my-tool"])
+        prompt = create_mcp_prompt(manifest, tool_names=["my-tool"])
 
         # Create agent
         agent = MCPAgent(prompt, project_name="mcp-example")
