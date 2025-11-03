@@ -1009,7 +1009,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 candidate_generation_report.set_generated_prompts()
 
                 return valid_prompts
-                # --- End Robust Parsing ---
 
             except Exception as e:
                 raise ValueError(
