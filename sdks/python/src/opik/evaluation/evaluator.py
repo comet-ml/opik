@@ -221,12 +221,15 @@ def _evaluate_task(
 def evaluate_experiment(
     experiment_name: str,
     scoring_metrics: List[base_metric.BaseMetric],
+    scroring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     scoring_threads: int = 16,
     verbose: int = 1,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
-    """Update the existing experiment with new evaluation metrics.
+    """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
+    evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
+    to receive inputs and outputs from the task.
 
     Args:
         experiment_name: The name of the experiment to update.
@@ -236,6 +239,12 @@ def evaluate_experiment(
             are taken from the `task` output, check the signature
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
+
+        scroring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • scoring_inputs — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
@@ -270,6 +279,16 @@ def evaluate_experiment(
     project_name = rest_operations.get_trace_project_name(
         client=client, trace_id=first_trace_id
     )
+
+    # wrap scoring functions if any
+    if scroring_functions:
+        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
+            scroring_functions, project_name=project_name
+        )
+        if scoring_metrics:
+            scoring_metrics.extend(function_metrics)
+        else:
+            scoring_metrics = function_metrics
 
     with asyncio_support.async_http_connections_expire_immediately():
         evaluation_engine = engine.EvaluationEngine(

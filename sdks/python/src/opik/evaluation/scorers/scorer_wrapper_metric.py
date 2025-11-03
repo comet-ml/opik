@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Optional, List
+from typing import Any, Callable, Dict, Optional, List, Union
 
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -48,7 +48,7 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         scoring_inputs: Dict[str, Any],
         task_outputs: Dict[str, Any],
         **kwargs: Any,
-    ) -> score_result.ScoreResult:
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
         """
         Score using the wrapped ScorerFunction.
 
@@ -81,7 +81,7 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         task_outputs: Dict[str, Any],
         task_span: Optional[models.SpanModel] = None,
         **kwargs: Any,
-    ) -> score_result.ScoreResult:
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
         """
         Score using the wrapped ScorerFunction.
 
@@ -112,8 +112,8 @@ def _scorer_name(scorer: Callable) -> str:
 
 def wrap_scorer_functions(
     scorer_functions: List[scorer_function.ScorerFunction], project_name: Optional[str]
-) -> List[ScorerWrapperMetric]:
-    metrics = []
+) -> List[base_metric.BaseMetric]:
+    metrics: List[base_metric.BaseMetric] = []
     for f in scorer_functions:
         name = _scorer_name(f)
         if scorer_function.has_task_span_in_parameters(f):
