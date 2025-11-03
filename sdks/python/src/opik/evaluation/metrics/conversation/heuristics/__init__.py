@@ -1,8 +1,8 @@
 """Heuristic conversation-level metrics.
 
-Exposes the reusable conversation-level heuristics so imports like
-``opik.evaluation.metrics.heuristics.conversation.degeneration.metric`` continue to
-resolve and can be surfaced in generated documentation.
+Exposes the reusable conversation-level heuristics under the public namespace
+``opik.evaluation.metrics.conversation.heuristics.*`` so documentation and downstream
+code can import them directly.
 """
 
 from .degeneration.metric import ConversationDegenerationMetric
