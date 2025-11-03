@@ -969,6 +969,52 @@ function Restart-Services {
     Test-Services
 }
 
+# Function for quick restart (only rebuild backend, keep infrastructure running)
+function Invoke-QuickRestart {
+    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend only) ==="
+    Write-LogInfo "Step 1/6: Stopping frontend..."
+    Stop-Frontend
+    Write-LogInfo "Step 2/6: Stopping backend..."
+    Stop-Backend
+    Write-LogInfo "Step 3/6: Building backend..."
+    Build-Backend
+    Write-LogInfo "Step 4/6: Starting backend..."
+    Start-Backend
+    
+    # Check if package.json has changed since last npm install
+    Write-LogInfo "Step 5/6: Checking frontend dependencies..."
+    $packageJson = Join-Path $script:FRONTEND_DIR "package.json"
+    $packageLock = Join-Path $script:FRONTEND_DIR "package-lock.json"
+    $nodeModules = Join-Path $script:FRONTEND_DIR "node_modules"
+    
+    $needsInstall = $false
+    
+    if (-not (Test-Path $nodeModules)) {
+        Write-LogInfo "node_modules not found, will install dependencies"
+        $needsInstall = $true
+    }
+    elseif (-not (Test-Path $packageLock)) {
+        Write-LogInfo "package-lock.json not found, will install dependencies"
+        $needsInstall = $true
+    }
+    elseif ((Get-Item $packageJson).LastWriteTime -gt (Get-Item $packageLock).LastWriteTime) {
+        Write-LogInfo "package.json is newer than package-lock.json, will install dependencies"
+        $needsInstall = $true
+    }
+    else {
+        Write-LogInfo "Frontend dependencies are up to date, skipping npm install"
+    }
+    
+    if ($needsInstall) {
+        Build-Frontend
+    }
+    
+    Write-LogInfo "Step 6/6: Starting frontend..."
+    Start-Frontend
+    Write-LogSuccess "=== Quick Restart Complete ==="
+    Test-Services
+}
+
 # Function to start BE-only services (without building)
 function Start-BeOnlyServices {
     Write-LogInfo "=== Starting Opik BE-Only Development Environment ==="
@@ -1048,15 +1094,16 @@ function Show-Usage {
     Write-Host "Usage: $PSCommandPath [OPTIONS]"
     Write-Host ""
     Write-Host "Standard Mode (BE and FE services as processes):"
-    Write-Host "  --start        - Start Docker infrastructure, and BE and FE processes (without building)"
-    Write-Host "  --stop         - Stop Docker infrastructure, and BE and FE processes"
-    Write-Host "  --restart      - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
-    Write-Host "  --verify       - Verify status of Docker infrastructure, and BE and FE processes"
+    Write-Host "  --start         - Start Docker infrastructure, and BE and FE processes (without building)"
+    Write-Host "  --stop          - Stop Docker infrastructure, and BE and FE processes"
+    Write-Host "  --restart       - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
+    Write-Host "  --quick-restart - Quick restart: stop BE/FE, rebuild BE only, start BE/FE (keeps infrastructure running)"
+    Write-Host "  --verify        - Verify status of Docker infrastructure, and BE and FE processes"
     Write-Host ""
     Write-Host "BE-Only Mode (BE as process, FE in Docker):"
     Write-Host "  --be-only-start    - Start Docker infrastructure and FE, and backend process (without building)"
     Write-Host "  --be-only-stop     - Stop Docker infrastructure and FE, and backend process"
-    Write-Host "  --be-only-restart  - Stop, build, and Docker infrastructure and FE, and backend process"
+    Write-Host "  --be-only-restart  - Stop, build, and start Docker infrastructure and FE, and backend process"
     Write-Host "  --be-only-verify   - Verify status of Docker infrastructure and FE, and backend process"
     Write-Host ""
     Write-Host "Other options:"
@@ -1097,6 +1144,9 @@ switch ($Action.ToLower()) {
     }
     "--restart" {
         Restart-Services
+    }
+    "--quick-restart" {
+        Invoke-QuickRestart
     }
     "--verify" {
         Test-Services

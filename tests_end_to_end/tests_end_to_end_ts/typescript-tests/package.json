@@ -10,7 +10,8 @@
     "test:report": "playwright show-report",
     "test:trace": "playwright show-trace",
     "test:sanity": "TEST_SUITE=sanity playwright test",
-    "test:regression": "TEST_SUITE=regression playwright test",
+    "test:happypaths": "TEST_SUITE=happypaths playwright test",
+    "test:fullregression": "TEST_SUITE=fullregression playwright test",
     "test:projects": "TEST_SUITE=projects playwright test",
     "test:datasets": "TEST_SUITE=datasets playwright test",
     "test:experiments": "TEST_SUITE=experiments playwright test",
@@ -19,6 +20,8 @@
     "test:tracing": "TEST_SUITE=tracing playwright test",
     "test:threads": "TEST_SUITE=threads playwright test",
     "test:attachments": "TEST_SUITE=attachments playwright test",
+    "test:feedbackscores": "TEST_SUITE=feedbackscores playwright test",
+    "test:onlinescores": "TEST_SUITE=onlinescores playwright test",
     "allure:report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
   },
   "keywords": [
