@@ -9,9 +9,16 @@ import useAppStore from "@/store/AppStore";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -53,6 +60,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [fetching, setFetching] = useState<boolean>(false);
+  const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
 
@@ -233,43 +241,49 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       );
     }
 
-    return datasets.map((d) => (
-      <div
-        key={d.id}
-        className={cn(
-          "rounded-sm px-4 py-2.5 flex flex-col",
-          noValidRows ? "cursor-default" : "cursor-pointer hover:bg-muted",
-        )}
-        onClick={() => !noValidRows && addToDatasetHandler(d)}
-      >
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <Database
+    return datasets.map((d) => {
+      const isSelected = selectedDataset?.id === d.id;
+      return (
+        <div
+          key={d.id}
+          className={cn(
+            "rounded-sm px-4 py-2.5 flex flex-col",
+            noValidRows
+              ? "cursor-default"
+              : "cursor-pointer hover:bg-primary-foreground",
+            isSelected && "bg-muted",
+          )}
+          onClick={() => !noValidRows && setSelectedDataset(d)}
+        >
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <Database
+                className={cn(
+                  "size-4 shrink-0",
+                  noValidRows ? "text-muted-gray" : "text-muted-slate",
+                )}
+              />
+              <span
+                className={cn(
+                  "comet-body-s-accented truncate w-full",
+                  noValidRows && "text-muted-gray",
+                )}
+              >
+                {d.name}
+              </span>
+            </div>
+            <div
               className={cn(
-                "size-4 shrink-0",
-                noValidRows ? "text-muted-gray" : "text-muted-slate",
-              )}
-            />
-            <span
-              className={cn(
-                "comet-body-s-accented truncate w-full",
-                noValidRows && "text-muted-gray",
+                "comet-body-s pl-6 whitespace-pre-line break-words",
+                noValidRows ? "text-muted-gray" : "text-light-slate",
               )}
             >
-              {d.name}
-            </span>
-          </div>
-          <div
-            className={cn(
-              "comet-body-s pl-6 whitespace-pre-line break-words",
-              noValidRows ? "text-muted-gray" : "text-light-slate",
-            )}
-          >
-            {d.description}
+              {d.description}
+            </div>
           </div>
         </div>
-      </div>
-    ));
+      );
+    });
   };
 
   const renderAlert = () => {
@@ -304,103 +318,112 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               ]}
             />
             {hasOnlyTraces && (
-              <div className="mb-4 rounded-md border p-4">
-                <h4 className="comet-body-s-accented mb-3">
-                  Include trace metadata
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-spans"
-                      checked={includeSpans}
-                      onCheckedChange={(checked) =>
-                        setIncludeSpans(checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor="include-spans"
-                      className="comet-body-s cursor-pointer"
-                    >
-                      Nested spans
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-tags"
-                      checked={includeTags}
-                      onCheckedChange={(checked) =>
-                        setIncludeTags(checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor="include-tags"
-                      className="comet-body-s cursor-pointer"
-                    >
-                      Tags
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-feedback-scores"
-                      checked={includeFeedbackScores}
-                      onCheckedChange={(checked) =>
-                        setIncludeFeedbackScores(checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor="include-feedback-scores"
-                      className="comet-body-s cursor-pointer"
-                    >
-                      Feedback scores
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-comments"
-                      checked={includeComments}
-                      onCheckedChange={(checked) =>
-                        setIncludeComments(checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor="include-comments"
-                      className="comet-body-s cursor-pointer"
-                    >
-                      Comments
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-usage"
-                      checked={includeUsage}
-                      onCheckedChange={(checked) =>
-                        setIncludeUsage(checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor="include-usage"
-                      className="comet-body-s cursor-pointer"
-                    >
-                      Usage metrics
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-metadata"
-                      checked={includeMetadata}
-                      onCheckedChange={(checked) =>
-                        setIncludeMetadata(checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor="include-metadata"
-                      className="comet-body-s cursor-pointer"
-                    >
-                      Metadata
-                    </Label>
-                  </div>
-                </div>
-              </div>
+              <Accordion
+                type="single"
+                collapsible
+                defaultValue=""
+                className="mb-4"
+              >
+                <AccordionItem value="metadata" className="border-t">
+                  <AccordionTrigger>
+                    Trace metadata configuration
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-spans"
+                          checked={includeSpans}
+                          onCheckedChange={(checked) =>
+                            setIncludeSpans(checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="include-spans"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Nested spans
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-tags"
+                          checked={includeTags}
+                          onCheckedChange={(checked) =>
+                            setIncludeTags(checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="include-tags"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Tags
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-feedback-scores"
+                          checked={includeFeedbackScores}
+                          onCheckedChange={(checked) =>
+                            setIncludeFeedbackScores(checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="include-feedback-scores"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Feedback scores
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-comments"
+                          checked={includeComments}
+                          onCheckedChange={(checked) =>
+                            setIncludeComments(checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="include-comments"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Comments
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-usage"
+                          checked={includeUsage}
+                          onCheckedChange={(checked) =>
+                            setIncludeUsage(checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="include-usage"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Usage metrics
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-metadata"
+                          checked={includeMetadata}
+                          onCheckedChange={(checked) =>
+                            setIncludeMetadata(checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="include-metadata"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Metadata
+                        </Label>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             )}
             <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select a dataset</h3>
@@ -438,12 +461,34 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               </div>
             )}
           </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={fetching}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedDataset) {
+                  addToDatasetHandler(selectedDataset);
+                }
+              }}
+              disabled={!selectedDataset || noValidRows || fetching}
+            >
+              Add to dataset
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <AddEditDatasetDialog
         open={openDialog}
         setOpen={setOpenDialog}
-        onDatasetCreated={addToDatasetHandler}
+        onDatasetCreated={(dataset) => {
+          setSelectedDataset(dataset);
+          setOpen(true);
+        }}
         hideUpload={true}
       />
     </>
