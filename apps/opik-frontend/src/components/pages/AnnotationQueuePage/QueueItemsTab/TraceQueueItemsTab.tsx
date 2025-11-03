@@ -250,8 +250,8 @@ type TraceQueueItemsTabProps = {
 const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   annotationQueue,
 }) => {
-  const truncationEnabled = useTruncationEnabled();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const truncationEnabled = useTruncationEnabled();
 
   const [search = "", setSearch] = useQueryParam("trace_search", StringParam, {
     updateType: "replaceIn",
