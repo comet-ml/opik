@@ -2037,7 +2037,11 @@ class SpansResourceTest {
                                     : filterValue)
                             .build());
 
-            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans.reversed(), unexpectedSpans);
+            // Prepare expected spans with provider injected into metadata
+            var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
+
+            var values = testAssertion.transformTestParams(preparedExpectedSpans, preparedExpectedSpans.reversed(),
+                    unexpectedSpans);
 
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
@@ -6019,7 +6023,8 @@ class SpansResourceTest {
             var expectedSpanBuilder = expectedSpan.toBuilder()
                     .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
-            var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+            var preparedExpectedSpan = SpanAssertions.prepareSpanForAssertion(expectedSpanBuilder.build());
+            var actualSpan = getAndAssert(preparedExpectedSpan, API_KEY, TEST_WORKSPACE);
 
             BigDecimal expectedCost;
             if (expectedSpanUpdate.totalEstimatedCost() != null) {
@@ -6529,8 +6534,9 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var actualSpan = getAndAssert(
-                    expectedSpan.toBuilder().provider(expectedProvider).build(), null, API_KEY, TEST_WORKSPACE);
+            var preparedExpectedSpan = SpanAssertions.prepareSpanForAssertion(
+                    expectedSpan.toBuilder().provider(expectedProvider).build());
+            var actualSpan = getAndAssert(preparedExpectedSpan, null, API_KEY, TEST_WORKSPACE);
             assertThat(actualSpan.provider()).isEqualTo(expectedProvider);
         }
 
