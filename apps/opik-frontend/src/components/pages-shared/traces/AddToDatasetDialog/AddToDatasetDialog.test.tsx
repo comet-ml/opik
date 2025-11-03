@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AddToDatasetDialog from "./AddToDatasetDialog";
-import { Trace, Span } from "@/types/traces";
+import { Trace, Span, SPAN_TYPE } from "@/types/traces";
 import { ReactNode } from "react";
 
 // Mock the API hooks
@@ -91,25 +91,35 @@ describe("AddToDatasetDialog", () => {
     output: { response: "test output" },
     start_time: "2024-01-01T00:00:00Z",
     end_time: "2024-01-01T00:00:01Z",
+    duration: 1000,
+    created_at: "2024-01-01T00:00:00Z",
+    last_updated_at: "2024-01-01T00:00:01Z",
     tags: ["tag1", "tag2"],
     metadata: {},
     feedback_scores: [],
+    comments: [],
     project_id: "project-1",
-    project_name: "Test Project",
-  } as Trace;
+  };
 
   const mockSpan: Span = {
     id: "span-1",
     name: "Test Span",
-    type: "llm",
+    type: SPAN_TYPE.llm,
     input: { prompt: "span input" },
     output: { response: "span output" },
     start_time: "2024-01-01T00:00:00Z",
     end_time: "2024-01-01T00:00:01Z",
+    duration: 1000,
+    created_at: "2024-01-01T00:00:00Z",
+    last_updated_at: "2024-01-01T00:00:01Z",
+    metadata: {},
+    feedback_scores: [],
+    comments: [],
+    tags: [],
     trace_id: "trace-1",
-    parent_span_id: null,
+    parent_span_id: "",
     project_id: "project-1",
-  } as Span;
+  };
 
   const defaultProps = {
     getDataForExport: vi.fn(async () => [mockTrace]),
@@ -218,7 +228,7 @@ describe("AddToDatasetDialog", () => {
   it("should show alert when no valid rows are present", () => {
     const propsWithInvalidRows = {
       ...defaultProps,
-      selectedRows: [{ ...mockTrace, input: undefined }],
+      selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
     };
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
@@ -233,7 +243,10 @@ describe("AddToDatasetDialog", () => {
   it("should show alert when only some rows are valid", () => {
     const propsWithPartialValid = {
       ...defaultProps,
-      selectedRows: [mockTrace, { ...mockTrace, id: "trace-2", input: undefined }],
+      selectedRows: [
+        mockTrace,
+        { ...mockTrace, id: "trace-2", input: undefined as unknown as object },
+      ],
     };
 
     render(<AddToDatasetDialog {...propsWithPartialValid} />, { wrapper });
@@ -248,7 +261,7 @@ describe("AddToDatasetDialog", () => {
   it("should disable create new dataset button when no valid rows", () => {
     const propsWithInvalidRows = {
       ...defaultProps,
-      selectedRows: [{ ...mockTrace, input: undefined }],
+      selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
     };
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
@@ -264,7 +277,22 @@ describe("AddToDatasetDialog", () => {
     );
     vi.mocked(useAddTracesToDatasetMutation.default).mockReturnValue({
       mutate: mockAddTracesToDataset,
-    } as any);
+      mutateAsync: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: false,
+      isIdle: true,
+      data: undefined,
+      error: null,
+      status: "idle",
+      reset: vi.fn(),
+      variables: undefined,
+      context: undefined,
+      failureCount: 0,
+      failureReason: null,
+      isPaused: false,
+      submittedAt: 0,
+    });
 
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
@@ -298,7 +326,22 @@ describe("AddToDatasetDialog", () => {
     );
     vi.mocked(useDatasetItemBatchMutation.default).mockReturnValue({
       mutate: mockBatchMutate,
-    } as any);
+      mutateAsync: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: false,
+      isIdle: true,
+      data: undefined,
+      error: null,
+      status: "idle",
+      reset: vi.fn(),
+      variables: undefined,
+      context: undefined,
+      failureCount: 0,
+      failureReason: null,
+      isPaused: false,
+      submittedAt: 0,
+    });
 
     const propsWithSpan = {
       ...defaultProps,
@@ -323,7 +366,22 @@ describe("AddToDatasetDialog", () => {
     );
     vi.mocked(useAddTracesToDatasetMutation.default).mockReturnValue({
       mutate: mockAddTracesToDataset,
-    } as any);
+      mutateAsync: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: false,
+      isIdle: true,
+      data: undefined,
+      error: null,
+      status: "idle",
+      reset: vi.fn(),
+      variables: undefined,
+      context: undefined,
+      failureCount: 0,
+      failureReason: null,
+      isPaused: false,
+      submittedAt: 0,
+    });
 
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
@@ -352,4 +410,3 @@ describe("AddToDatasetDialog", () => {
     });
   });
 });
-
