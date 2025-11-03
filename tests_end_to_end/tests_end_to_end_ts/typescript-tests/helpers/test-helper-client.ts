@@ -297,6 +297,106 @@ export class TestHelperClient {
     }
   }
 
+  // Dataset Items methods
+  async insertDatasetItems(datasetName: string, items: Array<Record<string, any>>): Promise<void> {
+    try {
+      await this.client.post('/api/datasets/insert-items', {
+        dataset_name: datasetName,
+        items,
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to insert dataset items');
+    }
+  }
+
+  async getDatasetItems(datasetName: string): Promise<Array<Record<string, any>>> {
+    try {
+      const response = await this.client.post('/api/datasets/get-items', {
+        dataset_name: datasetName,
+      });
+      return response.data.items;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get dataset items');
+    }
+  }
+
+  async updateDatasetItems(datasetName: string, items: Array<Record<string, any>>): Promise<void> {
+    try {
+      await this.client.post('/api/datasets/update-items', {
+        dataset_name: datasetName,
+        items,
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to update dataset items');
+    }
+  }
+
+  async deleteDatasetItem(datasetName: string, itemId: string): Promise<void> {
+    try {
+      await this.client.delete('/api/datasets/delete-item', {
+        data: {
+          dataset_name: datasetName,
+          item_id: itemId,
+        },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete dataset item');
+    }
+  }
+
+  async clearDataset(datasetName: string): Promise<void> {
+    try {
+      await this.client.post('/api/datasets/clear', {
+        dataset_name: datasetName,
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to clear dataset');
+    }
+  }
+
+  async waitForDatasetItemsCount(
+    datasetName: string,
+    expectedCount: number,
+    timeout: number = 10
+  ): Promise<void> {
+    try {
+      const response = await this.client.post('/api/datasets/wait-for-items-count', {
+        dataset_name: datasetName,
+        expected_count: expectedCount,
+        timeout,
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Items count not reached within timeout');
+      }
+    } catch (error) {
+      throw this.handleError(error, 'Failed to wait for dataset items count');
+    }
+  }
+
+  // Experiment Items methods
+  async getExperimentItems(experimentName: string, limit?: number): Promise<Array<Record<string, any>>> {
+    try {
+      const response = await this.client.post('/api/experiments/get-experiment-items', {
+        experiment_name: experimentName,
+        ...(limit ? { limit } : {}),
+      });
+      return response.data.items;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get experiment items');
+    }
+  }
+
+  async deleteExperimentItems(itemIds: string[]): Promise<void> {
+    try {
+      await this.client.delete('/api/experiments/delete-experiment-items', {
+        data: { ids: itemIds },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete experiment items');
+    }
+  }
+
   // Trace methods
   async createTracesDecorator(
     projectName: string,
