@@ -155,20 +155,9 @@ public class ModelNameMapper {
             return canonical;
         }
 
-        // Fallback for colon suffixes (e.g., "gpt-4:free" -> try "gpt-4")
-        int colonIndex = normalized.indexOf(':');
-        if (colonIndex > 0) {
-            String withoutColon = normalized.substring(0, colonIndex);
-            canonical = ENUM_TO_CANONICAL.get(withoutColon);
-            if (canonical != null) {
-                return canonical;
-            }
-            // If no enum mapping, return without colon for direct JSON lookup
-            return withoutColon;
-        }
-
         // Fallback: return normalized input (for models not in enums)
         // This handles direct JSON keys like "gpt-4", "claude-3-opus", etc.
+        // Note: :free suffix is handled separately in CostService before calling this method
         return normalized;
     }
 

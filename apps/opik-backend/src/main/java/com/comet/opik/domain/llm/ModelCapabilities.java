@@ -48,7 +48,17 @@ public class ModelCapabilities {
             return capability.get().supportsVision();
         }
 
-        // Fallback: Check if model matches vision patterns (for models not in JSON)
+        // Fallback for :free variants - check base model
+        // Free tier models should have same vision capabilities as paid versions
+        if (modelName != null && modelName.toLowerCase().contains(":free")) {
+            String baseModel = modelName.substring(0, modelName.toLowerCase().indexOf(":free"));
+            capability = find(baseModel);
+            if (capability.isPresent()) {
+                return capability.get().supportsVision();
+            }
+        }
+
+        // Final fallback: Check if model matches vision patterns (for models not in JSON)
         return matchesVisionPattern(modelName);
     }
 

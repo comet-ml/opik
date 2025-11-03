@@ -147,8 +147,16 @@ public class CostService {
                     calculator = SpanCostCalculator::textGenerationCost;
                 }
 
-                // Use normalized canonical key from JSON
-                String normalizedModelName = ModelNameMapper.normalize(modelName);
+                // Strip provider prefix from model name if present (e.g., "vertex_ai/model" -> "model")
+                // The JSON key format is "provider/model", but we store as "model/mapped-provider"
+                String modelNameWithoutPrefix = modelName;
+                int slashIndex = modelName.indexOf('/');
+                if (slashIndex > 0) {
+                    modelNameWithoutPrefix = modelName.substring(slashIndex + 1);
+                }
+
+                // Use normalized model name (without provider prefix) and mapped provider
+                String normalizedModelName = ModelNameMapper.normalize(modelNameWithoutPrefix);
                 String normalizedProvider = ModelNameMapper.normalize(PROVIDERS_MAPPING.get(provider));
                 String compositeKey = createModelProviderKey(normalizedModelName, normalizedProvider);
 

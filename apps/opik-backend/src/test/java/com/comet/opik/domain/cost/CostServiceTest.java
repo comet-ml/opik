@@ -147,12 +147,18 @@ class CostServiceTest {
                 "prompt_tokens", 100,
                 "completion_tokens", 50);
 
-        // Non-free colon suffix (e.g., "model:extended") should match base model
-        var withColon = CostService.calculateCost("gpt-4:extended", "openai", usage, null);
-        var withoutColon = CostService.calculateCost("gpt-4", "openai", usage, null);
+        // Models with :free suffix return $0 regardless of base model cost
+        var freeCost = CostService.calculateCost("gpt-4:free", "openai", usage, null);
+        assertThat(freeCost).isEqualTo(BigDecimal.ZERO);
 
-        // Should match the same model
-        assertThat(withColon).isEqualTo(withoutColon);
+        // Base model without suffix has normal pricing
+        var normalCost = CostService.calculateCost("gpt-4", "openai", usage, null);
+        assertThat(normalCost).isGreaterThan(BigDecimal.ZERO);
+
+        // Other colon suffixes (like :extended) must exist in JSON as exact matches
+        // If not in JSON, they return $0 (no match found)
+        var unknownVariant = CostService.calculateCost("gpt-4:unknown-variant", "openai", usage, null);
+        assertThat(unknownVariant).isEqualTo(BigDecimal.ZERO);
     }
 
     @Test
