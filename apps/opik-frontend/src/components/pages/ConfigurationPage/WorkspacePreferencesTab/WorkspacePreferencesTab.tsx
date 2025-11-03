@@ -86,33 +86,50 @@ const WorkspacePreferencesTab: React.FC = () => {
     [setEditPreferenceOpen],
   );
 
-  const handleThreadTimeoutSubmit = useCallback(
-    (values: EditThreadTimeoutFormValues) => {
+  const mergeConfigUpdate = useCallback(
+    (
+      updates: Partial<{
+        timeout_to_mark_thread_as_inactive: string | null;
+        truncation_on_tables: boolean;
+      }>,
+    ) => {
       updateWorkspaceConfig({
         config: {
           timeout_to_mark_thread_as_inactive:
-            values.timeout_to_mark_thread_as_inactive,
-          truncation_on_tables: workspaceConfig?.truncation_on_tables ?? null,
-        },
-      });
-    },
-    [updateWorkspaceConfig, workspaceConfig?.truncation_on_tables],
-  );
-
-  const handleTruncationToggleSubmit = useCallback(
-    (enabled: boolean) => {
-      updateWorkspaceConfig({
-        config: {
-          timeout_to_mark_thread_as_inactive:
-            workspaceConfig?.timeout_to_mark_thread_as_inactive ?? null,
-          truncation_on_tables: enabled,
+            updates.timeout_to_mark_thread_as_inactive !== undefined
+              ? updates.timeout_to_mark_thread_as_inactive
+              : workspaceConfig?.timeout_to_mark_thread_as_inactive ?? null,
+          truncation_on_tables:
+            updates.truncation_on_tables !== undefined
+              ? updates.truncation_on_tables
+              : workspaceConfig?.truncation_on_tables ?? null,
         },
       });
     },
     [
       updateWorkspaceConfig,
       workspaceConfig?.timeout_to_mark_thread_as_inactive,
+      workspaceConfig?.truncation_on_tables,
     ],
+  );
+
+  const handleThreadTimeoutSubmit = useCallback(
+    (values: EditThreadTimeoutFormValues) => {
+      mergeConfigUpdate({
+        timeout_to_mark_thread_as_inactive:
+          values.timeout_to_mark_thread_as_inactive,
+      });
+    },
+    [mergeConfigUpdate],
+  );
+
+  const handleTruncationToggleSubmit = useCallback(
+    (enabled: boolean) => {
+      mergeConfigUpdate({
+        truncation_on_tables: enabled,
+      });
+    },
+    [mergeConfigUpdate],
   );
 
   const columns = useMemo(() => {
