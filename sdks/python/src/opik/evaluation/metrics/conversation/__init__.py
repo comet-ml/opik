@@ -1,14 +1,4 @@
-"""Conversation metrics compatibility exports.
-
-Provides stable import paths for the conversation helpers and metrics so legacy
-code (and generated documentation) can resolve symbols such as
-``opik.evaluation.metrics.conversation.degeneration.metric``.
-"""
-
-from __future__ import annotations
-
-import importlib
-from typing import Any
+"""Public conversation metrics API."""
 
 from .conversation_thread_metric import ConversationThreadMetric
 from .conversation_turns_factory import build_conversation_turns
@@ -42,27 +32,17 @@ __all__ = [
     "GEvalConversationMetric",
 ]
 
-_LEGACY_EXPORTS = {
-    "ConversationDegenerationMetric": "opik.evaluation.metrics.conversation.degeneration.metric",
-    "KnowledgeRetentionMetric": "opik.evaluation.metrics.conversation.knowledge_retention.metric",
-    "ConversationalCoherenceMetric": "opik.evaluation.metrics.conversation.conversational_coherence.metric",
-    "SessionCompletenessQuality": "opik.evaluation.metrics.conversation.session_completeness.metric",
-    "UserFrustrationMetric": "opik.evaluation.metrics.conversation.user_frustration.metric",
-    "ConversationComplianceRiskMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-    "ConversationDialogueHelpfulnessMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-    "ConversationPromptUncertaintyMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-    "ConversationQARelevanceMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-    "ConversationSummarizationCoherenceMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-    "ConversationSummarizationConsistencyMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-    "GEvalConversationMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
-}
-
-
-def __getattr__(name: str) -> Any:
-    if name not in _LEGACY_EXPORTS:
-        raise AttributeError(name)
-
-    module = importlib.import_module(_LEGACY_EXPORTS[name])
-    value = getattr(module, name)
-    globals()[name] = value
-    return value
+from .heuristics.degeneration.metric import ConversationDegenerationMetric
+from .heuristics.knowledge_retention.metric import KnowledgeRetentionMetric
+from .llm_judges.conversational_coherence.metric import ConversationalCoherenceMetric
+from .llm_judges.g_eval_wrappers import (
+    GEvalConversationMetric,
+    ConversationComplianceRiskMetric,
+    ConversationDialogueHelpfulnessMetric,
+    ConversationQARelevanceMetric,
+    ConversationSummarizationCoherenceMetric,
+    ConversationSummarizationConsistencyMetric,
+    ConversationPromptUncertaintyMetric,
+)
+from .llm_judges.session_completeness.metric import SessionCompletenessQuality
+from .llm_judges.user_frustration.metric import UserFrustrationMetric
