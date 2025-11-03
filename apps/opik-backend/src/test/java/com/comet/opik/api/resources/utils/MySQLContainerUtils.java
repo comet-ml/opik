@@ -1,18 +1,18 @@
 package com.comet.opik.api.resources.utils;
 
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.Map;
 
 public class MySQLContainerUtils {
 
-    public static MySQLContainer<?> newMySQLContainer() {
+    public static MySQLContainer newMySQLContainer() {
         return newMySQLContainer(true);
     }
 
-    public static MySQLContainer<?> newMySQLContainer(boolean reusable) {
-        return new MySQLContainer<>(DockerImageName.parse("mysql:8.4.2"))
+    public static MySQLContainer newMySQLContainer(boolean reusable) {
+        return new MySQLContainer(DockerImageName.parse("mysql:8.4.2"))
                 .withUrlParam("createDatabaseIfNotExist", "true")
                 .withUrlParam("rewriteBatchedStatements", "true")
                 .withUrlParam("serverTimezone", "UTC")
