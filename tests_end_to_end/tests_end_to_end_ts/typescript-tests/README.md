@@ -174,7 +174,7 @@ Use Cursor to request test generation:
 
 Example prompts:
 - "Generate an E2E test for the new project metrics dashboard"
-- "Create automated test for the dataset upload flow"  
+- "Create automated test for the dataset upload flow"
 - "Add happy path test for experiment comparison"
 
 ### The Three Agents
@@ -227,10 +227,10 @@ test.describe('Feature Name @fullregression @feature', () => {
     // 1. Navigate to starting point
     const projectsPage = new ProjectsPage(page);
     await projectsPage.goto();
-    
+
     // 2. Perform user actions
     await projectsPage.clickProject(projectName);
-    
+
     // 3. Verify expected outcomes
     await expect(page.locator('[data-testid="result"]')).toBeVisible();
   });
@@ -264,7 +264,7 @@ typescript-tests/
 **2. Developer requests test generation:**
 ```
 I just built a project analytics dashboard. Generate an E2E test for it.
-The dashboard shows project statistics. Users access it from the project 
+The dashboard shows project statistics. Users access it from the project
 details page by clicking the "Analytics" tab.
 ```
 
@@ -296,7 +296,7 @@ git commit -m "[OPIK-1234] [FE] Add analytics dashboard + E2E test"
 
 **Agent Definitions:** `../.cursor/agents/`
 - `playwright-test-planner.md` - Planner agent configuration
-- `playwright-test-generator.md` - Generator agent configuration  
+- `playwright-test-generator.md` - Generator agent configuration
 - `playwright-test-healer.md` - Healer agent configuration
 
 **MCP Server:** `.mcp.json`

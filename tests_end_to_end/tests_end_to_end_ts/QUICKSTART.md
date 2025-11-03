@@ -53,7 +53,7 @@ npm run test:report
 You can automatically generate E2E tests for new features using Playwright's agent capabilities. The workflow uses three specialized agents:
 
 - **🎭 Planner**: Explores your UI and generates detailed test plans
-- **🎭 Generator**: Transforms test plans into executable Playwright tests  
+- **🎭 Generator**: Transforms test plans into executable Playwright tests
 - **🎭 Healer**: Automatically fixes failing tests
 
 ### Quick Usage
@@ -108,8 +108,8 @@ git commit -m "[OPIK-1234] [FE] Add feature + E2E test"
 **Prompt to Cursor:**
 ```
 I just built a project analytics dashboard. Generate an E2E test for it.
-The dashboard shows project statistics including total traces, average cost, 
-and success rate. Users access it from the project details page by clicking 
+The dashboard shows project statistics including total traces, average cost,
+and success rate. Users access it from the project details page by clicking
 the "Analytics" tab. Please create a happy path test.
 ```
 
@@ -157,10 +157,10 @@ test.describe('Feature Name', () => {
     // 1. Navigate to starting point
     const projectsPage = new ProjectsPage(page);
     await projectsPage.goto();
-    
+
     // 2. Perform user actions
     await projectsPage.clickProject(projectName);
-    
+
     // 3. Verify expected outcomes
     await expect(page.locator('[data-testid="result"]')).toBeVisible();
   });
@@ -207,12 +207,12 @@ tests_end_to_end_ts/
 
 ## 🎯 Key Features
 
-✅ **Flask Auto-Start** - Test helper service starts automatically  
-✅ **Type Safety** - TypeScript catches errors at compile time  
-✅ **Dual Verification** - Tests verify via both UI (Playwright) and SDK (Python)  
-✅ **Fixtures** - Clean setup/teardown like pytest  
-✅ **Page Objects** - Maintainable, reusable UI interactions  
-✅ **AI Agents** - Automatic test generation with Playwright agents  
+✅ **Flask Auto-Start** - Test helper service starts automatically
+✅ **Type Safety** - TypeScript catches errors at compile time
+✅ **Dual Verification** - Tests verify via both UI (Playwright) and SDK (Python)
+✅ **Fixtures** - Clean setup/teardown like pytest
+✅ **Page Objects** - Maintainable, reusable UI interactions
+✅ **AI Agents** - Automatic test generation with Playwright agents
 
 ## 🐛 Troubleshooting
 
@@ -276,4 +276,3 @@ After setup, you should be able to:
 - Check the full [README](typescript-tests/README.md)
 - Review [Cursor Rules](.cursor/rules/playwright-agent-workflow.mdc)
 - See [Playwright Agents Documentation](https://playwright.dev/docs/test-agents)
-
