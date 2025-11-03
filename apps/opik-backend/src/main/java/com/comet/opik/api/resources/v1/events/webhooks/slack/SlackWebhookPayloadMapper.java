@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events.webhooks.slack;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
@@ -12,6 +13,8 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +91,7 @@ public class SlackWebhookPayloadMapper {
             case TRACE_FEEDBACK_SCORE -> buildTraceFeedbackScoreDetails(metadata, baseUrl);
             case TRACE_THREAD_FEEDBACK_SCORE -> buildTraceThreadFeedbackScoreDetails(metadata, baseUrl);
             case TRACE_GUARDRAILS_TRIGGERED -> buildGuardrailsTriggeredDetails(metadata, baseUrl);
+            case EXPERIMENT_FINISHED -> buildExperimentFinishedDetails(metadata, baseUrl);
         };
 
         var blocks = new ArrayList<SlackBlock>();
@@ -252,6 +256,25 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Traces with Guardrails Triggered:*\n", guardrailLinks, fallbackText);
     }
 
+    private static DetailsBuildResult buildExperimentFinishedDetails(@NonNull List<?> metadata,
+            @NonNull String baseUrl) {
+        if (metadata.isEmpty()) {
+            return new DetailsBuildResult("No experiments finished");
+        }
+
+        List<String> experimentLinks = metadata.stream()
+                .map(item -> (Experiment) item)
+                .map(experiment -> buildExperimentLink(experiment.id(), experiment.datasetId(), baseUrl))
+                .toList();
+
+        String mainText = "*Experiments Finished:*\n" + String.join("\n", experimentLinks);
+        String fallbackText = String.format(
+                "Overall %d Experiments finished, you could check them here: <%s|View All>",
+                experimentLinks.size(), baseUrl + "/experiments");
+
+        return checkSlackTextLimit(mainText, "*Experiments Finished:*\n", experimentLinks, fallbackText);
+    }
+
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,
             List<String> links, String fallbackText) {
         // Check if exceeds limit
@@ -287,6 +310,7 @@ public class SlackWebhookPayloadMapper {
             case TRACE_FEEDBACK_SCORE -> "Trace Feedback Score";
             case TRACE_THREAD_FEEDBACK_SCORE -> "Thread Feedback Score";
             case TRACE_GUARDRAILS_TRIGGERED -> "Guardrail Triggered";
+            case EXPERIMENT_FINISHED -> "Experiment Finished";
         };
     }
 
@@ -338,5 +362,17 @@ public class SlackWebhookPayloadMapper {
                 baseUrl, fs.projectId(), fs.threadId());
         return String.format("Thread Score  *%s* = %.2f, reason: %s | <%s|View>",
                 fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
+    }
+
+    /**
+     * Builds a Slack-formatted link to an experiment in the UI.
+     */
+    private static String buildExperimentLink(@NonNull UUID experimentId, @NonNull UUID datasetId,
+            @NonNull String baseUrl) {
+        String experimentsParam = String.format("[\"%s\"]", experimentId);
+        String encodedExperimentsParam = URLEncoder.encode(experimentsParam, StandardCharsets.UTF_8);
+        String url = String.format("%s/experiments/%s/compare?experiments=%s",
+                baseUrl, datasetId, encodedExperimentsParam);
+        return String.format("Experiment `%s` | <%s|View>", experimentId, url);
     }
 }
