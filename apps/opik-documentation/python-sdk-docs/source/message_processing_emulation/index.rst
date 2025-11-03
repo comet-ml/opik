@@ -25,6 +25,7 @@ Key Classes
    SpanModel
    TraceModel
    ExperimentItemModel
+   local_recording
 
 Class Hierarchy
 ---------------
