@@ -12,14 +12,14 @@ try:
     from .conversation import types as conversation_types
 except ImportError:  # pragma: no cover - runtime compatibility
     from . import conversation_types as conversation_types  # type: ignore
-from .heuristics.conversation.degeneration.metric import ConversationDegenerationMetric
-from .heuristics.conversation.knowledge_retention.metric import (
+from .conversation.heuristics.degeneration.metric import ConversationDegenerationMetric
+from .conversation.heuristics.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
 )
-from .llm_judges.conversation.conversational_coherence.metric import (
+from .conversation.llm_judges.conversational_coherence.metric import (
     ConversationalCoherenceMetric,
 )
-from .llm_judges.conversation.g_eval_wrappers import (
+from .conversation.llm_judges.g_eval_wrappers import (
     GEvalConversationMetric,
     ConversationComplianceRiskMetric,
     ConversationDialogueHelpfulnessMetric,
@@ -28,10 +28,10 @@ from .llm_judges.conversation.g_eval_wrappers import (
     ConversationSummarizationConsistencyMetric,
     ConversationPromptUncertaintyMetric,
 )
-from .llm_judges.conversation.session_completeness.metric import (
+from .conversation.llm_judges.session_completeness.metric import (
     SessionCompletenessQuality,
 )
-from .llm_judges.conversation.user_frustration.metric import UserFrustrationMetric
+from .conversation.llm_judges.user_frustration.metric import UserFrustrationMetric
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.gleu import GLEU

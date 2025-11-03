@@ -1,4 +1,4 @@
-from ...llm_judges.conversation.session_completeness.templates import (
+from ..llm_judges.session_completeness.templates import (
     evaluate_user_goal,
     extract_user_goals,
     generate_reason,

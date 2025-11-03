@@ -4,10 +4,10 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
-from opik.evaluation.metrics.llm_judges.conversation.conversational_coherence import (
+from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence import (
     schema,
 )
-from opik.evaluation.metrics.llm_judges.conversation.conversational_coherence.metric import (
+from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence.metric import (
     ConversationalCoherenceMetric,
 )
 from opik.evaluation.models import base_model

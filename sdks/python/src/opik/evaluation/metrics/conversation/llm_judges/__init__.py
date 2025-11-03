@@ -1,8 +1,8 @@
 """
 LLM-judge conversation adapters.
 
-Re-export the conversation-focused metrics so imports under
-`opik.evaluation.metrics.llm_judges.conversation.*` remain stable.
+Expose the conversation-focused judges under
+`opik.evaluation.metrics.conversation.llm_judges.*`.
 """
 
 from .conversational_coherence.metric import ConversationalCoherenceMetric

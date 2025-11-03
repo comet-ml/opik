@@ -1,4 +1,4 @@
-from ...llm_judges.conversation.user_frustration.schema import (
+from ..llm_judges.user_frustration.schema import (
     EvaluateUserFrustrationResponse,
     ScoreReasonResponse,
 )

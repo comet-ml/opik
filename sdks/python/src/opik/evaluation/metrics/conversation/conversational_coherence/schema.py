@@ -1,4 +1,4 @@
-from ...llm_judges.conversation.conversational_coherence.schema import (
+from ..llm_judges.conversational_coherence.schema import (
     EvaluateConversationCoherenceResponse,
     ScoreReasonResponse,
 )

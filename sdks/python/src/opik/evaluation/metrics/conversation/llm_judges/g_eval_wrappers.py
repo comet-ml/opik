@@ -43,7 +43,7 @@ class GEvalConversationMetric(ConversationThreadMetric):
         the judge fails, ``scoring_failed`` is set and ``value`` is ``0.0``.
 
     Example:
-        >>> from opik.evaluation.metrics.llm_judges.conversation.g_eval_wrappers import (
+        >>> from opik.evaluation.metrics.conversation.llm_judges.g_eval_wrappers import (
         ...     GEvalConversationMetric,
         ... )
         >>> from opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite import DialogueHelpfulnessJudge

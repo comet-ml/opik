@@ -1,4 +1,4 @@
-from ...llm_judges.conversation.session_completeness.schema import (
+from ..llm_judges.session_completeness.schema import (
     EvaluateUserGoalResponse,
     ScoreReasonResponse,
     UserGoalsResponse,

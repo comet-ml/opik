@@ -1,4 +1,4 @@
-from ..llm_judges.conversation.g_eval_wrappers import (
+from .llm_judges.g_eval_wrappers import (
     ConversationComplianceRiskMetric,
     ConversationDialogueHelpfulnessMetric,
     ConversationPromptUncertaintyMetric,

@@ -1,4 +1,4 @@
-from ...llm_judges.conversation.user_frustration.templates import (
+from ..llm_judges.user_frustration.templates import (
     evaluate_conversation,
     generate_reason,
 )

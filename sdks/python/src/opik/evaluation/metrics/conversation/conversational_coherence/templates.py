@@ -1,4 +1,4 @@
-from ...llm_judges.conversation.conversational_coherence.templates import (
+from ..llm_judges.conversational_coherence.templates import (
     generate_reason,
     evaluate_conversation,
 )
