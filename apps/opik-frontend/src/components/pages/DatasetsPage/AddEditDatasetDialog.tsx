@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
@@ -71,6 +71,29 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const [description, setDescription] = useState<string>(
     dataset ? dataset.description || "" : "",
   );
+
+  // Reset state when dialog closes or when dataset prop changes
+  useEffect(() => {
+    if (!open) {
+      // Reset all state when dialog closes
+      setIsOverlayShown(false);
+      setCsvData(undefined);
+      setCsvError(undefined);
+      setConfirmOpen(false);
+      if (!dataset) {
+        setName("");
+        setDescription("");
+      }
+    } else {
+      // Reset state when dialog opens (in case of stale state)
+      setIsOverlayShown(false);
+      setConfirmOpen(false);
+      if (dataset) {
+        setName(dataset.name);
+        setDescription(dataset.description || "");
+      }
+    }
+  }, [open, dataset]);
 
   const isEdit = Boolean(dataset);
   const hasValidCsvData = csvData && csvData.length > 0;
