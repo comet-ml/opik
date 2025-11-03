@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 
 /**
  * JAX-RS ParamConverter for automatic Instant conversion from query parameters.
@@ -24,38 +25,38 @@ public class InstantParamConverter implements ParamConverterProvider {
             return null;
         }
 
-        return (ParamConverter<T>) new ParamConverter<Instant>() {
-            @Override
-            public Instant fromString(String value) {
-                if (value == null || value.isEmpty()) {
-                    return null;
-                }
+        return (ParamConverter<T>) new InstantConverter();
+    }
 
+    private static class InstantConverter implements ParamConverter<Instant> {
+
+        @Override
+        public Instant fromString(String value) {
+            if (value == null || value.isEmpty()) {
+                return null;
+            }
+
+            try {
+                // Try parsing as ISO-8601 format first
+                return Instant.parse(value);
+            } catch (DateTimeParseException exception) {
+                log.debug("Failed to parse '{}' as ISO-8601, attempting to parse as milliseconds since epoch", value,
+                        exception);
                 try {
-                    // Try parsing as ISO-8601 format first
-                    return Instant.parse(value);
-                } catch (Exception exception) {
-                    log.debug("Failed to parse '{}' as ISO-8601, attempting to parse as milliseconds since epoch",
-                            value);
-                    try {
-                        // Fall back to parsing as milliseconds since epoch
-                        long epochMillis = Long.parseLong(value);
-                        return Instant.ofEpochMilli(epochMillis);
-                    } catch (NumberFormatException numberFormatException) {
-                        log.error(
-                                "Invalid instant format: '{}'. Expected ISO-8601 (e.g., 2024-01-01T00:00:00Z) or milliseconds since epoch",
-                                value);
-                        throw new BadRequestException(
-                                "Invalid instant format: '%s'. Expected ISO-8601 (e.g., 2024-01-01T00:00:00Z) or milliseconds since epoch"
-                                        .formatted(value));
-                    }
+                    // Fall back to parsing as milliseconds since epoch
+                    long epochMillis = Long.parseLong(value);
+                    return Instant.ofEpochMilli(epochMillis);
+                } catch (NumberFormatException numberFormatException) {
+                    throw new BadRequestException(
+                            "Invalid instant format: '%s'. Expected ISO-8601 (e.g., 2024-01-01T00:00:00Z) or milliseconds since epoch"
+                                    .formatted(value));
                 }
             }
+        }
 
-            @Override
-            public String toString(Instant value) {
-                return value != null ? value.toString() : null;
-            }
-        };
+        @Override
+        public String toString(Instant value) {
+            return value != null ? value.toString() : null;
+        }
     }
 }
