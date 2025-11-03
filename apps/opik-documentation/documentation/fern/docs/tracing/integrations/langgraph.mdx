@@ -166,6 +166,111 @@ print(result)
 
 The graph execution is now logged on the Opik platform and can be viewed in the UI. The trace will show the complete execution path through the graph, including the classification decision and the chosen response path.
 
+## Compatibility with Opik tracing context
+
+LangGraph tracing integrates seamlessly with Opik's tracing context, allowing you to call `@track`-decorated functions (and most use most of other native Opik integrations) from within your graph nodes and have them automatically attached to the trace tree.
+
+### Synchronous execution (invoke)
+
+For synchronous graph execution using `invoke()`, everything works out of the box. You can access current spans/traces from LangGraph nodes and call tracked functions inside them:
+
+```python
+import opik_context
+from opik import track
+from opik.integrations.langchain import OpikTracer
+from langgraph.graph import StateGraph, START, END
+
+@track
+def process_data(value: int) -> int:
+    """Custom tracked function that will be attached to the trace tree."""
+    return value * 2
+
+def my_node(state):
+    current_trace_data = opik_context.get_current_trace_data()
+    current_span_data = opik_context.get_current_span_data()  # will return the span for `my_node`, created by OpikTracer
+
+    # This tracked function call will automatically be part of the trace tree
+    result = process_data(state["value"])
+    return {"value": result}
+
+# Build and execute graph
+graph = StateGraph(dict)
+graph.add_node("processor", my_node)
+graph.add_edge(START, "processor")
+graph.add_edge("processor", END)
+
+app = graph.compile()
+opik_tracer = OpikTracer()
+
+# Synchronous execution - tracked functions work automatically
+result = app.invoke({"value": 21}, config={"callbacks": [opik_tracer]})
+```
+
+### Asynchronous execution (ainvoke)
+
+For asynchronous graph execution using `ainvoke()`, you need to explicitly propagate the trace context to `@track`-decorated functions using the `extract_current_langgraph_span_data` helper:
+
+<Accordion title="Why is this needed for async execution?">
+This is due to a LangChain framework limitation that doesn't automatically share the execution context between callbacks (like `OpikTracer`) and node code in async scenarios. The explicit trace context propagation via distributed headers is required for seamless tracking across async boundaries.
+</Accordion>
+
+```python
+from opik import track
+from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
+from langgraph.graph import StateGraph, START, END
+
+@track
+def process_data(value: int) -> int:
+    """Custom tracked function that needs distributed trace headers in async context."""
+    return value * 2
+
+async def my_async_node(state, config):
+    # Extract current span data from LangGraph config. `opik_context` doesn't work here due to langgraph platform limitations related to context propagation.
+    span_data = extract_current_langgraph_span_data(config)
+    
+    # Pass distributed trace headers to attach the tracked function to the trace tree
+    result = process_data(
+        state["value"],
+        opik_distributed_trace_headers=span_data.get_distributed_trace_headers()  # all tracked functions implicitly support this parameter
+    )
+    return {"value": result}
+
+# Build and execute graph
+graph = StateGraph(dict)
+graph.add_node("processor", my_async_node)
+graph.add_edge(START, "processor")
+graph.add_edge("processor", END)
+
+app = graph.compile()
+opik_tracer = OpikTracer()
+
+# Asynchronous execution - requires explicit trace context propagation
+result = await app.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
+```
+
+Alternatively, if you don't want to use the `@track` decorator, you can use the `opik.start_as_current_span` context manager with distributed headers:
+
+```python
+import opik
+from opik.integrations.langchain import extract_current_langgraph_span_data
+
+async def my_async_node(state, config):
+    span_data = extract_current_langgraph_span_data(config)
+    
+    # Use context manager with distributed headers
+    with opik.start_as_current_span(
+        name="custom_operation",
+        input={"input": state["value"]},
+        opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
+    ) as span_data:
+        # Your custom logic here
+        result = state["value"] * 2
+        span_data.output = {"output": result}
+    
+    return {"value": result}
+```
+
+
 ## Logging threads
 
 When you are running multi-turn conversations using [LangGraph persistence](https://langchain-ai.github.io/langgraph/concepts/persistence/#threads), Opik will use Langgraph's thread_id as Opik thread_id. Here is an example below:
