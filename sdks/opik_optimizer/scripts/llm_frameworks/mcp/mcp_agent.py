@@ -177,7 +177,7 @@ class MCPAgent(OptimizableAgent):
         })
 
         # Create prompt with MCP tools
-        prompt = create_mcp_prompt(manifest, tool_names=["my-tool"])
+        prompt = create_mcp_prompt(manifest.to_dict(), tool_names=["my-tool"])
 
         # Create agent
         agent = MCPAgent(prompt, project_name="mcp-example")
