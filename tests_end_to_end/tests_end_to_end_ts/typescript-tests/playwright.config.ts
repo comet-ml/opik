@@ -9,11 +9,17 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : 1,
+  grep: process.env.TEST_SUITE ? new RegExp(`@${process.env.TEST_SUITE}`) : undefined,
 
   reporter: [
     ['html', { open: 'never' }],
     ['list'],
-    ['json', { outputFile: 'test-results/results.json' }]
+    ['json', { outputFile: 'test-results/results.json' }],
+    ['allure-playwright', {
+      outputFolder: process.env.ALLURE_RESULTS || 'allure-results',
+      detail: true,
+      suiteTitle: true
+    }]
   ],
 
   timeout: 60000,
