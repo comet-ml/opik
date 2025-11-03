@@ -17,5 +17,7 @@ import pytest
 def test_conversation_namespace_exports_public_symbols(attribute: str) -> None:
     module = importlib.import_module("opik.evaluation.metrics.conversation")
 
-    assert hasattr(module, attribute), f"{attribute} missing from conversation namespace"
+    assert hasattr(
+        module, attribute
+    ), f"{attribute} missing from conversation namespace"
     assert getattr(module, attribute) is not None
