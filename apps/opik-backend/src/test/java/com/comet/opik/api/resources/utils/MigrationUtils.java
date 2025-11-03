@@ -10,7 +10,7 @@ import liquibase.resource.ClassLoaderResourceAccessor;
 import lombok.experimental.UtilityClass;
 import org.jdbi.v3.core.Jdbi;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.yandex.clickhouse.ClickHouseConnectionImpl;
 
 import java.sql.SQLException;
@@ -29,7 +29,7 @@ public class MigrationUtils {
         }
     }
 
-    public static void runMysqlDbMigration(MySQLContainer<?> mysqlContainer) {
+    public static void runMysqlDbMigration(MySQLContainer mysqlContainer) {
         try (var connection = mysqlContainer.createConnection("")) {
             runDbMigration(MYSQL_CHANGELOG_FILE, MySQLContainerUtils.migrationParameters(),
                     new JdbcConnection(connection));
