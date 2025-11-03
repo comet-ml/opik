@@ -86,20 +86,9 @@ class ChatPrompt:
         self.name = name
         self.system = system
         self.user = user
-        self.messages: list[MessageDict] | None = None
-        # Normalize and validate messages to list[MessageDict]
-        if messages is not None:
-            if not isinstance(messages, list):
-                raise ValueError("`messages` must be a list")
-            normalised: list[MessageDict] = []
-            for message in messages:
-                # Expecting MessageDict; perform a shallow structural check
-                if not isinstance(message, dict):
-                    raise ValueError("Each item in `messages` must be a dictionary")
-                if "role" not in message or "content" not in message:
-                    raise ValueError("Each message must include 'role' and 'content'")
-                normalised.append(cast(MessageDict, message))
-            self.messages = normalised
+        self.messages = (
+            self.validate_messages(messages) if messages is not None else None
+        )
         # All of the rest are just for the ChatPrompt LLM
         # These are used from the prompt as controls:
         self.tools: list[ToolDict] | None = tools
@@ -118,6 +107,65 @@ class ChatPrompt:
         self.model = model
         self.model_kwargs = model_parameters or {}
         self.invoke = invoke
+
+    @staticmethod
+    def validate_messages(messages: list[MessageDict]) -> list[MessageDict]:
+        """Validate and normalize messages to MessageDict format.
+
+        Args:
+            messages: List of message dictionaries to validate
+
+        Returns:
+            List of validated MessageDict instances
+
+        Raises:
+            ValueError: If messages structure is invalid
+        """
+        if not isinstance(messages, list):
+            raise ValueError("`messages` must be a list")
+
+        normalised: list[MessageDict] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                raise ValueError("Each item in `messages` must be a dictionary")
+            if "role" not in message or "content" not in message:
+                raise ValueError("Each message must include 'role' and 'content'")
+
+            # Validate content structure if it's a list (multimodal)
+            content = message["content"]
+            if isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        raise ValueError(
+                            "Multimodal content parts must be dictionaries"
+                        )
+                    part_type = part.get("type")
+                    if part_type == "text":
+                        text_part = cast(TextPart, part)
+                        if "text" not in text_part:
+                            raise ValueError(
+                                "Text content part must include 'text' field"
+                            )
+                    elif part_type == "image_url":
+                        image_part = cast(ImagePart, part)
+                        if "image_url" not in image_part:
+                            raise ValueError(
+                                "Image content part must include 'image_url' field"
+                            )
+                        image_url = image_part["image_url"]
+                        if not isinstance(image_url, dict) or "url" not in image_url:
+                            raise ValueError(
+                                "Image 'image_url' must be a dict with 'url' field"
+                            )
+                    else:
+                        raise ValueError(
+                            f"Unknown content part type: {part_type}. "
+                            "Expected 'text' or 'image_url'"
+                        )
+
+            normalised.append(cast(MessageDict, message))
+
+        return normalised
 
     def get_messages(
         self,
