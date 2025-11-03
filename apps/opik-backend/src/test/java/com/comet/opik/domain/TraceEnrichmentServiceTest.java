@@ -46,8 +46,7 @@ class TraceEnrichmentServiceTest {
     void setUp() {
         traceEnrichmentService = new TraceEnrichmentService(
                 traceService,
-                spanService,
-                JsonUtils.getMapper());
+                spanService);
     }
 
     @Nested

@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
@@ -35,6 +36,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
@@ -69,6 +71,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull TransactionTemplate template;
 
     @Override
     @WithSpan
@@ -94,14 +97,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset exists
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
 
             return Mono.fromCallable(() -> {
-                Dataset dataset = datasetService.findById(datasetId, workspaceId, visibility);
-                if (dataset == null) {
-                    throw new NotFoundException("Dataset not found: '%s'".formatted(datasetId));
-                }
-                return dataset;
+                return template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.findById(datasetId, workspaceId)
+                            .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
+                });
             }).subscribeOn(Schedulers.boundedElastic());
         }).flatMap(dataset -> {
             // Enrich traces with metadata
