@@ -175,7 +175,7 @@ Agents use:
 - **Agent definitions**: `.cursor/agents/` directory
 
 For detailed documentation, see:
-- [Playwright Agent Workflow Rule](.cursor/rules/playwright-agent-workflow.mdc)
+- [Playwright Agent Workflow Rule](../../.cursor/rules/playwright-agent-workflow.mdc)
 - [Playwright Test Agents Docs](https://playwright.dev/docs/test-agents)
 
 ## 📁 Project Structure
@@ -274,5 +274,5 @@ After setup, you should be able to:
 ## 📞 Questions?
 
 - Check the full [README](typescript-tests/README.md)
-- Review [Cursor Rules](.cursor/rules/playwright-agent-workflow.mdc)
+- Review [Cursor Rules](../../.cursor/rules/playwright-agent-workflow.mdc)
 - See [Playwright Agents Documentation](https://playwright.dev/docs/test-agents)
