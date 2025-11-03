@@ -34,7 +34,7 @@ def create_mcp_prompt(
     with them registered in the function_map.
 
     Args:
-        manifest: MCPManifest describing the MCP server configuration
+        mcp_server: dict[str, Any] describing the MCP server configuration.
         tool_names: List of tool names to load from the MCP server.
             If None, all available tools will be loaded.
         system_prompt: Optional custom system prompt. If not provided,
