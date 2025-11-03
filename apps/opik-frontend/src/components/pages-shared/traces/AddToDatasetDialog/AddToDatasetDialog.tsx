@@ -8,6 +8,7 @@ import { Span, Trace } from "@/types/traces";
 import useAppStore from "@/store/AppStore";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -65,12 +66,14 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const { navigate } = useNavigateToExperiment();
 
   // Enrichment options state - all checked by default (opt-out design)
-  const [includeSpans, setIncludeSpans] = useState(true);
-  const [includeTags, setIncludeTags] = useState(true);
-  const [includeFeedbackScores, setIncludeFeedbackScores] = useState(true);
-  const [includeComments, setIncludeComments] = useState(true);
-  const [includeUsage, setIncludeUsage] = useState(true);
-  const [includeMetadata, setIncludeMetadata] = useState(true);
+  const [enrichmentOptions, setEnrichmentOptions] = useState({
+    includeSpans: true,
+    includeTags: true,
+    includeFeedbackScores: true,
+    includeComments: true,
+    includeUsage: true,
+    includeMetadata: true,
+  });
 
   const { mutate } = useDatasetItemBatchMutation();
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
@@ -108,12 +111,19 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const partialValid = validRows.length !== selectedRows.length;
 
   const onItemsAdded = useCallback(
-    (dataset: Dataset) => {
+    (dataset: Dataset, hasTraces: boolean, hasSpans: boolean) => {
+      let itemType = "Items";
+      if (hasTraces && !hasSpans) {
+        itemType = "Traces";
+      } else if (hasSpans && !hasTraces) {
+        itemType = "Spans";
+      }
+
       const explainer =
         EXPLAINERS_MAP[EXPLAINER_ID.i_added_traces_to_a_dataset_now_what];
 
       toast({
-        title: explainer.title,
+        title: `${itemType} added to dataset`,
         description: explainer.description,
         actions: [
           <ToastAction
@@ -153,16 +163,17 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               datasetId: dataset.id,
               traceIds: traces.map((t) => t.id),
               enrichmentOptions: {
-                include_spans: includeSpans,
-                include_tags: includeTags,
-                include_feedback_scores: includeFeedbackScores,
-                include_comments: includeComments,
-                include_usage: includeUsage,
-                include_metadata: includeMetadata,
+                include_spans: enrichmentOptions.includeSpans,
+                include_tags: enrichmentOptions.includeTags,
+                include_feedback_scores:
+                  enrichmentOptions.includeFeedbackScores,
+                include_comments: enrichmentOptions.includeComments,
+                include_usage: enrichmentOptions.includeUsage,
+                include_metadata: enrichmentOptions.includeMetadata,
               },
             },
             {
-              onSuccess: () => onItemsAdded(dataset),
+              onSuccess: () => onItemsAdded(dataset, true, false),
             },
           );
         } else {
@@ -190,7 +201,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               }),
             },
             {
-              onSuccess: () => onItemsAdded(dataset),
+              onSuccess: () =>
+                onItemsAdded(dataset, traces.length > 0, spans.length > 0),
             },
           );
         }
@@ -217,12 +229,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       workspaceName,
       onItemsAdded,
       toast,
-      includeSpans,
-      includeTags,
-      includeFeedbackScores,
-      includeComments,
-      includeUsage,
-      includeMetadata,
+      enrichmentOptions,
     ],
   );
 
@@ -306,11 +313,11 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[90vh] max-w-lg flex-col pb-8 sm:max-w-[560px]">
+        <DialogContent className="max-w-lg sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Add to dataset</DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 w-full flex-1 overflow-y-auto">
+          <DialogAutoScrollBody>
             <ExplainerDescription
               className="mb-4"
               {...EXPLAINERS_MAP[
@@ -333,9 +340,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="include-spans"
-                          checked={includeSpans}
+                          checked={enrichmentOptions.includeSpans}
                           onCheckedChange={(checked) =>
-                            setIncludeSpans(checked === true)
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeSpans: checked === true,
+                            }))
                           }
                         />
                         <Label
@@ -348,9 +358,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="include-tags"
-                          checked={includeTags}
+                          checked={enrichmentOptions.includeTags}
                           onCheckedChange={(checked) =>
-                            setIncludeTags(checked === true)
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeTags: checked === true,
+                            }))
                           }
                         />
                         <Label
@@ -363,9 +376,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="include-feedback-scores"
-                          checked={includeFeedbackScores}
+                          checked={enrichmentOptions.includeFeedbackScores}
                           onCheckedChange={(checked) =>
-                            setIncludeFeedbackScores(checked === true)
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeFeedbackScores: checked === true,
+                            }))
                           }
                         />
                         <Label
@@ -378,9 +394,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="include-comments"
-                          checked={includeComments}
+                          checked={enrichmentOptions.includeComments}
                           onCheckedChange={(checked) =>
-                            setIncludeComments(checked === true)
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeComments: checked === true,
+                            }))
                           }
                         />
                         <Label
@@ -393,9 +412,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="include-usage"
-                          checked={includeUsage}
+                          checked={enrichmentOptions.includeUsage}
                           onCheckedChange={(checked) =>
-                            setIncludeUsage(checked === true)
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeUsage: checked === true,
+                            }))
                           }
                         />
                         <Label
@@ -408,9 +430,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="include-metadata"
-                          checked={includeMetadata}
+                          checked={enrichmentOptions.includeMetadata}
                           onCheckedChange={(checked) =>
-                            setIncludeMetadata(checked === true)
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeMetadata: checked === true,
+                            }))
                           }
                         />
                         <Label
@@ -431,7 +456,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setOpen(false);
                   setOpenDialog(true);
                 }}
                 disabled={noValidRows}
@@ -460,7 +484,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 ></DataTablePagination>
               </div>
             )}
-          </div>
+          </DialogAutoScrollBody>
           <DialogFooter>
             <Button
               variant="outline"
@@ -487,7 +511,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         setOpen={setOpenDialog}
         onDatasetCreated={(dataset) => {
           setSelectedDataset(dataset);
-          setOpen(true);
         }}
         hideUpload={true}
       />

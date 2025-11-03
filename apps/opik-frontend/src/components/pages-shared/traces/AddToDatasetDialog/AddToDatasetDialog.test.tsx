@@ -319,10 +319,11 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should call batch mutation when clicking on dataset with spans", async () => {
+    const getDataForExportMock = vi.fn(async () => [mockSpan]);
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
-      getDataForExport: vi.fn(async () => [mockSpan]),
+      getDataForExport: getDataForExportMock,
     };
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
@@ -335,6 +336,12 @@ describe("AddToDatasetDialog", () => {
     const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
     fireEvent.click(addButton);
 
+    // Wait for getDataForExport to be called first
+    await waitFor(() => {
+      expect(getDataForExportMock).toHaveBeenCalled();
+    });
+
+    // Then wait for the batch mutation
     await waitFor(() => {
       expect(mockBatchMutate).toHaveBeenCalled();
     });
