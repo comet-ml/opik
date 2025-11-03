@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { TRUNCATION_DISABLED_MAX_PAGE_SIZE } from "@/constants/shared";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type EditTruncationToggleDialogProps = {
   open: boolean;
@@ -56,36 +57,39 @@ const EditTruncationToggleDialog: React.FC<EditTruncationToggleDialogProps> = ({
           <DialogTitle>
             {isDisabling ? "Disable" : "Enable"} data truncation?
           </DialogTitle>
-          {isDisabling && (
-            <DialogDescription>
-              Disabling truncation will have the following effects:
-            </DialogDescription>
-          )}
         </DialogHeader>
 
         {isDisabling && (
           <div className="space-y-3 py-4">
-            <div className="flex items-start gap-2 rounded-md bg-warning/10 p-3">
-              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
-              <div className="space-y-2 text-sm">
-                <p className="font-medium">Warning:</p>
-                <ul className="list-inside list-disc space-y-1 text-muted-foreground">
+            <Alert variant="default" size="sm">
+              <Info />
+              <AlertTitle size="sm">What will change:</AlertTitle>
+              <AlertDescription size="sm">
+                <ul className="list-inside list-disc space-y-1">
+                  <li>All data will be displayed in full without truncation</li>
                   <li>
-                    Pagination limited to maximum{" "}
-                    {TRUNCATION_DISABLED_MAX_PAGE_SIZE} items per page
+                    Pagination limited to {TRUNCATION_DISABLED_MAX_PAGE_SIZE}{" "}
+                    items per page maximum
                   </li>
-                  <li>Large data may cause performance issues</li>
-                  <li>You can re-enable truncation anytime</li>
                 </ul>
-              </div>
-            </div>
+              </AlertDescription>
+            </Alert>
+
+            <Alert variant="destructive" size="sm">
+              <AlertTriangle />
+              <AlertTitle size="sm">Performance impact:</AlertTitle>
+              <AlertDescription size="sm">
+                Large amounts of data may cause slower page loading and
+                increased memory usage.
+              </AlertDescription>
+            </Alert>
           </div>
         )}
 
         {!isDisabling && (
           <DialogDescription>
-            Enable data truncation to improve performance and allow full
-            pagination options.
+            Truncate large data to improve performance and enable full
+            pagination options. You can disable this anytime.
           </DialogDescription>
         )}
 
@@ -93,11 +97,8 @@ const EditTruncationToggleDialog: React.FC<EditTruncationToggleDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button
-            variant={isDisabling ? "destructive" : "default"}
-            onClick={handleConfirm}
-          >
-            {isDisabling ? "Disable Truncation" : "Enable Truncation"}
+          <Button variant="default" onClick={handleConfirm}>
+            {isDisabling ? "Disable truncation" : "Enable truncation"}
           </Button>
         </DialogFooter>
       </DialogContent>
