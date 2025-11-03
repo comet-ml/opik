@@ -7379,6 +7379,7 @@ class DatasetsResourceTest {
                     .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 1\"}"))
                     .tags(Set.of("tag1", "tag2"))
                     .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value1\"}"))
+                    .usage(Map.of("tokens", 100L))
                     .build();
 
             var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
@@ -7387,10 +7388,51 @@ class DatasetsResourceTest {
                     .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 2\"}"))
                     .tags(Set.of("tag3"))
                     .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value2\"}"))
+                    .usage(Map.of("tokens", 200L))
                     .build();
 
             traceResourceClient.createTrace(trace1, apiKey, workspaceName);
             traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            // Add feedback scores to trace1
+            var feedbackScore1 = FeedbackScoreBatchItem.builder()
+                    .id(trace1.id())
+                    .projectName(projectName)
+                    .name("accuracy")
+                    .value(BigDecimal.valueOf(0.95))
+                    .reason("High accuracy")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = FeedbackScoreBatchItem.builder()
+                    .id(trace1.id())
+                    .projectName(projectName)
+                    .name("relevance")
+                    .value(BigDecimal.valueOf(0.88))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            traceResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey, workspaceName);
+
+            // Add comment to trace1
+            var comment = new Comment(
+                    null,
+                    "Test comment",
+                    null,
+                    null,
+                    null,
+                    null);
+
+            try (var actualResponse = client.target(URL_TEMPLATE_TRACES.formatted(baseURI))
+                    .path(trace1.id().toString())
+                    .path("comments")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(comment))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            }
 
             // Create spans for trace1
             var span1 = factory.manufacturePojo(Span.class).toBuilder()
@@ -7446,11 +7488,39 @@ class DatasetsResourceTest {
             assertThat(item1.data()).containsKey("spans");
             assertThat(item1.data()).containsKey("tags");
             assertThat(item1.data()).containsKey("metadata");
+            assertThat(item1.data()).containsKey("feedback_scores");
+            assertThat(item1.data()).containsKey("comments");
+            assertThat(item1.data()).containsKey("usage");
 
             // Verify spans are included
             JsonNode spansNode = item1.data().get("spans");
             assertThat(spansNode.isArray()).isTrue();
             assertThat(spansNode).hasSize(2);
+
+            // Verify feedback scores are included and properly serialized (without timestamps)
+            JsonNode feedbackScoresNode = item1.data().get("feedback_scores");
+            assertThat(feedbackScoresNode.isArray()).isTrue();
+            assertThat(feedbackScoresNode).hasSize(2);
+
+            // Verify feedback score structure
+            JsonNode score1Node = feedbackScoresNode.get(0);
+            assertThat(score1Node.has("name")).isTrue();
+            assertThat(score1Node.has("value")).isTrue();
+            assertThat(score1Node.has("source")).isTrue();
+            // Verify timestamps are NOT included
+            assertThat(score1Node.has("created_at")).isFalse();
+            assertThat(score1Node.has("last_updated_at")).isFalse();
+            assertThat(score1Node.has("created_by")).isFalse();
+            assertThat(score1Node.has("last_updated_by")).isFalse();
+
+            // Verify comments are included
+            JsonNode commentsNode = item1.data().get("comments");
+            assertThat(commentsNode.isArray()).isTrue();
+            assertThat(commentsNode).hasSize(1);
+
+            // Verify usage is included
+            JsonNode usageNode = item1.data().get("usage");
+            assertThat(usageNode.isObject()).isTrue();
         }
 
         @Test

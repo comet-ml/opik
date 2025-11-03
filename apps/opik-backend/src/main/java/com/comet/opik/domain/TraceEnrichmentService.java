@@ -118,10 +118,10 @@ public class TraceEnrichmentService {
                     spanNode.set("metadata", objectMapper.valueToTree(span.metadata()));
                 }
                 if (span.feedbackScores() != null && !span.feedbackScores().isEmpty()) {
-                    spanNode.set("feedback_scores", objectMapper.valueToTree(span.feedbackScores()));
+                    spanNode.set("feedback_scores", buildFeedbackScoresNode(span.feedbackScores()));
                 }
                 if (span.comments() != null && !span.comments().isEmpty()) {
-                    spanNode.set("comments", objectMapper.valueToTree(span.comments()));
+                    spanNode.set("comments", buildCommentsNode(span.comments()));
                 }
                 spansArray.add(spanNode);
             }
@@ -136,12 +136,12 @@ public class TraceEnrichmentService {
         // Include feedback scores if requested
         if (options.includeFeedbackScores() && trace.feedbackScores() != null
                 && !trace.feedbackScores().isEmpty()) {
-            enrichedData.set("feedback_scores", objectMapper.valueToTree(trace.feedbackScores()));
+            enrichedData.set("feedback_scores", buildFeedbackScoresNode(trace.feedbackScores()));
         }
 
         // Include comments if requested
         if (options.includeComments() && trace.comments() != null && !trace.comments().isEmpty()) {
-            enrichedData.set("comments", objectMapper.valueToTree(trace.comments()));
+            enrichedData.set("comments", buildCommentsNode(trace.comments()));
         }
 
         // Include usage if requested
@@ -158,6 +158,51 @@ public class TraceEnrichmentService {
         Map<String, JsonNode> result = new HashMap<>();
         enrichedData.properties().forEach(entry -> result.put(entry.getKey(), entry.getValue()));
         return result;
+    }
+
+    /**
+     * Builds a JSON array node for feedback scores, excluding timestamp fields.
+     * This avoids serialization issues with Instant fields.
+     *
+     * @param feedbackScores The feedback scores to convert
+     * @return An ArrayNode containing the feedback scores without timestamps
+     */
+    private ArrayNode buildFeedbackScoresNode(List<com.comet.opik.api.FeedbackScore> feedbackScores) {
+        ArrayNode scoresArray = objectMapper.createArrayNode();
+        for (var score : feedbackScores) {
+            ObjectNode scoreNode = objectMapper.createObjectNode();
+            scoreNode.put("name", score.name());
+            if (score.categoryName() != null) {
+                scoreNode.put("category_name", score.categoryName());
+            }
+            scoreNode.put("value", score.value());
+            if (score.reason() != null) {
+                scoreNode.put("reason", score.reason());
+            }
+            scoreNode.put("source", score.source().toString());
+            // Omit createdAt, lastUpdatedAt, createdBy, lastUpdatedBy as they're not essential for dataset items
+            scoresArray.add(scoreNode);
+        }
+        return scoresArray;
+    }
+
+    /**
+     * Builds a JSON array node for comments, excluding timestamp fields.
+     * This avoids serialization issues with Instant fields.
+     *
+     * @param comments The comments to convert
+     * @return An ArrayNode containing the comments without timestamps
+     */
+    private ArrayNode buildCommentsNode(List<com.comet.opik.api.Comment> comments) {
+        ArrayNode commentsArray = objectMapper.createArrayNode();
+        for (var comment : comments) {
+            ObjectNode commentNode = objectMapper.createObjectNode();
+            commentNode.put("id", comment.id().toString());
+            commentNode.put("text", comment.text());
+            // Omit createdAt, lastUpdatedAt, createdBy, lastUpdatedBy as they're not essential for dataset items
+            commentsArray.add(commentNode);
+        }
+        return commentsArray;
     }
 
     /**
