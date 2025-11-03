@@ -91,6 +91,37 @@ function Initialize-BuildxBake {
     }
 }
 
+function Get-DockerComposeCommand {
+    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
+
+    if ($PORT_MAPPING) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
+    }
+
+    # Add profiles based on the selected mode (accumulative)
+    if ($INFRA) {
+        # No profile needed - infrastructure services start by default
+    } elseif ($BACKEND) {
+        $dockerArgs += "--profile", "backend"
+    } elseif ($LOCAL_BE) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
+        $dockerArgs += "--profile", "local-be"
+    } elseif ($LOCAL_BE_FE) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
+        $dockerArgs += "--profile", "local-be-fe"
+    } else {
+        # Full Opik (default) - includes all dependencies
+        $dockerArgs += "--profile", "opik"
+    }
+    
+    # Always add guardrails profile if enabled
+    if ($GUARDRAILS_ENABLED) {
+        $dockerArgs += "--profile", "guardrails"
+    }
+    
+    return $dockerArgs
+}
+
 function Get-SystemInfo {
     # Function to gather system info without failing the script
     # All commands wrapped with error handling and fallbacks
@@ -385,33 +416,7 @@ function Start-MissingContainers {
 
     Initialize-BuildxBake
 
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
-
-    if ($PORT_MAPPING) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
-    }
-
-    # Add profiles based on the selected mode (accumulative)
-    if ($INFRA) {
-        # No profile needed - infrastructure services start by default
-    } elseif ($BACKEND) {
-        $dockerArgs += "--profile", "backend"
-    } elseif ($LOCAL_BE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
-        $dockerArgs += "--profile", "local-be"
-    } elseif ($LOCAL_BE_FE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
-        $dockerArgs += "--profile", "local-be-fe"
-    } else {
-        # Full Opik (default) - includes all dependencies
-        $dockerArgs += "--profile", "opik"
-    }
-
-    # Always add guardrails profile if enabled
-    if ($GUARDRAILS_ENABLED) {
-        $dockerArgs += "--profile", "guardrails"
-    }
-    
+    $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "up", "-d"
 
     if ($BUILD_MODE -eq "true") {
@@ -475,33 +480,7 @@ function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
 
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
-
-    if ($PORT_MAPPING) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
-    }
-    
-    # Add profiles based on the selected mode (accumulative)
-    if ($INFRA) {
-        # No profile needed - infrastructure services start by default
-    } elseif ($BACKEND) {
-        $dockerArgs += "--profile", "backend"
-    } elseif ($LOCAL_BE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
-        $dockerArgs += "--profile", "local-be"
-    } elseif ($LOCAL_BE_FE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
-        $dockerArgs += "--profile", "local-be-fe"
-    } else {
-        # Full Opik (default) - includes all dependencies
-        $dockerArgs += "--profile", "opik"
-    }
-    
-    # Always add guardrails profile if enabled
-    if ($GUARDRAILS_ENABLED) {
-        $dockerArgs += "--profile", "guardrails"
-    }
-    
+    $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "down"
     docker @dockerArgs
     Write-Host '[OK] All containers stopped and cleaned up!'
@@ -516,33 +495,7 @@ function Remove-OpikData {
     Write-Host ''
     Write-Host '[INFO] Stopping all containers and removing volumes...'
 
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
-
-    if ($PORT_MAPPING) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
-    }
-    
-    # Add profiles based on the selected mode (accumulative)
-    if ($INFRA) {
-        # No profile needed - infrastructure services start by default
-    } elseif ($BACKEND) {
-        $dockerArgs += "--profile", "backend"
-    } elseif ($LOCAL_BE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
-        $dockerArgs += "--profile", "local-be"
-    } elseif ($LOCAL_BE_FE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
-        $dockerArgs += "--profile", "local-be-fe"
-    } else {
-        # Full Opik (default) - includes all dependencies
-        $dockerArgs += "--profile", "opik"
-    }
-    
-    # Always add guardrails profile if enabled
-    if ($GUARDRAILS_ENABLED) {
-        $dockerArgs += "--profile", "guardrails"
-    }
-    
+    $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "down", "-v"
     
     Write-DebugLog "[DEBUG] Running: docker $($dockerArgs -join ' ')"
@@ -559,33 +512,7 @@ function New-DemoData {
     # Build the complete command
     # --no-deps: Don't start dependent services
     # Add --build flag if BUILD_MODE is set
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
-
-    if ($PORT_MAPPING) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
-    }
-
-    # Add profiles based on the selected mode
-    if ($INFRA) {
-        # No profile needed - infrastructure services start by default
-    } elseif ($BACKEND) {
-        $dockerArgs += "--profile", "backend"
-    } elseif ($LOCAL_BE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
-        $dockerArgs += "--profile", "local-be"
-    } elseif ($LOCAL_BE_FE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
-        $dockerArgs += "--profile", "local-be-fe"
-    } else {
-        # Full Opik (default)
-        $dockerArgs += "--profile", "opik"
-    }
-    
-    # Always add guardrails profile if enabled
-    if ($GUARDRAILS_ENABLED) {
-        $dockerArgs += "--profile", "guardrails"
-    }
-
+    $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "up", "--no-deps", "-d"
     
     if ($BUILD_MODE -eq "true") {
