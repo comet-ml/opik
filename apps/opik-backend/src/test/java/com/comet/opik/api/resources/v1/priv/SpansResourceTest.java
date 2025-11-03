@@ -6478,7 +6478,11 @@ class SpansResourceTest {
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
             var updatedSpan = expectedSpan.toBuilder().metadata(metadata).build();
             var actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
-            assertThat(actualSpan.metadata()).isEqualTo(metadata);
+            
+            // Prepare expected metadata with provider injected (if span has provider)
+            var expectedMetadata = JsonUtils.injectStringFieldIntoMetadata(
+                    metadata, Span.SpanField.PROVIDER.getValue(), expectedSpan.provider());
+            assertThat(actualSpan.metadata()).isEqualTo(expectedMetadata);
         }
 
         Stream<Arguments> updateOnlyModel() {
