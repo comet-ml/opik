@@ -73,6 +73,14 @@ public class CostService {
             return DEFAULT_COST;
         }
 
+        // Free tier models (:free suffix) have zero cost regardless of canonical mapping
+        // This handles cases like "qwen/qwen2.5-vl-32b-instruct:free" which maps to
+        // a paid canonical key but should have $0 cost
+        if (modelName.toLowerCase().contains(":free")) {
+            log.debug("Model '{}' is free tier variant, returning zero cost", modelName);
+            return DEFAULT_COST;
+        }
+
         // Resolve to canonical JSON key using explicit enum mappings
         var canonicalModel = ModelNameMapper.resolveCanonicalKey(modelName);
         // Normalize both model and provider for consistent key format

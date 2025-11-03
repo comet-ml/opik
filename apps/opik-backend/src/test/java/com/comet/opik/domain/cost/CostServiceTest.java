@@ -147,12 +147,31 @@ class CostServiceTest {
                 "prompt_tokens", 100,
                 "completion_tokens", 50);
 
-        // Model with colon suffix (e.g., "model:free") should match base model
-        var withColon = CostService.calculateCost("gpt-4:free", "openai", usage, null);
+        // Non-free colon suffix (e.g., "model:extended") should match base model
+        var withColon = CostService.calculateCost("gpt-4:extended", "openai", usage, null);
         var withoutColon = CostService.calculateCost("gpt-4", "openai", usage, null);
 
         // Should match the same model
         assertThat(withColon).isEqualTo(withoutColon);
+    }
+
+    @Test
+    void calculateCostReturnsZeroForFreeTierModels() {
+        var usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        // Free tier models should always return $0 cost regardless of canonical mapping
+        var freeCost = CostService.calculateCost("qwen/qwen2.5-vl-32b-instruct:free", "openrouter", usage, null);
+        assertThat(freeCost).isEqualTo(BigDecimal.ZERO);
+
+        // Even if the base model has a cost, :free variant should be zero
+        var paidCost = CostService.calculateCost("gpt-4:free", "openai", usage, null);
+        assertThat(paidCost).isEqualTo(BigDecimal.ZERO);
+
+        // Other variants without :free should have normal pricing
+        var normalCost = CostService.calculateCost("gpt-4", "openai", usage, null);
+        assertThat(normalCost).isGreaterThan(BigDecimal.ZERO);
     }
 
     @Test
