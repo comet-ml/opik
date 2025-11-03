@@ -1,7 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
-import com.comet.opik.domain.llm.ModelNameMatcher;
+import com.comet.opik.domain.llm.ModelNameMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -73,31 +73,21 @@ public class CostService {
             return DEFAULT_COST;
         }
 
-        // Generate candidate keys for model+provider combinations
-        var modelCandidates = ModelNameMatcher.generateCandidateKeys(modelName);
-        var normalizedProvider = ModelNameMatcher.normalize(provider);
+        // Resolve to canonical JSON key using explicit enum mappings
+        var canonicalModel = ModelNameMapper.resolveCanonicalKey(modelName);
+        // Normalize both model and provider for consistent key format
+        var normalizedModel = ModelNameMapper.normalize(canonicalModel);
+        var normalizedProvider = ModelNameMapper.normalize(provider);
 
-        // Try each candidate with the provider
-        for (var modelCandidate : modelCandidates) {
-            var key = createModelProviderKey(modelCandidate, normalizedProvider);
-            var found = modelProviderPrices.get(key);
-            if (found != null) {
-                return found;
-            }
+        // Try direct lookup with normalized canonical model + provider
+        var key = createModelProviderKey(normalizedModel, normalizedProvider);
+        var found = modelProviderPrices.get(key);
+        if (found != null) {
+            return found;
         }
 
-        // Second pass: try suffix matching against stored keys
-        for (var modelCandidate : modelCandidates) {
-            var key = createModelProviderKey(modelCandidate, normalizedProvider);
-            for (var entry : modelProviderPrices.entrySet()) {
-                var storedKey = entry.getKey();
-                if (storedKey.endsWith("/" + key) || storedKey.equals(key)) {
-                    return entry.getValue();
-                }
-            }
-        }
-
-        log.debug("Model price not found for model='{}', provider='{}'", modelName, provider);
+        log.debug("Model price not found for model='{}' (canonical: '{}'), provider='{}'",
+                modelName, canonicalModel, provider);
         return DEFAULT_COST;
     }
 
@@ -149,20 +139,18 @@ public class CostService {
                     calculator = SpanCostCalculator::textGenerationCost;
                 }
 
-                parsedModelPrices.put(
-                        ModelNameMatcher.normalize(
-                                createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider))),
+                // Use normalized canonical key from JSON
+                String normalizedModelName = ModelNameMapper.normalize(modelName);
+                String normalizedProvider = ModelNameMapper.normalize(PROVIDERS_MAPPING.get(provider));
+                String compositeKey = createModelProviderKey(normalizedModelName, normalizedProvider);
+
+                parsedModelPrices.put(compositeKey,
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
                                 cacheReadInputTokenPrice, calculator));
             }
         });
 
         return parsedModelPrices;
-    }
-
-    private static String parseModelName(String modelName) {
-        int prefixIndex = modelName.indexOf('/');
-        return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 
     private static String createModelProviderKey(String modelName, String provider) {

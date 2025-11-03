@@ -2,8 +2,6 @@ package com.comet.opik.domain.llm;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelCapabilitiesTest {
@@ -35,9 +33,9 @@ class ModelCapabilitiesTest {
     }
 
     @Test
-    void supportsVisionMatchesModelWithDifferentProviderPrefix() {
-        // Test that "qwen/qwen2.5-vl-32b-instruct" matches "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct"
-        // The matching logic should find models even with different provider prefixes
+    void supportsVisionMatchesExplicitlyMappedEnumValues() {
+        // Test that explicitly mapped OpenRouter enum "qwen/qwen2.5-vl-32b-instruct"
+        // correctly resolves to its canonical JSON key "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct"
         assertThat(ModelCapabilities.supportsVision("qwen/qwen2.5-vl-32b-instruct")).isTrue();
         assertThat(ModelCapabilities.supportsVision("deepinfra/Qwen/Qwen2.5-VL-32B-Instruct")).isTrue();
     }
@@ -63,10 +61,17 @@ class ModelCapabilitiesTest {
     }
 
     @Test
-    void supportsVisionMatchesWithColonSuffix() {
-        // Model with colon suffix should still match base model if it supports vision
+    void supportsVisionHandlesColonSuffixes() {
+        // Colon suffixes are automatically stripped and matched to base model
+
+        // ✓ "qwen/qwen2.5-vl-32b-instruct:free" has explicit mapping
+        assertThat(ModelCapabilities.supportsVision("qwen/qwen2.5-vl-32b-instruct:free")).isTrue();
+
+        // ✓ "gpt-4o:free" falls back to "gpt-4o" (which exists in JSON and supports vision)
         assertThat(ModelCapabilities.supportsVision("gpt-4o:free")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("gpt-4-vision-preview:extended")).isTrue();
+
+        // ✗ "gpt-3.5-turbo:free" falls back to "gpt-3.5-turbo" (exists but doesn't support vision)
+        assertThat(ModelCapabilities.supportsVision("gpt-3.5-turbo:free")).isFalse();
     }
 
     @Test
@@ -80,19 +85,21 @@ class ModelCapabilitiesTest {
     }
 
     @Test
-    void supportsVisionWorksWithMultiplePrefixVariations() {
-        // Test that the same model works with different provider prefixes
-        var modelVariations = List.of(
-                "qwen2.5-vl-32b-instruct",
-                "qwen/qwen2.5-vl-32b-instruct",
-                "deepinfra/qwen/qwen2.5-vl-32b-instruct",
-                "openrouter/qwen/qwen2.5-vl-32b-instruct");
+    void supportsVisionRequiresExplicitMappingsOrRegexMatch() {
+        // With explicit enum mapping approach, these are supported:
 
-        for (var variation : modelVariations) {
-            assertThat(ModelCapabilities.supportsVision(variation))
-                    .as("Model variation '%s' should support vision", variation)
-                    .isTrue();
-        }
+        // ✓ Explicitly mapped OpenRouter enum value
+        assertThat(ModelCapabilities.supportsVision("qwen/qwen2.5-vl-32b-instruct")).isTrue();
+
+        // ✓ Direct JSON key (exact match)
+        assertThat(ModelCapabilities.supportsVision("deepinfra/Qwen/Qwen2.5-VL-32B-Instruct")).isTrue();
+
+        // ✓ Matches regex pattern ".*qwen.*vl.*" (fallback for unmapped Qwen VL models)
+        assertThat(ModelCapabilities.supportsVision("qwen2.5-vl-32b-instruct")).isTrue();
+
+        // ✗ Non-vision models without explicit mappings or regex matches are NOT supported
+        assertThat(ModelCapabilities.supportsVision("qwen-2.5-72b-instruct")).isFalse(); // No "vl" in name
+        assertThat(ModelCapabilities.supportsVision("random-model")).isFalse();
     }
 
     @Test

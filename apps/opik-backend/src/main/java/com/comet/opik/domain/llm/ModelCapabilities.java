@@ -29,27 +29,35 @@ public class ModelCapabilities {
             // Made pattern more flexible to match anywhere in the name
             Pattern.compile(".*qwen.*vl.*", Pattern.CASE_INSENSITIVE));
 
-    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
-
-    // Pre-built suffix index for O(n) lookups instead of O(n*m) iteration
-    // This maps all suffixes to their full keys for efficient matching
-    private static final Map<String, String> SUFFIX_INDEX = ModelNameMatcher
-            .buildSuffixIndex(CAPABILITIES_BY_NORMALIZED_NAME);
+    private static final Map<String, ModelCapability> CAPABILITIES_BY_CANONICAL_KEY = loadCapabilities();
 
     /**
      * Checks if a model name matches any of the hardcoded vision patterns.
      */
     private boolean matchesVisionPattern(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
+            return false;
+        }
         return VISION_MODEL_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(modelName).matches());
     }
 
     public boolean supportsVision(String modelName) {
-        return find(modelName).map(ModelCapability::supportsVision).orElse(false);
+        // First try to find in the capabilities map
+        var capability = find(modelName);
+        if (capability.isPresent()) {
+            return capability.get().supportsVision();
+        }
+
+        // Fallback: Check if model matches vision patterns (for models not in JSON)
+        return matchesVisionPattern(modelName);
     }
 
     private Optional<ModelCapability> find(String modelName) {
-        // Use optimized version with pre-built suffix index
-        return ModelNameMatcher.findInMap(CAPABILITIES_BY_NORMALIZED_NAME, modelName, SUFFIX_INDEX);
+        // Resolve to canonical JSON key using explicit enum mappings
+        String canonicalKey = ModelNameMapper.resolveCanonicalKey(modelName);
+        // Normalize the canonical key for case-insensitive lookup
+        String normalizedKey = ModelNameMapper.normalize(canonicalKey);
+        return Optional.ofNullable(CAPABILITIES_BY_CANONICAL_KEY.get(normalizedKey));
     }
 
     private Map<String, ModelCapability> loadCapabilities() {
@@ -68,14 +76,16 @@ public class ModelCapabilities {
                     return;
                 }
 
-                var normalizedName = ModelNameMatcher.normalize(modelName);
-                var canonicalName = modelName.trim();
+                // Use canonical key from JSON (preserve casing)
+                var canonicalKey = modelName.trim();
+                var normalizedKey = ModelNameMapper.normalize(canonicalKey);
 
                 // Check if model matches vision patterns - override JSON if it does
-                boolean supportsVision = modelData.supportsVision() || matchesVisionPattern(normalizedName);
+                boolean supportsVision = modelData.supportsVision() || matchesVisionPattern(normalizedKey);
 
-                capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
-                        .name(canonicalName)
+                // Store by normalized key for case-insensitive lookups
+                capabilities.putIfAbsent(normalizedKey, ModelCapability.builder()
+                        .name(canonicalKey)
                         .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
                         .supportsVision(supportsVision)
                         .build());
