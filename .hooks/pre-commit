@@ -12,7 +12,7 @@ if git diff --cached --name-only | grep -E '\.java$'; then
 
   cd apps/opik-backend || exit 1
 
-  # Run Spotless apply
+  # Run Spotless check
   if ! mvn spotless:check; then
     echo "Spotless found issues and failed to apply fixes. Please fix the issues before committing."
     exit 1
@@ -20,7 +20,43 @@ if git diff --cached --name-only | grep -E '\.java$'; then
 
   # Add any potentially modified files by Spotless back to the index
   git add -u
+  
+  cd ../.. || exit 1
 else
   echo "No Java files changed. Skipping Spotless."
+fi
+
+# Check for staged frontend files
+if git diff --cached --name-only | grep -E '^apps/opik-frontend/'; then
+  echo "Frontend files have been changed. Running lint and typecheck..."
+
+  # Check if the npm command exists
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "npm command not found. Please install Node.js/npm to use this pre-commit hook."
+    exit 1
+  fi
+
+  cd apps/opik-frontend || exit 1
+
+  # Run lint with auto-fix
+  echo "Running lint with auto-fix..."
+  if ! npm run lint:fix; then
+    echo "Lint failed. Please fix the remaining linting issues before committing."
+    exit 1
+  fi
+
+  # Run typecheck
+  echo "Running typecheck..."
+  if ! npm run typecheck; then
+    echo "Typecheck failed. Please fix the type errors before committing."
+    exit 1
+  fi
+
+  # Add any potentially modified files by lint back to the index
+  git add -u
+
+  cd ../.. || exit 1
+else
+  echo "No frontend files changed. Skipping lint and typecheck."
 fi
 
