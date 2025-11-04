@@ -135,4 +135,3 @@ const useChartTickConfig = (
 };
 
 export default useChartTickConfig;
-
