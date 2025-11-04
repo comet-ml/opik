@@ -61,6 +61,7 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
   convertColumnDataToColumn,
@@ -274,6 +275,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
+  const truncationEnabled = useTruncationEnabled();
+
   const { data, isPending } = useCompareExperimentsList(
     {
       workspaceName,
@@ -282,7 +285,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       filters,
       sorting,
       search: search as string,
-      truncate: false,
+      truncate: truncationEnabled,
       page: page as number,
       size: size as number,
     },
@@ -298,7 +301,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       datasetId,
       experimentsIds,
       filters,
-      truncate: false,
+      truncate: truncationEnabled,
       page: page as number,
       size: size as number,
     },
@@ -864,7 +867,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={total}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </PageBodyStickyContainer>
       <CompareExperimentsPanel
         experimentsCompareId={activeRowId}

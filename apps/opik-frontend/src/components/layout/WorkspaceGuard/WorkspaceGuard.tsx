@@ -2,6 +2,7 @@ import PageLayout from "@/components/layout/PageLayout/PageLayout";
 import Loader from "@/components/shared/Loader/Loader";
 import usePluginStore from "@/store/PluginsStore";
 import { FeatureTogglesProvider } from "@/components/feature-toggles-provider";
+import { ServerSyncProvider } from "@/components/server-sync-provider";
 
 const WorkspaceGuard = ({
   Layout = PageLayout,
@@ -19,7 +20,9 @@ const WorkspaceGuard = ({
   return (
     <WorkspacePreloader>
       <FeatureTogglesProvider>
-        <Layout />
+        <ServerSyncProvider>
+          <Layout />
+        </ServerSyncProvider>
       </FeatureTogglesProvider>
     </WorkspacePreloader>
   );
