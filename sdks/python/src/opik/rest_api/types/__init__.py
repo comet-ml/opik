@@ -244,6 +244,7 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
+from .ids_holder import IdsHolder
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -366,6 +367,7 @@ from .tool_call import ToolCall
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
+from .trace_enrichment_options import TraceEnrichmentOptions
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
 from .trace_filter import TraceFilter
 from .trace_filter_operator import TraceFilterOperator
@@ -639,6 +641,7 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
+    "IdsHolder",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -759,6 +762,7 @@ __all__ = [
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
+    "TraceEnrichmentOptions",
     "TraceExperimentItemBulkWriteView",
     "TraceFilter",
     "TraceFilterOperator",

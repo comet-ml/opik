@@ -41,6 +41,7 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
@@ -197,13 +198,15 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     defaultValue: [],
   });
 
+  const truncationEnabled = useTruncationEnabled();
+
   const { data, isPending } = useCompareExperimentsList(
     {
       workspaceName,
       datasetId,
       experimentsIds,
       filters,
-      truncate: true,
+      truncate: truncationEnabled,
       page: page as number,
       size: size as number,
     },
@@ -595,7 +598,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={total}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </PageBodyStickyContainer>
       <TraceDetailsPanel
         traceId={traceId!}
