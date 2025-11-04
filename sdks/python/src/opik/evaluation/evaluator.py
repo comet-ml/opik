@@ -76,6 +76,7 @@ def evaluate(
             arguments supplied by the evaluation engine:
                 • scoring_inputs — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default), 2 - outputs are enabled and detailed statistics
@@ -247,6 +248,7 @@ def evaluate_experiment(
             arguments supplied by the evaluation engine:
                 • scoring_inputs — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
@@ -291,6 +293,8 @@ def evaluate_experiment(
             scoring_metrics.extend(function_metrics)
         else:
             scoring_metrics = function_metrics
+
+    scoring_metrics = scoring_metrics if scoring_metrics else []
 
     with asyncio_support.async_http_connections_expire_immediately():
         evaluation_engine = engine.EvaluationEngine(
@@ -393,6 +397,7 @@ def evaluate_prompt(
     messages: List[Dict[str, Any]],
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -416,6 +421,13 @@ def evaluate_prompt(
 
         scoring_metrics: List of metrics to calculate during evaluation.
             The LLM input and output will be passed as arguments to each metric `score(...)` method.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • scoring_inputs — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         experiment_name: name of the experiment.
 
@@ -470,6 +482,17 @@ def evaluate_prompt(
         experiment_config=experiment_config,
         prompts=prompts,
     )
+
+    if scoring_functions:
+        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
+            scoring_functions, project_name=project_name
+        )
+        if scoring_metrics:
+            scoring_metrics.extend(function_metrics)
+        else:
+            scoring_metrics = function_metrics
+
+    scoring_metrics = scoring_metrics if scoring_metrics else []
 
     start_time = time.time()
 
