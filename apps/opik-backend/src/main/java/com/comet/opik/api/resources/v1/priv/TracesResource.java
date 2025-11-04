@@ -129,8 +129,8 @@ public class TracesResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude,
-            @QueryParam("from_time") Instant startTime,
-            @QueryParam("to_time") Instant endTime) {
+            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -174,7 +174,8 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(), workspaceId);
+        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(),
+                workspaceId);
 
         return Response.ok(tracePage).build();
     }
@@ -362,26 +363,20 @@ public class TracesResource {
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
-            @QueryParam("from_time") Instant startTime,
-            @QueryParam("to_time") Instant endTime) {
+            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
 
-        var searchCriteriaBuilder = TraceSearchCriteria.builder()
+        var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
-                .filters(traceFilters);
-
-        // Apply UUID-based time filtering if both from_time and to_time are provided
-        if (startTime != null && endTime != null) {
-            searchCriteriaBuilder
-                    .uuidFromTime(InstantToUUIDMapper.toLowerBound(startTime))
-                    .uuidToTime(InstantToUUIDMapper.toUpperBound(endTime));
-        }
-
-        var searchCriteria = searchCriteriaBuilder.build();
+                .filters(traceFilters)
+                .uuidFromTime(InstantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(InstantToUUIDMapper.toUpperBound(endTime))
+                .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

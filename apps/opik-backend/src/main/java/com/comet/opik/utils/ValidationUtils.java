@@ -60,7 +60,7 @@ public class ValidationUtils {
                     "Both 'from_time' and 'to_time' parameters must be provided together, or both must be omitted");
         }
 
-        if (startTimePresent && endTimePresent && startTime.isAfter(endTime)) {
+        if (startTimePresent && endTimePresent && !startTime.isBefore(endTime)) {
             throw new BadRequestException(
                     "Parameter 'from_time' must be before 'to_time'");
         }

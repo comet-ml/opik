@@ -5,11 +5,13 @@ import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
 import jakarta.ws.rs.ext.Provider;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.Objects;
 
 /**
  * JAX-RS ParamConverter for automatic Instant conversion from query parameters.
@@ -19,20 +21,22 @@ import java.time.format.DateTimeParseException;
 @Slf4j
 public class InstantParamConverter implements ParamConverterProvider {
 
+    private static final InstantConverter INSTANCE = new InstantConverter();
+
     @Override
     public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
         if (rawType != Instant.class) {
             return null;
         }
 
-        return (ParamConverter<T>) new InstantConverter();
+        return (ParamConverter<T>) INSTANCE;
     }
 
     private static class InstantConverter implements ParamConverter<Instant> {
 
         @Override
         public Instant fromString(String value) {
-            if (value == null || value.isEmpty()) {
+            if (StringUtils.isEmpty(value)) {
                 return null;
             }
 
@@ -56,7 +60,7 @@ public class InstantParamConverter implements ParamConverterProvider {
 
         @Override
         public String toString(Instant value) {
-            return value != null ? value.toString() : null;
+            return Objects.toString(value, null);
         }
     }
 }
