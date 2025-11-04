@@ -439,8 +439,8 @@ class BaseRedisSubscriberUnitTest {
             }));
             whenAutoClaimReturnEmpty(subscriber.getConsumerId());
             whenReadGroupReturnMessages();
-            // Mock listPending to fail
-            when(stream.listPending(any(org.redisson.api.stream.StreamPendingRangeArgs.class)))
+            // Mock listPending to fail (lenient because error is handled gracefully)
+            lenient().when(stream.listPending(any(org.redisson.api.stream.StreamPendingRangeArgs.class)))
                     .thenReturn(Mono.error(new RuntimeException("Redis error")));
             whenAckReturn();
             whenRemoveReturn();
