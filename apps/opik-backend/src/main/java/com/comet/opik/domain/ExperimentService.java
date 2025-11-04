@@ -17,6 +17,7 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -49,6 +50,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED;
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
@@ -489,8 +491,8 @@ public class ExperimentService {
                     .doOnNext(experiments -> {
                         if (CollectionUtils.isNotEmpty(experiments)) {
                             log.info("Raising alert event for finished experiments, count '{}'", experiments.size());
-                            eventBus.post(com.comet.opik.api.events.webhooks.AlertEvent.builder()
-                                    .eventType(com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED)
+                            eventBus.post(AlertEvent.builder()
+                                    .eventType(EXPERIMENT_FINISHED)
                                     .workspaceId(workspaceId)
                                     .workspaceName(workspaceName)
                                     .userName(userName)
