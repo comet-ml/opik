@@ -27,6 +27,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TestWorkspace;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
@@ -4687,65 +4688,34 @@ class GetTracesByProjectResourceTest {
         @MethodSource("provideBoundaryScenarios")
         void whenTimeParametersProvided_thenIncludeTracesWithinBounds(
                 String endpoint, TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var workspace = setupTestWorkspace();
 
             Instant baseTime = Instant.now();
             Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
             Instant upperBound = baseTime;
 
             // Create traces with UUIDs at specific boundary times
-            List<Trace> allTraces = new ArrayList<>();
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound,
+                            "At exact lower bound (should be included)"),
+                    createTraceAtTimestamp(workspace.projectName(), upperBound,
+                            "At exact upper bound (should be included)"),
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound.plus(Duration.ofMinutes(5)),
+                            "Between bounds (should be included)"));
 
-            // Index 0: At exact lower bound (should be included)
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(lowerBound))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Index 1: At exact upper bound (should be included)
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(upperBound))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Index 2: Between bounds (should be included)
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(lowerBound.plus(Duration.ofMinutes(5))))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
 
             var queryParams = Map.of(
                     "from_time", lowerBound.toString(),
                     "to_time", upperBound.toString());
 
             // Clear projectName from traces since API returns projectName=null
-            allTraces = allTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-
-            // Sort by ID descending to match API response order
-            var expectedTraces = allTraces.stream()
-                    .sorted(Comparator.comparing(Trace::id).reversed())
-                    .toList();
-
+            allTraces = normalizeTraces(allTraces);
+            var expectedTraces = sortByIdDescending(allTraces);
             var values = testAssertion.transformTestParams(allTraces, expectedTraces, List.of());
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(),
-                    values.unexpected(), values.all(), List.of(), queryParams);
+            testAssertion.assertTest(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(), values.unexpected(), values.all(), List.of(), queryParams);
         }
 
         @ParameterizedTest
@@ -4753,62 +4723,24 @@ class GetTracesByProjectResourceTest {
         @MethodSource("provideBoundaryScenarios")
         void whenTimeParametersProvided_thenExcludeTracesOutsideBounds(
                 String endpoint, TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var workspace = setupTestWorkspace();
 
             Instant baseTime = Instant.now();
             Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
             Instant upperBound = baseTime;
 
             // Create traces: 3 within bounds, 2 outside bounds
-            List<Trace> allTraces = new ArrayList<>();
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound, "Within bounds"),
+                    createTraceAtTimestamp(workspace.projectName(), upperBound, "Within bounds"),
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound.plus(Duration.ofMinutes(1)),
+                            "Within bounds"),
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound.minus(Duration.ofMinutes(1)),
+                            "Outside bounds (before lower)"),
+                    createTraceAtTimestamp(workspace.projectName(), upperBound.plus(Duration.ofMinutes(1)),
+                            "Outside bounds (after upper)"));
 
-            // Within bounds
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(lowerBound))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(upperBound))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(lowerBound.plus(Duration.ofMinutes(1))))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Outside bounds (before lower)
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(lowerBound.minus(Duration.ofMinutes(1))))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Outside bounds (after upper)
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(upperBound.plus(Duration.ofMinutes(1))))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
 
             // Expected: indices 0, 1, 2 (within bounds)
             // Unexpected: indices 3, 4 (outside bounds)
@@ -4819,20 +4751,15 @@ class GetTracesByProjectResourceTest {
                     "from_time", lowerBound.toString(),
                     "to_time", upperBound.toString());
 
-            // Clear projectName from traces since API returns projectName=null
-            allTraces = allTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-            expectedTraces = expectedTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-            unexpectedTraces = unexpectedTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-
-            // Sort expectedTraces by ID descending to match API response order
-            expectedTraces = expectedTraces.stream()
-                    .sorted(Comparator.comparing(Trace::id).reversed())
-                    .toList();
+            allTraces = normalizeTraces(allTraces);
+            expectedTraces = normalizeTraces(expectedTraces);
+            unexpectedTraces = normalizeTraces(unexpectedTraces);
+            expectedTraces = sortByIdDescending(expectedTraces);
 
             var values = testAssertion.transformTestParams(allTraces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(),
-                    values.unexpected(), values.all(), List.of(), queryParams);
+            testAssertion.assertTest(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(), values.unexpected(), values.all(), List.of(), queryParams);
         }
 
         // Scenario 2: ISO-8601 format parsing with extended time range
@@ -4847,57 +4774,23 @@ class GetTracesByProjectResourceTest {
         @MethodSource("provideFormatParsingScenarios")
         void whenTimeParametersInISO8601Format_thenReturnFilteredTraces(
                 String endpoint, TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var workspace = setupTestWorkspace();
 
             Instant referenceTime = Instant.now();
             Instant startTime = referenceTime.minus(Duration.ofMinutes(90));
             Instant withinBoundsTime = referenceTime.minus(Duration.ofMinutes(30));
             Instant outsideBoundsTime = referenceTime.plus(Duration.ofMinutes(30));
 
-            List<Trace> allTraces = new ArrayList<>();
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), startTime, "Should be included: at start of range"),
+                    createTraceAtTimestamp(workspace.projectName(), withinBoundsTime,
+                            "Should be included: within range"),
+                    createTraceAtTimestamp(workspace.projectName(), referenceTime,
+                            "Should be included: at end of range"),
+                    createTraceAtTimestamp(workspace.projectName(), outsideBoundsTime,
+                            "Should NOT be included: outside range"));
 
-            // Should be included: at start of range
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(startTime))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Should be included: within range
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(withinBoundsTime))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Should be included: at end of range
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(referenceTime))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            // Should NOT be included: outside range
-            allTraces.add(createTrace().toBuilder()
-                    .projectName(projectName)
-                    .id(generateUUIDForTimestamp(outsideBoundsTime))
-                    .spanCount(0)
-                    .llmSpanCount(0)
-                    .guardrailsValidations(null)
-                    .build());
-
-            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
 
             // Filter to get first 3 traces (within bounds)
             List<Trace> expectedTraces = allTraces.subList(0, 3);
@@ -4907,20 +4800,15 @@ class GetTracesByProjectResourceTest {
                     "from_time", startTime.toString(),
                     "to_time", referenceTime.toString());
 
-            // Clear projectName from traces since API returns projectName=null
-            allTraces = allTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-            expectedTraces = expectedTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-            unexpectedTraces = unexpectedTraces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
-
-            // Sort expectedTraces by ID descending to match API response order
-            expectedTraces = expectedTraces.stream()
-                    .sorted(Comparator.comparing(Trace::id).reversed())
-                    .toList();
+            allTraces = normalizeTraces(allTraces);
+            expectedTraces = normalizeTraces(expectedTraces);
+            unexpectedTraces = normalizeTraces(unexpectedTraces);
+            expectedTraces = sortByIdDescending(expectedTraces);
 
             var values = testAssertion.transformTestParams(allTraces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(),
-                    values.unexpected(), values.all(), List.of(), queryParams);
+            testAssertion.assertTest(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(), values.unexpected(), values.all(), List.of(), queryParams);
         }
 
         // Scenario 3: Incomplete time parameters should be rejected
@@ -4935,23 +4823,17 @@ class GetTracesByProjectResourceTest {
         @MethodSource("provideInvalidParameterScenarios")
         void whenOnlyFromTimeProvided_thenReturnBadRequest(
                 String endpoint, TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
+            var workspace = setupTestWorkspace();
             Instant now = Instant.now();
 
             WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
+                    .queryParam("project_name", workspace.projectName())
                     .queryParam("from_time", now.toString());
 
             var actualResponse = target
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
+                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
+                    .header(WORKSPACE_HEADER, workspace.workspaceName())
                     .get();
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
@@ -4962,6 +4844,27 @@ class GetTracesByProjectResourceTest {
         @MethodSource("provideInvalidParameterScenarios")
         void whenFromTimeAfterToTime_thenReturnBadRequest(
                 String endpoint, TracePageTestAssertion testAssertion) {
+            var workspace = setupTestWorkspace();
+            Instant now = Instant.now();
+            Instant earlier = now.minus(Duration.ofMinutes(10));
+
+            // from_time (now) is after to_time (earlier) - should fail
+            WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_name", workspace.projectName())
+                    .queryParam("from_time", now.toString())
+                    .queryParam("to_time", earlier.toString());
+
+            var actualResponse = target
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
+                    .header(WORKSPACE_HEADER, workspace.workspaceName())
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+
+        // Helper methods to reduce duplication
+        private TestWorkspace setupTestWorkspace() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -4969,28 +4872,34 @@ class GetTracesByProjectResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            Instant now = Instant.now();
-            Instant earlier = now.minus(Duration.ofMinutes(10));
+            return new TestWorkspace(workspaceName, workspaceId, apiKey, projectName);
+        }
 
-            // from_time (now) is after to_time (earlier) - should fail
-            WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
-                    .queryParam("from_time", now.toString())
-                    .queryParam("to_time", earlier.toString());
+        private Trace createTraceAtTimestamp(String projectName, Instant timestamp, String comment) {
+            return createTrace().toBuilder()
+                    .projectName(projectName)
+                    .id(generateUUIDForTimestamp(timestamp))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .build();
+        }
 
-            var actualResponse = target
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
+        private List<Trace> normalizeTraces(List<Trace> traces) {
+            return traces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
+        }
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        private List<Trace> sortByIdDescending(List<Trace> traces) {
+            return traces.stream()
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
         }
 
         private UUID generateUUIDForTimestamp(Instant timestamp) {
             byte[] zeroBytes = new byte[8];
             return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes, timestamp.toEpochMilli());
         }
+
     }
 
 }
