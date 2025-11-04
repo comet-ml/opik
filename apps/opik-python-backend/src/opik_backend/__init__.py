@@ -6,6 +6,7 @@ from flask import Flask
 from opentelemetry import metrics, trace
 
 from flask import jsonify
+from werkzeug.exceptions import HTTPException
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -108,8 +109,13 @@ def create_app(test_config=None, should_init_executor=True):
 
     @app.errorhandler(Exception)
     def handle_exception(e):
+        if isinstance(e, HTTPException):
+            return jsonify({
+                "error": e.name,
+                "message": e.description
+            }), e.code
+
         app.logger.exception("Unhandled exception occurred")
-    
         message = str(e) if app.debug else "Something went wrong. Please try again later."
         response = jsonify({
             "error": "Internal Server Error",
@@ -118,6 +124,7 @@ def create_app(test_config=None, should_init_executor=True):
         response.status_code = 500
         return response
 
+    
     return app
 
 def setup_otel_metrics(app, resource):
