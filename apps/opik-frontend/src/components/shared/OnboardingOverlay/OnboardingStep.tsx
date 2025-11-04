@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronsRight } from "lucide-react";
 import { useOnboarding } from "./OnboardingOverlayContext";
+import kebabCase from "lodash/kebabCase";
 
 type OnboardingStepProps = {
   className?: string;
@@ -58,7 +59,7 @@ const AnswerCard: React.FC<AnswerCardProps> = ({ option }) => {
 
   const { handleAnswer, currentStep } = useOnboarding();
 
-  const kebabCaseTitle = title?.toLowerCase().replace(/\s+/g, "-") || "";
+  const kebabCaseTitle = title ? kebabCase(title) : "";
   const stepIdentifier = currentStep || "unknown";
 
   return (
@@ -87,10 +88,7 @@ const AnswerList: React.FC<AnswerListProps> = ({ children, className }) => (
 const AnswerButton: React.FC<AnswerButtonProps> = ({ option }) => {
   const { handleAnswer, currentStep } = useOnboarding();
 
-  const kebabCaseOption = option
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
+  const kebabCaseOption = kebabCase(option);
   const stepIdentifier = currentStep || "unknown";
 
   return (
