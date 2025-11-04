@@ -27,6 +27,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 @UtilityClass
@@ -267,5 +268,71 @@ public class JsonUtils {
 
     public <T> T convertValue(@NonNull Object fromValue, @NonNull TypeReference<T> toValueTypeRef) {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
+    }
+
+    /**
+     * Injects a field at the beginning of metadata JsonNode.
+     * Creates a new ObjectNode with the field first, followed by existing metadata fields.
+     *
+     * @param metadata existing metadata JsonNode (can be null)
+     * @param fieldName name of the field to inject
+     * @param fieldValue value to inject (String)
+     * @return new JsonNode with field at the beginning, or original metadata if fieldValue is null/blank
+     */
+    public static JsonNode injectStringFieldIntoMetadata(JsonNode metadata, String fieldName, String fieldValue) {
+        if (fieldValue == null || fieldValue.isBlank()) {
+            return metadata;
+        }
+
+        TextNode valueNode = MAPPER.getNodeFactory().textNode(fieldValue);
+        return injectFieldIntoMetadata(metadata, fieldName, valueNode);
+    }
+
+    /**
+     * Injects a field with array value at the beginning of metadata JsonNode.
+     * Creates a new ObjectNode with the field first, followed by existing metadata fields.
+     *
+     * @param metadata existing metadata JsonNode (can be null)
+     * @param fieldName name of the field to inject
+     * @param fieldValues list of strings to inject as array
+     * @return new JsonNode with field at the beginning, or original metadata if fieldValues is null/empty
+     */
+    public static JsonNode injectArrayFieldIntoMetadata(JsonNode metadata, String fieldName, List<String> fieldValues) {
+        if (fieldValues == null || fieldValues.isEmpty()) {
+            return metadata;
+        }
+
+        ArrayNode arrayNode = MAPPER.createArrayNode();
+        fieldValues.forEach(arrayNode::add);
+
+        return injectFieldIntoMetadata(metadata, fieldName, arrayNode);
+    }
+
+    private static JsonNode injectFieldIntoMetadata(
+            JsonNode metadata,
+            String fieldKey,
+            JsonNode fieldValue) {
+        // 1. Create result and inject the payload field
+        ObjectNode result = MAPPER.createObjectNode();
+        result.set(fieldKey, fieldValue);
+
+        // 2. Delegate copying the common metadata fields
+        return copyMetadataFields(metadata, result);
+    }
+
+    /**
+     * Copies existing fields from metadata into the 'result' ObjectNode,
+     * maintaining insertion order after any fields already in 'result'.
+     *
+     * @param metadata The existing metadata to copy fields from (must be an object, or null)
+     * @param result The ObjectNode already containing the injected field(s).
+     * @return The final ObjectNode with all fields.
+     */
+    private static ObjectNode copyMetadataFields(JsonNode metadata, ObjectNode result) {
+        if (metadata != null && metadata.isObject()) {
+            result.setAll((ObjectNode) metadata);
+        }
+
+        return result;
     }
 }

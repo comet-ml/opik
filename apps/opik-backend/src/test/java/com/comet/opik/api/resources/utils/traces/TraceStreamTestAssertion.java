@@ -33,6 +33,7 @@ public final class TraceStreamTestAssertion implements TracePageTestAssertion<Tr
 
         var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
+        // TraceAssertions.assertTraces now automatically handles provider injection
         TraceAssertions.assertTraces(actualTraces, expected, userName);
     }
 
