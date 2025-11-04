@@ -4,44 +4,15 @@ name: opik
 
 services:
 
-  # Expose infrastructure ports for local backend to connect
-  mysql:
-    ports:
-      - "3306:3306"
-
-  redis:
-    ports:
-      - "6379:6379"
-
-  clickhouse:
-    ports:
-      - "8123:8123" # ClickHouse HTTP port
-      - "9000:9000" # ClickHouse Native Protocol port
-
-  minio:
-    ports:
-      - "9001:9000"   # MinIO API Port
-      - "9090:9090"   # MinIO Web UI Console
-
-  # Disable the backend service entirely, meant to be run as local process
-  backend:
-    profiles: !override
-      - disabled
-
-  python-backend:
-    profiles: !override
-      - local-be
-    ports:
-      - "8000:8000" # Python backend HTTP port
-
+  # Override to not depend on any service
+  # This is mostly for consistent operations like docker compose up/down and to avoid hanging containers
+  # Demo data creation is triggered from opik.sh and dev-runner.sh
   demo-data-generator:
-    profiles: !override
-      - local-be
+    depends_on: !override
+      [ ]
 
-  # Override frontend to not depend on backend and ensure it runs with local-be profile
+  # Override to not depend on backend
   frontend:
-    profiles: !override
-      - local-be
     depends_on: !override
       mysql:
         condition: service_healthy

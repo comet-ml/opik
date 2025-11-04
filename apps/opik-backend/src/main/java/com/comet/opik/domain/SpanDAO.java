@@ -694,6 +694,21 @@ class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_BY_TRACE_IDS = """
+            SELECT
+                s.*,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                    NULL) AS duration
+            FROM spans s
+            WHERE workspace_id = :workspace_id
+            AND trace_id IN :trace_ids
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
+
     private static final String SELECT_BY_PROJECT_ID = """
             WITH comments_final AS (
               SELECT
@@ -1700,6 +1715,27 @@ class SpanDAO {
         var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    @WithSpan
+    public Flux<Span> getByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting spans for '{}' traces", traceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_BY_TRACE_IDS)
+                            .bind("trace_ids", traceIds.toArray(new UUID[0]));
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_by_trace_ids");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(this::mapToDto);
     }
 
     @WithSpan

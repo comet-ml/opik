@@ -1227,6 +1227,28 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/{dataset_id}/items/from-traces:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from traces
+      description: Create dataset items from traces with enriched metadata
+      operationId: createDatasetItemsFromTraces
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetItemsFromTracesRequest"
+      responses:
+        "204":
+          description: No content
   /v1/private/datasets/{id}:
     get:
       tags:
@@ -1837,6 +1859,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentGroupAggregationsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/finish:
+    post:
+      tags:
+      - Experiments
+      summary: Finish experiments
+      description: Finish experiments and trigger alert events
+      operationId: finishExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteIdsHolder"
+      responses:
+        "204":
+          description: No content
         "400":
           description: Bad Request
           content:
@@ -4898,6 +4941,7 @@ components:
           - prompt:committed
           - trace:guardrails_triggered
           - prompt:deleted
+          - experiment:finished
         trigger_configs:
           type: array
           items:
@@ -5014,6 +5058,7 @@ components:
           - prompt:committed
           - trace:guardrails_triggered
           - prompt:deleted
+          - experiment:finished
         trigger_configs:
           type: array
           items:
@@ -5159,6 +5204,7 @@ components:
           - prompt:committed
           - trace:guardrails_triggered
           - prompt:deleted
+          - experiment:finished
         trigger_configs:
           type: array
           items:
@@ -7282,6 +7328,39 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+    CreateDatasetItemsFromTracesRequest:
+      required:
+      - enrichment_options
+      - trace_ids
+      type: object
+      properties:
+        trace_ids:
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: Set of trace IDs to add to the dataset
+          items:
+            type: string
+            description: Set of trace IDs to add to the dataset
+            format: uuid
+        enrichment_options:
+          $ref: "#/components/schemas/TraceEnrichmentOptions"
+    TraceEnrichmentOptions:
+      type: object
+      properties:
+        includeSpans:
+          type: boolean
+        includeTags:
+          type: boolean
+        includeFeedbackScores:
+          type: boolean
+        includeComments:
+          type: boolean
+        includeUsage:
+          type: boolean
+        includeMetadata:
+          type: boolean
+      description: Options for enriching trace data
     DatasetIdentifier:
       required:
       - dataset_name
@@ -8955,6 +9034,19 @@ components:
       properties:
         aggregations:
           $ref: "#/components/schemas/AggregationData"
+    IdsHolder:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     ExperimentItemStreamRequest:
       required:
       - experiment_name
