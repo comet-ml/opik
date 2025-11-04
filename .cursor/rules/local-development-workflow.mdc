@@ -298,7 +298,7 @@ cd apps/opik-frontend && rm -rf node_modules && npm install
 ```bash
 tail -100 /tmp/opik-backend.log           # Check migration errors
 ./scripts/dev-runner.sh --stop
-docker volume prune -a -f                 # ⚠️ DATA LOSS - removes ALL unused volumes (including database data if not in use)
+./opik.sh --clean                         # ⚠️ DATA LOSS - removes Opik volumes (MySQL, ClickHouse etc. data)
 ./scripts/dev-runner.sh --restart
 ```
 
@@ -318,9 +318,9 @@ rm -f /tmp/opik-*.pid
 # Soft reset
 ./scripts/dev-runner.sh --stop && ./scripts/dev-runner.sh --restart
 
-# Nuclear option (⚠️ DATA LOSS - removes all databases and storage)
+# Hard reset (⚠️ DATA LOSS - removes Opik databases and storage)
 ./scripts/dev-runner.sh --stop
-docker volume prune -a -f                 # Removes ALL volumes (MySQL, ClickHouse data)
+./opik.sh --clean                         # Removes Opik volumes (MySQL, ClickHouse etc. data)
 ./scripts/dev-runner.sh --restart
 ```
 
@@ -350,16 +350,18 @@ docker system prune -a
 # Monitor container resource usage
 docker stats
 
-# Clean up unused Docker resources
-docker system df                          # Show disk usage
-docker system prune                       # Remove unused data (⚠️ may affect other projects)
-docker volume prune                       # Remove unused volumes (⚠️ DATA LOSS - removes databases)
-docker image prune -a                     # Remove unused images
+# Clean up Opik Docker resources (SAFE - only affects Opik)
+./opik.sh --clean                         # ⚠️ DATA LOSS - removes Opik containers and volumes
+
+# Clean up unused Docker images (affects all projects)
+docker image prune -a                     # Remove unused images (⚠️ affects other projects)
 
 # Full cleanup (⚠️ DATA LOSS - removes ALL Docker data including databases)
-./opik.sh --stop
-docker system prune -a -f                 # Removes containers, networks, images
-docker volume prune -a -f                 # Removes volumes (databases, storage)
+./opik.sh --clean
+docker system prune -a                    # Removes unused containers, networks, images (⚠️ may affect other projects)
+
+# Show disk usage
+docker system df                          # Show disk usage across all projects
 ```
 
 ## Cursor Integration

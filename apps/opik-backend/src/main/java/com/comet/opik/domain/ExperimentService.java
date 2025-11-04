@@ -474,6 +474,35 @@ public class ExperimentService {
     }
 
     @WithSpan
+    public Mono<Void> finishExperiments(@NonNull Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            log.info("Finishing experiments, count '{}', workspaceId '{}'", ids.size(), workspaceId);
+
+            return experimentDAO.getByIds(ids)
+                    .collectList()
+                    .doOnNext(experiments -> {
+                        if (CollectionUtils.isNotEmpty(experiments)) {
+                            log.info("Raising alert event for finished experiments, count '{}'", experiments.size());
+                            eventBus.post(com.comet.opik.api.events.webhooks.AlertEvent.builder()
+                                    .eventType(com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED)
+                                    .workspaceId(workspaceId)
+                                    .workspaceName(workspaceName)
+                                    .userName(userName)
+                                    .payload(experiments)
+                                    .build());
+                        }
+                    })
+                    .then();
+        });
+    }
+
+    @WithSpan
     public Mono<Void> delete(@NonNull Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 

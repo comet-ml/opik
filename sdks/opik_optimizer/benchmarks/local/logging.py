@@ -30,7 +30,7 @@ from rich.table import Table
 from rich.text import Text
 
 if typing.TYPE_CHECKING:
-    from benchmark_runner import TaskResult
+    from benchmark_task import TaskResult
 
 console = Console(
     width=120,

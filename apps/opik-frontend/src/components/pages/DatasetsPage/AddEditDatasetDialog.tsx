@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
@@ -40,11 +40,19 @@ type AddEditDatasetDialogProps = {
   setOpen: (open: boolean) => void;
   onDatasetCreated?: (dataset: Dataset) => void;
   hideUpload?: boolean;
+  csvRequired?: boolean;
 };
 
 const AddEditDatasetDialog: React.FunctionComponent<
   AddEditDatasetDialogProps
-> = ({ dataset, open, setOpen, onDatasetCreated, hideUpload }) => {
+> = ({
+  dataset,
+  open,
+  setOpen,
+  onDatasetCreated,
+  hideUpload,
+  csvRequired = false,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
 
@@ -64,9 +72,35 @@ const AddEditDatasetDialog: React.FunctionComponent<
     dataset ? dataset.description || "" : "",
   );
 
+  // Reset state when dialog closes or when dataset prop changes
+  useEffect(() => {
+    if (!open) {
+      // Reset all state when dialog closes
+      setIsOverlayShown(false);
+      setCsvData(undefined);
+      setCsvError(undefined);
+      setConfirmOpen(false);
+      if (!dataset) {
+        setName("");
+        setDescription("");
+      }
+    } else {
+      // Reset state when dialog opens (in case of stale state)
+      setIsOverlayShown(false);
+      setConfirmOpen(false);
+      if (dataset) {
+        setName(dataset.name);
+        setDescription(dataset.description || "");
+      }
+    }
+  }, [open, dataset]);
+
   const isEdit = Boolean(dataset);
-  const isValid = Boolean(name.length);
   const hasValidCsvData = csvData && csvData.length > 0;
+  // Validation: name is required, and CSV is required only if csvRequired is true
+  const isValid =
+    Boolean(name.length) &&
+    (isEdit || hideUpload || !csvRequired || hasValidCsvData);
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
@@ -245,11 +279,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV (optional)</Label>
+              <Label>Upload a CSV</Label>
               <Description className="tracking-normal">
                 Your CSV file can contain up to 1,000 rows, for larger datasets
-                use the SDK instead. You can also skip this step and add dataset
-                items manually later.
+                use the SDK instead.
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}

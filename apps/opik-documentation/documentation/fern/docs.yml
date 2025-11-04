@@ -169,6 +169,9 @@ navigation:
           - page: Evaluate single prompts
             path: docs/evaluation/evaluate_prompt.mdx
             slug: evaluate_prompt
+          - page: Multimodal evaluations
+            path: docs/evaluation/evaluate_multimodal.mdx
+            slug: evaluate_multimodal
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm
@@ -1168,7 +1171,10 @@ redirects:
     destination: "/docs/opik/agent_optimization/faq"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/reference"
-    destination: "/docs/opik/agent_optimization/reference"
+    destination: "/docs/opik/agent_optimization/api-reference"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/reference"
+    destination: "/docs/opik/agent_optimization/api-reference"
     permanent: true
   # Common redirects
   - source: "/docs/opik/typescript-sdk/opik-query-language"
