@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,6 +47,20 @@ import java.util.stream.Stream;
 public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private static final String BUSYGROUP = "BUSYGROUP";
+
+    /**
+     * Non-retryable exceptions: programming errors and validation failures that won't succeed on retry.
+     */
+    private static final Set<Class<? extends RuntimeException>> NON_RETRYABLE_EXCEPTIONS = Set.of(
+            ArithmeticException.class,
+            ArrayIndexOutOfBoundsException.class,
+            ClassCastException.class,
+            IllegalArgumentException.class,
+            IllegalStateException.class,
+            IndexOutOfBoundsException.class,
+            NullPointerException.class,
+            NumberFormatException.class,
+            UnsupportedOperationException.class);
 
     /**
      * Enough for 2-3 concurrent Redis operations (read, ack, remove etc.) per subscriber
@@ -439,14 +454,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                                 .build()),
                         CONSUMER_SCHEDULER_THREAD_CAP_SIZE) // Parallelism for delivery count Redis queries
                 .filter(failure -> {
-                    // Filter if max limit not reached, these are claimed and retried, so no ack and remove
+                    // Filter out if max limit not reached, these are claimed and retried, so no ack and remove
                     if (failure.deliveryCount() < config.getMaxRetries()) {
                         log.warn("Retryable error for messageId '{}', deliveryCount '{}', will retry",
                                 failure.messageId(), failure.deliveryCount(), failure.error());
-                        return true;
+                        return false;
                     }
                     // Max retries reached, will ack and remove
-                    return false;
+                    return true;
                 })
                 .map(maxRetriesFailure -> {
                     // TODO: Send to the dead letter queue (DLQ) for further analysis
@@ -455,7 +470,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     return maxRetriesFailure.messageId();
                 })
                 .collectList() // Emits an empty list if the sequence is empty
-                .map(maxRetries ->
+                .flatMap(maxRetries ->
                 // Delete all non-retryable combined with max retries reached
                 ackAndRemoveMessages(Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList()))
                 .thenReturn(processingResults);
@@ -520,29 +535,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Classifies whether an exception is retryable or not.
-     * <p>
-     * Non-retryable exceptions are programming errors or validation failures that won't succeed on retry:
-     * {@link IllegalArgumentException}, {@link NullPointerException}, {@link IllegalStateException},
-     * {@link UnsupportedOperationException}.
-     * <p>
+     * Non-retryable exceptions are programming errors or validation failures that won't succeed on retry.
      * All other exceptions are considered retryable (transient errors like network issues, timeouts, etc.)
      * Unknown exceptions default to retryable for safety.
-     *
-     * @param exception the exception to classify
-     * @return true if the exception is retryable, false otherwise
      */
     private boolean isRetryableException(Throwable exception) {
-        // Non-retryable: programming errors, validation errors
-        if (exception instanceof IllegalArgumentException
-                || exception instanceof NullPointerException
-                || exception instanceof IllegalStateException
-                || exception instanceof UnsupportedOperationException) {
-            return false;
-        }
-        // Retryable: transient errors, network issues, timeouts
-        // Default to retryable for unknown exceptions (safe default)
-        return true;
+        return !NON_RETRYABLE_EXCEPTIONS.contains(exception.getClass());
     }
 
     /**
