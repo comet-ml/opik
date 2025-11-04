@@ -52,7 +52,7 @@ def test_upload_attachment__s3(rest_client_s3, attachment, respx_mock, capture_l
 def test_upload_attachment__s3__failed_upload(rest_client_s3, attachment, respx_mock):
     rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
 
-    failed_count = 1
+    failed_count = 2
 
     def retry_side_effect(request, route):
         if route.call_count < failed_count:
