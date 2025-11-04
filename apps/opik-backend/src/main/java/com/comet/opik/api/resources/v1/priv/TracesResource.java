@@ -114,6 +114,7 @@ public class TracesResource {
     private final @NonNull Streamer streamer;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     @GET
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
@@ -155,8 +156,8 @@ public class TracesResource {
                 .filters(traceFilters)
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
-                .uuidFromTime(InstantToUUIDMapper.toLowerBound(startTime))
-                .uuidToTime(InstantToUUIDMapper.toUpperBound(endTime))
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .sortingFields(sortingFields)
                 .build();
@@ -374,8 +375,8 @@ public class TracesResource {
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(traceFilters)
-                .uuidFromTime(InstantToUUIDMapper.toLowerBound(startTime))
-                .uuidToTime(InstantToUUIDMapper.toUpperBound(endTime))
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
