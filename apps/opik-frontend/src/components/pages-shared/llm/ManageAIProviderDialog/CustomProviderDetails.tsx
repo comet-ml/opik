@@ -17,19 +17,13 @@ import { Button } from "@/components/ui/button";
 
 type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
+  isEdit?: boolean;
 };
 
 const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   form,
+  isEdit = false,
 }) => {
-  // Determine if we're in edit mode by checking if providerName has an initial value
-  const defaultValues = form.formState.defaultValues;
-  const isEdit = Boolean(
-    defaultValues &&
-      "providerName" in defaultValues &&
-      defaultValues.providerName,
-  );
-
   return (
     <div className="flex flex-col gap-4 pb-4">
       <FormField
