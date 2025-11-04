@@ -2,18 +2,17 @@ import React, { useMemo, useRef, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
 
 import { convertColumnDataToColumn } from "@/lib/table";
-import { ProviderKey } from "@/types/providers";
+import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { formatDate } from "@/lib/date";
-import { PROVIDERS } from "@/constants/providers";
+import { PROVIDERS, CUSTOM_PROVIDER_DEFAULT_NAME } from "@/constants/providers";
 import AIProviderCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
-import { areAllProvidersConfigured } from "@/lib/provider";
 import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -26,7 +25,16 @@ export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => PROVIDERS[row.provider]?.apiKeyName,
+    accessorFn: (row) =>
+      row.provider === PROVIDER_TYPE.CUSTOM
+        ? row.keyName || CUSTOM_PROVIDER_DEFAULT_NAME
+        : PROVIDERS[row.provider]?.apiKeyName,
+  },
+  {
+    id: "base_url",
+    label: "URL",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.base_url || "-",
   },
   {
     id: "created_at",
@@ -75,9 +83,17 @@ const AIProvidersTab = () => {
     return providerKeys.filter((p) => {
       const providerDetails = PROVIDERS[p.provider];
 
+      // Handle custom providers differently - search by keyName
+      if (p.provider === PROVIDER_TYPE.CUSTOM) {
+        return (
+          p.keyName?.toLowerCase().includes(searchLowerCase) ||
+          p.base_url?.toLowerCase().includes(searchLowerCase)
+        );
+      }
+
       return (
-        providerDetails.apiKeyName.toLowerCase().includes(searchLowerCase) ||
-        providerDetails.value.toLowerCase().includes(searchLowerCase)
+        providerDetails?.apiKeyName?.toLowerCase().includes(searchLowerCase) ||
+        providerDetails?.value?.toLowerCase().includes(searchLowerCase)
       );
     });
   }, [providerKeys, search]);
@@ -122,11 +138,7 @@ const AIProvidersTab = () => {
           placeholder="Search by name"
           dimension="sm"
         />
-        <Button
-          onClick={handleAddConfigurationClick}
-          size="sm"
-          disabled={areAllProvidersConfigured(providerKeys)}
-        >
+        <Button onClick={handleAddConfigurationClick} size="sm">
           Add configuration
         </Button>
       </div>
@@ -145,6 +157,7 @@ const AIProvidersTab = () => {
           </DataTableNoData>
         }
       />
+
       <ManageAIProviderDialog
         configuredProvidersList={providerKeys}
         key={resetDialogKeyRef.current}

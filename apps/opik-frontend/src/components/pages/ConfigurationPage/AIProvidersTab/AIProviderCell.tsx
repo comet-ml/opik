@@ -2,14 +2,14 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { PROVIDERS } from "@/constants/providers";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDERS, getProviderKeyLabel } from "@/constants/providers";
+import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
 
-const AIProviderCell = (context: CellContext<unknown, PROVIDER_TYPE>) => {
+const AIProviderCell = (context: CellContext<ProviderKey, PROVIDER_TYPE>) => {
   const provider = context.getValue();
+  const row = context.row.original;
   const Icon = PROVIDERS[provider]?.icon || null;
-
-  const providerKeyLabel = PROVIDERS[provider]?.label || "";
+  const providerKeyLabel = getProviderKeyLabel(provider, row.keyName);
 
   return (
     <CellWrapper

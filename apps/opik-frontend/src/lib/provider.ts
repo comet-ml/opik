@@ -1,12 +1,6 @@
 import first from "lodash/first";
-import { PROVIDER_TYPE, ProviderKey } from "@/types/providers";
-import { CUSTOM_PROVIDER_MODEL_PREFIX, PROVIDERS } from "@/constants/providers";
-
-export const areAllProvidersConfigured = (
-  providers: (ProviderKey | PROVIDER_TYPE)[],
-) => {
-  return providers.length === Object.keys(PROVIDERS).length;
-};
+import { PROVIDER_TYPE } from "@/types/providers";
+import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 
 export const getDefaultProviderKey = (providers: PROVIDER_TYPE[]) => {
   return first(providers) || "";

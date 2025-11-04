@@ -418,17 +418,56 @@ export interface ProviderKeyConfiguration {
   models?: string;
 }
 
-export interface ProviderKey {
+// Base interface for all provider keys
+export interface BaseProviderKey {
   id: string;
-  keyName: string;
+  keyName: string; // Display name - can be empty string for legacy providers
   created_at: string;
   provider: PROVIDER_TYPE;
-  base_url?: string;
   configuration: ProviderKeyConfiguration;
 }
 
-export interface ProviderKeyWithAPIKey extends ProviderKey {
+// Standard provider key (OpenAI, Anthropic, Gemini, OpenRouter, Vertex AI)
+export interface StandardProviderKey extends BaseProviderKey {
+  provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM>;
+  base_url?: never;
+  provider_name?: never;
+}
+
+// Custom provider key (vLLM, Ollama, etc.)
+export interface CustomProviderKey extends BaseProviderKey {
+  provider: PROVIDER_TYPE.CUSTOM;
+  provider_name: string; // Unique identifier for model names - can be empty for legacy providers (pre-multi-provider support)
+  base_url: string; // Required - OpenAI-compatible API endpoint
+}
+
+// Union type for all provider keys
+export type ProviderKey = StandardProviderKey | CustomProviderKey;
+
+export type ProviderKeyWithAPIKey = ProviderKey & {
   apiKey: string;
+};
+
+// For mutations - allows partial updates while preserving type safety
+export type PartialProviderKeyUpdate = Partial<
+  Omit<BaseProviderKey, "provider">
+> & {
+  id?: string;
+  provider?: PROVIDER_TYPE;
+  apiKey?: string;
+  base_url?: string;
+  provider_name?: string;
+};
+
+export interface ProviderOption {
+  value: string;
+  label?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  configured?: boolean;
+  isCustomProvider?: boolean;
+  description?: string;
+  isAddCustom?: boolean;
+  isSeparator?: boolean;
 }
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";

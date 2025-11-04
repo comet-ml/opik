@@ -77,3 +77,56 @@ export const PROVIDERS: PROVIDERS_TYPE = {
 export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
 
 export const CUSTOM_PROVIDER_MODEL_PREFIX = "custom-llm";
+
+// Default display name for custom providers when no name is provided
+export const CUSTOM_PROVIDER_DEFAULT_NAME = "Custom provider";
+
+// Legacy custom providers (created before multi-provider support) don't have a provider_name
+// We use this constant as a placeholder for those providers
+export const LEGACY_CUSTOM_PROVIDER_NAME = "default";
+
+/**
+ * Get display label for a provider key
+ * For custom providers: returns keyName with fallback to default
+ * For standard providers: returns the provider's label from PROVIDERS constant
+ *
+ * Note: Handles legacy custom providers that may have empty keyName
+ */
+export const getProviderKeyLabel = (
+  provider: PROVIDER_TYPE,
+  keyName: string,
+): string => {
+  // Custom providers: use keyName or fallback to default
+  if (provider === PROVIDER_TYPE.CUSTOM) {
+    if (keyName) {
+      return keyName;
+    }
+    return CUSTOM_PROVIDER_DEFAULT_NAME;
+  }
+
+  // Standard providers: use label from PROVIDERS constant
+  const providerLabel = PROVIDERS[provider]?.label;
+  if (providerLabel) {
+    return providerLabel;
+  }
+
+  // Fallback for unknown provider types
+  return "";
+};
+
+// Model prefix format: {provider_name}/model-name
+export const buildCustomModelId = (
+  providerName: string,
+  modelName: string,
+): string => `${providerName}/${modelName}`;
+
+export const parseCustomModelId = (
+  modelId: string,
+): { providerName: string; modelName: string } | null => {
+  const parts = modelId.split("/");
+  if (parts.length < 2) return null;
+  return {
+    providerName: parts[0],
+    modelName: parts.slice(1).join("/"),
+  };
+};
