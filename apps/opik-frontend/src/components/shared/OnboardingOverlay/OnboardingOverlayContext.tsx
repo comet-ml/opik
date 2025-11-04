@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import posthog from "posthog-js";
 import { STEP_IDENTIFIERS } from "./constants";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
 
@@ -52,6 +53,12 @@ export const OnboardingProvider: React.FunctionComponent<
     // Update URL hash without triggering navigation
     if (window.location.hash !== hash) {
       window.history.replaceState(null, "", hash);
+
+      // Manually trigger PostHog pageview for hash changes
+      // replaceState doesn't trigger automatic pageview tracking
+      if (posthog.__loaded) {
+        posthog.capture("$pageview");
+      }
     }
   }, [currentStep]);
 
