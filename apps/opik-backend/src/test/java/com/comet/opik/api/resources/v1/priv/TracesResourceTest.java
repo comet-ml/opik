@@ -5796,9 +5796,8 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
-            // Prepare expected traces with providers injected into metadata
-            var preparedExpectedTraces = TraceAssertions.prepareTracesForAssertion(expectedTraces);
-            TraceAssertions.assertTraces(actualTraces, preparedExpectedTraces, USER);
+            // TraceAssertions.assertTraces now automatically handles provider injection
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
         }
 
         @ParameterizedTest
@@ -5844,9 +5843,8 @@ class TracesResourceTest {
                                             .limit(pageSize)
                                             .build());
 
-                            // Prepare expected traces with providers injected into metadata
-                            var preparedExpectedTrace = TraceAssertions.prepareTracesForAssertion(trace);
-                            TraceAssertions.assertTraces(actualTraces, preparedExpectedTrace, USER);
+                            // TraceAssertions.assertTraces now automatically handles provider injection
+                            TraceAssertions.assertTraces(actualTraces, trace, USER);
 
                             lastId.set(actualTraces.getLast().id());
                         });
@@ -5908,9 +5906,8 @@ class TracesResourceTest {
                             .build());
 
             if (stream) {
-                // Prepare expected traces with providers injected into metadata
-                var preparedExpectedTraces = TraceAssertions.prepareTracesForAssertion(traces.reversed());
-                TraceAssertions.assertTraces(actualTraces, preparedExpectedTraces, USER);
+                // TraceAssertions.assertTraces now automatically handles provider injection
+                TraceAssertions.assertTraces(actualTraces, traces.reversed(), USER);
             } else {
                 getAndAssertPage(
                         1,
