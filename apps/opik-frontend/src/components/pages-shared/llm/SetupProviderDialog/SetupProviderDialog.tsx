@@ -126,7 +126,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
           <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody className="flex flex-col">
-          <p className="comet-body-s text-muted-foreground mb-4">
+          <p className="comet-body-s mb-4 text-muted-foreground">
             To use the Playground, select an AI provider and enter your API key
           </p>
 
