@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -61,30 +62,34 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
 
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
+      const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
+      const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
+
       const providerKeyData: Partial<{
         provider: PROVIDER_TYPE;
         apiKey: string;
         base_url: string;
+        keyName: string;
         configuration: Record<string, string>;
       }> = {
         provider: data.provider as PROVIDER_TYPE,
         ...(data.apiKey && { apiKey: data.apiKey }),
       };
 
-      // Handle custom provider
       if (
-        data.provider === PROVIDER_TYPE.CUSTOM &&
+        isCustom &&
         "url" in data &&
-        "models" in data
+        "models" in data &&
+        "providerName" in data
       ) {
         providerKeyData.base_url = data.url;
+        providerKeyData.keyName = data.providerName;
         providerKeyData.configuration = {
           models: data.models,
         };
       }
 
-      // Handle Vertex AI
-      if (data.provider === PROVIDER_TYPE.VERTEX_AI && "location" in data) {
+      if (isVertex && "location" in data) {
         providerKeyData.configuration = {
           location: data.location,
         };
@@ -100,7 +105,6 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             form.reset();
             setSelectedProvider("");
 
-            // Notify parent that provider was added
             onProviderAdded?.();
           },
         },
@@ -121,8 +125,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 pb-4">
-          <p className="comet-body-s text-muted-foreground">
+        <DialogAutoScrollBody className="flex flex-col">
+          <p className="comet-body-s text-muted-foreground mb-4">
             To use the Playground, select an AI provider and enter your API key
           </p>
 
@@ -150,18 +154,21 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
                   )}
                 </>
               )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={handleCancel} type="button">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={!selectedProvider}>
-                  Done
-                </Button>
-              </DialogFooter>
             </form>
           </Form>
-        </div>
+        </DialogAutoScrollBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleCancel} type="button">
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={!selectedProvider}
+            onClick={form.handleSubmit(handleSubmit)}
+          >
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
