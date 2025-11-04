@@ -180,6 +180,8 @@ def _evaluate_task(
 
     client.flush()
 
+    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
+
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
         experiment_id=experiment.id,
@@ -279,6 +281,8 @@ def evaluate_experiment(
     )
 
     report.display_experiment_link(experiment_url=experiment_url)
+
+    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
@@ -465,6 +469,8 @@ def evaluate_prompt(
     report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
+
+    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,

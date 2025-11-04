@@ -79,6 +79,11 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
       "Triggered when a prompt is removed from the workspace's prompt library.",
     hasScope: false,
   },
+  [ALERT_EVENT_TYPE.experiment_finished]: {
+    title: "Experiment finished",
+    description: "Triggered when an experiment completes in the workspace.",
+    hasScope: false,
+  },
 };
 
 const getProjectIdsFromTriggerConfigs = (
