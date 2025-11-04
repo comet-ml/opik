@@ -13,6 +13,7 @@ def assert_equal(expected, actual):
 
     pytest_deepassert.equal(expected, actual)
 
+
 def assert_dicts_equal(
     dict1: Mapping[str, Any],
     dict2: Mapping[str, Any],
