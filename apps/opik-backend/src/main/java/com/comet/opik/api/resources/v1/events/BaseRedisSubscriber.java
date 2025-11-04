@@ -105,6 +105,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final DoubleGauge readSize;
     private final LongCounter ackAndRemoveErrors;
     private final LongHistogram ackAndRemoveProcessingTime;
+    private final LongCounter listPendingErrors;
+    private final LongHistogram listPendingTime;
     private final LongCounter unexpectedErrors;
 
     private volatile RStreamReactive<String, M> stream;
@@ -182,6 +184,16 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.ackAndRemoveProcessingTime = meter
                 .histogramBuilder("%s_%s_ack_and_remove_time".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Time taken for Redis ack and remove calls")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+        this.listPendingErrors = meter
+                .counterBuilder("%s_%s_list_pending_errors".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Errors when listing pending messages from Redis stream")
+                .build();
+        this.listPendingTime = meter
+                .histogramBuilder("%s_%s_list_pending_time".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Time taken for Redis list pending calls")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
@@ -489,7 +501,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .subscribeOn(consumerScheduler))
                 .doOnSuccess(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
                 .onErrorResume(throwable -> {
-                    // If ack and or remove fails, message will be claimed and automatic retried, and errors handled in postProcessFailureMessages
+                    // If ack and or remove fails, message will be automatically claimed and retried
                     ackAndRemoveErrors.add(1);
                     log.error("Error acknowledging or removing from Redis stream, size '{}'",
                             idsArray.length, throwable);
@@ -546,25 +558,27 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Not a batch operation as only range queries are supported by the Redis API.
-     * The number of messages in between the range can't be predicted, so the mandatory count arg can't be set.
-     * The alternative is iterating in batches, but could lead to very long waits if many messages are found
-     * within the range.
+     * Not a batch operation as only range queries are supported by the pending Redis API.
+     * The number of messages in between the range can't be predicted, so the mandatory count arg can't be set in advance.
+     * The alternative is iterating in batches, but could lead to very long waits if many messages are found within the range.
      * With all that in mind, queries per single message ID are a better approach.
      */
     private Mono<PendingEntry> listPending(StreamMessageId messageId) {
+        var startMillis = System.currentTimeMillis();
         var streamPendingRangeArgs = StreamPendingRangeArgs.groupName(config.getConsumerGroupName())
                 .startId(messageId)
                 .endId(messageId)
-                .count(1); // Supporting only by listing by single message ID
+                .count(1); // Supporting only listing by single message ID
         return stream.listPending(streamPendingRangeArgs)
                 .subscribeOn(consumerScheduler)
                 .filter(CollectionUtils::isNotEmpty)
-                .map(List::getFirst)
+                .map(List::getFirst) // Count is 1, so there would be only the first one
                 .onErrorResume(throwable -> {
+                    listPendingErrors.add(1);
                     log.warn("Error listing pending messageId '{}'", messageId, throwable);
                     return Mono.empty();
-                });
+                })
+                .doFinally(signalType -> listPendingTime.record(System.currentTimeMillis() - startMillis));
     }
 
     @Builder(toBuilder = true)

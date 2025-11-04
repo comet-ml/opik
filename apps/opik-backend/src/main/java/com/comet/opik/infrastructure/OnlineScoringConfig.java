@@ -42,8 +42,8 @@ public class OnlineScoringConfig {
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration pendingMessageDuration;
 
-    @Valid @JsonProperty
-    @Min(1) @Max(10) private int maxRetries = 3;
+    @JsonProperty
+    @Min(1) @Max(10) private int maxRetries;
 
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
