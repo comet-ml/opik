@@ -1,5 +1,6 @@
 export { DatasetWrite } from "./DatasetWrite";
 export { DatasetItemBatchWrite } from "./DatasetItemBatchWrite";
+export { CreateDatasetItemsFromTracesRequest } from "./CreateDatasetItemsFromTracesRequest";
 export { DatasetUpdate } from "./DatasetUpdate";
 export { DatasetIdentifier } from "./DatasetIdentifier";
 export { DatasetItemsDelete } from "./DatasetItemsDelete";
