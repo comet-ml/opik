@@ -9,7 +9,8 @@ export type AlertTriggerWriteEventType =
     | "prompt:created"
     | "prompt:committed"
     | "trace:guardrails_triggered"
-    | "prompt:deleted";
+    | "prompt:deleted"
+    | "experiment:finished";
 export const AlertTriggerWriteEventType = {
     TraceErrors: "trace:errors",
     TraceFeedbackScore: "trace:feedback_score",
@@ -18,4 +19,5 @@ export const AlertTriggerWriteEventType = {
     PromptCommitted: "prompt:committed",
     TraceGuardrailsTriggered: "trace:guardrails_triggered",
     PromptDeleted: "prompt:deleted",
+    ExperimentFinished: "experiment:finished",
 } as const;

@@ -11,6 +11,7 @@ AlertTriggerEventType = typing.Union[
         "prompt:committed",
         "trace:guardrails_triggered",
         "prompt:deleted",
+        "experiment:finished",
     ],
     typing.Any,
 ]

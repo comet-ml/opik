@@ -415,6 +415,32 @@ class ExperimentsClient:
         )
         return _response.data
 
+    def finish_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Finish experiments and trigger alert events
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.finish_experiments(ids=['ids'], )
+        """
+        _response = self._raw_client.finish_experiments(ids=ids, request_options=request_options)
+        return _response.data
+
     def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentPublic:
@@ -1000,6 +1026,35 @@ class AsyncExperimentsClient:
         _response = await self._raw_client.find_experiment_groups_aggregations(
             groups=groups, types=types, name=name, filters=filters, request_options=request_options
         )
+        return _response.data
+
+    async def finish_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Finish experiments and trigger alert events
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.finish_experiments(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.finish_experiments(ids=ids, request_options=request_options)
         return _response.data
 
     async def get_experiment_by_id(
