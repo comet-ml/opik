@@ -11,6 +11,8 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.LlmProviderApiKeyDAO;
@@ -92,7 +94,14 @@ class LlmProviderApiKeyResourceTest {
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(List.of(
+                                new CustomConfig("serviceToggles.isMultiCustomProvidersSupported", "true")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();

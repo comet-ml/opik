@@ -377,6 +377,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
+  # Default: false
+  # Description: Whether or not multiple custom LLM providers are supported. When false, only one custom provider per workspace is allowed (legacy behavior)
+  isMultiCustomProvidersSupported: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

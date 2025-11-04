@@ -518,6 +518,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not multiple custom LLM providers are supported. When false, only one custom provider per workspace is allowed (legacy behavior)
+  isMultiCustomProvidersSupported: ${TOGGLE_MULTI_CUSTOM_PROVIDERS_SUPPORTED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
