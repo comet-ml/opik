@@ -7591,8 +7591,12 @@ class TracesResourceTest {
             assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
         }
 
-        // Prepare expected trace with providers injected into metadata (as backend does)
-        var preparedExpectedTrace = TraceAssertions.prepareTraceForAssertion(expectedTrace);
+        // Prepare expected trace with actual providers injected into metadata
+        // We need to use actual providers because they're calculated from spans in the database
+        var expectedWithActualProviders = expectedTrace.toBuilder()
+                .providers(actualTrace.providers())
+                .build();
+        var preparedExpectedTrace = TraceAssertions.prepareTraceForAssertion(expectedWithActualProviders);
         TraceAssertions.assertTraces(List.of(actualTrace), List.of(preparedExpectedTrace), USER);
 
         return actualTrace;
