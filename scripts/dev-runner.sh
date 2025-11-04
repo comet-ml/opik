@@ -183,10 +183,18 @@ lint_frontend() {
     log_info "Linting frontend..."
     cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
 
-    if npm run lint; then
+    if npm run lint:fix; then
         log_success "Frontend linting completed successfully"
     else
         log_error "Frontend linting failed"
+        exit 1
+    fi
+
+    log_info "Typechecking frontend..."
+    if npm run typecheck; then
+        log_success "Frontend typechecking completed successfully"
+    else
+        log_error "Frontend typechecking failed"
         exit 1
     fi
 }

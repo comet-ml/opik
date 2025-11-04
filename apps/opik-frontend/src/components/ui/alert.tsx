@@ -41,8 +41,8 @@ Alert.displayName = "Alert";
 const alertTitleVariants = cva("font-medium text-foreground-secondary", {
   variants: {
     size: {
-      md: "mb-1 h-4 leading-5",
-      sm: "mb-0.5 h-3.5 leading-4",
+      md: "mb-2 h-4 leading-5",
+      sm: "mb-2 h-3.5 leading-4",
     },
   },
   defaultVariants: {
