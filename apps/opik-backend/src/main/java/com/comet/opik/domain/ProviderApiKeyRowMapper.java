@@ -17,7 +17,6 @@ import java.util.UUID;
  */
 public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
 
-    private static final String NULL_SENTINEL = "__NULL__";
     private final MapFlatArgumentFactory mapMapper = new MapFlatArgumentFactory();
 
     @Override
@@ -25,7 +24,7 @@ public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
         String providerName = rs.getString("provider_name");
 
         // Convert sentinel value to null
-        if (NULL_SENTINEL.equals(providerName)) {
+        if (LlmProviderApiKeyDAO.NULL_SENTINEL.equals(providerName)) {
             providerName = null;
         }
 
