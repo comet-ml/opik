@@ -105,9 +105,6 @@ def evaluate(
 
         trial_count: number of times to run the task and evaluate the task output for every dataset item.
     """
-    if scoring_metrics is None:
-        scoring_metrics = []
-
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
@@ -123,16 +120,11 @@ def evaluate(
     )
 
     # wrap scoring functions if any
-    if scoring_functions:
-        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
-            scoring_functions, project_name=project_name
-        )
-        if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
-        else:
-            scoring_metrics = function_metrics
-
-    scoring_metrics = scoring_metrics if scoring_metrics else []
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
 
     return _evaluate_task(
         client=client,
@@ -287,16 +279,11 @@ def evaluate_experiment(
     )
 
     # wrap scoring functions if any
-    if scoring_functions:
-        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
-            scoring_functions, project_name=project_name
-        )
-        if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
-        else:
-            scoring_metrics = function_metrics
-
-    scoring_metrics = scoring_metrics if scoring_metrics else []
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
 
     with asyncio_support.async_http_connections_expire_immediately():
         evaluation_engine = engine.EvaluationEngine(
@@ -473,9 +460,6 @@ def evaluate_prompt(
         if "model" not in experiment_config:
             experiment_config["model"] = opik_model.model_name
 
-    if scoring_metrics is None:
-        scoring_metrics = []
-
     client = opik_client.get_client_cached()
 
     prompts = [prompt] if prompt else None
@@ -487,16 +471,12 @@ def evaluate_prompt(
         prompts=prompts,
     )
 
-    if scoring_functions:
-        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
-            scoring_functions, project_name=project_name
-        )
-        if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
-        else:
-            scoring_metrics = function_metrics
-
-    scoring_metrics = scoring_metrics if scoring_metrics else []
+    # wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
 
     start_time = time.time()
 
@@ -657,3 +637,20 @@ def evaluate_optimization_trial(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
     )
+
+
+def _wrap_scoring_functions(
+    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    project_name: Optional[str] = None,
+) -> List[base_metric.BaseMetric]:
+    if scoring_functions:
+        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
+            scoring_functions, project_name=project_name
+        )
+        if scoring_metrics:
+            scoring_metrics.extend(function_metrics)
+        else:
+            scoring_metrics = function_metrics
+
+    return scoring_metrics if scoring_metrics else []

@@ -27,10 +27,8 @@ def llm_task(item: Dict[str, Any]):
     )
 
 
-def equals_scoring_function(
-    scoring_inputs: Dict[str, Any], task_outputs: Dict[str, Any]
-):
-    reference = scoring_inputs["expected_model_output"]["output"]
+def equals_scoring_function(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
+    reference = dataset_item["expected_model_output"]["output"]
     prediction = task_outputs["output"]
     if reference == prediction:
         value = 1.0
@@ -55,13 +53,13 @@ def task_span_name_scoring_function(
 
 
 def task_span_name_and_equals_scoring_function(
-    scoring_inputs: Dict[str, Any],
+    dataset_item: Dict[str, Any],
     task_outputs: Dict[str, Any],
     task_span: models.SpanModel,
 ) -> score_result.ScoreResult:
     score = 1.0 if task_span.name == "llm_task" else 0.0
 
-    reference = scoring_inputs["expected_model_output"]["output"]
+    reference = dataset_item["expected_model_output"]["output"]
     prediction = task_outputs["output"]
     if reference == prediction:
         value = 1.0
@@ -224,7 +222,7 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
 ):
     # Tests that mix of ordinary scoring functions and task span scoring functions work correctly.
     # Also, it checks that task span scoring functions can access:
-    # task span, dataset item content (scoring_inputs), and task output (task_outputs) parameters.
+    # task span, dataset item content (dataset_item), and task output (task_outputs) parameters.
     dataset = opik_client.create_dataset(dataset_name)
     dataset.insert(DATASET_ITEMS)
 

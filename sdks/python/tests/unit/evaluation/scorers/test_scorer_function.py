@@ -10,7 +10,7 @@ def test_validate_scorer_function_valid_function():
     """Test that a valid scorer function passes validation"""
 
     def valid_scorer(
-        scoring_inputs: Dict[str, Any], task_outputs: Dict[str, Any]
+        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -22,7 +22,7 @@ def test_validate_scorer_function_valid_with_extra_params():
     """Test that a function with required params plus extras passes validation"""
 
     def valid_scorer_with_extras(
-        scoring_inputs: Dict[str, Any],
+        dataset_item: Dict[str, Any],
         task_outputs: Dict[str, Any],
         extra_param: str = "default",
     ) -> score_result.ScoreResult:
@@ -51,7 +51,7 @@ def test_validate_scorer_function_no_parameters__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
+        match="scorer_function must have either both 'dataset_item' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(no_params)
 
@@ -64,33 +64,33 @@ def test_validate_scorer_function_wrong_parameter_names__raises_error():
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
+        match="scorer_function must have either both 'dataset_item' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(wrong_names)
 
 
-def test_validate_scorer_function_missing_scoring_inputs__raises_error():
-    """Test that function missing scoring_inputs parameter raises ValueError"""
+def test_validate_scorer_function_missing_dataset_item__raises_error():
+    """Test that function missing dataset_item parameter raises ValueError"""
 
-    def missing_scoring_inputs(task_outputs: Dict[str, Any], other_param: str):
+    def missing_dataset_item(task_outputs: Dict[str, Any], other_param: str):
         return score_result.ScoreResult(name="test", value=1.0)
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
+        match="scorer_function must have either both 'dataset_item' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
-        validate_scorer_function(missing_scoring_inputs)
+        validate_scorer_function(missing_dataset_item)
 
 
 def test_validate_scorer_function_missing_task_outputs__raises_error():
     """Test that function missing task_outputs parameter raises ValueError"""
 
-    def missing_task_outputs(scoring_inputs: Dict[str, Any], other_param: str):
+    def missing_task_outputs(dataset_item: Dict[str, Any], other_param: str):
         return score_result.ScoreResult(name="test", value=1.0)
 
     with pytest.raises(
         ValueError,
-        match="scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters or at least one 'task_span' parameter",
+        match="scorer_function must have either both 'dataset_item' and 'task_outputs' parameters or at least one 'task_span' parameter",
     ):
         validate_scorer_function(missing_task_outputs)
 
@@ -99,7 +99,7 @@ def test_validate_scorer_function_with_kwargs():
     """Test that function with **kwargs passes validation"""
 
     def scorer_with_kwargs(
-        scoring_inputs: Dict[str, Any], task_outputs: Dict[str, Any], **kwargs
+        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any], **kwargs
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -111,7 +111,7 @@ def test_validate_scorer_function_with_args_and_kwargs():
     """Test that function with *args and **kwargs passes validation"""
 
     def scorer_with_args_kwargs(
-        scoring_inputs: Dict[str, Any], task_outputs: Dict[str, Any], *args, **kwargs
+        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any], *args, **kwargs
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -120,7 +120,7 @@ def test_validate_scorer_function_with_args_and_kwargs():
 
 
 def test_validate_scorer_function_with_task_span_only():
-    """Test that function with only task_span parameter passes validation"""
+    """Test that function with only the task_span parameter passes validation"""
 
     def scorer_with_task_span_only(
         task_span: Optional[models.SpanModel],
@@ -145,10 +145,10 @@ def test_validate_scorer_function_with_task_span_and_other_params():
 
 
 def test_validate_scorer_function_with_all_params():
-    """Test that function with all parameters (scoring_inputs, task_outputs, task_span) passes validation"""
+    """Test that function with all parameters (dataset_item, task_outputs, task_span) passes validation"""
 
     def scorer_with_all_params(
-        scoring_inputs: Dict[str, Any],
+        dataset_item: Dict[str, Any],
         task_outputs: Dict[str, Any],
         task_span: Optional[models.SpanModel] = None,
     ) -> score_result.ScoreResult:

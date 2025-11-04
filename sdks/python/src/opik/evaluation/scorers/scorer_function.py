@@ -11,13 +11,13 @@ class ScorerFunctionProtocol(Protocol):
 
     This protocol serves as a contract for implementing scorer functions used in
     evaluating tasks. A scorer function adhering to this protocol should take
-    scoring inputs, task outputs, and optionally a task span model as input
+    dataset item data, task outputs, and optionally a task span model as input
     parameters and return a scoring result.
     """
 
     def __call__(
         self,
-        scoring_inputs: Dict[str, Any],
+        dataset_item: Dict[str, Any],
         task_outputs: Dict[str, Any],
         task_span: Optional[models.SpanModel] = None,
     ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]: ...
@@ -26,7 +26,7 @@ class ScorerFunctionProtocol(Protocol):
 ScorerFunction = ScorerFunctionProtocol
 
 
-EXPECTED_SCORER_FUNCTION_PARAMETERS = ["scoring_inputs", "task_outputs"]
+EXPECTED_SCORER_FUNCTION_PARAMETERS = ["dataset_item", "task_outputs"]
 
 
 def validate_scorer_function(scorer_function: ScorerFunction) -> None:
@@ -36,17 +36,17 @@ def validate_scorer_function(scorer_function: ScorerFunction) -> None:
     parameters = inspect.signature(scorer_function).parameters
     names = set(parameters.keys())
 
-    # Check if it has both scoring_inputs and task_outputs
-    has_scoring_inputs_and_task_outputs = all(
+    # Check if it has both dataset_item and task_outputs
+    has_dataset_item_and_task_outputs = all(
         param in names for param in EXPECTED_SCORER_FUNCTION_PARAMETERS
     )
 
     # Check if it has at least one task_span parameter
     has_task_span = "task_span" in names
 
-    if not (has_scoring_inputs_and_task_outputs or has_task_span):
+    if not (has_dataset_item_and_task_outputs or has_task_span):
         raise ValueError(
-            f"scorer_function must have either both 'scoring_inputs' and 'task_outputs' parameters "
+            f"scorer_function must have either both 'dataset_item' and 'task_outputs' parameters "
             f"or at least one 'task_span' parameter. Found parameters: {list(names)}"
         )
 

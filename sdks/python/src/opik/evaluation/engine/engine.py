@@ -364,13 +364,13 @@ def _scores_by_metrics(
                     task_span := score_kwargs.get(EVALUATION_SPAN_PARAMETER_NAME)
                 ) is not None:
                     result = metric.score(
-                        scoring_inputs=test_case_.dataset_item_content,
+                        dataset_item=test_case_.dataset_item_content,
                         task_outputs=test_case_.task_output,
                         task_span=task_span,
                     )
                 else:
                     result = metric.score(
-                        scoring_inputs=test_case_.dataset_item_content,
+                        dataset_item=test_case_.dataset_item_content,
                         task_outputs=test_case_.task_output,
                     )
             else:

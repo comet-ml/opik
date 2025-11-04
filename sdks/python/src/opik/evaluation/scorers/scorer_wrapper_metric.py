@@ -23,11 +23,11 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         ValueError if the scorer function is invalid.
 
     Example:
-        >>> def my_scorer(scoring_inputs: Dict[str, Any], task_outputs: Dict[str, Any]) -> score_result.ScoreResult:
+        >>> def my_scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]) -> score_result.ScoreResult:
         >>>     return score_result.ScoreResult(name="my_metric", value=1.0)
         >>>
         >>> wrapper = ScorerWrapperMetric(scorer_function=my_scorer, name="wrapped_scorer")
-        >>> result = wrapper.score(scoring_inputs={"text": "hello"}, task_outputs={"text": "hello"})
+        >>> result = wrapper.score(dataset_item={"text": "hello"}, task_outputs={"text": "hello"})
     """
 
     def __init__(
@@ -45,7 +45,7 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
 
     def score(
         self,
-        scoring_inputs: Dict[str, Any],
+        dataset_item: Dict[str, Any],
         task_outputs: Dict[str, Any],
         **kwargs: Any,
     ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
@@ -53,14 +53,14 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         Score using the wrapped ScorerFunction.
 
         Args:
-            scoring_inputs: The expected/reference dictionary to score against - can be the dataset item content
+            dataset_item: The dataset item data to score against
             task_outputs: The output dictionary to be scored - can be the output of LLM task, etc.
             **kwargs: Additional keyword arguments (ignored by the scorer function)
 
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        return self.scorer(scoring_inputs=scoring_inputs, task_outputs=task_outputs)
+        return self.scorer(dataset_item=dataset_item, task_outputs=task_outputs)
 
 
 class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
@@ -77,7 +77,7 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
 
     def score(
         self,
-        scoring_inputs: Dict[str, Any],
+        dataset_item: Dict[str, Any],
         task_outputs: Dict[str, Any],
         task_span: Optional[models.SpanModel] = None,
         **kwargs: Any,
@@ -86,7 +86,7 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         Score using the wrapped ScorerFunction.
 
         Args:
-            scoring_inputs: The expected/reference dictionary to score against - can be the dataset item content
+            dataset_item: The dataset item data to score against
             task_outputs: The output dictionary to be scored - can be the output of LLM task, etc.
             task_span: The collected task span data.
             **kwargs: Additional keyword arguments (ignored by the scorer function)
@@ -98,12 +98,12 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
             self.scorer
         ):
             return self.scorer(
-                scoring_inputs=scoring_inputs,
+                dataset_item=dataset_item,
                 task_outputs=task_outputs,
                 task_span=task_span,
             )
 
-        return self.scorer(scoring_inputs=scoring_inputs, task_outputs=task_outputs)
+        return self.scorer(dataset_item=dataset_item, task_outputs=task_outputs)
 
 
 def _scorer_name(scorer: Callable) -> str:
