@@ -577,9 +577,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .subscribeOn(consumerScheduler)
                 .map(pendingResult -> {
                     if (pendingResult != null && !pendingResult.isEmpty()) {
-                        var pendingEntry = pendingResult.get(messageId);
-                        if (pendingEntry != null) {
-                            return pendingEntry.getLastTimeDelivered();
+                        // Get the first (and only) entry from the list
+                        var entry = pendingResult.get(0);
+                        if (entry != null) {
+                            return entry.getLastTimeDelivered();
                         }
                     }
                     return 0L;
