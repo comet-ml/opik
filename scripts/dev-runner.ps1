@@ -310,13 +310,24 @@ function Invoke-FrontendLint {
     Push-Location $script:FRONTEND_DIR
     
     try {
-        npm run lint
+        npm run lint:fix
         
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "Frontend linting completed successfully"
         }
         else {
             Write-LogError "Frontend linting failed"
+            exit 1
+        }
+        
+        Write-LogInfo "Typechecking frontend..."
+        npm run typecheck
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-LogSuccess "Frontend typechecking completed successfully"
+        }
+        else {
+            Write-LogError "Frontend typechecking failed"
             exit 1
         }
     }
