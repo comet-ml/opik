@@ -4,7 +4,6 @@ Requires `pip install ez-mcp-tools --upgrade`
 
 from typing import Any
 
-import opik
 from opik_optimizer import FewShotBayesianOptimizer
 
 from opik.evaluation.metrics import LevenshteinRatio
