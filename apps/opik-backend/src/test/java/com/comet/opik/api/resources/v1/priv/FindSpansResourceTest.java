@@ -31,6 +31,7 @@ import com.comet.opik.api.resources.utils.spans.StatsTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -53,6 +54,7 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -4141,6 +4143,167 @@ class FindSpansResourceTest {
         }
         SpanAssertions.assertSpan(List.of(actualSpan), List.of(expectedSpan), USER);
         return actualSpan;
+    }
+
+    @Nested
+    @DisplayName("Get Spans With Time Filtering:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetSpansWithTimeFilteringTests {
+
+        private final StatsTestAssertion statsTestAssertion = new StatsTestAssertion(spanResourceClient);
+        private final SpansTestAssertion spansTestAssertion = new SpansTestAssertion(spanResourceClient, USER);
+        private final SpanStreamTestAssertion spanStreamTestAssertion = new SpanStreamTestAssertion(spanResourceClient,
+                USER);
+
+        private Stream<Arguments> provideBoundaryScenarios() {
+            return Stream.of(
+                    Arguments.of("/spans/stats", statsTestAssertion, Comparator.comparing(Span::id).reversed()),
+                    Arguments.of("/spans", spansTestAssertion,
+                            Comparator.comparing(Span::traceId).thenComparing(Span::parentSpanId)
+                                    .thenComparing(Span::id).reversed()),
+                    Arguments.of("/spans/search", spanStreamTestAssertion, Comparator.comparing(Span::id).reversed()));
+        }
+
+        private Span createSpanWithTimestamp(String projectName, Instant timestamp) {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(generateUUIDForTimestamp(timestamp))
+                    .projectName(projectName)
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+        }
+
+        @ParameterizedTest
+        @DisplayName("filter spans by UUID creation time - includes spans at lower bound, upper bound, and between")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenIncludeSpansWithinBounds(
+                String endpoint, SpanPageTestAssertion testAssertion, Comparator<Span> comparator) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
+            Instant upperBound = baseTime;
+
+            // Create spans with UUIDs at specific boundary times
+            List<Span> allSpans = new ArrayList<>();
+            allSpans.add(createSpanWithTimestamp(projectName, lowerBound));
+            allSpans.add(createSpanWithTimestamp(projectName, upperBound));
+            allSpans.add(createSpanWithTimestamp(projectName, lowerBound.plus(Duration.ofMinutes(5))));
+
+            spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+            var queryParams = Map.of(
+                    "from_time", lowerBound.toString(),
+                    "to_time", upperBound.toString());
+
+            // Clear projectName from spans since API returns projectName=null
+            allSpans = allSpans.stream().map(s -> s.toBuilder().projectName(null).build()).toList();
+
+            // Sort by id descending to match API response order
+            allSpans = allSpans.stream()
+                    .sorted(comparator)
+                    .toList();
+
+            var values = testAssertion.transformTestParams(allSpans, allSpans, List.of());
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), List.of(), queryParams);
+        }
+
+        @ParameterizedTest
+        @DisplayName("filter spans by UUID creation time - excludes spans outside bounds")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenExcludeSpansOutsideBounds(
+                String endpoint, SpanPageTestAssertion testAssertion, Comparator<Span> comparator) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
+            Instant upperBound = baseTime;
+
+            // Create spans: 3 within bounds, 2 outside bounds
+            List<Span> allSpans = new ArrayList<>();
+
+            // Within bounds - indices 0, 1, 2
+            allSpans.add(createSpanWithTimestamp(projectName, lowerBound));
+            allSpans.add(createSpanWithTimestamp(projectName, upperBound));
+            allSpans.add(createSpanWithTimestamp(projectName, lowerBound.plus(Duration.ofMinutes(1))));
+
+            // Outside bounds - indices 3, 4
+            allSpans.add(createSpanWithTimestamp(projectName, lowerBound.minus(Duration.ofMinutes(1))));
+            allSpans.add(createSpanWithTimestamp(projectName, upperBound.plus(Duration.ofMinutes(1))));
+
+            spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+            var queryParams = Map.of(
+                    "from_time", lowerBound.toString(),
+                    "to_time", upperBound.toString());
+
+            // Expected: indices 0, 1, 2 (within bounds)
+            var expectedSpans = allSpans.subList(0, 3).stream().map(s -> s.toBuilder().projectName(null).build())
+                    .toList();
+            var unexpectedSpans = allSpans.subList(3, 5).stream().map(s -> s.toBuilder().projectName(null).build())
+                    .toList();
+
+            // Sort expected spans by id descending to match API response order
+
+            expectedSpans = expectedSpans.stream()
+                    .sorted(comparator)
+                    .toList();
+
+            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), List.of(), queryParams);
+        }
+
+        @ParameterizedTest
+        @DisplayName("time filtering requires both from_time and to_time parameters")
+        @ValueSource(strings = {"/spans/stats", "/spans", "/spans/search"})
+        void whenOnlyFromTimeProvided_thenReturnBadRequest(String endpoint) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant now = Instant.now();
+
+            String url = URL_TEMPLATE.formatted(baseURI);
+            if ("/search".equals(endpoint)) {
+                url += "/search";
+            } else if ("/stats".equals(endpoint)) {
+                url += "/stats";
+            }
+
+            try (var actualResponse = client.target(url)
+                    .queryParam("project_name", projectName)
+                    .queryParam("from_time", now.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        private UUID generateUUIDForTimestamp(Instant timestamp) {
+            byte[] zeroBytes = new byte[8];
+            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes, timestamp.toEpochMilli());
+        }
     }
 
 }
