@@ -781,6 +781,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -995,6 +996,7 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
@@ -1412,6 +1414,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -2892,6 +2895,13 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
+
+        // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> {
+                    template.add("uuid_from_time", uuid_from_time);
+                    template.add("uuid_to_time", traceSearchCriteria.uuidToTime());
+                });
         return template;
     }
 
@@ -2907,6 +2917,12 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        if (traceSearchCriteria.uuidFromTime() != null && traceSearchCriteria.uuidToTime() != null) {
+            statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
+            statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
+        }
     }
 
     @Override
