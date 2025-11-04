@@ -5886,9 +5886,8 @@ class SpansResourceTest {
         } else {
             assertThat(actualSpan.projectId()).isEqualTo(expectedProjectId);
         }
-        // Prepare expected span with provider injected into metadata (as backend does)
-        var preparedExpectedSpan = SpanAssertions.prepareSpanForAssertion(expectedSpan);
-        SpanAssertions.assertSpan(List.of(actualSpan), List.of(preparedExpectedSpan), USER);
+        // SpanAssertions.assertSpan now automatically handles provider injection
+        SpanAssertions.assertSpan(List.of(actualSpan), List.of(expectedSpan), USER);
         return actualSpan;
     }
 
