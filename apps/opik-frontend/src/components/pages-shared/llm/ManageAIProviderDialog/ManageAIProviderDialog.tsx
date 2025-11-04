@@ -269,7 +269,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         !Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE));
 
     if (isCustomProvider) {
-      return <CustomProviderDetails form={form} />;
+      return <CustomProviderDetails form={form} isEdit={isEdit} />;
     }
 
     return (
