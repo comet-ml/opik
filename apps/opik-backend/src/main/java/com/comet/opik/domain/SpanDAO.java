@@ -900,6 +900,7 @@ class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1041,6 +1042,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1248,6 +1250,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -2030,6 +2033,12 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        if (spanSearchCriteria.uuidFromTime() != null) {
+            template.add("uuid_from_time", spanSearchCriteria.uuidFromTime());
+            template.add("uuid_to_time", spanSearchCriteria.uuidToTime());
+        }
         return template;
     }
 
@@ -2046,6 +2055,13 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        Optional.ofNullable(spanSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> {
+                    statement.bind("uuid_from_time", uuid_from_time);
+                    statement.bind("uuid_to_time", spanSearchCriteria.uuidToTime());
+                });
     }
 
     @WithSpan
