@@ -34,7 +34,7 @@ public class SpanAssertions {
      * @param span the span to prepare
      * @return a new span with provider injected into metadata if provider is present
      */
-    public static Span prepareSpanForAssertion(Span span) {
+    private static Span prepareSpanForAssertion(Span span) {
         if (span.provider() == null || span.provider().isBlank()) {
             return span;
         }
@@ -53,7 +53,7 @@ public class SpanAssertions {
      * @param spans the spans to prepare
      * @return a new list of spans with provider injected into metadata where applicable
      */
-    public static List<Span> prepareSpansForAssertion(List<Span> spans) {
+    private static List<Span> prepareSpansForAssertion(List<Span> spans) {
         return spans.stream()
                 .map(SpanAssertions::prepareSpanForAssertion)
                 .toList();

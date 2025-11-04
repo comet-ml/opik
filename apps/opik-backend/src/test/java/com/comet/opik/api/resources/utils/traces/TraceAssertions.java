@@ -40,7 +40,7 @@ public class TraceAssertions {
      * @param trace the trace to prepare
      * @return a new trace with providers injected into metadata if providers are present
      */
-    public static Trace prepareTraceForAssertion(Trace trace) {
+    private static Trace prepareTraceForAssertion(Trace trace) {
         if (trace.providers() == null || trace.providers().isEmpty()) {
             return trace;
         }
@@ -59,7 +59,7 @@ public class TraceAssertions {
      * @param traces the traces to prepare
      * @return a new list of traces with providers injected into metadata where applicable
      */
-    public static List<Trace> prepareTracesForAssertion(List<Trace> traces) {
+    private static List<Trace> prepareTracesForAssertion(List<Trace> traces) {
         return traces.stream()
                 .map(TraceAssertions::prepareTraceForAssertion)
                 .toList();
