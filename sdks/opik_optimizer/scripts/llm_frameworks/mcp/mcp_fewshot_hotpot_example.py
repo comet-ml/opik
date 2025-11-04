@@ -1,3 +1,7 @@
+"""
+Requires `pip install ez-mcp-tools --upgrade`
+"""
+
 from typing import Any
 
 import opik
@@ -5,11 +9,15 @@ from opik_optimizer import FewShotBayesianOptimizer
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
+from opik_optimizer.datasets import hotpot_300
 
 from mcp_agent import create_mcp_prompt, MCPAgent
 
-client = opik.Opik()
-dataset = client.get_or_create_dataset("comet-mcp-tests-dataset")
+dataset = hotpot_300()
+
+system_prompt = """Answer the question with a direct, accurate response.
+You have access to a Wikipedia search tool - use it to find relevant information before answering.
+Provide concise answers based on the search results."""
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -17,19 +25,11 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-system_prompt = """
-You are an expert AI assistant specializing in machine learning experiment analysis using Comet ML.
-
-You help researchers analyze their experiments from named projects in the default workspace, providing insights, recommendations, and answering questions about their ML experiments.
-
-Always provide actionable insights and concrete recommendations for improving experiment results.
-"""
-
 # Configure the Comet ML MCP server:
 mcp_server = {
-    "name": "comet-mcp",
-    "command": "comet-mcp",
-    "args": [],
+    "name": "wikipedia-mcp",
+    "command": "ez-mcp-server",
+    "args": ["--quiet", "my_tools.py"],
     "env": {},
 }
 prompt = create_mcp_prompt(
