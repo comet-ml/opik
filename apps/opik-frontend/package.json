@@ -20,6 +20,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint src --max-warnings=0 && stylelint src/**/*.{css,scss,sass}",
+    "lint:fix": "eslint src --fix --max-warnings=0 && stylelint src/**/*.{css,scss,sass} --fix",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "e2e": "playwright test && playwright show-report",
     "e2e:debug": "playwright test --debug",
