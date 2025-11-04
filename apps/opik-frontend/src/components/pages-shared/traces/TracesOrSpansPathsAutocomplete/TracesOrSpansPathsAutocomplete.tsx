@@ -11,7 +11,7 @@ import useTracesOrSpansList, {
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import { PROJECTS_SELECT_QUERY_KEY } from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { Project } from "@/types/projects";
-import { PLAYGROUND_PROJECT_NAME } from "@/api/playground/createLogPlaygroundProcessor";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 type CachedProjectsData = { content: Project[]; total: number };
 
