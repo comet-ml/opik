@@ -99,33 +99,30 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
             .join("");
 
           return (
-            <div
+            <IntegrationCard
               key={integration.id}
+              title={integration.title}
+              description={integration.description}
+              icon={
+                <img
+                  alt={integration.title}
+                  src={
+                    themeMode === THEME_MODE.DARK && integration.whiteIcon
+                      ? integration.whiteIcon
+                      : integration.icon
+                  }
+                  className="size-[40px] shrink-0"
+                />
+              }
+              tag={integration.tag}
+              onClick={() => setSelectedIntegrationId(integration.id)}
               id={`integration-card-${integration.id}${
                 source ? `-${source}` : ""
               }`}
               data-fs-element={`IntegrationCard${integrationIdPascalCase}${
                 source ? `-${source}` : ""
               }`}
-            >
-              <IntegrationCard
-                title={integration.title}
-                description={integration.description}
-                icon={
-                  <img
-                    alt={integration.title}
-                    src={
-                      themeMode === THEME_MODE.DARK && integration.whiteIcon
-                        ? integration.whiteIcon
-                        : integration.icon
-                    }
-                    className="size-[40px] shrink-0"
-                  />
-                }
-                tag={integration.tag}
-                onClick={() => setSelectedIntegrationId(integration.id)}
-              />
-            </div>
+            />
           );
         })}
 
@@ -136,10 +133,6 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
           )}
           target="_blank"
           rel="noopener noreferrer"
-          data-fs-element={`IntegrationsOverviewDocsLink${
-            source ? `-${source}` : ""
-          }`}
-          id={`integrations-overview-docs-link${source ? `-${source}` : ""}`}
         >
           <IntegrationCard
             title="View all integrations"
@@ -149,25 +142,26 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
                 <BookOpen className="size-5 text-primary" />
               </div>
             }
+            id={`integrations-overview-docs-link${source ? `-${source}` : ""}`}
+            data-fs-element={`IntegrationsOverviewDocsLink${
+              source ? `-${source}` : ""
+            }`}
           />
         </a>
 
-        <div
+        <IntegrationCard
+          title="Request integration"
+          iconClassName="min-w-0 min-h-10"
+          className="justify-center"
+          icon={<Plus className="size-4" />}
+          onClick={handleRequestIntegration}
           id={`integration-grid-request-integration${
             source ? `-${source}` : ""
           }`}
           data-fs-element={`IntegrationGridRequestIntegration${
             source ? `-${source}` : ""
           }`}
-        >
-          <IntegrationCard
-            title="Request integration"
-            iconClassName="min-w-0 min-h-10"
-            className="justify-center"
-            icon={<Plus className="size-4" />}
-            onClick={handleRequestIntegration}
-          />
-        </div>
+        />
       </div>
 
       <RequestIntegrationDialog

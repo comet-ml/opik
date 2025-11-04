@@ -15,10 +15,6 @@ const IntegrationTypeScriptSDK: React.FC = () => {
       )}
       target="_blank"
       rel="noopener noreferrer"
-      data-fs-element={`IntegrationTypeScriptSDKCard${
-        source ? `-${source}` : ""
-      }`}
-      id={`integration-typescript-sdk-card${source ? `-${source}` : ""}`}
     >
       <IntegrationCard
         title="TypeScript SDK"
@@ -28,6 +24,10 @@ const IntegrationTypeScriptSDK: React.FC = () => {
           <img alt="TypeScript" src={tsLogo} className="size-[32px] shrink-0" />
         }
         tag="New"
+        id={`integration-typescript-sdk-card${source ? `-${source}` : ""}`}
+        data-fs-element={`IntegrationTypeScriptSDKCard${
+          source ? `-${source}` : ""
+        }`}
       />
     </a>
   );
