@@ -49,7 +49,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private static final String BUSYGROUP = "BUSYGROUP";
 
     /**
-     * Non-retryable exceptions: programming errors and validation failures that won't succeed on retry.
+     * Non-retryable: programming and validation exceptions that won't succeed on retry.
      */
     private static final Set<Class<? extends RuntimeException>> NON_RETRYABLE_EXCEPTIONS = Set.of(
             ArithmeticException.class,
@@ -501,18 +501,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * Provide a particular implementation for processing the event.
      * <p>
-     * Exception handling semantics:
-     * <ul>
-     *   <li><b>Retryable exceptions</b>: Transient errors that may succeed on retry, such as:
-     *     {@link java.io.IOException}, {@link java.util.concurrent.TimeoutException}, network errors,
-     *     temporary service unavailability. Messages with retryable errors will be left in pending state
-     *     and retried up to {@code maxRetries} times before being removed.</li>
-     *   <li><b>Non-retryable exceptions</b>: Programming errors or validation errors that won't succeed on retry,
-     *     such as: {@link IllegalArgumentException}, {@link NullPointerException}, {@link IllegalStateException},
-     *     {@link UnsupportedOperationException}. Messages with non-retryable errors are immediately removed
-     *     from the stream without retrying.</li>
-     *   <li><b>Unknown exceptions</b>: Default to retryable for safety.</li>
-     * </ul>
+     * Exception handling: Exceptions in {@link #NON_RETRYABLE_EXCEPTIONS} are immediately removed from the stream.
+     * All other exceptions are retried up to {@code maxRetries} times before being removed.
      *
      * @param message a Redis message
      */
