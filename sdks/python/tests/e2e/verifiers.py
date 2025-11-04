@@ -29,7 +29,7 @@ OutputType = InputType
 def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
     if instance is None:
         return None
-    
+
     if hasattr(instance, "model_dump"):
         return instance.model_dump()
 
