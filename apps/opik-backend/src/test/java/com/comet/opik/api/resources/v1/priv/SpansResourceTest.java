@@ -171,7 +171,8 @@ class SpansResourceTest {
     private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(redisContainer, mySqlContainer, clickHouseContainer, zookeeperContainer, minIOContainer).join();
+        Startables.deepStart(redisContainer, mySqlContainer, clickHouseContainer, zookeeperContainer, minIOContainer)
+                .join();
         String minioUrl = "http://%s:%d".formatted(minIOContainer.getHost(), minIOContainer.getMappedPort(9000));
 
         wireMock = WireMockUtils.startWireMock();
@@ -857,7 +858,8 @@ class SpansResourceTest {
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().projectName(project.name()).build();
             spanResourceClient.createSpan(span, apiKey, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/stats")
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("stats")
                     .queryParam("project_name", span.projectName())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
@@ -890,7 +892,8 @@ class SpansResourceTest {
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().projectName(project.name()).build();
             spanResourceClient.createSpan(span, apiKey, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/feedback-scores/names")
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("feedback-scores/names")
                     .queryParam("project_id", projectId)
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
@@ -1038,7 +1041,6 @@ class SpansResourceTest {
         AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
                 USER);
     }
-
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1239,10 +1241,11 @@ class SpansResourceTest {
         }
 
         private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status,
-                                                 String errorMessage) {
+                String errorMessage) {
             try (var response = spanResourceClient.createSpan(span, apiKey, workspaceName, status)) {
                 assertThat(response.hasEntity()).isTrue();
-                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors().getFirst())
+                        .isEqualTo(errorMessage);
             }
         }
 
@@ -3664,8 +3667,6 @@ class SpansResourceTest {
                     API_KEY, List.of(), List.of());
         }
     }
-
-
 
     @Nested
     @DisplayName("Get Feedback Score names")
