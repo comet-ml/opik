@@ -223,7 +223,7 @@ def _evaluate_task(
 def evaluate_experiment(
     experiment_name: str,
     scoring_metrics: List[base_metric.BaseMetric],
-    scroring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     scoring_threads: int = 16,
     verbose: int = 1,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
@@ -242,7 +242,7 @@ def evaluate_experiment(
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
 
-        scroring_functions: List of scorer functions to be executed during evaluation.
+        scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
                 • scoring_inputs — a dictionary containing the dataset item content,
@@ -283,9 +283,9 @@ def evaluate_experiment(
     )
 
     # wrap scoring functions if any
-    if scroring_functions:
+    if scoring_functions:
         function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
-            scroring_functions, project_name=project_name
+            scoring_functions, project_name=project_name
         )
         if scoring_metrics:
             scoring_metrics.extend(function_metrics)
