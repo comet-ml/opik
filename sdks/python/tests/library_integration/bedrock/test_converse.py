@@ -6,6 +6,7 @@ from opik.integrations.bedrock import track_bedrock
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
+    ANY_LIST,
     ANY_STRING,
     SpanModel,
     TraceModel,
@@ -381,7 +382,7 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
                 name="bedrock_converse_stream",
                 type="llm",
                 input={"messages": messages, "toolConfig": tool_config},
-                output={"output": ANY_DICT},  # May contain text or toolUse
+                output={"output": ANY_DICT},  # Simplified - just verify structure exists
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock"],

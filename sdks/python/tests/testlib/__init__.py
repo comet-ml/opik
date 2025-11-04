@@ -4,7 +4,6 @@ from .assert_helpers import (
     assert_dict_keys_in_list,
     assert_dicts_equal,
     assert_equal,
-    prepare_difference_report,
 )
 from .backend_emulator_message_processor import BackendEmulatorMessageProcessor
 from .models import FeedbackScoreModel, SpanModel, TraceModel
@@ -25,5 +24,4 @@ __all__ = [
     "assert_dicts_equal",
     "assert_equal",
     "patch_environ",
-    "prepare_difference_report",
 ]

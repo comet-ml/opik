@@ -16,6 +16,7 @@ from opik.rest_api.types import (
 from opik.types import ErrorInfoDict, FeedbackScoreDict
 from opik import url_helpers
 from .. import testlib
+from ..testlib import assert_equal
 
 InputType = Union[
     Dict[str, Any],
@@ -62,24 +63,16 @@ def verify_trace(
 
     trace = opik_client.get_trace_content(id=trace_id)
 
-    assert trace.name == name, f"{trace.name} != {name}"
-    assert trace.input == input, testlib.prepare_difference_report(trace.input, input)
-    assert trace.output == output, testlib.prepare_difference_report(
-        trace.output, output
-    )
-    assert trace.metadata == metadata, testlib.prepare_difference_report(
-        trace.metadata, metadata
-    )
+    assert_equal(name, trace.name)
+    assert_equal(input, trace.input)
+    assert_equal(output, trace.output)
+    assert_equal(metadata, trace.metadata)
 
     if tags is not mock.ANY:
-        assert _try_build_set(trace.tags) == _try_build_set(
-            tags
-        ), testlib.prepare_difference_report(trace.tags, tags)
+        assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
 
     if error_info is not mock.ANY:
-        assert (
-            _try_get__dict__(trace.error_info) == error_info
-        ), testlib.prepare_difference_report(trace.error_info, error_info)
+        assert_equal(error_info, _try_get__dict__(trace.error_info))
 
     assert thread_id == trace.thread_id, f"{trace.thread_id} != {thread_id}"
 
@@ -159,24 +152,18 @@ def verify_span(
             span.parent_span_id == parent_span_id
         ), f"{span.parent_span_id} != {parent_span_id}"
 
-    assert span.name == name, f"{span.name} != {name}"
-    assert span.type == type, f"{span.type} != {type}"
+    assert_equal(name, span.name)
+    assert_equal(type, span.type)
 
-    assert span.input == input, testlib.prepare_difference_report(span.input, input)
-    assert span.output == output, testlib.prepare_difference_report(span.output, output)
-    assert span.metadata == metadata, testlib.prepare_difference_report(
-        span.metadata, metadata
-    )
+    assert_equal(input, span.input)
+    assert_equal(output, span.output)
+    assert_equal(metadata, span.metadata)
 
     if tags is not mock.ANY:
-        assert _try_build_set(span.tags) == _try_build_set(
-            tags
-        ), testlib.prepare_difference_report(span.tags, tags)
+        assert_equal(_try_build_set(tags), _try_build_set(span.tags))
 
     if error_info is not mock.ANY:
-        assert (
-            _try_get__dict__(span.error_info) == error_info
-        ), testlib.prepare_difference_report(span.error_info, error_info)
+        assert_equal(error_info, _try_get__dict__(span.error_info))
 
     assert span.model == model, f"{span.model} != {model}"
     assert span.provider == provider, f"{span.provider} != {provider}"
@@ -561,14 +548,10 @@ def verify_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
 ) -> None:
-    assert name == prompt.name, f"{prompt.name} != {name}"
-    assert template == prompt.prompt, testlib.prepare_difference_report(
-        template, prompt.prompt
-    )
-    assert type == prompt.type, f"{type} != {prompt.type}"
-    assert metadata == prompt.metadata, testlib.prepare_difference_report(
-        metadata, prompt.metadata
-    )
+    assert_equal(name, prompt.name)
+    assert_equal(template, prompt.prompt)
+    assert_equal(type, prompt.type)
+    assert_equal(metadata, prompt.metadata)
     assert (
         version_id == prompt.__internal_api__version_id__
     ), f"{prompt.__internal_api__version_id__} != {version_id}"
