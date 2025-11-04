@@ -21,6 +21,7 @@ import org.apache.commons.lang3.EnumUtils;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -116,7 +117,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
                     // For custom LLMs, also match provider_name
                     if (llmProvider == LlmProvider.CUSTOM_LLM) {
-                        return providerName.equals(providerApiKey.providerName());
+                        return Objects.equals(providerName, providerApiKey.providerName());
                     }
 
                     return true;
