@@ -26,7 +26,7 @@ const TruncationConfigPopover: React.FC<TruncationConfigPopoverProps> = ({
     <HoverCard openDelay={200}>
       <HoverCardTrigger asChild>{children}</HoverCardTrigger>
       <HoverCardContent
-        className="w-80 pb-1"
+        className="w-80"
         align="start"
         onClick={(event) => event.stopPropagation()}
       >
