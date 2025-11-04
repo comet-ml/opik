@@ -565,7 +565,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Gets the delivery count for a specific message from Redis pending list.
+     * Gets the delivery count for a specific message from Redis pending list using the non-deprecated API.
      * The delivery count indicates how many times a message has been delivered to consumers.
      * Returns 0 if the message is not in the pending list or on error.
      *
@@ -573,7 +573,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * @return Mono with the delivery count (0 if not found or on error)
      */
     private Mono<Long> getDeliveryCount(StreamMessageId messageId) {
-        return stream.listPending(config.getConsumerGroupName(), messageId, messageId, 1)
+        var args = org.redisson.api.stream.StreamPendingRangeArgs.groupName(config.getConsumerGroupName())
+                .startId(messageId)
+                .endId(messageId)
+                .count(1);
+
+        return stream.listPending(args)
                 .subscribeOn(consumerScheduler)
                 .map(pendingResult -> {
                     if (pendingResult != null && !pendingResult.isEmpty()) {
