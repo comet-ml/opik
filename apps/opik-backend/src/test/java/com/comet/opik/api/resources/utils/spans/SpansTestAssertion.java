@@ -50,11 +50,8 @@ public final class SpansTestAssertion implements SpanPageTestAssertion<Span, Spa
 
         SpanAssertions.assertPage(actualPage, page, expected.size(), expected.size());
 
-        // Prepare expected spans with provider injected into metadata (as backend does)
-        var preparedExpected = SpanAssertions.prepareSpansForAssertion(expected);
-        var preparedUnexpected = SpanAssertions.prepareSpansForAssertion(unexpected);
-
-        assertSpan(actualPage.content(), preparedExpected, preparedUnexpected, userName);
+        // SpanAssertions.assertSpan now automatically handles provider injection
+        assertSpan(actualPage.content(), expected, unexpected, userName);
 
     }
 

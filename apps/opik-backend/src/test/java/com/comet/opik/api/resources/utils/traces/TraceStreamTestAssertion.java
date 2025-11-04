@@ -33,9 +33,8 @@ public final class TraceStreamTestAssertion implements TracePageTestAssertion<Tr
 
         var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
-        // Prepare expected traces with providers injected into metadata
-        var preparedExpected = TraceAssertions.prepareTracesForAssertion(expected);
-        TraceAssertions.assertTraces(actualTraces, preparedExpected, userName);
+        // TraceAssertions.assertTraces now automatically handles provider injection
+        TraceAssertions.assertTraces(actualTraces, expected, userName);
     }
 
     @Override
