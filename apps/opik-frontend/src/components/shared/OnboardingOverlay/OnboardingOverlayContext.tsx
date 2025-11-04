@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { STEP_IDENTIFIERS } from "./constants";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
@@ -41,6 +41,20 @@ export const OnboardingProvider: React.FunctionComponent<
 
   const submitAnswer = useSubmitOnboardingAnswerMutation();
 
+  // Update URL hash when step changes
+  // This allows FullStory and PostHog to distinguish steps by URL
+  useEffect(() => {
+    if (!currentStep || currentStep === ONBOARDING_STEP_FINISHED) return;
+
+    const stepKey = STEP_IDENTIFIERS[currentStep];
+    const hash = `#${stepKey}`;
+
+    // Update URL hash without triggering navigation
+    if (window.location.hash !== hash) {
+      window.history.replaceState(null, "", hash);
+    }
+  }, [currentStep]);
+
   const handleAnswer = (answer: string) => {
     if (!currentStep || currentStep === ONBOARDING_STEP_FINISHED) return;
 
@@ -76,6 +90,7 @@ export const OnboardingProvider: React.FunctionComponent<
       currentStep === ONBOARDING_STEP_FINISHED
     )
       return;
+
     setStep((currentStep - 1) as 1 | 2);
   };
 

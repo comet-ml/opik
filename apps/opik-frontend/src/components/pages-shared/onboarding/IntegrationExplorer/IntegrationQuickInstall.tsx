@@ -26,7 +26,7 @@ const INTEGRATION_ICON_THEME_MAP = {
 } as const;
 
 const IntegrationQuickInstall: React.FC = () => {
-  const { selectedIntegrationId, setSelectedIntegrationId } =
+  const { selectedIntegrationId, setSelectedIntegrationId, source } =
     useIntegrationExplorer();
   const { themeMode } = useTheme();
 
@@ -36,31 +36,38 @@ const IntegrationQuickInstall: React.FC = () => {
 
   return (
     <>
-      <IntegrationCard
-        title="Quick install with AI assistants"
-        description="Set up Opik fast with Cursor, Copilot, Windsurf, or your favorite AI assistant."
-        size="lg"
-        icon={
-          <div className="flex items-center gap-1 pr-2">
-            <img
-              alt="Cursor"
-              src={INTEGRATION_ICON_THEME_MAP.cursor[themeMode]}
-              className="hidden size-[32px] shrink-0 md:block"
-            />
-            <img
-              alt="Copilot"
-              src={INTEGRATION_ICON_THEME_MAP.copilot[themeMode]}
-              className="size-[36px] shrink-0 md:size-[22px]"
-            />
-            <img
-              alt="Windsurf"
-              src={INTEGRATION_ICON_THEME_MAP.windsurf[themeMode]}
-              className="hidden size-[32px] shrink-0 md:block"
-            />
-          </div>
-        }
-        onClick={handleQuickInstallClick}
-      />
+      <div
+        id={`integration-quick-install-card${source ? `-${source}` : ""}`}
+        data-fs-element={`IntegrationQuickInstallCard${
+          source ? `-${source}` : ""
+        }`}
+      >
+        <IntegrationCard
+          title="Quick install with AI assistants"
+          description="Set up Opik fast with Cursor, Copilot, Windsurf, or your favorite AI assistant."
+          size="lg"
+          icon={
+            <div className="flex items-center gap-1 pr-2">
+              <img
+                alt="Cursor"
+                src={INTEGRATION_ICON_THEME_MAP.cursor[themeMode]}
+                className="hidden size-[32px] shrink-0 md:block"
+              />
+              <img
+                alt="Copilot"
+                src={INTEGRATION_ICON_THEME_MAP.copilot[themeMode]}
+                className="size-[36px] shrink-0 md:size-[22px]"
+              />
+              <img
+                alt="Windsurf"
+                src={INTEGRATION_ICON_THEME_MAP.windsurf[themeMode]}
+                className="hidden size-[32px] shrink-0 md:block"
+              />
+            </div>
+          }
+          onClick={handleQuickInstallClick}
+        />
+      </div>
 
       <QuickInstallDialog
         open={selectedIntegrationId === "quick-opik-install"}

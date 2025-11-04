@@ -12,6 +12,8 @@ type CopyButtonProps = {
   successIconTimeout?: number;
   variant?: "default" | "outline" | "ghost";
   className?: string;
+  id?: string;
+  "data-fs-element"?: string;
 } & Pick<ButtonProps, "size">;
 
 const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
@@ -22,6 +24,8 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
   variant = "ghost",
   className,
   size = "icon-sm",
+  id,
+  "data-fs-element": dataFsElement,
 }) => {
   const { toast } = useToast();
   const [showSuccessIcon, setShowSuccessIcon] = useState(false);
@@ -61,6 +65,8 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
           className={className}
           onClick={copyClickHandler}
           tabIndex={-1}
+          id={id}
+          data-fs-element={dataFsElement}
         >
           <Copy />
         </Button>
