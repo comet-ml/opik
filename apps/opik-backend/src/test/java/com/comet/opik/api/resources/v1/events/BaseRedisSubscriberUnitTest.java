@@ -241,7 +241,7 @@ class BaseRedisSubscriberUnitTest {
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
                 if (count == 1) {
-                    return Mono.error(new RuntimeException("Unexpected error"));
+                    return Mono.error(new NullPointerException("Unexpected error"));
                 }
                 return Mono.empty();
             }));
@@ -324,7 +324,7 @@ class BaseRedisSubscriberUnitTest {
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
                 if (count == 2 || count == 3) {
-                    return Mono.error(new RuntimeException("Unexpected error"));
+                    return Mono.error(new NullPointerException("Unexpected error"));
                 }
                 return Mono.empty();
             }));
