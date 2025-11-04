@@ -157,7 +157,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAM
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
-import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
@@ -1888,10 +1887,8 @@ class SpansResourceTest {
                                 .build())
                         .toList();
 
-                // SpanAssertions now automatically handles provider injection
-                assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(expectedSpans);
+                // SpanAssertions.assertSpan now automatically handles provider injection
+                assertSpan(actualSpans, expectedSpans, USER);
             }
         }
 

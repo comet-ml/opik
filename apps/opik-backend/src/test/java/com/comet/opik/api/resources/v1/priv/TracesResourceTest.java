@@ -173,7 +173,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAM
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
-import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB;
 import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
 import static com.comet.opik.api.validation.InRangeValidator.MIN_ANALYTICS_DB;
@@ -5755,9 +5754,8 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
-            assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                    .containsExactlyElementsOf(expectedTraces);
+            // TraceAssertions.assertTraces now automatically handles provider injection
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
         }
 
         @ParameterizedTest
