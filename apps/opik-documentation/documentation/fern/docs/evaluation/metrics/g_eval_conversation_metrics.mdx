@@ -1,0 +1,54 @@
+---
+title: Conversation-level GEval Metrics
+description: How to run GEval-based judges on full conversations
+---
+
+# Conversation-level GEval Metrics
+
+Opik ships adapters that wrap GEval-based judges so they can score entire conversation threads. Each adapter implements `ConversationThreadMetric`, which means you can plug them into `evaluate_threads` or any pipeline that operates on chat transcripts.
+
+> [!NOTE]
+> The adapters keep the underlying judge’s reasoning. For example, `ConversationComplianceRiskMetric` returns the same detailed rationale as `ComplianceRiskJudge`, but scopes the analysis to the conversation context.
+
+| Metric | Description | Underlying Judge |
+| --- | --- | --- |
+| `ConversationComplianceRiskMetric` | Flags non-factual / non-compliant statements in regulated contexts. | `ComplianceRiskJudge` |
+| `ConversationDialogueHelpfulnessMetric` | Scores how helpful the final assistant reply is. | `DialogueHelpfulnessJudge` |
+| `ConversationQARelevanceMetric` | Checks whether the answer directly addresses the user question. | `QARelevanceJudge` |
+| `ConversationSummarizationConsistencyMetric` | Gauges how faithful a summary is to the source discussion. | `SummarizationConsistencyJudge` |
+| `ConversationSummarizationCoherenceMetric` | Evaluates the coherence of a conversation summary. | `SummarizationCoherenceJudge` |
+| `ConversationPromptUncertaintyMetric` | Estimates how ambiguous the prompt is for downstream models. | `PromptUncertaintyJudge` |
+
+## Usage
+
+```python
+from opik.evaluation.metrics import ConversationComplianceRiskMetric
+from opik.evaluation import evaluate_threads
+
+metrics = [ConversationComplianceRiskMetric(model="gpt-4o-mini")]
+
+results = evaluate_threads(
+    dataset="my_threads_dataset",
+    metrics=metrics,
+)
+```
+
+Each adapter accepts the same keyword arguments as the underlying GEval judge (`model`, `track`, `temperature`, `project_name`, etc.).
+
+### ConversationComplianceRiskMetric {#conversationcomplianceriskmetric}
+Flags the latest assistant reply when it strays into non-compliant or risky territory (financial advice, medical guidance, KYC breaches, etc.). The underlying ComplianceRiskJudge reviews the full transcript but concentrates its verdict on the most recent assistant turn, making it ideal for inbox-style workflows where an agent hands off to a human reviewer. Pair it with automated routing so high-risk threads escalate immediately.
+
+### ConversationDialogueHelpfulnessMetric {#conversationdialoguehelpfulnessmetric}
+Answers the question “did the assistant ultimately help the user?” after considering the exchange so far. The judge weighs context handed over by the user, detects if the assistant ignored clarifications, and rewards concrete, actionable replies. Use it to track assistant quality in customer-support or onboarding flows where the last response is the hand-off back to the user.
+
+### ConversationQARelevanceMetric {#conversationqarelevancemetric}
+Scores how well the final answer resolves the user’s question, even if the conversation meandered. It picks up on subtle forms of deflection (“see our docs”) or hallucinated follow-ups. Teams often combine it with retrieval-based guardrails to ensure the agent grounds every final answer in the right snippet.
+
+### ConversationSummarizationConsistencyMetric {#conversationsummarizationconsistencymetric}
+Validates that an auto-generated summary sticks to the facts shared in the transcript. It is particularly useful when you summarise long support chats or sales calls and need confidence that the synopsis won’t fabricate commitments or omit key blockers. Feed it alongside human-written spot checks to prioritise which summaries require review.
+
+### ConversationSummarizationCoherenceMetric {#conversationsummarizationcoherencemetric}
+Looks at the same summary through a writing-quality lens: is it organised, easy to skim, and logically grouped? Combine it with the consistency judge to ensure summaries are both faithful and readable before they populate CRM notes or ticket backlogs.
+
+### ConversationPromptUncertaintyMetric {#conversationpromptuncertaintymetric}
+Pinpoints last-turn prompts that lack critical context (“Can you finish it?”) or contain conflicting instructions. Surfacing these cases lets you proactively ask the user for clarification or enrich the prompt with missing metadata before rerunning expensive evaluations.

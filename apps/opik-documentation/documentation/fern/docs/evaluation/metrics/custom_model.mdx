@@ -6,13 +6,13 @@ toc_max_heading_level: 4
 
 Opik provides a set of LLM as a Judge metrics that are designed to be model-agnostic and can be used with any LLM. In order to achieve this, we use the [LiteLLM library](https://github.com/BerriAI/litellm) to abstract the LLM calls.
 
-By default, Opik will use the `gpt-4o` model. However, you can change this by setting the `model` parameter when initializing your metric to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers):
+By default, Opik will use the `gpt-5-nano` model. However, you can change this by setting the `model` parameter when initializing your metric to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers):
 
 ```python
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination(
-    model="gpt-4-turbo"
+    model="gpt-4o-mini"
 )
 ```
 

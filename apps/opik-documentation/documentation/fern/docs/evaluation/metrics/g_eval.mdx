@@ -2,82 +2,224 @@
 description: Describes Opik's built-in G-Eval metric which is a task agnostic LLM as a Judge metric
 ---
 
-G-Eval is a task agnostic LLM as a Judge metric that allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score. You can learn more about G-Eval in the [original paper](https://arxiv.org/abs/2303.16634).
+G-Eval is a task-agnostic LLM-as-a-judge metric that allows you to specify a task description and evaluation criteria. The model first drafts step-by-step evaluation instructions and then produces a score between 0 and 1. You can learn more about G-Eval in the [original paper](https://arxiv.org/abs/2303.16634).
 
-To use G-Eval, you need to specify just two pieces of information:
+To use G-Eval, supply two pieces of information:
 
-1. A task introduction: This describes the task you want to evaluate
-2. Evaluation criteria: This is a list of criteria that the LLM will use to evaluate the task.
+1. A task introduction describing what should be evaluated.
+2. Evaluation criteria outlining what “good” looks like.
 
-You can then use the `GEval` metric to score your LLM outputs:
+The judge responds with an **integer between 0 and 10**. Opik divides that value by 10 so callers receive a score between 0.0 and 1.0. We recommend packaging the full scenario (prompt, context, answer, etc.) inside a single string and passing it via the `output` argument; any other keyword arguments are ignored by the metric interface.
 
 ```python
 from opik.evaluation.metrics import GEval
 
 metric = GEval(
     task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
-    evaluation_criteria="In provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
+    evaluation_criteria="In the provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
 )
 
-metric.score(
-    output="""
-           OUTPUT: Paris is the capital of France.
-           CONTEXT: France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.
-           """
-)
+payload = """INPUT: What is the capital of France?
+CONTEXT: France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.
+OUTPUT: Paris is the capital of France.
+"""
+
+metric.score(output=payload)
 ```
 
 ## How it works
 
-The way the G-Eval metric works is by first using the task introduction and evaluation criteria to create a set of evaluation steps. These evaluation steps are then combined with the task introduction and evaluation criteria to return a single score.
+G-Eval first expands your task description into a step-by-step Chain of Thought (CoT). This CoT becomes the rubric the judge will follow when scoring the provided answer. The model then evaluates the answer, returning a score in the 0–10 range which Opik normalises to 0–1.
 
-By default, the `gpt-4o` model is used to generate the final score, but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section.
-
-The evaluation steps are generated using the following prompt:
-
-```markdown
-\*\*\* TASK:
-Based on the following task description and evaluation criteria,
-generate a detailed Chain of Thought (CoT) that outlines the necessary Evaluation Steps
-to assess the solution. The CoT should clarify the reasoning process for each step of evaluation.
-
-\*\*\* INPUT:
-
-TASK INTRODUCTION:
-{task_introduction}
-
-EVALUATION CRITERIA:
-{evaluation_criteria}
-
-FINAL SCORE:
-IF THE USER'S SCALE IS DIFFERENT FROM THE 0 TO 10 RANGE, RECALCULATE THE VALUE USING THIS SCALE.
-SCORE VALUE MUST BE AN INTEGER.
-```
-
-The LLM judge generates the final score above by integrating the evaluation steps returned by the prompt with the task
-introduction and the defined evaluation criteria.
-
-```markdown
-\*\*\* TASK INTRODUCTION:
-{task_introduction}
-
-\*\*\* EVALUATION CRITERIA:
-{evaluation_criteria}
-
-{chain_of_thought}
-
-\*\*\* INPUT:
-{input}
-
-\*\*\* OUTPUT:
-NO TEXT, ONLY SCORE
-```
+By default, the `gpt-5-nano` model is used, but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) via the `model` parameter. Learn more in the [custom model guide](/evaluation/metrics/custom_model).
 
 <Note>
-  In order to make the G-Eval metric more robust, we request the top 10 log_probs from the LLM and compute a weighted
-  average of the scores as recommended by the [original paper](https://arxiv.org/abs/2303.16634).
+  To make the metric more robust, Opik requests the top 20 log probabilities from the LLM and computes a weighted average of the scores, as recommended by the original paper. The evaluator always returns an **integer between 0 and 10**; Opik divides that value by 10 before exposing it so callers see numbers in the [0, 1] range. Newer models in the GPT-5 family and other providers may not expose log probabilities, so scores can vary when switching models.
 </Note>
 
+## Built-in G-Eval judges
 
-The score produced by `GEval.score()` and `GEval.ascore()` lies within the range 0 to 1.0. This normalization is achieved by dividing
-the final score from the LLM judge by 10.
+Opik ships opinionated presets for common evaluation needs. Each class inherits from `GEval` and exposes the same constructor parameters (`model`, `track`, `temperature`, etc.).
+
+### Compliance Risk Judge
+Flags statements that may be non-factual, non-compliant, or risky (e.g. finance, healthcare, legal). This judge is useful when you need an automated review step before customer-facing responses are sent, or when auditing historical conversations for policy breaches.
+
+```python title="Compliance example"
+from opik.evaluation.metrics import ComplianceRiskJudge
+
+metric = ComplianceRiskJudge(model="gpt-4o-mini")
+
+payload = """INPUT: Customer asked about wire-transfer reversal policies.
+OUTPUT: Just reverse it whenever the customer asks.
+"""
+
+score = metric.score(output=payload)
+print(score.value, score.reason)
+```
+
+Inspect `score.reason` for granular rationales and route risky cases accordingly. The raw 0–10 judgement is divided by 10 in the returned value.
+
+### Prompt Uncertainty Judge
+`PromptUncertaintyJudge` estimates how ambiguous a user prompt is before it reaches your model. Run it on raw user messages to prioritise agent hand-offs or to warn users when the request is ill-posed.
+
+```python title="Prompt uncertainty"
+from opik.evaluation.metrics import PromptUncertaintyJudge
+
+prompt = "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes."
+
+uncertainty = PromptUncertaintyJudge().score(prompt=prompt)
+print(uncertainty.value)
+```
+
+Use the score to highlight prompts that may confuse downstream models; the judge emits an integer from 0 (best) to 10 (worst) before normalisation.
+
+### Summarization Consistency Judge
+Checks whether a generated summary is faithful to the source material. This is the right choice when a downstream workflow consumes summaries and you need to enforce factual alignment with the source document.
+
+```python title="Summary faithfulness"
+from opik.evaluation.metrics import SummarizationConsistencyJudge
+
+metric = SummarizationConsistencyJudge(model="gpt-4o")
+
+payload = """CONTEXT: ...long article text...
+SUMMARY: The article confirms new safety protocols but misstates the deadline.
+"""
+
+score = metric.score(output=payload)
+print(score.value, score.reason)
+```
+
+Pair this metric with alerts or automated rollbacks when the score drops below a threshold; the evaluator still returns raw integers in 0–10 before Opik scales them.
+
+### Summarization Coherence Judge
+Scores the structure, clarity, and organisation of a summary. Use it when you optimise for human readability or want to catch summaries that are factually right but poorly written.
+
+```python title="Summary coherence"
+from opik.evaluation.metrics import SummarizationCoherenceJudge
+
+metric = SummarizationCoherenceJudge()
+
+score = metric.score(output="""SUMMARY: First... Secondly... Finally...""")
+print(score.value, score.reason)
+```
+
+High scores correlate with summaries that maintain logical ordering and concise transitions between ideas. A perfect 10 becomes 1.0 after Opik normalisation.
+
+### Dialogue Helpfulness Judge
+Examines how helpful an assistant reply is in the context of the preceding dialogue. Helpful for agent tuning or support chat routing where you want to surface conversations that require escalation.
+
+```python title="Dialogue helpfulness"
+from opik.evaluation.metrics import DialogueHelpfulnessJudge
+
+transcript = """USER: How do I reset my password?
+ASSISTANT: Visit settings and click reset.
+USER: I cannot see that option.
+ASSISTANT: Please contact support.
+"""
+
+score = DialogueHelpfulnessJudge().score(output=transcript)
+print(score.value, score.reason)
+```
+
+Low scores typically indicate the assistant ignored prior context or refused to offer actionable steps. The normalised value originates from an integer between 0 and 10.
+
+### QA Relevance Judge
+Determines whether an answer directly addresses the user’s question. Ideal for dataset regression tests where each sample has a clear question/answer pair.
+
+```python title="QA relevance"
+from opik.evaluation.metrics import QARelevanceJudge
+
+metric = QARelevanceJudge()
+
+payload = """QUESTION: What causes rainbows?
+ANSWER: The capital of France is Paris.
+"""
+
+score = metric.score(output=payload)
+print(score.value, score.reason)
+```
+
+Combine with hallucination metrics to distinguish totally off-topic answers from confident but wrong responses; the judge still works on a 0–10 scale internally.
+
+### Agent Task Completion Judge
+Evaluates if an agent fulfilled its assigned high-level task. Works well for long-running workflows where success is defined by end-state rather than a single response.
+
+```python title="Task completion"
+from opik.evaluation.metrics import AgentTaskCompletionJudge
+
+trace_summary = "Agent gathered quotes, compared options, and booked travel."
+score = AgentTaskCompletionJudge().score(output=trace_summary)
+print(score.value, score.reason)
+```
+
+Use the reason text to inspect which sub-goals the judge believed were satisfied; a raw 0–10 verdict is divided by 10 in the returned value.
+
+### Agent Tool Correctness Judge
+Assesses whether an agent invoked tools appropriately and interpreted outputs correctly. Especially useful for production agents integrating external APIs.
+
+```python title="Tool correctness"
+from opik.evaluation.metrics import AgentToolCorrectnessJudge
+
+call_trace = "Tool weather_api called with city='Paris' but response ignored."
+score = AgentToolCorrectnessJudge().score(output=call_trace)
+print(score.value, score.reason)
+```
+
+Lower scores suggest the agent mis-handled tool results or skipped required invocations. Raw values remain in the 0–10 range before normalisation.
+
+### Trajectory Accuracy
+Scores whether an agent’s trajectory (series of states or actions) matches the expected path. Use it to audit reinforcement-learning agents or scripted flows that should follow specific checkpoints.
+
+```python title="Trajectory accuracy"
+from opik.evaluation.metrics import TrajectoryAccuracy
+
+expected = ["start", "search_docs", "summarise", "respond"]
+actual = ["start", "search_docs", "respond"]
+score = TrajectoryAccuracy(expected_path=expected).score(output=actual)
+print(score.value, score.reason)
+```
+
+This metric highlights missing or out-of-order actions so you can tighten guardrails around multi-step agents.
+
+## LLM Juries Judge
+
+`LLMJuriesJudge` is an ensemble wrapper that averages the outputs of multiple judge metrics. This is useful when you want to combine bespoke criteria—e.g. take the mean of hallucination, helpfulness, and compliance scores.
+
+```python
+from opik.evaluation.metrics import LLMJuriesJudge, Hallucination, ComplianceRiskJudge
+
+jury = LLMJuriesJudge([
+    Hallucination(model="gpt-4o-mini"),
+    ComplianceRiskJudge(model="gpt-4o-mini"),
+])
+payload = """INPUT: Summarise compliance requirements for fintech onboarding.
+OUTPUT: No need for KYC; just accept the payment.
+"""
+
+result = jury.score(output=payload)
+print(result.value, result.metadata["judge_scores"])
+```
+
+## Conversation adapters
+
+Need to apply G-Eval-based judges to full conversations? Use the conversation adapters in `opik.evaluation.metrics.conversation.llm_judges.g_eval_wrappers`, exposed via `Conversation*` classes. They focus on the last assistant turn (or full transcript for summaries) and keep the original GEval reasoning.
+
+Refer to [Conversation-level GEval Metrics](/evaluation/metrics/g_eval_conversation_metrics) for available adapters and usage examples.
+
+## Customising models
+
+All GEval-derived metrics expose the `model` parameter so you can switch the underlying LLM. For example:
+
+```python
+from opik.evaluation.metrics import Hallucination
+
+metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+
+payload = """INPUT: What is the capital of France?
+OUTPUT: The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.
+"""
+
+score = metric.score(output=payload)
+```
+
+This functionality relies on LiteLLM. See the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide for a full list of supported providers and model identifiers.

@@ -3,7 +3,7 @@ import os
 import certifi
 import pytest
 
-from opik.evaluation.metrics.conversation.conversational_coherence import (
+from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence import (
     metric as conversational_coherence,
 )
 from ...testlib import assert_helpers
