@@ -79,16 +79,36 @@ public class TraceAssertions {
     public static void assertTraces(List<Trace> actualTraces, List<Trace> expectedTraces, List<Trace> unexpectedTraces,
             String user) {
 
+        // Automatically prepare expected traces with actual providers injected into metadata
+        // We need to use actual providers because they're calculated from spans in the database
+        var preparedExpectedTraces = expectedTraces.stream()
+                .map(expected -> {
+                    var actual = actualTraces.stream()
+                            .filter(a -> a.id().equals(expected.id()))
+                            .findFirst()
+                            .orElse(null);
+                    if (actual == null) {
+                        return prepareTraceForAssertion(expected);
+                    }
+                    // Use actual providers for metadata injection
+                    var expectedWithActualProviders = expected.toBuilder()
+                            .providers(actual.providers())
+                            .build();
+                    return prepareTraceForAssertion(expectedWithActualProviders);
+                })
+                .toList();
+
         assertThat(actualTraces)
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                .containsExactlyElementsOf(expectedTraces);
+                .containsExactlyElementsOf(preparedExpectedTraces);
 
-        assertIgnoredFields(actualTraces, expectedTraces, user);
+        assertIgnoredFields(actualTraces, preparedExpectedTraces, user);
 
         if (!unexpectedTraces.isEmpty()) {
+            var preparedUnexpectedTraces = prepareTracesForAssertion(unexpectedTraces);
             assertThat(actualTraces)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                    .doesNotContainAnyElementsOf(unexpectedTraces);
+                    .doesNotContainAnyElementsOf(preparedUnexpectedTraces);
         }
     }
 

@@ -72,21 +72,41 @@ public class SpanAssertions {
     public static void assertSpan(List<Span> actualSpans, List<Span> expectedSpans, List<Span> unexpectedSpans,
             String userName) {
 
+        // Automatically prepare expected spans with actual provider injected into metadata
+        // We need to use actual provider because it's from the database
+        var preparedExpectedSpans = expectedSpans.stream()
+                .map(expected -> {
+                    var actual = actualSpans.stream()
+                            .filter(a -> a.id().equals(expected.id()))
+                            .findFirst()
+                            .orElse(null);
+                    if (actual == null) {
+                        return prepareSpanForAssertion(expected);
+                    }
+                    // Use actual provider for metadata injection
+                    var expectedWithActualProvider = expected.toBuilder()
+                            .provider(actual.provider())
+                            .build();
+                    return prepareSpanForAssertion(expectedWithActualProvider);
+                })
+                .toList();
+
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS)
                 .ignoringCollectionOrderInFields("tags")
-                .isEqualTo(expectedSpans);
+                .isEqualTo(preparedExpectedSpans);
 
-        assertIgnoredFields(actualSpans, expectedSpans, userName);
+        assertIgnoredFields(actualSpans, preparedExpectedSpans, userName);
 
         if (!unexpectedSpans.isEmpty()) {
+            var preparedUnexpectedSpans = prepareSpansForAssertion(unexpectedSpans);
             assertThat(actualSpans)
                     .usingRecursiveComparison()
                     .ignoringFields(IGNORED_FIELDS)
                     .ignoringCollectionOrderInFields("tags")
-                    .isNotEqualTo(unexpectedSpans);
+                    .isNotEqualTo(preparedUnexpectedSpans);
         }
     }
 

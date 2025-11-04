@@ -6813,27 +6813,8 @@ class TracesResourceTest {
         assertThat(actualPage.size()).isEqualTo(expectedTraces.size());
         assertThat(actualPage.total()).isEqualTo(total);
 
-        // Prepare expected traces with actual providers injected into metadata
-        // We need to use actual providers because they're calculated from spans in the database
-        var preparedExpectedTraces = expectedTraces.stream()
-                .map(expected -> {
-                    var actualTrace = actualTraces.stream()
-                            .filter(actual -> actual.id().equals(expected.id()))
-                            .findFirst()
-                            .orElse(null);
-                    if (actualTrace == null) {
-                        return TraceAssertions.prepareTraceForAssertion(expected);
-                    }
-                    // Use actual providers for metadata injection
-                    var expectedWithActualProviders = expected.toBuilder()
-                            .providers(actualTrace.providers())
-                            .build();
-                    return TraceAssertions.prepareTraceForAssertion(expectedWithActualProviders);
-                })
-                .toList();
-        var preparedUnexpectedTraces = TraceAssertions.prepareTracesForAssertion(unexpectedTraces);
-
-        TraceAssertions.assertTraces(actualTraces, preparedExpectedTraces, preparedUnexpectedTraces, USER);
+        // TraceAssertions.assertTraces now automatically handles provider injection
+        TraceAssertions.assertTraces(actualTraces, expectedTraces, unexpectedTraces, USER);
     }
 
     private void getAndAssertPageSpans(
@@ -6892,30 +6873,8 @@ class TracesResourceTest {
             assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
 
-            // Prepare expected spans with actual provider injected into metadata
-            // We need to use actual provider because it's from the database
-            var preparedExpectedSpans = expectedSpans.stream()
-                    .map(expected -> {
-                        var actualSpan = actualSpans.stream()
-                                .filter(actual -> actual.id().equals(expected.id()))
-                                .findFirst()
-                                .orElse(null);
-                        if (actualSpan == null) {
-                            return SpanAssertions.prepareSpanForAssertion(expected);
-                        }
-                        // Use actual provider for metadata injection
-                        var expectedWithActualProvider = expected.toBuilder()
-                                .provider(actualSpan.provider())
-                                .build();
-                        return SpanAssertions.prepareSpanForAssertion(expectedWithActualProvider);
-                    })
-                    .toList();
-
-            assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
-            assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
-                    .containsExactlyElementsOf(preparedExpectedSpans);
-            SpanAssertions.assertIgnoredFields(actualSpans, preparedExpectedSpans, USER);
+            // SpanAssertions.assertSpan now automatically handles provider injection
+            SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
@@ -7591,13 +7550,8 @@ class TracesResourceTest {
             assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
         }
 
-        // Prepare expected trace with actual providers injected into metadata
-        // We need to use actual providers because they're calculated from spans in the database
-        var expectedWithActualProviders = expectedTrace.toBuilder()
-                .providers(actualTrace.providers())
-                .build();
-        var preparedExpectedTrace = TraceAssertions.prepareTraceForAssertion(expectedWithActualProviders);
-        TraceAssertions.assertTraces(List.of(actualTrace), List.of(preparedExpectedTrace), USER);
+        // TraceAssertions.assertTraces now automatically handles provider injection
+        TraceAssertions.assertTraces(List.of(actualTrace), List.of(expectedTrace), USER);
 
         return actualTrace;
     }
