@@ -411,15 +411,71 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var failures = processingResults.stream()
                 .filter(processingResult -> processingResult.status() == MessageStatus.FAILURE)
                 .toList();
-        // TODO: Implement proper error handling, potential approaches:
-        //  - claim the messages back to the consumers for reprocessing retryable errors
-        //  - send to the dead letter queue (DLQ) when consuming up to max retries
-        //  - directly ack and remove non-retryable errors
-        // For now: log and metric, no ack and remove
+
+        if (failures.isEmpty()) {
+            return Mono.just(processingResults);
+        }
+
+        // Increment error counter
         messageProcessingErrors.add(failures.size());
-        failures.forEach(failure -> log.error("Processing failed for message messageId '{}'",
-                failure.messageId(), failure.error));
-        return Mono.just(processingResults);
+
+        // Classify failures by exception type and query delivery counts
+        return Flux.fromIterable(failures)
+                .flatMap(failure -> getDeliveryCount(failure.messageId())
+                        .map(deliveryCount -> new FailureClassification(
+                                failure,
+                                isRetryableException(failure.error()),
+                                deliveryCount)))
+                .collectList()
+                .flatMap(classifications -> {
+                    // Separate into non-retryable, max retries reached, and retriable
+                    var nonRetryable = classifications.stream()
+                            .filter(c -> !c.retryable())
+                            .map(FailureClassification::result)
+                            .toList();
+
+                    var maxRetriesReached = classifications.stream()
+                            .filter(FailureClassification::retryable)
+                            .filter(c -> c.deliveryCount() >= config.getMaxRetries())
+                            .map(FailureClassification::result)
+                            .toList();
+
+                    var stillRetryable = classifications.stream()
+                            .filter(FailureClassification::retryable)
+                            .filter(c -> c.deliveryCount() < config.getMaxRetries())
+                            .map(FailureClassification::result)
+                            .toList();
+
+                    // Log all failures
+                    nonRetryable.forEach(failure -> log.error(
+                            "Non-retryable error for message messageId '{}', removing from stream",
+                            failure.messageId(), failure.error()));
+
+                    maxRetriesReached.forEach(failure -> log.error(
+                            "Max retries reached for message messageId '{}', deliveryCount '{}', removing from stream",
+                            failure.messageId(), config.getMaxRetries(), failure.error()));
+
+                    stillRetryable.forEach(failure -> log.warn(
+                            "Retryable error for message messageId '{}', will retry", failure.messageId(),
+                            failure.error()));
+
+                    // Ack and remove non-retryable and max retries reached
+                    var toRemove = new java.util.ArrayList<>(nonRetryable);
+                    toRemove.addAll(maxRetriesReached);
+
+                    var idsToRemove = toRemove.stream()
+                            .map(ProcessingResult::messageId)
+                            .toList();
+
+                    // TODO: Add hook for sending messages to Dead Letter Queue (DLQ) for further analysis
+                    // Messages that reached max retries could be sent to DLQ before removal
+
+                    return ackAndRemoveMessages(idsToRemove)
+                            .thenReturn(processingResults);
+                });
+    }
+
+    private record FailureClassification(ProcessingResult result, boolean retryable, long deliveryCount) {
     }
 
     private Mono<Long> ackAndRemoveMessages(List<StreamMessageId> messageIds) {
@@ -435,10 +491,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .subscribeOn(consumerScheduler))
                 .doOnSuccess(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
                 .onErrorResume(throwable -> {
-                    // TODO: Some related error handling might be needed, potential approaches:
-                    //  - add as failure to processingResults and handle downstream
-                    //  - Implement similar logic as in postProcessFailureMessages (claim, DLQ, retries, etc.)
-                    // For now: log, metric and resume
+                    // Error handling: log error and increment counter but don't throw
+                    // Failed ack/remove allows message to remain in pending state for reclaim
+                    // This provides automatic retry through the normal claim mechanism
                     ackAndRemoveErrors.add(1);
                     log.error("Error acknowledging or removing from Redis stream, size '{}'",
                             idsArray.length, throwable);
@@ -449,6 +504,19 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     /**
      * Provide a particular implementation for processing the event.
+     * <p>
+     * Exception handling semantics:
+     * <ul>
+     *   <li><b>Retryable exceptions</b>: Transient errors that may succeed on retry, such as:
+     *     {@link java.io.IOException}, {@link java.util.concurrent.TimeoutException}, network errors,
+     *     temporary service unavailability. Messages with retryable errors will be left in pending state
+     *     and retried up to {@code maxRetries} times before being removed.</li>
+     *   <li><b>Non-retryable exceptions</b>: Programming errors or validation errors that won't succeed on retry,
+     *     such as: {@link IllegalArgumentException}, {@link NullPointerException}, {@link IllegalStateException},
+     *     {@link UnsupportedOperationException}. Messages with non-retryable errors are immediately removed
+     *     from the stream without retrying.</li>
+     *   <li><b>Unknown exceptions</b>: Default to retryable for safety.</li>
+     * </ul>
      *
      * @param message a Redis message
      */
@@ -468,6 +536,59 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             log.warn("Failed to parse timestamp from message ID: '{}'", messageId, exception);
         }
         return Optional.empty();
+    }
+
+    /**
+     * Classifies whether an exception is retryable or not.
+     * <p>
+     * Non-retryable exceptions are programming errors or validation failures that won't succeed on retry:
+     * {@link IllegalArgumentException}, {@link NullPointerException}, {@link IllegalStateException},
+     * {@link UnsupportedOperationException}.
+     * <p>
+     * All other exceptions are considered retryable (transient errors like network issues, timeouts, etc.)
+     * Unknown exceptions default to retryable for safety.
+     *
+     * @param exception the exception to classify
+     * @return true if the exception is retryable, false otherwise
+     */
+    private boolean isRetryableException(Throwable exception) {
+        // Non-retryable: programming errors, validation errors
+        if (exception instanceof IllegalArgumentException
+                || exception instanceof NullPointerException
+                || exception instanceof IllegalStateException
+                || exception instanceof UnsupportedOperationException) {
+            return false;
+        }
+        // Retryable: transient errors, network issues, timeouts
+        // Default to retryable for unknown exceptions (safe default)
+        return true;
+    }
+
+    /**
+     * Gets the delivery count for a specific message from Redis pending list.
+     * The delivery count indicates how many times a message has been delivered to consumers.
+     * Returns 0 if the message is not in the pending list or on error.
+     *
+     * @param messageId the message ID to query
+     * @return Mono with the delivery count (0 if not found or on error)
+     */
+    private Mono<Long> getDeliveryCount(StreamMessageId messageId) {
+        return stream.listPending(config.getConsumerGroupName(), messageId, messageId, 1)
+                .subscribeOn(consumerScheduler)
+                .map(pendingResult -> {
+                    if (pendingResult != null && !pendingResult.isEmpty()) {
+                        var pendingEntry = pendingResult.get(messageId);
+                        if (pendingEntry != null) {
+                            return pendingEntry.getLastTimeDelivered();
+                        }
+                    }
+                    return 0L;
+                })
+                .onErrorResume(throwable -> {
+                    log.warn("Failed to get delivery count for message ID: '{}'", messageId, throwable);
+                    return Mono.just(0L);
+                })
+                .defaultIfEmpty(0L);
     }
 
     @Builder(toBuilder = true)

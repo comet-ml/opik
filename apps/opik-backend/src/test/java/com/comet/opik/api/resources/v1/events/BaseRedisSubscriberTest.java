@@ -243,6 +243,123 @@ class BaseRedisSubscriberTest {
     }
 
     @Nested
+    class RetryLogicTests {
+
+        @Test
+        void shouldAckAndRemoveNonRetryableFailures() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient, message -> {
+                // Throw non-retryable exception
+                return Mono.error(new IllegalArgumentException("Invalid message"));
+            }));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // Non-retryable errors should be immediately removed
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(
+                            () -> assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size()));
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        @Test
+        void shouldAckAndRemoveAfterMaxRetries() {
+            var fastConfig = config.toBuilder()
+                    .maxRetries(2)
+                    .claimIntervalRatio(2)
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(500))
+                    .build();
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient,
+                    message -> Mono.error(new RuntimeException("Temporary error"))));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // Messages should be retried and eventually removed after max retries
+            await().atMost(AWAIT_TIMEOUT_SECONDS * 3, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // Wait for messages to be removed (they should fail multiple times first)
+                        assertThat(stream.size().block()).isZero();
+                        assertThat(subscriber.getFailedMessageCount().get()).isGreaterThanOrEqualTo(messages.size());
+                    });
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        @Test
+        void shouldRetryRetryableFailures() {
+            var retryableMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var successMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var attemptCount = new java.util.concurrent.ConcurrentHashMap<String, AtomicInteger>();
+            var fastConfig = config.toBuilder()
+                    .claimIntervalRatio(2)
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(500))
+                    .build();
+
+            var subscriber = trackSubscriber(
+                    TestRedisSubscriber.createSubscriber(fastConfig, redissonClient, message -> {
+                        var count = attemptCount.computeIfAbsent(message, k -> new AtomicInteger(0));
+                        var attempts = count.incrementAndGet();
+
+                        if (retryableMessages.contains(message)) {
+                            if (attempts == 1) {
+                                // Fail on first attempt with retryable error
+                                return Mono.error(new RuntimeException("Temporary error"));
+                            }
+                            // Succeed on retry
+                            return Mono.empty();
+                        }
+                        // Success messages always succeed
+                        return Mono.empty();
+                    }));
+            subscriber.start();
+
+            publishMessagesToStream(retryableMessages);
+            publishMessagesToStream(successMessages);
+
+            // Both should eventually succeed
+            waitForMessagesProcessed(subscriber, retryableMessages.size() + successMessages.size());
+            waitForMessagesAckedAndRemoved();
+
+            // Verify retryable messages were attempted multiple times
+            retryableMessages.forEach(message -> {
+                var attempts = attemptCount.get(message);
+                assertThat(attempts).isNotNull();
+                assertThat(attempts.get()).isGreaterThan(1);
+            });
+
+            assertThat(subscriber.getSuccessMessageCount().get())
+                    .isEqualTo(retryableMessages.size() + successMessages.size());
+        }
+
+        @Test
+        void shouldRespectMaxRetriesConfiguration() {
+            var maxRetries = 1;
+            var fastConfig = config.toBuilder()
+                    .maxRetries(maxRetries)
+                    .claimIntervalRatio(2)
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(500))
+                    .build();
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient,
+                    message -> Mono.error(new RuntimeException("Always fails"))));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // With maxRetries=1, messages should be removed quickly
+            await().atMost(AWAIT_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(stream.size().block()).isZero();
+                    });
+            assertThat(subscriber.getFailedMessageCount().get()).isGreaterThanOrEqualTo(messages.size());
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+    }
+
+    @Nested
     class LifecycleTests {
 
         @Test

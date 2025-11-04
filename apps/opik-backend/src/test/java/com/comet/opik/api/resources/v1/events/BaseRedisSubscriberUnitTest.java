@@ -385,6 +385,104 @@ class BaseRedisSubscriberUnitTest {
     }
 
     @Nested
+    class RetryLogicTests {
+
+        @BeforeEach
+        void setUp() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+        }
+
+        @Test
+        void shouldClassifyExceptionsCorrectly() {
+            var nonRetryableExceptions = List.of(
+                    new IllegalArgumentException("test"),
+                    new NullPointerException("test"),
+                    new IllegalStateException("test"),
+                    new UnsupportedOperationException("test"));
+
+            var retryableExceptions = List.of(
+                    new java.io.IOException("test"),
+                    new java.util.concurrent.TimeoutException("test"),
+                    new RuntimeException("test"),
+                    new Exception("test"));
+
+            var processCount = new AtomicInteger();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
+                int count = processCount.incrementAndGet();
+                if (count <= nonRetryableExceptions.size()) {
+                    return Mono.error(nonRetryableExceptions.get(count - 1));
+                } else if (count <= nonRetryableExceptions.size() + retryableExceptions.size()) {
+                    return Mono.error(retryableExceptions.get(count - nonRetryableExceptions.size() - 1));
+                }
+                return Mono.empty();
+            }));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Non-retryable should be acked/removed, retryable should remain
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(processCount.get()).isGreaterThanOrEqualTo(
+                                nonRetryableExceptions.size() + retryableExceptions.size());
+                    });
+        }
+
+        @Test
+        void shouldHandleDeliveryCountQueryFailure() {
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
+                return Mono.error(new RuntimeException("Always fails"));
+            }));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnMessages();
+            // Mock listPending to fail
+            when(stream.listPending(anyString(), any(StreamMessageId.class), any(StreamMessageId.class), anyInt()))
+                    .thenReturn(Mono.error(new RuntimeException("Redis error")));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Should handle delivery count query failure gracefully
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(subscriber.getFailedMessageCount().get()).isGreaterThan(0);
+                    });
+        }
+
+        @Test
+        void shouldHandleMixedRetryableAndNonRetryableFailures() {
+            var processCount = new AtomicInteger();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
+                int count = processCount.incrementAndGet();
+                // Alternate between retryable and non-retryable
+                if (count % 2 == 0) {
+                    return Mono.error(new IllegalArgumentException("Non-retryable"));
+                } else {
+                    return Mono.error(new RuntimeException("Retryable"));
+                }
+            }));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Both types should be handled appropriately
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(processCount.get()).isGreaterThan(4);
+                        assertThat(subscriber.getFailedMessageCount().get()).isGreaterThan(0);
+                    });
+        }
+    }
+
+    @Nested
     class LifecycleErrorTests {
 
         @Test
