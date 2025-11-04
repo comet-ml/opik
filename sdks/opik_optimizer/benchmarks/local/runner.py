@@ -5,9 +5,9 @@ import traceback
 from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
 
-import benchmark_checkpoint
+from local import checkpoint as benchmark_checkpoint
+from local import logging as benchmark_logging
 import benchmark_config
-import benchmark_logging
 from benchmark_task import TaskEvaluationResult, TaskResult
 
 import opik_optimizer
