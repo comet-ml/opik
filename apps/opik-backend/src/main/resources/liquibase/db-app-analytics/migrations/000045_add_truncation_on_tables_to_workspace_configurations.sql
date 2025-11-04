@@ -3,7 +3,7 @@
 --comment: Add boolean flag to enable/disable data truncation in table views for workspace configurations
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '{cluster}'
-    ADD COLUMN IF NOT EXISTS truncation_on_tables UInt8 DEFAULT 1;
+    ADD COLUMN IF NOT EXISTS truncation_on_tables Bool DEFAULT true;
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS truncation_on_tables;
 

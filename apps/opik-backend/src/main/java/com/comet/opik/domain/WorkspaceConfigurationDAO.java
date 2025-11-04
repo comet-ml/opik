@@ -93,9 +93,9 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             }
 
             if (configuration.truncationOnTables() != null) {
-                statement.bind("truncation_on_tables", configuration.truncationOnTables() ? 1 : 0);
+                statement.bind("truncation_on_tables", configuration.truncationOnTables());
             } else {
-                statement.bind("truncation_on_tables", 1);
+                statement.bindNull("truncation_on_tables", Boolean.class);
             }
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
@@ -118,9 +118,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                                 .map(Duration::ofSeconds)
                                 .orElse(null);
 
-                        Boolean truncationOnTables = Optional.ofNullable(row.get("truncation_on_tables", Long.class))
-                                .map(value -> value == 1)
-                                .orElse(null);
+                        Boolean truncationOnTables = row.get("truncation_on_tables", Boolean.class);
 
                         return WorkspaceConfiguration.builder()
                                 .timeoutToMarkThreadAsInactive(timeout)
