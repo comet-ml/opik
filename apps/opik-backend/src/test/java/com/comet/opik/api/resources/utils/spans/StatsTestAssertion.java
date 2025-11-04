@@ -38,6 +38,8 @@ public final class StatsTestAssertion implements SpanPageTestAssertion<ProjectSt
     @Override
     public TestArgs<ProjectStats.ProjectStatItem<?>> transformTestParams(List<Span> spans, List<Span> expected,
             List<Span> unexpected) {
+        // Stats are calculated from raw database columns, not from DTOs with injected provider
+        // So we should NOT prepare spans (inject provider) when calculating expected stats
         return TestArgs.of(List.of(), getProjectSpanStatItems(expected),
                 List.of());
     }
