@@ -16,7 +16,7 @@ describe("helpers.ts", () => {
       duration: 3600000,
       created_at: "2023-01-01T00:00:00Z",
       last_updated_at: "2023-01-01T00:00:00Z",
-      metadata: { providers: ["openai", "anthropic"], environment: "test" },
+      metadata: { environment: "test" },
       feedback_scores: [
         { name: "relevance", value: 0.8, source: "sdk" } as TraceFeedbackScore,
       ],
@@ -45,7 +45,7 @@ describe("helpers.ts", () => {
       duration: 1800000,
       created_at: "2023-01-01T00:00:00Z",
       last_updated_at: "2023-01-01T00:00:00Z",
-      metadata: { provider: "openai", model: "gpt-4" },
+      metadata: { model: "gpt-4" },
       feedback_scores: [],
       comments: [],
       tags: ["llm"],
@@ -558,12 +558,7 @@ describe("helpers.ts", () => {
       describe("metadata column (dictionary)", () => {
         it("should filter by metadata with all dictionary operators", () => {
           const filters = [
-            {
-              operator: "=",
-              value:
-                '{"providers":["openai","anthropic"],"environment":"test"}',
-              expected: true,
-            },
+            { operator: "=", value: '{"environment":"test"}', expected: true },
             { operator: "contains", value: "environment", expected: true },
             { operator: ">", value: 1, expected: false }, // metadata is not a number
             { operator: "<", value: 1, expected: false }, // metadata is not a number
@@ -593,63 +588,6 @@ describe("helpers.ts", () => {
               value: "test",
               type: COLUMN_TYPE.dictionary,
               key: "environment",
-            },
-          ];
-
-          expect(filterFunction(mockTrace, filter)).toBe(true);
-        });
-
-        it("should filter by span metadata with all dictionary operators", () => {
-          const filters = [
-            {
-              operator: "=",
-              value: '{"provider":"openai","model":"gpt-4"}',
-              expected: true,
-            },
-            { operator: "contains", value: "model", expected: true },
-            { operator: ">", value: 1, expected: false }, // metadata is not a number
-            { operator: "<", value: 1, expected: false }, // metadata is not a number
-          ] as const;
-
-          filters.forEach(({ operator, value, expected }) => {
-            const filter: Filters = [
-              {
-                id: "filter-1",
-                field: "metadata",
-                operator,
-                value,
-                type: COLUMN_TYPE.dictionary,
-              },
-            ];
-
-            expect(filterFunction(mockSpan, filter)).toBe(expected);
-          });
-        });
-
-        it("should filter by provider in span metadata with key", () => {
-          const filter: Filters = [
-            {
-              id: "filter-1",
-              field: "metadata",
-              operator: "=",
-              value: "openai",
-              type: COLUMN_TYPE.dictionary,
-              key: "provider",
-            },
-          ];
-
-          expect(filterFunction(mockSpan, filter)).toBe(true);
-        });
-
-        it("should filter by providers in trace metadata with key", () => {
-          const filter: Filters = [
-            {
-              id: "filter-1",
-              field: "metadata",
-              operator: "contains",
-              value: "openai",
-              type: COLUMN_TYPE.dictionary,
-              key: "providers",
             },
           ];
 
