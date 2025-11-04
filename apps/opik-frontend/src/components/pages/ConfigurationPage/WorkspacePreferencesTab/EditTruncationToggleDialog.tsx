@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { TRUNCATION_DISABLED_MAX_PAGE_SIZE } from "@/constants/shared";
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type EditTruncationToggleDialogProps = {
@@ -57,40 +57,24 @@ const EditTruncationToggleDialog: React.FC<EditTruncationToggleDialogProps> = ({
           <DialogTitle>
             {isDisabling ? "Disable" : "Enable"} data truncation?
           </DialogTitle>
+          <DialogDescription>
+            {isDisabling
+              ? `Disabling truncation will display full content in tables. This may slow performance and limit pagination to ${TRUNCATION_DISABLED_MAX_PAGE_SIZE} items per page.`
+              : "Truncating large data improves performance and enables full pagination options. You can change this anytime."}
+          </DialogDescription>
         </DialogHeader>
 
         {isDisabling && (
-          <div className="space-y-3 py-4">
-            <Alert variant="default" size="sm">
-              <Info />
-              <AlertTitle size="sm">What will change:</AlertTitle>
-              <AlertDescription size="sm">
-                <ul className="list-inside list-disc space-y-1">
-                  <li>All data will be displayed in full without truncation</li>
-                  <li>
-                    Pagination limited to {TRUNCATION_DISABLED_MAX_PAGE_SIZE}{" "}
-                    items per page maximum
-                  </li>
-                </ul>
-              </AlertDescription>
-            </Alert>
-
-            <Alert variant="destructive" size="sm">
-              <AlertTriangle />
-              <AlertTitle size="sm">Performance impact:</AlertTitle>
-              <AlertDescription size="sm">
-                Large amounts of data may cause slower page loading and
-                increased memory usage.
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
-
-        {!isDisabling && (
-          <DialogDescription>
-            Truncate large data to improve performance and enable full
-            pagination options. You can disable this anytime.
-          </DialogDescription>
+          <Alert variant="destructive" size="sm">
+            <AlertTriangle />
+            <AlertTitle size="sm" className="text-destructive">
+              Performance impact
+            </AlertTitle>
+            <AlertDescription size="sm" className="text-foreground">
+              Large amounts of data may cause slower page loading and increased
+              memory usage.
+            </AlertDescription>
+          </Alert>
         )}
 
         <DialogFooter>

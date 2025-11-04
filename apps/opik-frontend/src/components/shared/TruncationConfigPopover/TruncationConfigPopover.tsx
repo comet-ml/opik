@@ -7,7 +7,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
 import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
@@ -31,12 +30,12 @@ const TruncationConfigPopover: React.FC<TruncationConfigPopoverProps> = ({
         align="start"
         onClick={(event) => event.stopPropagation()}
       >
-        <div>
-          <p className="text-xs text-muted-foreground">{message}</p>
-          <Separator className="my-2" />
+        <div className="flex flex-col items-start gap-1">
+          <p className="comet-body-xs text-muted-foreground">{message}</p>
           <Button
             variant="link"
-            className="w-full justify-start gap-1 px-2"
+            size="2xs"
+            className="justify-start gap-1 px-0"
             asChild
           >
             <Link

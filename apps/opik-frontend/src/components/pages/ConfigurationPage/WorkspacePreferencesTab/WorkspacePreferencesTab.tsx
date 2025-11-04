@@ -58,7 +58,7 @@ const WorkspacePreferencesTab: React.FC = () => {
         type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
       },
       {
-        name: "Enable data truncation in tables",
+        name: "Data truncation in tables",
         value: truncationToggleValue ? "Enabled" : "Disabled",
         type: WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
       },
