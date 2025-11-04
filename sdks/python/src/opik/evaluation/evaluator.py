@@ -32,7 +32,7 @@ def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
-    scroring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -71,7 +71,7 @@ def evaluate(
             are mandatory in `task`-returned dictionary.
             If no value provided, the experiment won't have any scoring metrics.
 
-        scroring_functions: List of scorer functions to be executed during evaluation.
+        scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
                 • scoring_inputs — a dictionary containing the dataset item content,
@@ -122,14 +122,16 @@ def evaluate(
     )
 
     # wrap scoring functions if any
-    if scroring_functions:
+    if scoring_functions:
         function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
-            scroring_functions, project_name=project_name
+            scoring_functions, project_name=project_name
         )
         if scoring_metrics:
             scoring_metrics.extend(function_metrics)
         else:
             scoring_metrics = function_metrics
+
+    scoring_metrics = scoring_metrics if scoring_metrics else []
 
     return _evaluate_task(
         client=client,

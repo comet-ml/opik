@@ -89,7 +89,7 @@ def test_evaluate__scoring_functions__happy_flow(
     evaluation_result = opik.evaluate(
         dataset=dataset,
         task=llm_task,
-        scroring_functions=[equals_scoring_function],
+        scoring_functions=[equals_scoring_function],
         experiment_name=experiment_name,
         experiment_config={
             "model_name": "gpt-3.5",
@@ -155,7 +155,7 @@ def test_evaluate__scoring_functions_mixed_with_scoring_metrics__happy_flow(
         dataset=dataset,
         task=llm_task,
         scoring_metrics=[equals_metric],
-        scroring_functions=[equals_scoring_function],
+        scoring_functions=[equals_scoring_function],
         experiment_name=experiment_name,
         experiment_config={
             "model_name": "gpt-3.5",
@@ -231,7 +231,7 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
     evaluation_result = opik.evaluate(
         dataset=dataset,
         task=llm_task,
-        scroring_functions=[
+        scoring_functions=[
             equals_scoring_function,
             task_span_name_scoring_function,
             task_span_name_and_equals_scoring_function,
