@@ -8,7 +8,7 @@ from opik.evaluation.metrics import score_result
 LOGGER = logging.getLogger(__name__)
 
 
-def assert_equal(expected, actual):
+def assert_equal(expected: Any, actual: Any) -> None:
     __tracebackhide__ = True
 
     pytest_deepassert.equal(expected, actual)
