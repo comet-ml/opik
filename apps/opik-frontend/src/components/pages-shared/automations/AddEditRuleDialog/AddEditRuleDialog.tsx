@@ -127,6 +127,7 @@ type AddEditRuleDialogProps = {
   rule?: EvaluatorsRule;
   projectName?: string; // Optional: project name for pre-selected projects
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
+  hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -150,6 +151,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   rule: defaultRule,
   projectName,
   datasetColumnNames,
+  hideScopeSelector = false,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -457,39 +459,43 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     }}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="scope"
-                    render={({ field }) => (
-                      <FormItem className="flex-1">
-                        <Label className="flex items-center">
-                          Scope{" "}
-                          <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
-                            <Info className="ml-1 size-4 text-light-slate" />
-                          </TooltipWrapper>
-                        </Label>
-                        <FormControl>
-                          <Select
-                            value={field.value}
-                            onValueChange={handleScopeChange}
-                            disabled={isEdit}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select scope" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
-                                Trace
-                              </SelectItem>
-                              <SelectItem value={EVALUATORS_RULE_SCOPE.thread}>
-                                Thread
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                  {!hideScopeSelector && (
+                    <FormField
+                      control={form.control}
+                      name="scope"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <Label className="flex items-center">
+                            Scope{" "}
+                            <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
+                              <Info className="ml-1 size-4 text-light-slate" />
+                            </TooltipWrapper>
+                          </Label>
+                          <FormControl>
+                            <Select
+                              value={field.value}
+                              onValueChange={handleScopeChange}
+                              disabled={isEdit}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select scope" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
+                                  Trace
+                                </SelectItem>
+                                <SelectItem
+                                  value={EVALUATORS_RULE_SCOPE.thread}
+                                >
+                                  Thread
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
 
                 <FormField
