@@ -225,6 +225,23 @@ class AlertServiceImpl implements AlertService {
                           }
                         }
                     ]
+                    """,
+            AlertEventType.EXPERIMENT_FINISHED,
+            """
+                    [
+                        {
+                                "id": "0198c90e-3884-7fe6-9236-168acd26d4bb",
+                                "name": "opik-assistant-v1",
+                                "dataset_id": "0198c909-9294-7d3a-a3c2-7511f46a9ef0",
+                                "metadata": {
+                                    "model": "gpt-4o-mini",
+                                    "prompts": [
+                                        "You are an instructor for technical executives that want to extract value of AI models.\\n        If you know the answer to the question, respond by stating that it is possible to do what is being asked,\\n        but without going into technical details on how to do it.\\n        Make sure you include in your answer:\\n        - A description of the lifecycle of a machine learning model\\n        - Where in this lifecycle the current question is relevant\\n        - The business benefits of implementing the provided answer\\n        - An estimation of the time and cost of implementing the provided answer"
+                                    ]
+                                },
+                                "type": "regular"
+                            }
+                    ]
                     """));
 
     private static final Alert DUMMY_ALERT = Alert.builder()
