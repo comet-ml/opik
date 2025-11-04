@@ -1809,9 +1809,8 @@ class SpansResourceTest {
                                             .limit(pageSize)
                                             .build());
 
-                            // Prepare expected spans with provider injected into metadata
-                            var preparedExpectedTrace = SpanAssertions.prepareSpansForAssertion(trace);
-                            SpanAssertions.assertSpan(actualSpans, preparedExpectedTrace, USER);
+                            // SpanAssertions.assertSpan now automatically handles provider injection
+                            SpanAssertions.assertSpan(actualSpans, trace, USER);
 
                             lastId.set(actualSpans.getLast().id());
                         });
@@ -1889,12 +1888,10 @@ class SpansResourceTest {
                                 .build())
                         .toList();
 
-                // Prepare expected spans with provider injected into metadata
-                var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
-
+                // SpanAssertions now automatically handles provider injection
                 assertThat(actualSpans)
                         .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(preparedExpectedSpans);
+                        .containsExactlyElementsOf(expectedSpans);
             }
         }
 
@@ -1938,9 +1935,8 @@ class SpansResourceTest {
 
             List<Span> actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
-            // Prepare expected spans with provider injected into metadata
-            var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
-            assertSpan(actualSpans, preparedExpectedSpans, USER);
+            // SpanAssertions.assertSpan now automatically handles provider injection
+            assertSpan(actualSpans, expectedSpans, USER);
         }
 
         @ParameterizedTest
@@ -2044,10 +2040,8 @@ class SpansResourceTest {
                                     : filterValue)
                             .build());
 
-            // Prepare expected spans with provider injected into metadata
-            var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
-
-            var values = testAssertion.transformTestParams(preparedExpectedSpans, preparedExpectedSpans.reversed(),
+            // SpanAssertions.assertSpan (called by runTestAndAssert) now automatically handles provider injection
+            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans.reversed(),
                     unexpectedSpans);
 
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
@@ -2085,11 +2079,9 @@ class SpansResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Prepare spans with provider injected into metadata
-            var preparedSpans = SpanAssertions.prepareSpansForAssertion(spans);
-
-            var expectedSpans = getExpectedSpans.apply(preparedSpans);
-            var unexpectedSpans = getUnexpectedSpans.apply(preparedSpans);
+            // SpanAssertions.assertSpan (called by runTestAndAssert) now automatically handles provider injection
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
             List<SpanFilter> filters = List.of(SpanFilter.builder()
                     .field(SpanField.TOTAL_ESTIMATED_COST)
@@ -2097,7 +2089,7 @@ class SpansResourceTest {
                     .value("0")
                     .build());
 
-            var values = testAssertion.transformTestParams(preparedSpans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
@@ -4982,11 +4974,8 @@ class SpansResourceTest {
 
         SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
 
-        // Prepare expected spans with provider injected into metadata
-        var preparedExpectedSpans = SpanAssertions.prepareSpansForAssertion(expectedSpans);
-        var preparedUnexpectedSpans = SpanAssertions.prepareSpansForAssertion(unexpectedSpans);
-
-        SpanAssertions.assertSpan(actualPage.content(), preparedExpectedSpans, preparedUnexpectedSpans, USER);
+        // SpanAssertions.assertSpan now automatically handles provider injection
+        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, unexpectedSpans, USER);
     }
 
     private void createAndAssert(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
