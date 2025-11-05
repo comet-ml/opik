@@ -15,6 +15,7 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
 import org.redisson.api.options.PlainOptions;
 import org.redisson.api.stream.StreamCreateGroupArgs;
+import org.redisson.api.stream.StreamPendingRangeArgs;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -136,6 +137,7 @@ class BaseRedisSubscriberUnitTest {
         void setUp() {
             whenCreateGroupReturnEmpty();
             whenRemoveConsumerReturn();
+            whenListPendingReturn();
         }
 
         @Test
@@ -391,6 +393,7 @@ class BaseRedisSubscriberUnitTest {
         void setUp() {
             whenCreateGroupReturnEmpty();
             whenRemoveConsumerReturn();
+            whenListPendingReturn();
         }
 
         @Test
@@ -439,8 +442,8 @@ class BaseRedisSubscriberUnitTest {
             }));
             whenAutoClaimReturnEmpty(subscriber.getConsumerId());
             whenReadGroupReturnMessages();
-            // Mock listPending to fail (lenient because error is handled gracefully)
-            lenient().when(stream.listPending(any(org.redisson.api.stream.StreamPendingRangeArgs.class)))
+            // Mock listPending to fail for this specific test
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
                     .thenReturn(Mono.error(new RuntimeException("Redis error")));
             whenAckReturn();
             whenRemoveReturn();
@@ -577,5 +580,12 @@ class BaseRedisSubscriberUnitTest {
 
     private void whenRemoveConsumerReturn() {
         when(stream.removeConsumer(anyString(), anyString())).thenReturn(Mono.just(0L));
+    }
+
+    private void whenListPendingReturn() {
+        // This should be lenient as listPending only happens on retryable failures
+        // and the test might finish before the query executes
+        lenient().when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                .thenReturn(Mono.just(List.of()));
     }
 }
