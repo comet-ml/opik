@@ -3,11 +3,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import find from "lodash/find";
 
-import {
-  AggregatedFeedbackScore,
-  COLUMN_TYPE,
-  ColumnData,
-} from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
@@ -19,16 +15,12 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
-import {
-  normalizeFeedbackScores,
-  getScoreValueByKey,
-} from "@/lib/feedback-scores";
+import { getScoreValueByKey, getAllScoreKeys } from "@/lib/feedback-scores";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
     id: string;
-    feedback_scores?: AggregatedFeedbackScore[];
-    pre_computed_metric_aggregates?: Record<string, Record<string, number>>;
+    feedbackScoresMap?: Record<string, Record<string, number>>;
   }[];
 }
 
@@ -47,10 +39,7 @@ export const getFeedbackScoreMap = ({
   experiments,
 }: GetFeedbackScoreMapArguments): NormalizedFeedbackScoreMap => {
   return experiments.reduce<NormalizedFeedbackScoreMap>((acc, e) => {
-    acc[e.id] = normalizeFeedbackScores(
-      e.feedback_scores,
-      e.pre_computed_metric_aggregates,
-    );
+    acc[e.id] = e.feedbackScoresMap || {};
     return acc;
   }, {});
 };
@@ -67,14 +56,8 @@ export const getFeedbackScoresForExperimentsAsRows = ({
   const allKeys = new Set<string>();
 
   Object.values(feedbackScoresMap).forEach((normalized) => {
-    Object.entries(normalized).forEach(([scoreName, aggregates]) => {
-      const hasMultipleAggregates = Object.keys(aggregates).length > 1;
-      Object.keys(aggregates).forEach((aggregateType) => {
-        const key = hasMultipleAggregates
-          ? `${scoreName} (${aggregateType})`
-          : scoreName;
-        allKeys.add(key);
-      });
+    getAllScoreKeys(normalized).forEach((key) => {
+      allKeys.add(key);
     });
   });
 

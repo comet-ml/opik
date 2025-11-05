@@ -117,13 +117,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
         </span>
       );
     case STATISTIC_AGGREGATION_TYPE.PERCENTAGE: {
-      // Dynamically generate options from available keys in statistic.value
       const availableKeys =
         statistic?.value && typeof statistic.value === "object"
           ? Object.keys(statistic.value)
           : ["p50", "p90", "p99"];
 
-      // Use first available key if current selection doesn't exist
       const currentValue = availableKeys.includes(percentileValue)
         ? percentileValue
         : availableKeys[0] || "p50";

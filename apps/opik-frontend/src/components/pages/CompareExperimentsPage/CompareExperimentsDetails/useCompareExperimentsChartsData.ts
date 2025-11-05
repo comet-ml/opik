@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Experiment } from "@/types/datasets";
 import uniq from "lodash/uniq";
 import { BarDataPoint, RadarDataPoint } from "@/types/chart";
-import { normalizeFeedbackScores } from "@/lib/feedback-scores";
+import { normalizedScoresToFlatMap } from "@/lib/feedback-scores";
 
 export type ExperimentLabelsMap = Record<string, string>;
 type UseCompareExperimentsChartsDataArgs = {
@@ -28,41 +28,20 @@ const useCompareExperimentsChartsData = ({
     return experiments.slice(0, MAX_VISIBLE_ENTITIES);
   }, [experiments]);
 
-  const normalizedScoreMap = useMemo(() => {
-    if (!isCompare) return {};
-    return experimentsList.reduce<
-      Record<string, Record<string, Record<string, number>>>
-    >((acc, e) => {
-      acc[e.id] = normalizeFeedbackScores(
-        e.feedback_scores,
-        e.pre_computed_metric_aggregates,
-      );
-      return acc;
-    }, {});
-  }, [experimentsList, isCompare]);
-
   const scoreMap = useMemo(() => {
     if (!isCompare) return {};
     const flatMap: Record<string, Record<string, number>> = {};
 
-    Object.entries(normalizedScoreMap).forEach(([experimentId, normalized]) => {
-      const scoreMap: Record<string, number> = {};
-
-      Object.entries(normalized).forEach(([scoreName, aggregates]) => {
-        const hasMultipleAggregates = Object.keys(aggregates).length > 1;
-        Object.keys(aggregates).forEach((aggregateType) => {
-          const key = hasMultipleAggregates
-            ? `${scoreName} (${aggregateType})`
-            : scoreName;
-          scoreMap[key] = aggregates[aggregateType];
-        });
-      });
-
-      flatMap[experimentId] = scoreMap;
+    experimentsList.forEach((experiment) => {
+      if (experiment.feedbackScoresMap) {
+        flatMap[experiment.id] = normalizedScoresToFlatMap(
+          experiment.feedbackScoresMap,
+        );
+      }
     });
 
     return flatMap;
-  }, [normalizedScoreMap, isCompare]);
+  }, [experimentsList, isCompare]);
 
   const scoreColumns = useMemo(() => {
     return uniq(

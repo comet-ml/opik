@@ -30,6 +30,7 @@ import {
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
+  ColumnStatistic,
   DynamicColumn,
   OnChangeFn,
   ROW_HEIGHT,
@@ -76,7 +77,6 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import useExperimentItemsStatistic from "@/api/datasets/useExperimentItemsStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { normalizeFeedbackScores } from "@/lib/feedback-scores";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import {
@@ -358,49 +358,46 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const columnsStatistic = useMemo(() => {
     const baseStats = statisticData?.stats ?? [];
+    const statsMap = new Map<string, ColumnStatistic>();
 
-    // Create a map to merge statistics by name
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const statsMap = new Map<string, any>();
-
-    // Add base stats to map
     baseStats.forEach((stat) => {
       statsMap.set(stat.name, stat);
     });
 
-    if (experiments && experiments.length > 0) {
-      const normalized = normalizeFeedbackScores(
-        experiments[0]?.feedback_scores,
-        experiments[0]?.pre_computed_metric_aggregates,
-      );
+    if (
+      experiments &&
+      experiments.length > 0 &&
+      experiments[0]?.feedbackScoresMap
+    ) {
+      Object.entries(experiments[0].feedbackScoresMap).forEach(
+        ([scoreName, aggregates]) => {
+          const statName = `${COLUMN_FEEDBACK_SCORES_ID}.${scoreName}`;
+          const existingStat = statsMap.get(statName);
 
-      Object.entries(normalized).forEach(([scoreName, aggregates]) => {
-        const statName = `${COLUMN_FEEDBACK_SCORES_ID}.${scoreName}`;
-        const existingStat = statsMap.get(statName);
+          if (Object.keys(aggregates).length > 1) {
+            const aggregateValues: Record<string, number> = { ...aggregates };
 
-        if (Object.keys(aggregates).length > 1) {
-          const aggregateValues: Record<string, number> = { ...aggregates };
+            if (
+              existingStat?.type === STATISTIC_AGGREGATION_TYPE.AVG &&
+              typeof existingStat.value === "number"
+            ) {
+              aggregateValues.avg = existingStat.value;
+            }
 
-          if (
-            existingStat?.type === STATISTIC_AGGREGATION_TYPE.AVG &&
-            typeof existingStat.value === "number"
-          ) {
-            aggregateValues.avg = existingStat.value;
+            statsMap.set(statName, {
+              name: statName,
+              type: STATISTIC_AGGREGATION_TYPE.PERCENTAGE,
+              value: aggregateValues as Record<string, number>,
+            } as ColumnStatistic);
+          } else if (!existingStat) {
+            statsMap.set(statName, {
+              name: statName,
+              type: STATISTIC_AGGREGATION_TYPE.AVG,
+              value: aggregates.avg ?? 0,
+            });
           }
-
-          statsMap.set(statName, {
-            name: statName,
-            type: STATISTIC_AGGREGATION_TYPE.PERCENTAGE,
-            value: aggregateValues,
-          });
-        } else if (!existingStat) {
-          statsMap.set(statName, {
-            name: statName,
-            type: STATISTIC_AGGREGATION_TYPE.AVG,
-            value: aggregates.avg ?? 0,
-          });
-        }
-      });
+        },
+      );
     }
 
     return Array.from(statsMap.values());

@@ -1,6 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
+import { mergePreComputedMetrics } from "@/lib/feedback-scores";
 
 export const getExperimentById = async (
   { signal }: QueryFunctionContext,
@@ -10,7 +11,7 @@ export const getExperimentById = async (
     signal,
   });
 
-  return data;
+  return mergePreComputedMetrics(data);
 };
 
 export type UseExperimentByIdParams = {

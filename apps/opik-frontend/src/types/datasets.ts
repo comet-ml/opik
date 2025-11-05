@@ -73,6 +73,7 @@ export interface Experiment {
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];
   pre_computed_metric_aggregates?: Record<string, Record<string, number>>;
+  feedbackScoresMap?: Record<string, Record<string, number>>;
   duration?: AggregatedDuration;
   // @deprecated
   prompt_version?: ExperimentPromptVersion;

@@ -2,43 +2,13 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import isBoolean from "lodash/isBoolean";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
-import { AggregatedFeedbackScore } from "@/types/shared";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 import { Filters } from "@/types/filters";
 import { generatePromptFilters, processFilters } from "@/lib/filters";
-import { normalizeFeedbackScores } from "@/lib/feedback-scores";
+import { mergePreComputedMetrics } from "@/lib/feedback-scores";
 
 const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
-
-const mergePreComputedMetrics = (experiment: Experiment): Experiment => {
-  const normalized = normalizeFeedbackScores(
-    experiment.feedback_scores,
-    experiment.pre_computed_metric_aggregates,
-  );
-
-  const allScores: AggregatedFeedbackScore[] = [];
-
-  Object.entries(normalized).forEach(([scoreName, aggregates]) => {
-    const hasMultipleAggregates = Object.keys(aggregates).length > 1;
-    Object.entries(aggregates).forEach(([aggregateType, value]) => {
-      const name = hasMultipleAggregates
-        ? `${scoreName} (${aggregateType})`
-        : scoreName;
-
-      allScores.push({
-        name,
-        value,
-        type: aggregateType,
-      });
-    });
-  });
-
-  return {
-    ...experiment,
-    feedback_scores: allScores,
-  };
-};
 
 export type UseExperimentsListParams = {
   workspaceName?: string;

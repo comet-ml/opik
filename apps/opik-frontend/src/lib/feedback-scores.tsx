@@ -6,6 +6,7 @@ import {
   TraceFeedbackScore,
 } from "@/types/traces";
 import { AggregatedFeedbackScore } from "@/types/shared";
+import { Experiment } from "@/types/datasets";
 import {
   COMPARE_EXPERIMENTS_KEY,
   SPANS_KEY,
@@ -342,11 +343,6 @@ export const aggregateMultiAuthorFeedbackScore = (
   };
 };
 
-/**
- * Normalizes feedback scores and pre-computed metric aggregates into a structured format.
- * Returns Record<string, Record<string, number>> where first key is score name,
- * second key is aggregate type (e.g., "avg", "min", "max"), value is the numeric value.
- */
 export const normalizeFeedbackScores = (
   feedbackScores?: AggregatedFeedbackScore[],
   preComputedMetricAggregates?: Record<string, Record<string, number>>,
@@ -390,10 +386,6 @@ export const normalizeFeedbackScores = (
   return normalized;
 };
 
-/**
- * Gets a value from normalized feedback scores structure using a formatted key.
- * Supports keys like "scoreName (avg)" or just "scoreName" (defaults to avg).
- */
 export const getScoreValueByKey = (
   normalizedScores: Record<string, Record<string, number>>,
   key: string,
@@ -405,12 +397,6 @@ export const getScoreValueByKey = (
   return normalizedScores[scoreName]?.[aggregateType];
 };
 
-/**
- * Parses a score label to extract name and type.
- * Examples:
- * - "hallucination_metric (min)" -> { name: "hallucination_metric", type: "min" }
- * - "hallucination_metric" -> { name: "hallucination_metric", type: null }
- */
 export const parseScoreLabel = (
   label: string,
 ): { name: string; type: string | null } => {
@@ -424,5 +410,76 @@ export const parseScoreLabel = (
   return {
     name: label,
     type: null,
+  };
+};
+
+export const formatScoreKey = (
+  scoreName: string,
+  aggregateType: string,
+  aggregates: Record<string, number>,
+): string => {
+  const hasMultipleAggregates = Object.keys(aggregates).length > 1;
+  return hasMultipleAggregates ? `${scoreName} (${aggregateType})` : scoreName;
+};
+
+export const normalizedScoresToFlatMap = (
+  normalizedScores: Record<string, Record<string, number>>,
+): Record<string, number> => {
+  const flatMap: Record<string, number> = {};
+
+  Object.entries(normalizedScores).forEach(([scoreName, aggregates]) => {
+    Object.entries(aggregates).forEach(([aggregateType, value]) => {
+      const key = formatScoreKey(scoreName, aggregateType, aggregates);
+      flatMap[key] = value;
+    });
+  });
+
+  return flatMap;
+};
+
+export const getAllScoreKeys = (
+  normalizedScores: Record<string, Record<string, number>>,
+): string[] => {
+  const keys = new Set<string>();
+
+  Object.entries(normalizedScores).forEach(([scoreName, aggregates]) => {
+    Object.keys(aggregates).forEach((aggregateType) => {
+      keys.add(formatScoreKey(scoreName, aggregateType, aggregates));
+    });
+  });
+
+  return Array.from(keys).sort();
+};
+
+export const normalizedScoresToArray = (
+  normalizedScores: Record<string, Record<string, number>>,
+): AggregatedFeedbackScore[] => {
+  const allScores: AggregatedFeedbackScore[] = [];
+
+  Object.entries(normalizedScores).forEach(([scoreName, aggregates]) => {
+    Object.entries(aggregates).forEach(([aggregateType, value]) => {
+      const name = formatScoreKey(scoreName, aggregateType, aggregates);
+
+      allScores.push({
+        name,
+        value,
+        type: aggregateType,
+      });
+    });
+  });
+
+  return allScores;
+};
+
+export const mergePreComputedMetrics = (experiment: Experiment): Experiment => {
+  const normalized = normalizeFeedbackScores(
+    experiment.feedback_scores,
+    experiment.pre_computed_metric_aggregates,
+  );
+
+  return {
+    ...experiment,
+    feedback_scores: normalizedScoresToArray(normalized),
+    feedbackScoresMap: normalized,
   };
 };

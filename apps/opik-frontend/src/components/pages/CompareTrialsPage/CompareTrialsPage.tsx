@@ -49,9 +49,9 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     false,
   );
 
-  const experiments: Experiment[] = response
+  const experiments = response
     .map((r) => r.data)
-    .filter((e) => !isUndefined(e));
+    .filter((e): e is Experiment => !isUndefined(e));
 
   const memorizedExperiments: Experiment[] = useDeepMemo(() => {
     return experiments ?? [];
