@@ -52,7 +52,8 @@ optimization_result = optimizer.optimize_prompt(
     agent_class=MCPAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_trials=5,
+    max_trials=3,
+    n_samples=5,
 )
 
 optimization_result.display()
