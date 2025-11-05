@@ -32,9 +32,9 @@ public record ProviderApiKey(
                 View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
         @JsonView({View.Public.class,
-                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). "
-                        +
-                        "Should not be set for standard providers (OpenAI, Anthropic, etc.).", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
+                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). "
+                +
+                "Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.).", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> headers,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
         @JsonView({View.Public.class,
@@ -78,7 +78,7 @@ public record ProviderApiKey(
             @JsonView({View.Public.class}) List<ProviderApiKey> content,
             @JsonView({View.Public.class}) List<String> sortableBy)
             implements
-                com.comet.opik.api.Page<ProviderApiKey>{
+            com.comet.opik.api.Page<ProviderApiKey>{
 
         public static ProviderApiKeyPage empty(int page) {
             return new ProviderApiKeyPage(page, 0, 0, List.of(), List.of());
