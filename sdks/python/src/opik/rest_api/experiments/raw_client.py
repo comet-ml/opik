@@ -143,6 +143,7 @@ class RawExperimentsClient:
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -167,6 +168,8 @@ class RawExperimentsClient:
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
+
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -194,6 +197,7 @@ class RawExperimentsClient:
                 "prompt_versions": convert_and_respect_annotation_metadata(
                     object_=prompt_versions, annotation=typing.Sequence[PromptVersionLinkWrite], direction="write"
                 ),
+                "pre_computed_metric_aggregates": pre_computed_metric_aggregates,
             },
             headers={
                 "content-type": "application/json",
@@ -695,6 +699,7 @@ class RawExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -713,6 +718,8 @@ class RawExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -728,6 +735,7 @@ class RawExperimentsClient:
                 "metadata": metadata,
                 "type": type,
                 "status": status,
+                "pre_computed_metric_aggregates": pre_computed_metric_aggregates,
             },
             headers={
                 "content-type": "application/json",
@@ -1047,6 +1055,7 @@ class AsyncRawExperimentsClient:
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1071,6 +1080,8 @@ class AsyncRawExperimentsClient:
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
+
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1098,6 +1109,7 @@ class AsyncRawExperimentsClient:
                 "prompt_versions": convert_and_respect_annotation_metadata(
                     object_=prompt_versions, annotation=typing.Sequence[PromptVersionLinkWrite], direction="write"
                 ),
+                "pre_computed_metric_aggregates": pre_computed_metric_aggregates,
             },
             headers={
                 "content-type": "application/json",
@@ -1599,6 +1611,7 @@ class AsyncRawExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1617,6 +1630,8 @@ class AsyncRawExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1632,6 +1647,7 @@ class AsyncRawExperimentsClient:
                 "metadata": metadata,
                 "type": type,
                 "status": status,
+                "pre_computed_metric_aggregates": pre_computed_metric_aggregates,
             },
             headers={
                 "content-type": "application/json",

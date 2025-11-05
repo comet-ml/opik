@@ -122,6 +122,7 @@ class ExperimentsClient:
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -147,6 +148,8 @@ class ExperimentsClient:
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
 
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -170,6 +173,7 @@ class ExperimentsClient:
             status=status,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
+            pre_computed_metric_aggregates=pre_computed_metric_aggregates,
             request_options=request_options,
         )
         return _response.data
@@ -476,6 +480,7 @@ class ExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -494,6 +499,8 @@ class ExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -508,7 +515,13 @@ class ExperimentsClient:
         client.experiments.update_experiment(id='id', )
         """
         _response = self._raw_client.update_experiment(
-            id, name=name, metadata=metadata, type=type, status=status, request_options=request_options
+            id,
+            name=name,
+            metadata=metadata,
+            type=type,
+            status=status,
+            pre_computed_metric_aggregates=pre_computed_metric_aggregates,
+            request_options=request_options,
         )
         return _response.data
 
@@ -711,6 +724,7 @@ class AsyncExperimentsClient:
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -735,6 +749,8 @@ class AsyncExperimentsClient:
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
+
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -762,6 +778,7 @@ class AsyncExperimentsClient:
             status=status,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
+            pre_computed_metric_aggregates=pre_computed_metric_aggregates,
             request_options=request_options,
         )
         return _response.data
@@ -1095,6 +1112,7 @@ class AsyncExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1113,6 +1131,8 @@ class AsyncExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        pre_computed_metric_aggregates : typing.Optional[typing.Dict[str, typing.Dict[str, float]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1130,7 +1150,13 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_experiment(
-            id, name=name, metadata=metadata, type=type, status=status, request_options=request_options
+            id,
+            name=name,
+            metadata=metadata,
+            type=type,
+            status=status,
+            pre_computed_metric_aggregates=pre_computed_metric_aggregates,
+            request_options=request_options,
         )
         return _response.data
 

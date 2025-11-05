@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 from rich import align, console, panel, table, text
 
@@ -41,7 +41,10 @@ def _compute_average_scores(
 
 
 def display_experiment_results(
-    dataset_name: str, total_time: float, test_results: List[test_result.TestResult]
+    dataset_name: str,
+    total_time: float,
+    test_results: List[test_result.TestResult],
+    experiment_metrics: Optional[Dict[str, Dict[str, float]]] = None,
 ) -> None:
     average_scores, failed_scores = _compute_average_scores(test_results)
     nb_items = len(test_results)
@@ -54,13 +57,37 @@ def display_experiment_results(
     nb_samples_text.stylize("bold", 0, 18)
     nb_samples_text = align.Align.left(nb_samples_text)
 
-    # Create test results text
+    # Create test results text with experiment-level metrics merged in
     score_strings = text.Text("")
+
+    # Group experiment metrics by score name for easy merging
+    experiment_metrics_by_score: Dict[str, Dict[str, float]] = {}
+    if experiment_metrics:
+        experiment_metrics_by_score = experiment_metrics
+
     for name, avg_score in average_scores.items():
         score_strings += text.Text(f"{name}: {avg_score} (avg)", style="green bold")
+
+        # Add experiment-level metrics for this score if they exist
+        if name in experiment_metrics_by_score:
+            for metric_name, metric_value in experiment_metrics_by_score[name].items():
+                if metric_name != "avg":  # Skip avg since we already show it
+                    score_strings += text.Text(
+                        f", {metric_value:.4f} ({metric_name})", style="cyan"
+                    )
+
         if failed_scores[name] > 0:
             score_strings += text.Text(f" - {failed_scores[name]} failed", style="red")
         score_strings += text.Text("\n")
+
+    # Add any experiment-level metrics for scores not in average_scores
+    for score_name, metrics in experiment_metrics_by_score.items():
+        if score_name not in average_scores:
+            metric_strs = [f"{value:.4f} ({name})" for name, value in metrics.items()]
+            score_strings += text.Text(
+                f"{score_name}: {', '.join(metric_strs)}", style="cyan bold"
+            )
+            score_strings += text.Text("\n")
 
     aligned_test_results = align.Align.left(score_strings)
 

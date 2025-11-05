@@ -43,6 +43,7 @@ def evaluate(
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
+    experiment_metrics: Optional[List[Callable]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -93,6 +94,11 @@ def evaluate(
             If not provided, all samples in the dataset will be evaluated.
 
         trial_count: number of times to run the task and evaluate the task output for every dataset item.
+
+        experiment_metrics: List of callable functions that compute experiment-level metrics.
+            Each function receives an EvaluationResult object and returns either a single ExperimentMetricResult
+            or a list of ExperimentMetricResult objects. These metrics are computed after all test cases
+            are evaluated and uploaded to the backend as pre-computed aggregates.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -125,6 +131,7 @@ def evaluate(
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
+        experiment_metrics=experiment_metrics,
     )
 
 
@@ -143,6 +150,7 @@ def _evaluate_task(
     dataset_item_ids: Optional[List[str]],
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
+    experiment_metrics: Optional[List[Callable]],
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -167,20 +175,13 @@ def _evaluate_task(
 
     total_time = time.time() - start_time
 
-    if verbose >= 1:
-        report.display_experiment_results(dataset.name, total_time, test_results)
-
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
 
-    report.display_experiment_link(experiment_url=experiment_url)
-
     client.flush()
-
-    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
@@ -190,6 +191,35 @@ def _evaluate_task(
         experiment_url=experiment_url,
         trial_count=trial_count,
     )
+
+    # Compute experiment-level metrics if provided
+    pre_computed_aggregates = None
+    if experiment_metrics is not None and len(experiment_metrics) > 0:
+        from . import experiment_metrics_helpers
+
+        pre_computed_aggregates = (
+            experiment_metrics_helpers.compute_experiment_metrics(
+                experiment_metrics=experiment_metrics,
+                evaluation_result_=evaluation_result_,
+            )
+        )
+
+        if pre_computed_aggregates:
+            # Upload pre-computed metrics to the backend
+            client._rest_client.experiments.update_experiment(
+                id=experiment.id,
+                pre_computed_metric_aggregates=pre_computed_aggregates,
+            )
+
+    # Display results with experiment metrics
+    if verbose >= 1:
+        report.display_experiment_results(
+            dataset.name, total_time, test_results, pre_computed_aggregates
+        )
+
+    report.display_experiment_link(experiment_url=experiment_url)
+
+    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
 
     if verbose >= 2:
         report.display_evaluation_scores_statistics(
@@ -366,6 +396,7 @@ def evaluate_prompt(
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
+    experiment_metrics: Optional[List[Callable]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -400,6 +431,11 @@ def evaluate_prompt(
             If not provided, all samples in the dataset will be evaluated.
 
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
+
+        experiment_metrics: List of callable functions that compute experiment-level metrics.
+            Each function receives an EvaluationResult object and returns either a single ExperimentMetricResult
+            or a list of ExperimentMetricResult objects. These metrics are computed after all test cases
+            are evaluated and uploaded to the backend as pre-computed aggregates.
     """
     if isinstance(model, str):
         opik_model = models_factory.get(model_name=model)
@@ -457,20 +493,13 @@ def evaluate_prompt(
 
     total_time = time.time() - start_time
 
-    if verbose >= 1:
-        report.display_experiment_results(dataset.name, total_time, test_results)
-
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
 
-    report.display_experiment_link(experiment_url=experiment_url)
-
     client.flush()
-
-    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,
@@ -480,6 +509,35 @@ def evaluate_prompt(
         experiment_url=experiment_url,
         trial_count=trial_count,
     )
+
+    # Compute experiment-level metrics if provided
+    pre_computed_aggregates = None
+    if experiment_metrics is not None and len(experiment_metrics) > 0:
+        from . import experiment_metrics_helpers
+
+        pre_computed_aggregates = (
+            experiment_metrics_helpers.compute_experiment_metrics(
+                experiment_metrics=experiment_metrics,
+                evaluation_result_=evaluation_result_,
+            )
+        )
+
+        if pre_computed_aggregates:
+            # Upload pre-computed metrics to the backend
+            client._rest_client.experiments.update_experiment(
+                id=experiment.id,
+                pre_computed_metric_aggregates=pre_computed_aggregates,
+            )
+
+    # Display results with experiment metrics
+    if verbose >= 1:
+        report.display_experiment_results(
+            dataset.name, total_time, test_results, pre_computed_aggregates
+        )
+
+    report.display_experiment_link(experiment_url=experiment_url)
+
+    experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
 
     if verbose >= 2:
         report.display_evaluation_scores_statistics(

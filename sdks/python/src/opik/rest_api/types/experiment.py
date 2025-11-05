@@ -36,6 +36,7 @@ class Experiment(UniversalBaseModel):
     status: typing.Optional[ExperimentStatus] = None
     prompt_version: typing.Optional[PromptVersionLink] = None
     prompt_versions: typing.Optional[typing.List[PromptVersionLink]] = None
+    pre_computed_metric_aggregates: typing.Optional[typing.Dict[str, typing.Dict[str, float]]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
