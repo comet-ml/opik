@@ -2,3 +2,5 @@ pandas
 nltk
 respx
 rouge-score
+scipy
+textstat

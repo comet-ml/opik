@@ -27,6 +27,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TestWorkspace;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
@@ -44,6 +45,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -4664,6 +4666,240 @@ class GetTracesByProjectResourceTest {
                             .build();
                 })
                 .toList();
+    }
+
+    @Nested
+    @DisplayName("Get Traces With Time Filtering:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetTracesByProjectTimeFilteringTests {
+
+        private final TraceStatsAssertion traceStatsAssertion = new TraceStatsAssertion(traceResourceClient);
+        private final TraceTestAssertion traceTestAssertion = new TraceTestAssertion(traceResourceClient, USER);
+
+        // Scenario 1: Boundary condition testing - traces at exact lower bound, upper bound, and in between
+        private Stream<Arguments> provideBoundaryScenarios() {
+            return Stream.of(
+                    Arguments.of("/traces/stats", traceStatsAssertion),
+                    Arguments.of("/traces", traceTestAssertion));
+        }
+
+        @ParameterizedTest
+        @DisplayName("filter traces by UUID creation time - includes traces at lower bound, upper bound, and between")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenIncludeTracesWithinBounds(
+                String endpoint, TracePageTestAssertion testAssertion) {
+            var workspace = setupTestWorkspace();
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
+            Instant upperBound = baseTime;
+
+            // Create traces with UUIDs at specific boundary times
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound,
+                            "At exact lower bound (should be included)"),
+                    createTraceAtTimestamp(workspace.projectName(), upperBound,
+                            "At exact upper bound (should be included)"),
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound.plus(Duration.ofMinutes(5)),
+                            "Between bounds (should be included)"));
+
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
+
+            var queryParams = Map.of(
+                    "from_time", lowerBound.toString(),
+                    "to_time", upperBound.toString());
+
+            // Clear projectName from traces since API returns projectName=null
+            allTraces = normalizeTraces(allTraces);
+            var expectedTraces = sortByIdDescending(allTraces);
+            var values = testAssertion.transformTestParams(allTraces, expectedTraces, List.of());
+
+            testAssertion.assertTest(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(), values.unexpected(), values.all(), List.of(), queryParams);
+        }
+
+        @ParameterizedTest
+        @DisplayName("filter traces by UUID creation time - excludes traces outside bounds")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenExcludeTracesOutsideBounds(
+                String endpoint, TracePageTestAssertion testAssertion) {
+            var workspace = setupTestWorkspace();
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
+            Instant upperBound = baseTime;
+
+            // Create traces: 3 within bounds, 2 outside bounds
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound, "Within bounds"),
+                    createTraceAtTimestamp(workspace.projectName(), upperBound, "Within bounds"),
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound.plus(Duration.ofMinutes(1)),
+                            "Within bounds"),
+                    createTraceAtTimestamp(workspace.projectName(), lowerBound.minus(Duration.ofMinutes(1)),
+                            "Outside bounds (before lower)"),
+                    createTraceAtTimestamp(workspace.projectName(), upperBound.plus(Duration.ofMinutes(1)),
+                            "Outside bounds (after upper)"));
+
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
+
+            // Expected: indices 0, 1, 2 (within bounds)
+            // Unexpected: indices 3, 4 (outside bounds)
+            List<Trace> expectedTraces = allTraces.subList(0, 3);
+            List<Trace> unexpectedTraces = allTraces.subList(3, 5);
+
+            var queryParams = Map.of(
+                    "from_time", lowerBound.toString(),
+                    "to_time", upperBound.toString());
+
+            allTraces = normalizeTraces(allTraces);
+            expectedTraces = normalizeTraces(expectedTraces);
+            unexpectedTraces = normalizeTraces(unexpectedTraces);
+            expectedTraces = sortByIdDescending(expectedTraces);
+
+            var values = testAssertion.transformTestParams(allTraces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(), values.unexpected(), values.all(), List.of(), queryParams);
+        }
+
+        // Scenario 2: ISO-8601 format parsing with extended time range
+        private Stream<Arguments> provideFormatParsingScenarios() {
+            return Stream.of(
+                    Arguments.of("/traces/stats", traceStatsAssertion),
+                    Arguments.of("/traces", traceTestAssertion));
+        }
+
+        @ParameterizedTest
+        @DisplayName("time parameters in ISO-8601 format parse correctly and filter traces")
+        @MethodSource("provideFormatParsingScenarios")
+        void whenTimeParametersInISO8601Format_thenReturnFilteredTraces(
+                String endpoint, TracePageTestAssertion testAssertion) {
+            var workspace = setupTestWorkspace();
+
+            Instant referenceTime = Instant.now();
+            Instant startTime = referenceTime.minus(Duration.ofMinutes(90));
+            Instant withinBoundsTime = referenceTime.minus(Duration.ofMinutes(30));
+            Instant outsideBoundsTime = referenceTime.plus(Duration.ofMinutes(30));
+
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), startTime, "Should be included: at start of range"),
+                    createTraceAtTimestamp(workspace.projectName(), withinBoundsTime,
+                            "Should be included: within range"),
+                    createTraceAtTimestamp(workspace.projectName(), referenceTime,
+                            "Should be included: at end of range"),
+                    createTraceAtTimestamp(workspace.projectName(), outsideBoundsTime,
+                            "Should NOT be included: outside range"));
+
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
+
+            // Filter to get first 3 traces (within bounds)
+            List<Trace> expectedTraces = allTraces.subList(0, 3);
+            List<Trace> unexpectedTraces = allTraces.subList(3, 4);
+
+            var queryParams = Map.of(
+                    "from_time", startTime.toString(),
+                    "to_time", referenceTime.toString());
+
+            allTraces = normalizeTraces(allTraces);
+            expectedTraces = normalizeTraces(expectedTraces);
+            unexpectedTraces = normalizeTraces(unexpectedTraces);
+            expectedTraces = sortByIdDescending(expectedTraces);
+
+            var values = testAssertion.transformTestParams(allTraces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(), values.unexpected(), values.all(), List.of(), queryParams);
+        }
+
+        // Scenario 3: Incomplete time parameters should be rejected
+        private Stream<Arguments> provideInvalidParameterScenarios() {
+            return Stream.of(
+                    Arguments.of("/traces/stats", traceStatsAssertion),
+                    Arguments.of("/traces", traceTestAssertion));
+        }
+
+        @ParameterizedTest
+        @DisplayName("time filtering requires both from_time and to_time parameters")
+        @MethodSource("provideInvalidParameterScenarios")
+        void whenOnlyFromTimeProvided_thenReturnBadRequest(
+                String endpoint, TracePageTestAssertion testAssertion) {
+            var workspace = setupTestWorkspace();
+            Instant now = Instant.now();
+
+            WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_name", workspace.projectName())
+                    .queryParam("from_time", now.toString());
+
+            var actualResponse = target
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
+                    .header(WORKSPACE_HEADER, workspace.workspaceName())
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @ParameterizedTest
+        @DisplayName("from_time must be before to_time")
+        @MethodSource("provideInvalidParameterScenarios")
+        void whenFromTimeAfterToTime_thenReturnBadRequest(
+                String endpoint, TracePageTestAssertion testAssertion) {
+            var workspace = setupTestWorkspace();
+            Instant now = Instant.now();
+            Instant earlier = now.minus(Duration.ofMinutes(10));
+
+            // from_time (now) is after to_time (earlier) - should fail
+            WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_name", workspace.projectName())
+                    .queryParam("from_time", now.toString())
+                    .queryParam("to_time", earlier.toString());
+
+            var actualResponse = target
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
+                    .header(WORKSPACE_HEADER, workspace.workspaceName())
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+
+        // Helper methods to reduce duplication
+        private TestWorkspace setupTestWorkspace() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            return new TestWorkspace(workspaceName, workspaceId, apiKey, projectName);
+        }
+
+        private Trace createTraceAtTimestamp(String projectName, Instant timestamp, String comment) {
+            return createTrace().toBuilder()
+                    .projectName(projectName)
+                    .id(generateUUIDForTimestamp(timestamp))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .build();
+        }
+
+        private List<Trace> normalizeTraces(List<Trace> traces) {
+            return traces.stream().map(t -> t.toBuilder().projectName(null).build()).toList();
+        }
+
+        private List<Trace> sortByIdDescending(List<Trace> traces) {
+            return traces.stream()
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
+        }
+
+        private UUID generateUUIDForTimestamp(Instant timestamp) {
+            byte[] zeroBytes = new byte[8];
+            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes, timestamp.toEpochMilli());
+        }
+
     }
 
 }

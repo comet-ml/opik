@@ -2,6 +2,7 @@ import os
 import random
 import string
 import tempfile
+import warnings
 from typing import cast
 
 import numpy as np
@@ -278,3 +279,15 @@ def ensure_groq_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
     if "GROQ_API_KEY" not in os.environ:
         raise Exception("Groq is not configured!")
+
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*PydanticDeprecatedSince20.*",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*0 counts of 2-gram overlaps.*",
+    category=UserWarning,
+)

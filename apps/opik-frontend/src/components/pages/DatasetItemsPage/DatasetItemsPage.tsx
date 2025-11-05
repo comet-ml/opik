@@ -48,6 +48,7 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -67,6 +68,7 @@ const ROW_HEIGHT_KEY = "dataset-items-row-height";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
+  const truncationEnabled = useTruncationEnabled();
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -115,7 +117,7 @@ const DatasetItemsPage = () => {
       page: page as number,
       size: size as number,
       search: search!,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       placeholderData: keepPreviousData,
@@ -433,7 +435,9 @@ const DatasetItemsPage = () => {
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </div>
       <ResizableSidePanel
         panelId="dataset-items"
