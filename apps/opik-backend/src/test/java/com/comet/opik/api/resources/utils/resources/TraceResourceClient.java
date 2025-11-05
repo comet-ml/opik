@@ -875,21 +875,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public Response callGetTraces(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            target = target.queryParam(entry.getKey(), entry.getValue());
-        }
-
-        return target
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-    }
-
     public Response callGetStats(String apiKey, String workspaceName, Map<String, String> queryParams) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("stats");
@@ -921,15 +906,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
-    }
-
-    public Response callSearchTraces(TraceSearchStreamRequest streamRequest, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("search")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(streamRequest));
     }
 
     public Response callGetTracesWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
