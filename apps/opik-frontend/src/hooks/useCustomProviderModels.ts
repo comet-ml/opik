@@ -28,13 +28,6 @@ const useCustomProviderModels = () => {
         (providerKey) => providerKey.provider === PROVIDER_TYPE.CUSTOM,
       );
 
-      console.log('[useCustomProviderModels] Custom configs:', customConfigs.map(c => ({
-        id: c.id,
-        provider_name: c.provider_name,
-        keyName: c.keyName,
-        models: c.configuration?.models
-      })));
-
       // Create a separate entry for each custom provider
       customConfigs.forEach((customConfig) => {
         if (customConfig.configuration?.models) {
@@ -76,22 +69,9 @@ const useCustomProviderModels = () => {
             });
 
           retval[providerKey] = models;
-          
-          console.log(`[useCustomProviderModels] Provider "${providerKey}":`, {
-            provider_name: customConfig.provider_name,
-            keyName: customConfig.keyName,
-            isLegacy: isLegacyProvider,
-            modelCount: models.length,
-            models: models.map(m => ({ value: m.value, label: m.label }))
-          });
         }
       });
     }
-    
-    console.log('[useCustomProviderModels] Final result:', Object.keys(retval).map(key => ({
-      key,
-      modelCount: retval[key].length
-    })));
     
     return retval;
   }, [data]);

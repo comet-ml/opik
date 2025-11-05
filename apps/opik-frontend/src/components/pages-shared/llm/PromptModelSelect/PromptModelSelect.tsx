@@ -178,6 +178,43 @@ const PromptModelSelect = ({
       .filter((filteredGroupedOption) => !isNull(filteredGroupedOption));
   }, [filterValue, groupOptions]);
 
+  const getProviderIcon = useCallback(
+    (providerType: PROVIDER_TYPE | "") => {
+      if (!providerType) {
+        return null;
+      }
+
+      // Handle icon for dynamic custom providers
+      if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
+        // For dynamic custom providers, use the custom provider icon
+        return PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
+      }
+
+      // For standard providers, use their specific icon
+      return PROVIDERS[providerType].icon;
+    },
+    [],
+  );
+
+  const getProviderLabel = useCallback(
+    (providerType: PROVIDER_TYPE | "") => {
+      if (!providerType) {
+        return "";
+      }
+
+      // Handle label for dynamic custom providers
+      if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
+        // For dynamic custom providers, get the label from groupOptions
+        const customGroup = groupOptions.find((o) => o.provider === providerType);
+        return customGroup ? customGroup.label : "";
+      }
+
+      // For standard providers, use PROVIDERS constant
+      return PROVIDERS[providerType].label;
+    },
+    [groupOptions],
+  );
+
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
       const modelProvider = openProviderMenu
@@ -290,11 +327,7 @@ const PromptModelSelect = ({
   };
 
   const renderProviderValueIcon = () => {
-    if (!provider) {
-      return null;
-    }
-
-    const Icon = PROVIDERS[provider].icon;
+    const Icon = getProviderIcon(provider);
 
     if (!Icon) {
       return null;
@@ -309,9 +342,8 @@ const PromptModelSelect = ({
         .find((o) => o.provider === provider)
         ?.options?.find((m) => m.value === value)?.label ?? value;
 
-    const title = `${
-      provider ? PROVIDERS[provider].label + " " : ""
-    }${modelName}`;
+    const providerLabel = getProviderLabel(provider);
+    const title = providerLabel ? `${providerLabel} ${modelName}` : modelName;
 
     return (
       <SelectTrigger
