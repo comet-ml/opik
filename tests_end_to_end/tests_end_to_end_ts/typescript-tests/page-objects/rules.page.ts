@@ -27,7 +27,7 @@ export class RulesPage {
 
   async navigateToRulesTab(): Promise<void> {
     console.log('Navigating to online evaluation rules tab');
-    
+
     try {
       await expect(this.onlineEvaluationTab).toBeVisible({ timeout: 5000 });
     } catch (error) {
@@ -94,7 +94,7 @@ export class RulesPage {
     // Fill in variable mapping
     await this.variableMapInput.click();
     await this.variableMapInput.fill('output.output');
-    
+
     // Try to click the option if it exists, otherwise just proceed (for projects with no traces)
     try {
       await this.page.getByRole('option', { name: 'output.output' }).click({ timeout: 2000 });
@@ -174,4 +174,3 @@ export class RulesPage {
     console.log(`Successfully created moderation rule with filters: ${ruleName}`);
   }
 }
-

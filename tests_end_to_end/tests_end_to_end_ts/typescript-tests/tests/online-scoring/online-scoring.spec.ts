@@ -75,7 +75,7 @@ test.describe('Online Scoring Tests', () => {
 
         const ruleName = `Test Moderation Rule - ${modelConfig.name}`;
         await rulesPage.createModerationRule(ruleName, providerConfig.display_name, modelConfig.ui_selector);
-        
+
         console.log('Rule created successfully - waiting for rule to fully activate before creating traces');
         // CRITICAL: Wait for the rule to fully activate in the backend before creating traces
         await page.waitForTimeout(10000);
@@ -95,7 +95,7 @@ test.describe('Online Scoring Tests', () => {
               // The Moderation column might not appear immediately, try refreshing
               let columnFound = false;
               const maxAttempts = 5;
-              
+
               for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
                   // Wait for the Moderation column to exist in the DOM
@@ -113,7 +113,7 @@ test.describe('Online Scoring Tests', () => {
                   }
                 }
               }
-              
+
               if (!columnFound) {
                 throw new Error(`Moderation column did not appear after ${maxAttempts} attempts and refreshes`);
               }
@@ -122,21 +122,21 @@ test.describe('Online Scoring Tests', () => {
       await test.step('Verify moderation scores are present', async () => {
         // All traces should have moderation scores of 0 (safe content)
         // Scoring is asynchronous, so we need to wait for the scores to populate
-        
+
         // Count rows in the table - each row should have a moderation score
         const tableRows = page.locator('table tbody tr');
         const rowCount = await tableRows.count();
-        
+
         console.log(`Found ${rowCount} rows in traces table`);
-        
+
         // We expect all 10 traces to be present
         expect(rowCount).toBeGreaterThanOrEqual(10);
-        
+
         // Find the column index of the Moderation column
         const headerCells = page.locator('table thead th, table thead td');
         const headerCount = await headerCells.count();
         let moderationColumnIndex = -1;
-        
+
         for (let i = 0; i < headerCount; i++) {
           const cellText = await headerCells.nth(i).textContent();
           if (cellText?.includes('Moderation')) {
@@ -145,26 +145,26 @@ test.describe('Online Scoring Tests', () => {
             break;
           }
         }
-        
+
         if (moderationColumnIndex === -1) {
           throw new Error('Could not find Moderation column in table header');
         }
-        
+
         // Wait for scoring to complete - retry until we see actual scores (not "-")
         const firstRow = tableRows.first();
         const cells = firstRow.locator('td');
         const moderationCell = cells.nth(moderationColumnIndex);
-        
+
         let moderationValue = '';
         const maxRetries = 10;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           moderationValue = (await moderationCell.textContent())?.trim() || '';
           console.log(`Attempt ${attempt}: First row moderation value: ${moderationValue}`);
-          
+
           if (moderationValue !== '-' && moderationValue !== '') {
             break;
           }
-          
+
           if (attempt < maxRetries) {
             console.log(`Scores not populated yet, waiting 2 seconds before retry...`);
             await page.waitForTimeout(2000);
@@ -172,7 +172,7 @@ test.describe('Online Scoring Tests', () => {
             await page.waitForTimeout(1000);
           }
         }
-        
+
         // The value should be "0" (safe content)
         expect(moderationValue).toBe('0');
         console.log(`Successfully verified moderation scoring is working - traces have been scored with value: ${moderationValue}`);
@@ -186,4 +186,3 @@ test.describe('Online Scoring Tests', () => {
     });
   }
 });
-
