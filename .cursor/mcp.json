@@ -30,6 +30,14 @@
     "chrome-devtools": {
       "command": "npx",
       "args": ["chrome-devtools-mcp@latest"]
+    },
+    "playwright-test": {
+      "command": "npx",
+      "args": [
+        "playwright",
+        "run-test-mcp-server"
+      ],
+      "cwd": "${workspaceFolder}/tests_end_to_end/tests_end_to_end_ts/typescript-tests"
     }
   }
 }
