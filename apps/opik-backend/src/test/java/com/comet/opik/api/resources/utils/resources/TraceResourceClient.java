@@ -777,14 +777,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .get();
     }
 
-    private WebTarget getWebTarget(String pathSuffix) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            target = target.path(pathSuffix);
-        }
-        return target;
-    }
-
     public Response callDeleteTrace(UUID id, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
@@ -795,12 +787,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callGetTracesWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            target = target.queryParam(entry.getKey(), entry.getValue());
-        }
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
 
         return target
                 .request()
@@ -810,15 +797,9 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callGetById(UUID id, String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(id.toString());
-
-        // Add all query parameters
-        if (queryParams != null) {
-            for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-                target = target.queryParam(entry.getKey(), entry.getValue());
-            }
-        }
+        WebTarget target = addQueryParameters(
+                client.target(RESOURCE_PATH.formatted(baseURI)).path(id.toString()),
+                queryParams);
 
         return target
                 .request()
@@ -915,19 +896,4 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .post(Entity.json(threadIds));
     }
 
-    /**
-     * Helper method to add path segments to a WebTarget.
-     * Splits the pathSuffix by "/" and adds each non-empty part as a path segment.
-     */
-    private WebTarget addPathSegments(WebTarget target, String pathSuffix) {
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
-        return target;
-    }
 }

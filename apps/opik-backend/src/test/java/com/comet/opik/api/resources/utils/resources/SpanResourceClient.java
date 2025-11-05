@@ -141,12 +141,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callGetSpansWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            target = target.queryParam(entry.getKey(), entry.getValue());
-        }
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
 
         return target
                 .request()
@@ -157,12 +152,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public Response callGetSpansWithQueryParamsAndCookie(String sessionToken, String workspaceName,
             Map<String, String> queryParams) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            target = target.queryParam(entry.getKey(), entry.getValue());
-        }
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
 
         return target
                 .request()
