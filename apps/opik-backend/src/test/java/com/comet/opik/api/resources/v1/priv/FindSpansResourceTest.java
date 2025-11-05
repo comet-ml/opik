@@ -1031,9 +1031,7 @@ class FindSpansResourceTest {
                                 .build())
                         .toList();
 
-                assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(expectedSpans);
+                assertSpan(actualSpans, expectedSpans, USER);
             }
         }
 
