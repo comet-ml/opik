@@ -21,6 +21,7 @@ from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from . import evaluation_tasks_executor, exception_analyzer, helpers
 from .types import EvaluationTask
 from ..metrics import arguments_validator, arguments_helpers, base_metric, score_result
+from ..scorers import scorer_wrapper_metric
 from ...message_processing import message_processors_chain
 from ...message_processing.emulation import models
 
@@ -77,6 +78,7 @@ class EvaluationEngine:
             scoring_metrics=self._scoring_metrics,
             score_kwargs=test_case_.scoring_inputs,
             scoring_key_mapping=self._scoring_key_mapping,
+            test_case_=test_case_,
         )
 
         test_result_ = test_result.TestResult(
@@ -141,6 +143,7 @@ class EvaluationEngine:
                 dataset_item_id=item.id,
                 scoring_inputs=scoring_inputs,
                 task_output=task_output_,
+                dataset_item_content=item_content,
             )
             test_result_ = self._evaluate_test_case(
                 test_case_=test_case_,
@@ -313,6 +316,7 @@ class EvaluationEngine:
             scoring_metrics=self._task_span_scoring_metrics,
             score_kwargs=score_kwargs,
             scoring_key_mapping=self._scoring_key_mapping,
+            test_case_=test_case_,
         )
 
         # log feedback scores
@@ -347,17 +351,36 @@ def _scores_by_metrics(
     scoring_metrics: List[base_metric.BaseMetric],
     score_kwargs: Dict[str, Any],
     scoring_key_mapping: Optional[ScoringKeyMappingType],
+    test_case_: test_case.TestCase,
 ) -> List[score_result.ScoreResult]:
     score_results: List[score_result.ScoreResult] = []
     for metric in scoring_metrics:
         try:
-            arguments_validator.validate_score_arguments(
-                metric=metric,
-                kwargs=score_kwargs,
-                scoring_key_mapping=scoring_key_mapping,
-            )
             LOGGER.debug("Metric %s score started", metric.name)
-            result = metric.score(**score_kwargs)
+
+            if isinstance(metric, scorer_wrapper_metric.ScorerWrapperMetric):
+                # use original dataset item content without any mappings applied
+                if (
+                    task_span := score_kwargs.get(EVALUATION_SPAN_PARAMETER_NAME)
+                ) is not None:
+                    result = metric.score(
+                        dataset_item=test_case_.dataset_item_content,
+                        task_outputs=test_case_.task_output,
+                        task_span=task_span,
+                    )
+                else:
+                    result = metric.score(
+                        dataset_item=test_case_.dataset_item_content,
+                        task_outputs=test_case_.task_output,
+                    )
+            else:
+                arguments_validator.validate_score_arguments(
+                    metric=metric,
+                    kwargs=score_kwargs,
+                    scoring_key_mapping=scoring_key_mapping,
+                )
+                result = metric.score(**score_kwargs)
+
             LOGGER.debug("Metric %s score ended", metric.name)
 
             if isinstance(result, list):
