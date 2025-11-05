@@ -242,7 +242,11 @@ class AlertServiceImpl implements AlertService {
                                 "type": "regular"
                             }
                     ]
-                    """));
+                    """,
+            AlertEventType.COST,
+            "\"Total cost has exceeded the defined threshold 10 USD in the last 30 minutes\"",
+            AlertEventType.LATENCY,
+            "\"Average Latency has exceeded the defined threshold 5 seconds in the last 30 minutes\""));
 
     private static final Alert DUMMY_ALERT = Alert.builder()
             .id(UUID.fromString("01234567-89ab-cdef-0123-456789abcdef"))

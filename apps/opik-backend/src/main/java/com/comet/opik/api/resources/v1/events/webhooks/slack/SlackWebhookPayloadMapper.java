@@ -92,6 +92,8 @@ public class SlackWebhookPayloadMapper {
             case TRACE_THREAD_FEEDBACK_SCORE -> buildTraceThreadFeedbackScoreDetails(metadata, baseUrl);
             case TRACE_GUARDRAILS_TRIGGERED -> buildGuardrailsTriggeredDetails(metadata, baseUrl);
             case EXPERIMENT_FINISHED -> buildExperimentFinishedDetails(metadata, baseUrl);
+            case COST -> buildCostDetails(metadata, baseUrl);
+            case LATENCY -> buildLatencyDetails(metadata, baseUrl);
         };
 
         var blocks = new ArrayList<SlackBlock>();
@@ -276,6 +278,18 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Experiments Finished:*\n", experimentLinks, fallbackText);
     }
 
+    private static DetailsBuildResult buildCostDetails(@NonNull List<?> metadata,
+            @NonNull String baseUrl) {
+        // TODO: implement cost details mapping
+        return new DetailsBuildResult("implement later");
+    }
+
+    private static DetailsBuildResult buildLatencyDetails(@NonNull List<?> metadata,
+            @NonNull String baseUrl) {
+        // TODO: implement latency details mapping
+        return new DetailsBuildResult("implement later");
+    }
+
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,
             List<String> links, String fallbackText) {
         // Check if exceeds limit
@@ -312,6 +326,8 @@ public class SlackWebhookPayloadMapper {
             case TRACE_THREAD_FEEDBACK_SCORE -> "Thread Feedback Score";
             case TRACE_GUARDRAILS_TRIGGERED -> "Guardrail Triggered";
             case EXPERIMENT_FINISHED -> "Experiment Finished";
+            case COST -> "Cost Alert";
+            case LATENCY -> "Latency Alert";
         };
     }
 
