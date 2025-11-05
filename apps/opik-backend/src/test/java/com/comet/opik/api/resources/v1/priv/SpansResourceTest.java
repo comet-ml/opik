@@ -1936,7 +1936,6 @@ class SpansResourceTest {
         } else {
             assertThat(actualSpan.projectId()).isEqualTo(expectedProjectId);
         }
-        // SpanAssertions.assertSpan now automatically handles provider injection
         SpanAssertions.assertSpan(List.of(actualSpan), List.of(expectedSpan), USER);
         return actualSpan;
     }

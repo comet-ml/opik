@@ -2231,7 +2231,6 @@ class TracesResourceTest {
         assertThat(actualPage.size()).isEqualTo(expectedTraces.size());
         assertThat(actualPage.total()).isEqualTo(total);
 
-        // TraceAssertions.assertTraces now automatically handles provider injection
         TraceAssertions.assertTraces(actualTraces, expectedTraces, unexpectedTraces, USER);
     }
 
@@ -2291,7 +2290,6 @@ class TracesResourceTest {
             assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
 
-            // SpanAssertions.assertSpan now automatically handles provider injection
             SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
@@ -2955,7 +2953,6 @@ class TracesResourceTest {
             assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
         }
 
-        // TraceAssertions.assertTraces now automatically handles provider injection
         TraceAssertions.assertTraces(List.of(actualTrace), List.of(expectedTrace), USER);
 
         return actualTrace;

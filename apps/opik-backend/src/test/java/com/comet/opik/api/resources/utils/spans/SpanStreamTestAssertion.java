@@ -35,7 +35,6 @@ public final class SpanStreamTestAssertion implements SpanPageTestAssertion<Span
 
         var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
-        // SpanAssertions.assertSpan now automatically handles provider injection
         assertSpan(actualSpans, expected, userName);
     }
 

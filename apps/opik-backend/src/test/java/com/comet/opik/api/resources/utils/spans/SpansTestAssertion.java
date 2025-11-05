@@ -49,8 +49,6 @@ public final class SpansTestAssertion implements SpanPageTestAssertion<Span, Spa
                 List.of());
 
         SpanAssertions.assertPage(actualPage, page, expected.size(), expected.size());
-
-        // SpanAssertions.assertSpan now automatically handles provider injection
         assertSpan(actualPage.content(), expected, unexpected, userName);
 
     }
