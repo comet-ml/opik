@@ -4,7 +4,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
-import org.apache.commons.collections4.ListUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +24,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -271,11 +272,14 @@ class BaseRedisSubscriberTest {
         }
 
         @Test
-        void shouldRetryRetryableFailures() {
+        void shouldRetryRetryableFailuresAndHandleAllMixedCasesInTheSameBatch() {
+            var nonRetryableMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var retryableMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var successMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var attemptCount = new ConcurrentHashMap<String, AtomicInteger>();
             var fastConfig = config.toBuilder()
+                    // Set batch size to total messages to process them all at once
+                    .consumerBatchSize(nonRetryableMessages.size() + retryableMessages.size() + successMessages.size())
                     .claimIntervalRatio(2)
                     .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(500))
                     .build();
@@ -283,29 +287,36 @@ class BaseRedisSubscriberTest {
                     TestRedisSubscriber.createSubscriber(fastConfig, redissonClient, message -> {
                         var counter = attemptCount.computeIfAbsent(message, key -> new AtomicInteger());
                         var attempts = counter.incrementAndGet();
-                        if (retryableMessages.contains(message) && attempts == 1) {
-                            // Fail on first attempt with retryable error
+                        if (nonRetryableMessages.contains(message)) {
+                            // Fail with permanent error non-retryable messages
+                            return Mono.error(new NullPointerException("Permanent error"));
+                        } else if (retryableMessages.contains(message) && attempts == 1) {
+                            // Fail with temporary error on first attempt for retryable messages
                             return Mono.error(new RuntimeException("Temporary error"));
                         }
-                        // Succeed on next retry or for success messages
+                        // Succeed on next retry for retryable messages or for success messages
                         return Mono.empty();
                     }));
             subscriber.start();
 
-            publishMessagesToStream(ListUtils.union(retryableMessages, successMessages));
+            var allMessages = Stream.of(nonRetryableMessages, retryableMessages, successMessages)
+                    .flatMap(Collection::stream)
+                    .toList();
+            publishMessagesToStream(allMessages);
 
-            // Both should eventually succeed
+            // Success and retryable should eventually succeed
             waitForMessagesProcessed(subscriber, retryableMessages.size() + successMessages.size());
-            // Both should eventually be removed from stream
+            // All messages should eventually be removed from stream
             waitForMessagesAckedAndRemoved();
-            // Messages should fail only on the first attempt for retryable messages
+            // Messages should fail for non retryable and only on the first attempt for retryable messages
             assertThat(subscriber.getFailedMessageCount().get())
-                    .isEqualTo(retryableMessages.size());
+                    .isEqualTo(nonRetryableMessages.size() + retryableMessages.size());
+            // Verify non-retryable messages were attempted only once
+            nonRetryableMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(1));
             // Verify retryable messages were retried up twice: first failed attempt + second successful retry
-            retryableMessages.forEach(message -> {
-                var attempts = attemptCount.get(message);
-                assertThat(attempts.get()).isEqualTo(2);
-            });
+            retryableMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(2));
+            // Verify success messages were attempted only once
+            successMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(1));
         }
     }
 

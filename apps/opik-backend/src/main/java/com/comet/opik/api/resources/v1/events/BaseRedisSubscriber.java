@@ -573,6 +573,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .subscribeOn(consumerScheduler)
                 .filter(CollectionUtils::isNotEmpty)
                 .map(List::getFirst) // Count is 1, so there would be only the first one
+                .doOnSuccess(size -> log.debug("Successfully list pending messageId '{}'", messageId))
                 .onErrorResume(throwable -> {
                     listPendingErrors.add(1);
                     log.warn("Error listing pending messageId '{}'", messageId, throwable);
