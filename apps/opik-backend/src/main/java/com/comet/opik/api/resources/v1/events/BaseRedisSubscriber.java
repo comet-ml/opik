@@ -480,7 +480,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 })
                 .map(maxRetriesFailure -> {
                     // TODO: Send to the dead letter queue (DLQ) for further analysis
-                    log.error("Max retries reached for messageId '{}, removing from stream",
+                    log.error("Max retries reached for messageId '{}', removing from stream",
                             maxRetriesFailure.messageId(), maxRetriesFailure.error());
                     return maxRetriesFailure.messageId();
                 })
