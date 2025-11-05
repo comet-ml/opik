@@ -23,6 +23,7 @@ import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELin
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -94,37 +95,53 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       >
         <div className="mb-1 flex gap-4 overflow-x-auto">
           {annotationQueue?.created_at && (
-            <DateTag date={annotationQueue.created_at} />
+            <TooltipWrapper content="The date and time when this annotation queue was created">
+              <div>
+                <DateTag date={annotationQueue.created_at} />
+              </div>
+            </TooltipWrapper>
           )}
           {annotationQueue?.scope && (
-            <Tag variant="blue" size="md">
-              {capitalize(annotationQueue.scope)}
-            </Tag>
+            <TooltipWrapper content="Indicates whether this queue contains Traces or Threads for review">
+              <div>
+                <Tag variant="blue" size="md">
+                  {capitalize(annotationQueue.scope)}
+                </Tag>
+              </div>
+            </TooltipWrapper>
           )}
           {annotationQueue?.project_id && (
-            <ResourceLink
-              id={annotationQueue.project_id}
-              name={annotationQueue.project_name}
-              resource={RESOURCE_TYPE.project}
-              asTag
-            />
+            <TooltipWrapper
+              content={`Navigate to project page: ${annotationQueue.project_name}`}
+            >
+              <div>
+                <ResourceLink
+                  id={annotationQueue.project_id}
+                  name={annotationQueue.project_name}
+                  resource={RESOURCE_TYPE.project}
+                  asTag
+                />
+              </div>
+            </TooltipWrapper>
           )}
           {annotationQueue && (
             <AnnotationQueueProgressTag annotationQueue={annotationQueue} />
           )}
         </div>
-        <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
-          <div className="flex gap-1 overflow-x-auto">
-            {allocatedFeedbackScores.map((feedbackScore) => (
-              <FeedbackScoreTag
-                key={feedbackScore.name + feedbackScore.value}
-                label={feedbackScore.name}
-                value={feedbackScore.value}
-              />
-            ))}
+        <TooltipWrapper content="Feedback scores collected for items in this queue">
+          <div className="flex h-11 items-center gap-2">
+            <PenLine className="size-4 shrink-0" />
+            <div className="flex gap-1 overflow-x-auto">
+              {allocatedFeedbackScores.map((feedbackScore) => (
+                <FeedbackScoreTag
+                  key={feedbackScore.name + feedbackScore.value}
+                  label={feedbackScore.name}
+                  value={feedbackScore.value}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        </TooltipWrapper>
       </PageBodyStickyContainer>
       <Tabs
         defaultValue="items"
