@@ -17,7 +17,6 @@ import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -368,7 +367,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
 
         if (CollectionUtils.isNotEmpty(filters)) {
-            target = target.queryParam("filters", toURLEncodedQueryParam(filters));
+            target = target.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
         }
 
         if (CollectionUtils.isNotEmpty(sortingFields)) {
@@ -478,7 +477,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
 
         if (filters != null) {
-            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+            webTarget = webTarget.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
         }
 
         if (projectId != null) {
@@ -536,7 +535,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .reduce(finalTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
 
         var actualResponse = target
-                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .queryParam("filters", TestUtils.toURLEncodedQueryParam(filters))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -849,10 +848,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
-    }
-
-    private static String toURLEncodedQueryParam(List<? extends Filter> filters) {
-        return TestUtils.toURLEncodedQueryParam(filters);
     }
 
     public Response callRetrieveThreadResponse(TraceThreadIdentifier identifier, String apiKey, String workspaceName) {

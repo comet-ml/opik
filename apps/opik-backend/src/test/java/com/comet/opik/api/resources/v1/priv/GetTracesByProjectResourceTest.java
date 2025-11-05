@@ -4775,6 +4775,8 @@ class GetTracesByProjectResourceTest {
             List<Trace> expectedTraces = allTraces.subList(0, 3);
             List<Trace> unexpectedTraces = allTraces.subList(3, 4);
 
+            // Use mutable HashMap instead of immutable Map.of() because
+            // TraceResourceClient.getTraces() needs to process query parameters
             var queryParams = new HashMap<String, String>();
             queryParams.put("from_time", startTime.toString());
             queryParams.put("to_time", referenceTime.toString());
