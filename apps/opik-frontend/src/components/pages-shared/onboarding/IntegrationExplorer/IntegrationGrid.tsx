@@ -61,7 +61,17 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
             No search results
           </h3>
 
-          <Button variant="link" size="sm" onClick={handleRequestIntegration}>
+          <Button
+            variant="link"
+            size="sm"
+            onClick={handleRequestIntegration}
+            id={`integration-grid-no-results-request${
+              source ? `-${source}` : ""
+            }`}
+            data-fs-element={`IntegrationGridNoResultsRequest${
+              source ? `-${source}` : ""
+            }`}
+          >
             Request integration
           </Button>
         </div>
@@ -82,26 +92,39 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
           className,
         )}
       >
-        {filteredIntegrations.map((integration) => (
-          <IntegrationCard
-            key={integration.id}
-            title={integration.title}
-            description={integration.description}
-            icon={
-              <img
-                alt={integration.title}
-                src={
-                  themeMode === THEME_MODE.DARK && integration.whiteIcon
-                    ? integration.whiteIcon
-                    : integration.icon
-                }
-                className="size-[40px] shrink-0"
-              />
-            }
-            tag={integration.tag}
-            onClick={() => setSelectedIntegrationId(integration.id)}
-          />
-        ))}
+        {filteredIntegrations.map((integration) => {
+          const integrationIdPascalCase = integration.id
+            .split("-")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join("");
+
+          return (
+            <IntegrationCard
+              key={integration.id}
+              title={integration.title}
+              description={integration.description}
+              icon={
+                <img
+                  alt={integration.title}
+                  src={
+                    themeMode === THEME_MODE.DARK && integration.whiteIcon
+                      ? integration.whiteIcon
+                      : integration.icon
+                  }
+                  className="size-[40px] shrink-0"
+                />
+              }
+              tag={integration.tag}
+              onClick={() => setSelectedIntegrationId(integration.id)}
+              id={`integration-card-${integration.id}${
+                source ? `-${source}` : ""
+              }`}
+              data-fs-element={`IntegrationCard${integrationIdPascalCase}${
+                source ? `-${source}` : ""
+              }`}
+            />
+          );
+        })}
 
         <a
           href={buildDocsUrl(
@@ -110,10 +133,6 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
           )}
           target="_blank"
           rel="noopener noreferrer"
-          data-fs-element={`IntegrationsOverviewDocsLink${
-            source ? `-${source}` : ""
-          }`}
-          id={`integrations-overview-docs-link${source ? `-${source}` : ""}`}
         >
           <IntegrationCard
             title="View all integrations"
@@ -123,6 +142,10 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
                 <BookOpen className="size-5 text-primary" />
               </div>
             }
+            id={`integrations-overview-docs-link${source ? `-${source}` : ""}`}
+            data-fs-element={`IntegrationsOverviewDocsLink${
+              source ? `-${source}` : ""
+            }`}
           />
         </a>
 
@@ -132,6 +155,12 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
           className="justify-center"
           icon={<Plus className="size-4" />}
           onClick={handleRequestIntegration}
+          id={`integration-grid-request-integration${
+            source ? `-${source}` : ""
+          }`}
+          data-fs-element={`IntegrationGridRequestIntegration${
+            source ? `-${source}` : ""
+          }`}
         />
       </div>
 
