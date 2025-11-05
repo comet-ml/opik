@@ -36,6 +36,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             INSERT INTO workspace_configurations (
                 workspace_id,
                 timeout_mark_thread_as_inactive,
+                truncation_on_tables,
                 created_at,
                 last_updated_at,
                 created_by,
@@ -44,6 +45,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             SELECT
                 new_config.workspace_id,
                 new_config.timeout_mark_thread_as_inactive,
+                new_config.truncation_on_tables,
                 if(empty(wc.workspace_id), new_config.created_at, wc.created_at),
                 new_config.last_updated_at,
                 if(empty(wc.workspace_id), new_config.created_by, wc.created_by),
@@ -52,6 +54,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 SELECT
                     :workspace_id AS workspace_id,
                     :timeout_seconds AS timeout_mark_thread_as_inactive,
+                    :truncation_on_tables AS truncation_on_tables,
                     now64(9) AS created_at,
                     now64(6) AS last_updated_at,
                     :user_name AS created_by,
@@ -61,7 +64,9 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             """;
 
     private static final String GET_CONFIGURATION_SQL = """
-            SELECT timeout_mark_thread_as_inactive
+            SELECT
+                timeout_mark_thread_as_inactive,
+                truncation_on_tables
             FROM workspace_configurations final
             WHERE workspace_id = :workspace_id
             """;
@@ -87,6 +92,12 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 statement.bindNull("timeout_seconds", Long.class);
             }
 
+            if (configuration.truncationOnTables() != null) {
+                statement.bind("truncation_on_tables", configuration.truncationOnTables());
+            } else {
+                statement.bindNull("truncation_on_tables", Boolean.class);
+            }
+
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
@@ -107,8 +118,11 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                                 .map(Duration::ofSeconds)
                                 .orElse(null);
 
+                        Boolean truncationOnTables = row.get("truncation_on_tables", Boolean.class);
+
                         return WorkspaceConfiguration.builder()
                                 .timeoutToMarkThreadAsInactive(timeout)
+                                .truncationOnTables(truncationOnTables)
                                 .build();
                     })));
         });
