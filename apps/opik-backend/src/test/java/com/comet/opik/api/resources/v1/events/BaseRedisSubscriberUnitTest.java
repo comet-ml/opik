@@ -34,7 +34,9 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -137,7 +139,6 @@ class BaseRedisSubscriberUnitTest {
         void setUp() {
             whenCreateGroupReturnEmpty();
             whenRemoveConsumerReturn();
-            whenListPendingReturn();
         }
 
         @Test
@@ -326,7 +327,7 @@ class BaseRedisSubscriberUnitTest {
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
                 if (count == 2 || count == 3) {
-                    return Mono.error(new NullPointerException("Unexpected error"));
+                    return Mono.error(new RuntimeException("Unexpected error"));
                 }
                 return Mono.empty();
             }));
@@ -334,6 +335,7 @@ class BaseRedisSubscriberUnitTest {
             whenReadGroupReturnMessages();
             whenAckReturn();
             // Not mocking remove, so unhandled null pointer exceptions occur in post-processing success
+            when(stream.listPending(any(StreamPendingRangeArgs.class))).thenReturn(Mono.just(List.of()));
 
             subscriber.start();
 
@@ -343,6 +345,7 @@ class BaseRedisSubscriberUnitTest {
                         assertThat(processCount.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                         assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(2);
+                        verify(stream, atLeast(2)).listPending(any(StreamPendingRangeArgs.class));
                     });
         }
 
@@ -387,7 +390,7 @@ class BaseRedisSubscriberUnitTest {
     }
 
     @Nested
-    class RetryLogicTests {
+    class RetryTests {
 
         @BeforeEach
         void setUp() {
@@ -578,14 +581,12 @@ class BaseRedisSubscriberUnitTest {
         lenient().when(stream.remove(any(StreamMessageId[].class))).thenReturn(Mono.just(1L));
     }
 
-    private void whenRemoveConsumerReturn() {
-        when(stream.removeConsumer(anyString(), anyString())).thenReturn(Mono.just(0L));
+    private void whenListPendingReturn() {
+        // This should be lenient as only on retryable failures and the test might finish before list pending happening
+        lenient().when(stream.listPending(any(StreamPendingRangeArgs.class))).thenReturn(Mono.just(List.of()));
     }
 
-    private void whenListPendingReturn() {
-        // This should be lenient as listPending only happens on retryable failures
-        // and the test might finish before the query executes
-        lenient().when(stream.listPending(any(StreamPendingRangeArgs.class)))
-                .thenReturn(Mono.just(List.of()));
+    private void whenRemoveConsumerReturn() {
+        when(stream.removeConsumer(anyString(), anyString())).thenReturn(Mono.just(0L));
     }
 }
