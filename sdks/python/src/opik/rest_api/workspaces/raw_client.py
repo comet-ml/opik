@@ -147,6 +147,7 @@ class RawWorkspacesClient:
         self,
         *,
         timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
+        truncation_on_tables: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[WorkspaceConfiguration]:
         """
@@ -156,6 +157,9 @@ class RawWorkspacesClient:
         ----------
         timeout_to_mark_thread_as_inactive : typing.Optional[str]
             Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H for 2 hours, P1D for 1 day). Minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
+
+        truncation_on_tables : typing.Optional[bool]
+            Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -170,6 +174,7 @@ class RawWorkspacesClient:
             method="PUT",
             json={
                 "timeout_to_mark_thread_as_inactive": timeout_to_mark_thread_as_inactive,
+                "truncation_on_tables": truncation_on_tables,
             },
             headers={
                 "content-type": "application/json",
@@ -593,6 +598,7 @@ class AsyncRawWorkspacesClient:
         self,
         *,
         timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
+        truncation_on_tables: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[WorkspaceConfiguration]:
         """
@@ -602,6 +608,9 @@ class AsyncRawWorkspacesClient:
         ----------
         timeout_to_mark_thread_as_inactive : typing.Optional[str]
             Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H for 2 hours, P1D for 1 day). Minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
+
+        truncation_on_tables : typing.Optional[bool]
+            Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -616,6 +625,7 @@ class AsyncRawWorkspacesClient:
             method="PUT",
             json={
                 "timeout_to_mark_thread_as_inactive": timeout_to_mark_thread_as_inactive,
+                "truncation_on_tables": truncation_on_tables,
             },
             headers={
                 "content-type": "application/json",
