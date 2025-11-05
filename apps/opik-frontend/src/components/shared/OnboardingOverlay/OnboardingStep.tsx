@@ -68,10 +68,7 @@ const AnswerCard: React.FC<AnswerCardProps> = ({ option }) => {
       onClick={() => handleAnswer(option)}
       className="flex min-h-[100px] w-full min-w-0 flex-col items-start whitespace-normal p-6 text-left"
       id={`onboarding-step-${stepIdentifier}-answer-card-${kebabCaseTitle}`}
-      data-fs-element={`OnboardingStep${stepIdentifier}AnswerCard${title?.replace(
-        /\s+/g,
-        "",
-      )}`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-answer-card-${kebabCaseTitle}`}
     >
       <span className="comet-body-s-accented">{title}</span>
       <span className="comet-body-xs text-muted-foreground">{description}</span>
@@ -98,10 +95,7 @@ const AnswerButton: React.FC<AnswerButtonProps> = ({ option }) => {
       onClick={() => handleAnswer(option)}
       className="h-auto justify-center whitespace-normal bg-white px-4 py-2.5 text-left dark:bg-soft-background hover:dark:bg-primary-foreground"
       id={`onboarding-step-${stepIdentifier}-answer-${kebabCaseOption}`}
-      data-fs-element={`OnboardingStep${stepIdentifier}Answer${option.replace(
-        /[^a-zA-Z0-9]/g,
-        "",
-      )}`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-answer-${kebabCaseOption}`}
     >
       {option}
     </Button>
@@ -118,7 +112,7 @@ const Skip: React.FC = () => {
       className="pl-0 text-foreground"
       onClick={handleSkip}
       id={`onboarding-step-${stepIdentifier}-skip`}
-      data-fs-element={`OnboardingStep${stepIdentifier}Skip`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-skip`}
     >
       Skip
       <ChevronsRight className="ml-1 size-4" />
@@ -137,7 +131,7 @@ const BackButton: React.FC = () => {
         className="pl-0 text-foreground"
         onClick={handleBack}
         id={`onboarding-step-${stepIdentifier}-back`}
-        data-fs-element={`OnboardingStep${stepIdentifier}Back`}
+        data-fs-element={`onboarding-step-${stepIdentifier}-back`}
       >
         <ChevronLeft className="mr-1 size-4" />
         Back
