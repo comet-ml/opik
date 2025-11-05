@@ -798,35 +798,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return target;
     }
 
-    public ProjectStats getStats(String projectName, UUID projectId, String apiKey, String workspaceName,
-            Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("stats");
-
-        if (projectName != null) {
-            webTarget = webTarget.queryParam("project_name", projectName);
-        }
-        if (projectId != null) {
-            webTarget = webTarget.queryParam("project_id", projectId);
-        }
-
-        // Add remaining queryParams (like from_time, to_time)
-        WebTarget finalTarget = webTarget;
-        webTarget = queryParams.entrySet()
-                .stream()
-                .reduce(finalTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
-
-        try (var actualResponse = webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return actualResponse.readEntity(ProjectStats.class);
-        }
-    }
-
     public Response callDeleteTrace(UUID id, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
@@ -834,78 +805,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .delete();
-    }
-
-    public Trace.TracePage getTraces(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            target = target.queryParam(entry.getKey(), entry.getValue());
-        }
-
-        try (var actualResponse = target
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-            return actualResponse.readEntity(Trace.TracePage.class);
-        }
-    }
-
-    public ProjectStats getStats(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("stats");
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
-        }
-
-        try (var actualResponse = webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return actualResponse.readEntity(ProjectStats.class);
-        }
-    }
-
-    public Response callGetStats(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("stats");
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
-        }
-
-        return webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-    }
-
-    public Response callGetFeedbackScoreNames(String apiKey, String workspaceName, Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("feedback-scores")
-                .path("names");
-
-        // Add all query parameters
-        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
-        }
-
-        return webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
     }
 
     public Response callGetTracesWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
@@ -941,50 +840,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .get();
     }
 
-    public Response callGetStats(UUID projectId, String projectName, String apiKey, String workspaceName,
-            Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("stats");
-
-        if (projectId != null) {
-            webTarget = webTarget.queryParam("project_id", projectId);
-        }
-
-        if (projectName != null) {
-            webTarget = webTarget.queryParam("project_name", projectName);
-        }
-
-        // Add remaining query parameters
-        if (queryParams != null) {
-            for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-                webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
-            }
-        }
-
-        return webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-    }
-
     public Response callGetFeedbackScoresToNames(UUID projectId, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names")
                 .queryParam("project_id", projectId)
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-    }
-
-    public Response callGetTraceThreadsWithResponseOnly(String projectName, String apiKey, String workspaceName,
-            List<? extends Filter> filters) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("threads")
-                .queryParam("project_name", projectName)
-                .queryParam("filters", toURLEncodedQueryParam(filters))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -1090,26 +950,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(body));
-    }
-
-    public Response callDeleteToPath(String pathSuffix, String apiKey, String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
-
-        return target
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete();
     }
 
     public Response callDeleteTraceThreads(DeleteTraceThreads threadIds, String apiKey, String workspaceName) {
