@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.DefaultValue;
 import lombok.Builder;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +26,9 @@ public record SpanSearchStreamRequest(
         List<SpanFilter> filters,
         @Schema(description = "Max number of spans to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         UUID lastRetrievedId,
-        @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate) {
+        @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate,
+        @Schema(description = "Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant fromTime,
+        @Schema(description = "Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant toTime) {
 
     @Override
     public Integer limit() {

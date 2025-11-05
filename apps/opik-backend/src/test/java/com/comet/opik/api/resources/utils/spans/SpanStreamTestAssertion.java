@@ -7,8 +7,10 @@ import com.comet.opik.api.resources.utils.TestArgs;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import lombok.RequiredArgsConstructor;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
@@ -30,8 +32,19 @@ public final class SpanStreamTestAssertion implements SpanPageTestAssertion<Span
             List<? extends SpanFilter> filters,
             Map<String, String> queryParams) {
 
-        var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                .filters(List.copyOf(filters)).build();
+        var streamRequestBuilder = SpanSearchStreamRequest.builder().projectName(projectName)
+                .filters(List.copyOf(filters));
+
+        // Add time filtering parameters if present
+        Optional.ofNullable(queryParams.get("from_time"))
+                .map(Instant::parse)
+                .ifPresent(streamRequestBuilder::fromTime);
+
+        Optional.ofNullable(queryParams.get("to_time"))
+                .map(Instant::parse)
+                .ifPresent(streamRequestBuilder::toTime);
+
+        var streamRequest = streamRequestBuilder.build();
 
         var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 

@@ -46,7 +46,9 @@ public final class SpansTestAssertion implements SpanPageTestAssertion<Span, Spa
                 Optional.ofNullable(queryParams.get("type")).map(SpanType::valueOf).orElse(null),
                 filters,
                 List.of(),
-                List.of());
+                List.of(),
+                queryParams.get("from_time"),
+                queryParams.get("to_time"));
 
         SpanAssertions.assertPage(actualPage, page, expected.size(), expected.size());
         assertSpan(actualPage.content(), expected, unexpected, userName);
