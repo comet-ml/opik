@@ -55,7 +55,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
         input={"title": "Documentary about Bigfoot in Paris"},
         output={"output": ANY_DICT},
         tags=["tag1", "tag2"],
-        metadata={"providers": ["groq"], "a": "b", "created_from": "langchain"},
+        metadata={"a": "b", "created_from": "langchain"},
         end_time=ANY_BUT_NONE,
         spans=[
             SpanModel(
