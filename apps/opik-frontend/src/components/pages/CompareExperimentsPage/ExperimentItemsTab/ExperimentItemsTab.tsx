@@ -387,8 +387,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             statsMap.set(statName, {
               name: statName,
               type: STATISTIC_AGGREGATION_TYPE.PERCENTAGE,
-              value: aggregateValues as Record<string, number>,
-            } as ColumnStatistic);
+              value: aggregateValues,
+            });
           } else if (!existingStat) {
             statsMap.set(statName, {
               name: statName,

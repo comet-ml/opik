@@ -115,11 +115,7 @@ export enum STATISTIC_AGGREGATION_TYPE {
 }
 
 export interface PercentageStatisticData {
-  value: {
-    p50: number;
-    p90: number;
-    p99: number;
-  };
+  value: Record<string, number>;
   type: STATISTIC_AGGREGATION_TYPE.PERCENTAGE;
 }
 
