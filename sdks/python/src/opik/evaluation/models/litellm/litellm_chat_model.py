@@ -61,9 +61,10 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         must_support_arguments: Optional[List[str]] = None,
         **completion_kwargs: Any,
     ) -> None:
+        import litellm
+
         """
         Initializes the base model with a given model name.
-        Wraps `litellm.completion` function.
         You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input.
 
         Args:
@@ -77,7 +78,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
             completion_kwargs: key-value arguments to always pass additionally into `litellm.completion` function.
         """
-
         super().__init__(model_name=model_name)
 
         self._check_model_name()
@@ -95,12 +95,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             # Litellm has already fixed that, but it is not released yet, so this filter
             # should be removed from here soon.
             warnings.simplefilter("ignore")
-            import litellm
 
         warning_filters.add_warning_filters()
 
-        # Create tracked versions of completion methods for Opik monitoring
-        # Check config to see if monitoring is enabled and properly configured
         config = opik_config.OpikConfig()
         is_monitoring_enabled = (
             config.enable_litellm_models_monitoring
@@ -108,7 +105,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         )
 
         if is_monitoring_enabled:
-            # Apply tracking decorator
             self._litellm_completion = litellm_integration.track_completion()(
                 litellm.completion
             )
