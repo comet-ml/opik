@@ -272,7 +272,7 @@ class BaseRedisSubscriberTest {
         }
 
         @Test
-        void shouldRetryRetryableFailuresAndHandleAllMixedCasesInTheSameBatch() {
+        void shouldHandleMixedSuccessRetryableAndNonRetryableMessagesInSameBatch() {
             var nonRetryableMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var retryableMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var successMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);

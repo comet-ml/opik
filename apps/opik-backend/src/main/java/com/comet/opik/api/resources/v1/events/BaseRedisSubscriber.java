@@ -241,12 +241,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             streamSubscription = setupStreamListener();
         }
         log.info(
-                "Consumer started successfully with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}', longPollingDuration='{}'",
+                "Consumer started successfully with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}', longPollingDuration='{}', claimIntervalRatio='{}', pendingMessageDuration='{}', maxRetries='{}'",
                 config.getStreamName(),
                 config.getConsumerGroupName(),
                 config.getConsumerBatchSize(),
                 config.getPoolingInterval().toJavaDuration(),
-                config.getLongPollingDuration().toJavaDuration());
+                config.getLongPollingDuration().toJavaDuration(),
+                config.getClaimIntervalRatio(),
+                config.getPendingMessageDuration().toJavaDuration(),
+                config.getMaxRetries());
     }
 
     @Override
