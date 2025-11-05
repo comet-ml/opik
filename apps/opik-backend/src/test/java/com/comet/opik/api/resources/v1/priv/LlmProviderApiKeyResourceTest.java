@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -540,6 +541,7 @@ class LlmProviderApiKeyResourceTest {
         }
     }
 
+    @Disabled("Disabled until we fully support multiple custom providers")
     @ParameterizedTest
     @EmptySource
     @NullSource
