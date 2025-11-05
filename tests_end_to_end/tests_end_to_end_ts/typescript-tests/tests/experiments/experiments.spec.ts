@@ -9,6 +9,20 @@ test.describe('Experiments CRUD Tests', () => {
       helperClient,
       createExperiment,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that experiments created via the SDK are properly visible and accessible in both the UI and SDK interfaces.
+
+Steps:
+1. Create an experiment via SDK (handled by fixture)
+2. Navigate to the experiments page in the UI
+3. Verify the experiment appears in the UI list
+4. Retrieve the experiment via SDK
+5. Verify the experiment name matches expected value
+
+This test ensures proper synchronization between UI and backend after SDK-based experiment creation.`
+      });
+
       await test.step('Verify experiment is visible in UI', async () => {
         const experimentsPage = new ExperimentsPage(page);
         await experimentsPage.goto();
@@ -50,6 +64,20 @@ test.describe('Experiments CRUD Tests', () => {
       helperClient,
       createExperiment,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that experiments can be deleted through the UI, and the deletion is properly reflected in the SDK.
+
+Steps:
+1. Create an experiment via SDK (handled by fixture)
+2. Navigate to the experiments page
+3. Delete the experiment using the UI delete action
+4. Verify the experiment no longer appears in the UI
+5. Verify the experiment returns 404 when fetched via SDK
+
+This test ensures UI deletions propagate correctly to the backend and SDK.`
+      });
+
       await test.step('Delete experiment using UI', async () => {
         const experimentsPage = new ExperimentsPage(page);
         await experimentsPage.goto();
@@ -69,6 +97,19 @@ test.describe('Experiments CRUD Tests', () => {
       helperClient,
       createExperiment,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that experiments can be deleted through the SDK, and the deletion is properly reflected in the UI.
+
+Steps:
+1. Create an experiment via SDK (handled by fixture)
+2. Delete the experiment using SDK
+3. Verify the experiment no longer appears in the UI
+4. Verify the experiment returns 404 when fetched via SDK
+
+This test ensures SDK deletions are reflected in the UI.`
+      });
+
       await test.step('Delete experiment using SDK', async () => {
         await helperClient.deleteExperiment(createExperiment.id);
       });

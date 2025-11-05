@@ -13,6 +13,7 @@ export type FeedbackScoresFixtures = {
 export type ExperimentsFixtures = {
   experimentsPage: ExperimentsPage;
   createExperiment: Experiment;
+  createExperimentWithItems: { experiment: Experiment; datasetSize: number };
 };
 
 export type PromptsFixtures = {
@@ -78,6 +79,42 @@ export const test = base.extend<
     const experiment = await helperClient.createExperiment(experimentName, datasetName);
 
     await use(experiment);
+
+    try {
+      await helperClient.deleteExperiment(experiment.id);
+      await helperClient.deleteDataset(datasetName);
+    } catch (error) {
+      console.warn(`Failed to cleanup experiment ${experimentName}:`, error);
+    }
+  },
+
+  // Create Experiment with Dataset Items
+  createExperimentWithItems: async ({ helperClient, datasetName }, use) => {
+    // Create dataset
+    await helperClient.createDataset(datasetName);
+    await helperClient.waitForDatasetVisible(datasetName, 10);
+
+    // Insert test items into dataset
+    const TEST_ITEMS = [
+      { input: 'input0', output: 'output0' },
+      { input: 'input1', output: 'output1' },
+      { input: 'input2', output: 'output2' },
+      { input: 'input3', output: 'output3' },
+      { input: 'input4', output: 'output4' },
+      { input: 'input5', output: 'output5' },
+      { input: 'input6', output: 'output6' },
+      { input: 'input7', output: 'output7' },
+      { input: 'input8', output: 'output8' },
+      { input: 'input9', output: 'output9' },
+    ];
+    await helperClient.insertDatasetItems(datasetName, TEST_ITEMS);
+    await helperClient.waitForDatasetItemsCount(datasetName, TEST_ITEMS.length, 15);
+
+    // Create experiment on the dataset
+    const experimentName = `test-experiment-${Date.now()}`;
+    const experiment = await helperClient.createExperiment(experimentName, datasetName);
+
+    await use({ experiment, datasetSize: TEST_ITEMS.length });
 
     try {
       await helperClient.deleteExperiment(experiment.id);
