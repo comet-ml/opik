@@ -104,6 +104,10 @@ const useChartTickDefaultConfig = (
   }, [filteredValues, showMinMaxDomain]);
 
   const ticks = useMemo(() => {
+    if (filteredValues.length === 0) {
+      return [] as number[];
+    }
+
     if (showMinMaxDomain) {
       const [domainMin, domainMax] = domain as [number, number];
       return generateEvenlySpacedValues(
@@ -129,6 +133,9 @@ const useChartTickDefaultConfig = (
   ]);
 
   const width = useMemo(() => {
+    if (!ticks.length) {
+      return MIN_Y_AXIS_WIDTH;
+    }
     return Math.min(
       Math.max(
         Math.max(
@@ -147,8 +154,6 @@ const useChartTickDefaultConfig = (
     (value: number) => tickFormatter(value, maxDecimalNumbersLength),
     [maxDecimalNumbersLength, tickFormatter],
   );
-
-  // domain already computed above
 
   return {
     width,
