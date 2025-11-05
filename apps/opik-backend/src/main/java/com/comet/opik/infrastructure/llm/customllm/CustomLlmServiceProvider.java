@@ -21,8 +21,8 @@ class CustomLlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiKey) {
-        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(apiKey));
+    public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
+        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration());
     }
 
     @Override
