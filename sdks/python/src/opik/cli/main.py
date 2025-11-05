@@ -5,9 +5,9 @@ from importlib import metadata
 import click
 
 from .configure import configure
-from .export import export
+from .export import export_group
 from .healthcheck import healthcheck
-from .import_command import import_data
+from .import_command import import_group
 from .proxy import proxy
 
 __version__: str = "0.0.0+dev"
@@ -29,5 +29,5 @@ def cli() -> None:
 cli.add_command(configure)
 cli.add_command(proxy)
 cli.add_command(healthcheck)
-cli.add_command(export)
-cli.add_command(import_data)
+cli.add_command(export_group)
+cli.add_command(import_group)
