@@ -179,13 +179,13 @@ test.describe('Project Metrics Dashboard', () => {
     // 1. Navigate to projects page
     const projectsPage = new ProjectsPage(page);
     await projectsPage.goto();
-    
+
     // 2. Click on project to view details
     await projectsPage.clickProject(projectName);
-    
+
     // 3. Navigate to metrics tab
     await page.click('[data-testid="metrics-tab"]');
-    
+
     // Expected: Metrics dashboard is displayed
     await expect(page.locator('[data-testid="metrics-chart"]')).toBeVisible();
   });
@@ -432,8 +432,8 @@ open http://localhost:5173
 Prompt to Cursor:
 ```
 I just built a new project analytics dashboard. Generate an E2E test for it.
-The dashboard shows project statistics including total traces, average cost, and 
-success rate. Users access it from the project details page by clicking the 
+The dashboard shows project statistics including total traces, average cost, and
+success rate. Users access it from the project details page by clicking the
 "Analytics" tab. Please create a happy path test.
 ```
 
