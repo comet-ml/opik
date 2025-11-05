@@ -33,11 +33,14 @@ To create a custom conversation metric, subclass [`ConversationThreadMetric`](ht
 
 ```python
 from typing import Any
-from opik.evaluation.metrics.conversation import conversation_thread_metric, types
 from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import (
+    ConversationThreadMetric,
+    types as conversation_types,
+)
 
 
-class ConversationLengthMetric(conversation_thread_metric.ConversationThreadMetric):
+class ConversationLengthMetric(ConversationThreadMetric):
     """
     A simple metric that counts the number of conversation turns.
     """
@@ -46,7 +49,7 @@ class ConversationLengthMetric(conversation_thread_metric.ConversationThreadMetr
         super().__init__(name)
 
     def score(
-        self, conversation: types.Conversation, **kwargs: Any
+        self, conversation: conversation_types.Conversation, **kwargs: Any
     ) -> score_result.ScoreResult:
         """
         Score based on conversation length.
@@ -92,4 +95,3 @@ For more details on evaluating conversation threads, see the [Evaluate Threads g
 
 - Learn about [built-in conversation metrics](/evaluation/metrics/conversation_threads_metrics)
 - Read the [Evaluate Threads guide](/evaluation/evaluate_threads)
-
