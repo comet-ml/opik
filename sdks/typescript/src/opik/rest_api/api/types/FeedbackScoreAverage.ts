@@ -5,4 +5,5 @@
 export interface FeedbackScoreAverage {
     name: string;
     value: number;
+    type?: string;
 }

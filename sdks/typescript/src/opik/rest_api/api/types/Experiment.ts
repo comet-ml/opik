@@ -26,4 +26,5 @@ export interface Experiment {
     status?: OpikApi.ExperimentStatus;
     promptVersion?: OpikApi.PromptVersionLink;
     promptVersions?: OpikApi.PromptVersionLink[];
+    preComputedMetricAggregates?: Record<string, Record<string, number>>;
 }

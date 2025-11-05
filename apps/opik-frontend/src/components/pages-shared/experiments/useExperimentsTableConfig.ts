@@ -118,29 +118,41 @@ export const useExperimentsTableConfig = <
 
   const scoresColumnsData = useMemo(() => {
     return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) =>
-              (
-                row as T & { feedback_scores?: Array<{ name: string }> }
-              ).feedback_scores?.find((f) => f.name === label),
-            customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                (
-                  aggregation as ExperimentsAggregations & {
-                    feedback_scores?: Array<{ name: string }>;
-                  }
-                ).feedback_scores?.find((f) => f.name === label)?.value,
+      ...dynamicScoresColumns.map(({ label, id, columnType }) => {
+        // Parse label to extract score name and aggregate type
+        // e.g., "hallucination_metric (min)" -> scoreName: "hallucination_metric", aggregate: "min"
+        const match = label.match(/^(.+?)\s*\((.+)\)$/);
+        const scoreName = match ? match[1] : label;
+        const aggregateKey = match ? match[2] : null;
+
+        return {
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          aggregatedCell: FeedbackScoreCell.Aggregation as never,
+          accessorFn: (row: T) =>
+            (
+              row as T & { feedback_scores?: Array<{ name: string }> }
+            ).feedback_scores?.find((f) => f.name === label),
+          customMeta: {
+            accessorFn: (aggregation: ExperimentsAggregations) => {
+              // If this is a pre-computed aggregate column (has aggregate key like "min", "max")
+              if (aggregateKey) {
+                // Look in feedback_scores for entry matching both name and type
+                return aggregation.feedback_scores?.find(
+                  (f) => f.name === scoreName && f.type === aggregateKey,
+                )?.value;
+              }
+              // Otherwise, look in feedback_scores for the base avg (or entry without type)
+              return aggregation.feedback_scores?.find(
+                (f) => f.name === label && (!f.type || f.type === "avg"),
+              )?.value;
             },
-          }) as ColumnData<T>,
-      ),
+          },
+        } as ColumnData<T>;
+      }),
     ];
   }, [dynamicScoresColumns]);
 

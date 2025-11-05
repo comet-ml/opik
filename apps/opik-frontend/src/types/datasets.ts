@@ -72,6 +72,7 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];
+  pre_computed_metric_aggregates?: Record<string, Record<string, number>>;
   duration?: AggregatedDuration;
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
@@ -110,6 +111,7 @@ export interface ExperimentsAggregations {
   total_estimated_cost_avg?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
+  pre_computed_metric_aggregates?: Record<string, Record<string, number>>;
 }
 
 export interface ExperimentsGroupNode {

@@ -14,6 +14,7 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -42,6 +43,7 @@ import reactor.core.publisher.SignalType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +61,8 @@ import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
 import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
+import static com.comet.opik.utils.JsonUtils.jsonStringToNestedMap;
+import static com.comet.opik.utils.JsonUtils.nestedMapToJsonString;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
@@ -87,7 +91,8 @@ class ExperimentDAO {
                 prompt_versions,
                 type,
                 optimization_id,
-                status
+                status,
+                pre_computed_metric_aggregates
             )
             SELECT
                 if(
@@ -106,7 +111,8 @@ class ExperimentDAO {
                 new.prompt_versions,
                 new.type,
                 new.optimization_id,
-                new.status
+                new.status,
+                new.pre_computed_metric_aggregates
             FROM (
                 SELECT
                 :id AS id,
@@ -121,7 +127,8 @@ class ExperimentDAO {
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
                 :optimization_id AS optimization_id,
-                :status AS status
+                :status AS status,
+                :pre_computed_metric_aggregates AS pre_computed_metric_aggregates
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -357,6 +364,7 @@ class ExperimentDAO {
                 e.optimization_id as optimization_id,
                 e.type as type,
                 e.status as status,
+                e.pre_computed_metric_aggregates as pre_computed_metric_aggregates,
                 fs.feedback_scores as feedback_scores,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
@@ -569,11 +577,13 @@ class ExperimentDAO {
                     e.id as id,
                     e.dataset_id AS dataset_id,
                     e.metadata AS metadata,
+                    e.pre_computed_metric_aggregates as pre_computed_metric_aggregates,
                     fs.feedback_scores as feedback_scores,
                     ed.trace_count as trace_count,
                     ed.duration_values AS duration,
                     ed.total_estimated_cost_sum as total_estimated_cost,
-                    ed.total_estimated_cost_avg as total_estimated_cost_avg
+                    ed.total_estimated_cost_avg as total_estimated_cost_avg,
+                    <groupSelects>
                 FROM experiments_final AS e
                 LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
                 LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
@@ -585,6 +595,7 @@ class ExperimentDAO {
                 avg(total_estimated_cost_avg) as total_estimated_cost_avg,
                 avgMap(feedback_scores) as feedback_scores,
                 avgMap(duration) as duration,
+                arrayFilter(x -> length(x) > 0, groupArray(pre_computed_metric_aggregates)) as pre_computed_metric_aggregates_array,
                 <groupSelects>
             FROM experiments_full
             GROUP BY <groupBy>
@@ -684,6 +695,7 @@ class ExperimentDAO {
                 type,
                 optimization_id,
                 status,
+                pre_computed_metric_aggregates,
                 created_at,
                 last_updated_at
             )
@@ -701,6 +713,7 @@ class ExperimentDAO {
                 <if(type)> :type <else> type <endif> as type,
                 optimization_id,
                 <if(status)> :status <else> status <endif> as status,
+                <if(pre_computed_metric_aggregates)> :pre_computed_metric_aggregates <else> pre_computed_metric_aggregates <endif> as pre_computed_metric_aggregates,
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
@@ -729,7 +742,9 @@ class ExperimentDAO {
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
                 .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
-                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue());
+                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue())
+                .bind("pre_computed_metric_aggregates",
+                        nestedMapToJsonString(experiment.preComputedMetricAggregates()));
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -849,6 +864,8 @@ class ExperimentDAO {
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
+                    .preComputedMetricAggregates(
+                            jsonStringToNestedMap(row.get("pre_computed_metric_aggregates", String.class)))
                     .build();
         });
     }
@@ -916,11 +933,89 @@ class ExperimentDAO {
                 .map(scores -> {
                     return new FeedbackScoreAverage(scores.getKey(),
                             BigDecimal.valueOf(scores.getValue().doubleValue()).setScale(SCALE,
-                                    RoundingMode.HALF_EVEN));
+                                    RoundingMode.HALF_EVEN),
+                            "avg");
                 })
                 .toList();
 
         return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
+    }
+
+    public static List<FeedbackScoreAverage> getFeedbackScoresWithPreComputed(Row row) {
+        // Get auto-computed averages (type = "avg")
+        List<FeedbackScoreAverage> result = new ArrayList<>();
+
+        Optional.ofNullable(row.get("feedback_scores", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
+                .orElse(Map.of())
+                .forEach((name, value) -> result.add(new FeedbackScoreAverage(
+                        name,
+                        BigDecimal.valueOf(value.doubleValue()).setScale(SCALE, RoundingMode.HALF_EVEN),
+                        "avg")));
+
+        // Get pre-computed metrics and flatten
+        String preComputedJson = row.get("pre_computed_metric_aggregates", String.class);
+        Map<String, Map<String, BigDecimal>> preComputed = jsonStringToNestedMap(preComputedJson);
+
+        if (preComputed != null && !preComputed.isEmpty()) {
+            preComputed.forEach((feedbackScoreName,
+                    metrics) -> metrics.forEach((metricType, metricValue) -> result.add(new FeedbackScoreAverage(
+                            feedbackScoreName,
+                            metricValue,
+                            metricType))));
+        }
+
+        return result.isEmpty() ? null : result;
+    }
+
+    public static List<FeedbackScoreAverage> getFeedbackScoresFromAggregation(Row row) {
+        // Get auto-computed averages (type = "avg")
+        List<FeedbackScoreAverage> result = new ArrayList<>();
+
+        Optional.ofNullable(row.get("feedback_scores", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
+                .orElse(Map.of())
+                .forEach((name, value) -> result.add(new FeedbackScoreAverage(
+                        name,
+                        BigDecimal.valueOf(value.doubleValue()).setScale(SCALE, RoundingMode.HALF_EVEN),
+                        "avg")));
+
+        // Get array of pre-computed metrics from all experiments in the group
+        List<String> preComputedArray = row.get("pre_computed_metric_aggregates_array", List.class);
+
+        if (preComputedArray != null && !preComputedArray.isEmpty()) {
+            // Collect all metrics from all experiments
+            Map<String, Map<String, List<BigDecimal>>> allMetrics = new java.util.HashMap<>();
+
+            for (String preComputedJson : preComputedArray) {
+                if (preComputedJson == null || preComputedJson.isBlank()) {
+                    continue;
+                }
+
+                Map<String, Map<String, BigDecimal>> preComputed = jsonStringToNestedMap(preComputedJson);
+                if (preComputed != null && !preComputed.isEmpty()) {
+                    preComputed.forEach((feedbackScoreName,
+                            metrics) -> metrics.forEach((metricType, metricValue) -> allMetrics
+                                    .computeIfAbsent(feedbackScoreName, k -> new java.util.HashMap<>())
+                                    .computeIfAbsent(metricType, k -> new java.util.ArrayList<>())
+                                    .add(metricValue)));
+                }
+            }
+
+            // Average the collected metrics
+            allMetrics.forEach((feedbackScoreName, metrics) -> metrics.forEach((metricType, values) -> {
+                BigDecimal avg = values.stream()
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)
+                        .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_EVEN);
+
+                result.add(new FeedbackScoreAverage(
+                        feedbackScoreName,
+                        avg,
+                        metricType));
+            }));
+        }
+
+        return result.isEmpty() ? null : result;
     }
 
     @WithSpan
@@ -943,9 +1038,12 @@ class ExperimentDAO {
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
 
-        var sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields());
+        // Create custom field mapping for feedback_scores fields to support pre-computed metrics
+        Map<String, String> fieldMapping = createFeedbackScoresFieldMapping(experimentSearchCriteria.sortingFields());
 
-        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(experimentSearchCriteria.sortingFields());
+        var sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields(), fieldMapping);
+
+        log.info("Generated ORDER BY: {}", sorting);
 
         int offset = (page - 1) * size;
 
@@ -955,16 +1053,56 @@ class ExperimentDAO {
         template.add("limit", size);
         template.add("offset", offset);
 
-        var statement = connection.createStatement(template.render())
+        String renderedSql = template.render();
+        log.info("SQL before parameter binding:\n{}", renderedSql);
+
+        var statement = connection.createStatement(renderedSql)
                 .bind("limit", size)
                 .bind("offset", offset);
 
-        if (hasDynamicKeys) {
-            statement = sortingQueryBuilder.bindDynamicKeys(statement, experimentSearchCriteria.sortingFields());
-        }
-
         bindSearchCriteria(statement, experimentSearchCriteria, false);
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private Map<String, String> createFeedbackScoresFieldMapping(List<SortingField> sortingFields) {
+        Map<String, String> fieldMapping = new java.util.HashMap<>();
+
+        for (SortingField sortingField : sortingFields) {
+            String field = sortingField.field();
+
+            if (field.startsWith("feedback_scores.")) {
+                String scoreName = com.comet.opik.api.sorting.ExperimentSortingFactory.extractScoreName(field);
+                String scoreType = com.comet.opik.api.sorting.ExperimentSortingFactory.extractScoreType(field);
+
+                String coalesceExpression;
+
+                if (scoreType != null) {
+                    // Format: feedback_scores.name.type (e.g., feedback_scores.answer_correctness.exact_match)
+                    // Check both auto-computed averages and pre-computed metrics
+                    // Use literal values in the SQL since this is part of the ORDER BY clause
+                    // Use if() to return NULL when map is empty, since empty map returns 0 instead of NULL
+                    // Cast to Nullable(Float64) to ensure type compatibility with toDecimal64OrNull result
+                    coalesceExpression = "coalesce(" +
+                            "if(mapContains(fs.feedback_scores, '" + scoreName + "'), toFloat64(fs.feedback_scores['"
+                            + scoreName + "']), NULL), " +
+                            "toFloat64OrNull(" +
+                            "JSONExtractString(" +
+                            "JSONExtractString(e.pre_computed_metric_aggregates, '" + scoreName + "'), " +
+                            "'" + scoreType + "')))";
+                } else {
+                    // Format: feedback_scores.name (e.g., feedback_scores.answer_correctness)
+                    // Only use auto-computed averages from the map
+                    // Use if() to return NULL when map is empty, since empty map returns 0 instead of NULL
+                    coalesceExpression = "if(mapContains(fs.feedback_scores, '" + scoreName
+                            + "'), toFloat64(fs.feedback_scores['" + scoreName + "']), NULL)";
+                }
+
+                // Use field() as the key, not dbField(), since SortingQueryBuilder line 29 uses field() for lookup
+                fieldMapping.put(field, coalesceExpression);
+            }
+        }
+
+        return fieldMapping;
     }
 
     private Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria) {
@@ -1264,7 +1402,7 @@ class ExperimentDAO {
                     .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
                     .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
                     .duration(getDuration(row))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScoresFromAggregation(row))
                     .build();
         });
     }
@@ -1309,6 +1447,10 @@ class ExperimentDAO {
             template.add("status", experimentUpdate.status().getValue());
         }
 
+        if (experimentUpdate.preComputedMetricAggregates() != null) {
+            template.add("pre_computed_metric_aggregates", true);
+        }
+
         return template;
     }
 
@@ -1327,6 +1469,11 @@ class ExperimentDAO {
 
         if (experimentUpdate.status() != null) {
             statement.bind("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.preComputedMetricAggregates() != null) {
+            statement.bind("pre_computed_metric_aggregates",
+                    nestedMapToJsonString(experimentUpdate.preComputedMetricAggregates()));
         }
     }
 

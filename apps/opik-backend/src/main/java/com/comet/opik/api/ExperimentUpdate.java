@@ -8,6 +8,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
@@ -17,5 +20,6 @@ public record ExperimentUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String name,
         JsonNode metadata,
         ExperimentType type,
-        @Schema(description = "The status of the experiment") ExperimentStatus status) {
+        @Schema(description = "The status of the experiment") ExperimentStatus status,
+        Map<String, Map<String, BigDecimal>> preComputedMetricAggregates) {
 }

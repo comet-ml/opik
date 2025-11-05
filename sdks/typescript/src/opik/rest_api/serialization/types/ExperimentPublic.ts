@@ -47,6 +47,15 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
         "prompt_versions",
         core.serialization.list(PromptVersionLinkPublic).optional(),
     ),
+    preComputedMetricAggregates: core.serialization.property(
+        "pre_computed_metric_aggregates",
+        core.serialization
+            .record(
+                core.serialization.string(),
+                core.serialization.record(core.serialization.string(), core.serialization.number()),
+            )
+            .optional(),
+    ),
 });
 
 export declare namespace ExperimentPublic {
@@ -72,5 +81,6 @@ export declare namespace ExperimentPublic {
         status?: ExperimentPublicStatus.Raw | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
+        pre_computed_metric_aggregates?: Record<string, Record<string, number>> | null;
     }
 }

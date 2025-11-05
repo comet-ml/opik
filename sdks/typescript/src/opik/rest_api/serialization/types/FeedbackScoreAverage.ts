@@ -12,11 +12,13 @@ export const FeedbackScoreAverage: core.serialization.ObjectSchema<
 > = core.serialization.object({
     name: core.serialization.string(),
     value: core.serialization.number(),
+    type: core.serialization.string().optional(),
 });
 
 export declare namespace FeedbackScoreAverage {
     export interface Raw {
         name: string;
         value: number;
+        type?: string | null;
     }
 }

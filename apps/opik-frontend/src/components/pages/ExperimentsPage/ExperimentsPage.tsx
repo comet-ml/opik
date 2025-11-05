@@ -191,7 +191,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
       get(row, "feedback_scores", []).map((score) => ({

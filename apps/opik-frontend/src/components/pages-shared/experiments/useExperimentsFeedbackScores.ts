@@ -20,10 +20,13 @@ export const useExperimentsFeedbackScores = () => {
 
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
-      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .sort((c1, c2) => {
+        const nameCompare = c1.name.localeCompare(c2.name);
+        return nameCompare !== 0 ? nameCompare : c1.type.localeCompare(c2.type);
+      })
       .map<DynamicColumn>((c) => ({
-        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
-        label: c.name,
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}.${c.type}`,
+        label: `${c.name} (${c.type})`,
         columnType: COLUMN_TYPE.number,
       }));
   }, [feedbackScoresData?.scores]);

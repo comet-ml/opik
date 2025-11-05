@@ -60,6 +60,9 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
 
+    Mono<com.comet.opik.api.ExperimentFeedbackScoreNames> getExperimentsFeedbackScoreNamesWithType(
+            Set<UUID> experimentIds);
+
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
@@ -208,6 +211,15 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return dao.getExperimentsFeedbackScoreNames(experimentIds)
                 .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
                 .map(FeedbackScoreNames::new);
+    }
+
+    public Mono<com.comet.opik.api.ExperimentFeedbackScoreNames> getExperimentsFeedbackScoreNamesWithType(
+            Set<UUID> experimentIds) {
+        return ((FeedbackScoreDAOImpl) dao).getExperimentsFeedbackScoreNamesWithType(experimentIds)
+                .map(scores -> scores.stream()
+                        .map(s -> new com.comet.opik.api.ExperimentFeedbackScoreNames.ScoreName(s.name(), s.type()))
+                        .toList())
+                .map(com.comet.opik.api.ExperimentFeedbackScoreNames::new);
     }
 
     @Override

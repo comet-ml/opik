@@ -24,6 +24,15 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
             "prompt_versions",
             core.serialization.list(PromptVersionLinkWrite).optional(),
         ),
+        preComputedMetricAggregates: core.serialization.property(
+            "pre_computed_metric_aggregates",
+            core.serialization
+                .record(
+                    core.serialization.string(),
+                    core.serialization.record(core.serialization.string(), core.serialization.number()),
+                )
+                .optional(),
+        ),
     });
 
 export declare namespace ExperimentWrite {
@@ -37,5 +46,6 @@ export declare namespace ExperimentWrite {
         status?: ExperimentWriteStatus.Raw | null;
         prompt_version?: PromptVersionLinkWrite.Raw | null;
         prompt_versions?: PromptVersionLinkWrite.Raw[] | null;
+        pre_computed_metric_aggregates?: Record<string, Record<string, number>> | null;
     }
 }

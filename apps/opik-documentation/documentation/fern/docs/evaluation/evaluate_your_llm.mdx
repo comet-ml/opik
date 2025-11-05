@@ -542,6 +542,38 @@ You can create aggregated statistics for each metric by calling its `aggregate_e
 Aggregated statistics can help analyze evaluation results and are useful for comparing the
 performance of different models or different versions of the same model, for example.
 
+#### Logging experiment-level metrics
+
+You can also log custom experiment-level metrics that will be displayed alongside the default aggregated scores (avg, min, max, std) in the Opik UI. This is useful for tracking additional statistics like percentiles or other custom aggregates:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik.evaluation.metrics import ExperimentMetricResult
+
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    experiment_metrics=[
+        ExperimentMetricResult(
+            score_name="hallucination_metric",
+            metric_name="p95",
+            value=0.95
+        ),
+        ExperimentMetricResult(
+            score_name="hallucination_metric",
+            metric_name="p99",
+            value=0.99
+        ),
+    ]
+)
+```
+
+</CodeBlocks>
+
+These experiment-level metrics will be stored with the experiment and displayed in the Opik UI alongside trace-level scores. You can use them to track percentiles, custom aggregations, or any other experiment-wide statistics that complement the per-test-case scores.
+
 ### Python SDK
 
 #### Using async evaluation tasks

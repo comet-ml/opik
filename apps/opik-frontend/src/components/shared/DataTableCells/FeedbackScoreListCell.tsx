@@ -170,7 +170,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
     value = (rawValue as TraceFeedbackScore[])
       .map(
         (item: TraceFeedbackScore) =>
-          `${item.name}: ${
+          `${item.name}${item.type ? ` (${item.type})` : ""}: ${
             isNumber(item.value) ? dataFormatter(item.value) : "-"
           }`,
       )

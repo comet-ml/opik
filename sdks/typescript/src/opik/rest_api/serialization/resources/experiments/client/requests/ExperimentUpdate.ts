@@ -15,6 +15,15 @@ export const ExperimentUpdate: core.serialization.Schema<serializers.ExperimentU
         metadata: JsonNode.optional(),
         type: ExperimentUpdateType.optional(),
         status: ExperimentUpdateStatus.optional(),
+        preComputedMetricAggregates: core.serialization.property(
+            "pre_computed_metric_aggregates",
+            core.serialization
+                .record(
+                    core.serialization.string(),
+                    core.serialization.record(core.serialization.string(), core.serialization.number()),
+                )
+                .optional(),
+        ),
     });
 
 export declare namespace ExperimentUpdate {
@@ -23,5 +32,6 @@ export declare namespace ExperimentUpdate {
         metadata?: JsonNode.Raw | null;
         type?: ExperimentUpdateType.Raw | null;
         status?: ExperimentUpdateStatus.Raw | null;
+        pre_computed_metric_aggregates?: Record<string, Record<string, number>> | null;
     }
 }

@@ -13,3 +13,6 @@ evaluators together without rewriting orchestration logic.
 .. autoclass:: RagasMetricWrapper
     :special-members: __init__
     :members: score
+
+.. autoclass:: ExperimentMetricResult
+    :members:

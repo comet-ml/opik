@@ -7,7 +7,6 @@ import { formatNumericData } from "@/lib/utils";
 import {
   ColumnStatistic,
   ColumnsStatistic,
-  DropdownOption,
   STATISTIC_AGGREGATION_TYPE,
 } from "@/types/shared";
 import {
@@ -16,21 +15,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const OPTIONS: DropdownOption<string>[] = [
-  {
-    label: "Percentile 50",
-    value: "p50",
-  },
-  {
-    label: "Percentile 90",
-    value: "p90",
-  },
-  {
-    label: "Percentile 99",
-    value: "p99",
-  },
-];
 
 // Columns that should display sum alongside avg
 const COLUMNS_WITH_SUM = [
@@ -132,35 +116,47 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
           </span>
         </span>
       );
-    case STATISTIC_AGGREGATION_TYPE.PERCENTAGE:
+    case STATISTIC_AGGREGATION_TYPE.PERCENTAGE: {
+      // Dynamically generate options from available keys in statistic.value
+      const availableKeys =
+        statistic?.value && typeof statistic.value === "object"
+          ? Object.keys(statistic.value)
+          : ["p50", "p90", "p99"];
+
+      // Use first available key if current selection doesn't exist
+      const currentValue = availableKeys.includes(percentileValue)
+        ? percentileValue
+        : availableKeys[0] || "p50";
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="flex max-w-full">
               <span className="comet-body-s truncate text-foreground">
-                <span>{percentileValue}</span>
+                <span>{currentValue}</span>
                 <span className="ml-1 font-semibold">
-                  {dataFormater(get(statistic.value, percentileValue, 0))}
+                  {dataFormater(get(statistic.value, currentValue, 0))}
                 </span>
               </span>
               <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {OPTIONS.map((option) => {
+            {availableKeys.map((key) => {
               return (
                 <DropdownMenuCheckboxItem
-                  key={option.value}
-                  onSelect={() => setPercentileValue(option.value)}
-                  checked={percentileValue === option.value}
+                  key={key}
+                  onSelect={() => setPercentileValue(key)}
+                  checked={percentileValue === key}
                 >
-                  {option.label}
+                  {key}
                 </DropdownMenuCheckboxItem>
               );
             })}
           </DropdownMenuContent>
         </DropdownMenu>
       );
+    }
     default:
       return <span className="comet-body-s text-foreground">-</span>;
   }

@@ -33,6 +33,7 @@ import {
   DynamicColumn,
   OnChangeFn,
   ROW_HEIGHT,
+  STATISTIC_AGGREGATION_TYPE,
 } from "@/types/shared";
 import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -354,12 +355,80 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
 
-  const columnsStatistic = useMemo(
-    () => statisticData?.stats ?? [],
-    [statisticData],
-  );
-  const noDataText = "There is no data for the selected experiments";
+  const columnsStatistic = useMemo(() => {
+    const baseStats = statisticData?.stats ?? [];
 
+    // Create a map to merge statistics by name
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const statsMap = new Map<string, any>();
+
+    // Add base stats to map
+    baseStats.forEach((stat) => {
+      statsMap.set(stat.name, stat);
+    });
+
+    // Merge feedback score statistics from experiments
+    if (experiments && experiments.length > 0) {
+      // Get all unique feedback score names from all experiments
+      const scoreNames = new Set<string>();
+      experiments.forEach((exp) => {
+        exp.feedback_scores?.forEach((score) => scoreNames.add(score.name));
+      });
+
+      // For each score, build or merge the statistic
+      scoreNames.forEach((scoreName) => {
+        const statName = `${COLUMN_FEEDBACK_SCORES_ID}.${scoreName}`;
+        const existingStat = statsMap.get(statName);
+        const preComputedAggregates =
+          experiments[0]?.pre_computed_metric_aggregates?.[scoreName];
+        const avgValue =
+          experiments[0]?.feedback_scores?.find((s) => s.name === scoreName)
+            ?.value ?? 0;
+
+        if (
+          preComputedAggregates &&
+          Object.keys(preComputedAggregates).length > 0
+        ) {
+          // Has pre-computed aggregates - start with avg from feedback_scores, then merge
+          const aggregateValues: Record<string, number> = {};
+
+          // Start with avg from feedback_scores or existing stat
+          if (
+            existingStat?.type === STATISTIC_AGGREGATION_TYPE.AVG &&
+            typeof existingStat.value === "number"
+          ) {
+            aggregateValues.avg = existingStat.value;
+          } else {
+            aggregateValues.avg = avgValue;
+          }
+
+          // Merge in pre-computed aggregates
+          Object.keys(preComputedAggregates).forEach((key) => {
+            aggregateValues[key] = preComputedAggregates[key];
+          });
+
+          statsMap.set(statName, {
+            name: statName,
+            type: STATISTIC_AGGREGATION_TYPE.PERCENTAGE,
+            value: aggregateValues,
+          });
+        } else if (!existingStat) {
+          // Only add if not already present (from API)
+          statsMap.set(statName, {
+            name: statName,
+            type: STATISTIC_AGGREGATION_TYPE.AVG,
+            value: avgValue,
+          });
+        }
+      });
+    }
+
+    return Array.from(statsMap.values());
+  }, [statisticData, experiments]);
+
+  console.log("columnsStatistic", columnsStatistic);
+
+  const noDataText = "There is no data for the selected experiments";
   const dynamicDatasetColumns = useMemo(() => {
     return (data?.columns ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
@@ -482,10 +551,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       columnType: COLUMN_TYPE.number,
     };
 
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
+    // Filter out "User feedback" from dynamic columns and deduplicate by label
+    const seenLabels = new Set<string>();
+    const otherDynamicColumns = dynamicScoresColumns.filter((col) => {
+      if (col.id === USER_FEEDBACK_COLUMN_ID) return false;
+      if (seenLabels.has(col.label)) return false;
+      seenLabels.add(col.label);
+      return true;
+    });
 
     return [userFeedbackColumn, ...otherDynamicColumns].map(
       ({ label, id, columnType }) =>

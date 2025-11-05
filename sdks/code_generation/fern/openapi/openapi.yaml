@@ -5451,6 +5451,8 @@ components:
           type: string
         value:
           type: number
+        type:
+          type: string
     AnnotationQueue_Write:
       required:
       - name
@@ -5613,6 +5615,8 @@ components:
           type: string
         value:
           type: number
+        type:
+          type: string
       readOnly: true
     AnnotationQueueUpdate:
       type: object
@@ -5844,6 +5848,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -5851,10 +5859,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6127,6 +6131,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceFilter_Write"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6134,10 +6142,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6333,6 +6337,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6340,10 +6348,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6587,6 +6591,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6594,10 +6602,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6672,6 +6676,10 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6679,10 +6687,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8216,6 +8220,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        pre_computed_metric_aggregates:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
     PercentageValues:
       type: object
       properties:
@@ -8276,6 +8286,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink_Write"
+        pre_computed_metric_aggregates:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
     JsonListString_Write:
       type: object
       anyOf:
@@ -8972,6 +8988,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink_Public"
+        pre_computed_metric_aggregates:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
     JsonListString_Public:
       type: object
       anyOf:
@@ -9134,6 +9156,12 @@ components:
           - running
           - completed
           - cancelled
+        pre_computed_metric_aggregates:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
     JsonNode:
       type: object
     CategoricalFeedbackDefinition:
@@ -10397,6 +10425,8 @@ components:
           type: string
         value:
           type: number
+        type:
+          type: string
       readOnly: true
     PercentageValues_Detailed:
       type: object

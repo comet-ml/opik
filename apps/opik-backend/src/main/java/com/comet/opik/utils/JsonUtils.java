@@ -27,6 +27,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 @UtilityClass
@@ -191,6 +192,30 @@ public class JsonUtils {
                 .filter(s -> !s.isBlank())
                 .map(JsonUtils::getJsonNodeFromString)
                 .orElse(null);
+    }
+
+    public static String nestedMapToJsonString(Map<String, Map<String, BigDecimal>> nestedMap) {
+        if (nestedMap == null || nestedMap.isEmpty()) {
+            return "";
+        }
+        try {
+            return MAPPER.writeValueAsString(nestedMap);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static Map<String, Map<String, BigDecimal>> jsonStringToNestedMap(String jsonString) {
+        if (jsonString == null || jsonString.isBlank()) {
+            return null;
+        }
+        try {
+            return MAPPER.readValue(jsonString, new TypeReference<Map<String, Map<String, BigDecimal>>>() {
+            });
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse pre_computed_metric_aggregates JSON: {}", jsonString, e);
+            return null;
+        }
     }
 
     public JsonNode readTree(@NonNull Object content) {

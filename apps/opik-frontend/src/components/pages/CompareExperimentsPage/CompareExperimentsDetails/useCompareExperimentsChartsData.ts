@@ -31,13 +31,49 @@ const useCompareExperimentsChartsData = ({
     if (!isCompare) return {};
     return experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
-        acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-          (a, f) => {
-            a[f.name] = f.value;
-            return a;
-          },
-          {},
-        );
+        const scoreMap: Record<string, number> = {};
+
+        // Get all unique score names
+        const scoreNames = new Set<string>();
+        e.feedback_scores?.forEach((score) => scoreNames.add(score.name));
+
+        // For each score name, add all aggregates
+        scoreNames.forEach((scoreName) => {
+          const preComputedAggregates =
+            e.pre_computed_metric_aggregates?.[scoreName];
+
+          if (
+            preComputedAggregates &&
+            Object.keys(preComputedAggregates).length > 0
+          ) {
+            // Add avg from feedback_scores first
+            const avgValue = e.feedback_scores?.find(
+              (s) => s.name === scoreName,
+            )?.value;
+            if (avgValue !== undefined) {
+              scoreMap[`${scoreName} (avg)`] = avgValue;
+            }
+
+            // Add all pre-computed aggregates
+            Object.keys(preComputedAggregates).forEach((aggregateKey) => {
+              if (aggregateKey !== "avg") {
+                // Skip avg since we already added it
+                scoreMap[`${scoreName} (${aggregateKey})`] =
+                  preComputedAggregates[aggregateKey];
+              }
+            });
+          } else {
+            // Only has avg - add it without suffix
+            const avgValue = e.feedback_scores?.find(
+              (s) => s.name === scoreName,
+            )?.value;
+            if (avgValue !== undefined) {
+              scoreMap[scoreName] = avgValue;
+            }
+          }
+        });
+
+        acc[e.id] = scoreMap;
         return acc;
       },
       {},

@@ -105,6 +105,7 @@ export enum CELL_VERTICAL_ALIGNMENT {
 
 export interface FeedbackScoreName {
   name: string;
+  type: string;
 }
 
 export enum STATISTIC_AGGREGATION_TYPE {
@@ -160,6 +161,7 @@ export interface UsageData {
 export interface AggregatedFeedbackScore {
   name: string;
   value: number;
+  type?: string;
 }
 
 export interface AggregatedDuration {

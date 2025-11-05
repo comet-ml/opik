@@ -566,23 +566,77 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         });
     }
 
+    public record ScoreNameWithType(String name, String type) {
+    }
+
     @Override
     @WithSpan
     public Mono<List<String>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
+        return getExperimentsFeedbackScoreNamesWithType(experimentIds)
+                .map(scores -> scores.stream()
+                        .map(s -> s.name() + " (" + s.type() + ")")
+                        .collect(Collectors.toList()));
+    }
+
+    public Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNamesWithType(Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
 
+            // Get feedback score names from traces with "avg" type
             ST template = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
-
             bindTemplateParam(null, true, experimentIds, template);
-
             var statement = connection.createStatement(template.render());
-
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            Mono<List<ScoreNameWithType>> traceFeedbackScoreNames = makeMonoContextAware(
+                    bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
                     .distinct()
+                    .map(name -> new ScoreNameWithType(name, "avg"))
                     .collect(Collectors.toList());
+
+            // Get feedback score name+type combinations from pre_computed_metric_aggregates
+            String preComputedQuery = """
+                    SELECT DISTINCT
+                        feedback_score_name as name,
+                        metric_type as type
+                    FROM (
+                        SELECT
+                            arrayJoin(JSONExtractKeys(pre_computed_metric_aggregates)) as feedback_score_name,
+                            pre_computed_metric_aggregates
+                        FROM experiments
+                        WHERE workspace_id = :workspace_id
+                        AND length(pre_computed_metric_aggregates) > 0
+                        """ + (experimentIds != null && !experimentIds.isEmpty() ? "AND id IN :experiment_ids" : "")
+                    + """
+                            ) AS expanded
+                            ARRAY JOIN JSONExtractKeys(JSONExtractString(pre_computed_metric_aggregates, feedback_score_name)) as metric_type
+                            """;
+
+            var preComputedStatement = connection.createStatement(preComputedQuery);
+            if (experimentIds != null && !experimentIds.isEmpty()) {
+                preComputedStatement.bind("experiment_ids", experimentIds);
+            }
+
+            Mono<List<ScoreNameWithType>> preComputedScoreNames = makeMonoContextAware(
+                    bindWorkspaceIdToMono(preComputedStatement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> new ScoreNameWithType(
+                            row.get("name", String.class),
+                            row.get("type", String.class))))
+                    .collect(Collectors.toList());
+
+            // Combine and deduplicate both lists
+            return Mono.zip(traceFeedbackScoreNames, preComputedScoreNames)
+                    .map(tuple -> {
+                        List<ScoreNameWithType> combined = new java.util.ArrayList<>(tuple.getT1());
+                        combined.addAll(tuple.getT2());
+                        return combined.stream()
+                                .distinct()
+                                .sorted((a, b) -> {
+                                    int nameCompare = a.name().compareTo(b.name());
+                                    return nameCompare != 0 ? nameCompare : a.type().compareTo(b.type());
+                                })
+                                .collect(Collectors.toList());
+                    });
         });
     }
 

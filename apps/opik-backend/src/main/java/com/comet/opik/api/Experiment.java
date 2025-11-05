@@ -51,7 +51,9 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentStatus status,
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(deprecated = true) PromptVersionLink promptVersion,
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions){
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions,
+        @JsonView({Experiment.View.Public.class,
+                Experiment.View.Write.class}) Map<String, Map<String, BigDecimal>> preComputedMetricAggregates){
 
     @Builder(toBuilder = true)
     public record ExperimentPage(
