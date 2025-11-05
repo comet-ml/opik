@@ -41,7 +41,13 @@ const NewQuickstartPage: React.FunctionComponent = () => {
             <div className="flex flex-wrap items-center gap-6 md:gap-3">
               <IntegrationExplorer.CopyApiKey />
               <IntegrationExplorer.GetHelp />
-              <Button variant="ghost" size="sm" asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                id="quickstart-skip-explore-platform"
+                data-fs-element="QuickstartSkipExplorePlatform"
+              >
                 <Link to="/$workspaceName/home" params={{ workspaceName }}>
                   Skip & explore platform
                   <ChevronsRight className="ml-1.5 size-3.5" />

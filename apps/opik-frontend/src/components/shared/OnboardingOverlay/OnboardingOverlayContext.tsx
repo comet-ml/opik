@@ -1,5 +1,6 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import posthog from "posthog-js";
 import { STEP_IDENTIFIERS } from "./constants";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
 
@@ -41,6 +42,31 @@ export const OnboardingProvider: React.FunctionComponent<
 
   const submitAnswer = useSubmitOnboardingAnswerMutation();
 
+  // Update URL hash when step changes
+  // This allows FullStory and PostHog to distinguish steps by URL
+  useEffect(() => {
+    if (!currentStep || currentStep === ONBOARDING_STEP_FINISHED) return;
+
+    const stepKey = STEP_IDENTIFIERS[currentStep];
+    const hash = `#${stepKey}`;
+
+    // Update URL hash without triggering navigation
+    if (window.location.hash !== hash) {
+      window.history.replaceState(null, "", hash);
+
+      // Manually trigger PostHog pageview for hash changes
+      // replaceState doesn't trigger automatic pageview tracking
+      try {
+        if (posthog.is_capturing()) {
+          posthog.capture("$pageview");
+        }
+      } catch (error) {
+        // PostHog may not be initialized or available
+        // Silently fail to not break the user experience
+      }
+    }
+  }, [currentStep]);
+
   const handleAnswer = (answer: string) => {
     if (!currentStep || currentStep === ONBOARDING_STEP_FINISHED) return;
 
@@ -76,6 +102,7 @@ export const OnboardingProvider: React.FunctionComponent<
       currentStep === ONBOARDING_STEP_FINISHED
     )
       return;
+
     setStep((currentStep - 1) as 1 | 2);
   };
 

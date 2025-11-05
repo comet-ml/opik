@@ -26,7 +26,7 @@ const INTEGRATION_ICON_THEME_MAP = {
 } as const;
 
 const IntegrationQuickInstall: React.FC = () => {
-  const { selectedIntegrationId, setSelectedIntegrationId } =
+  const { selectedIntegrationId, setSelectedIntegrationId, source } =
     useIntegrationExplorer();
   const { themeMode } = useTheme();
 
@@ -60,6 +60,10 @@ const IntegrationQuickInstall: React.FC = () => {
           </div>
         }
         onClick={handleQuickInstallClick}
+        id={`integration-quick-install-card${source ? `-${source}` : ""}`}
+        data-fs-element={`IntegrationQuickInstallCard${
+          source ? `-${source}` : ""
+        }`}
       />
 
       <QuickInstallDialog

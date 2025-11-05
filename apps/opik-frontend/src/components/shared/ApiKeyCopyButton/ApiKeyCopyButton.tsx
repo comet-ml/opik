@@ -39,6 +39,8 @@ const ApiKeyCopyButton: React.FunctionComponent<ApiKeyCopyButtonProps> = ({
       onClick={handleCopy}
       className={className}
       disabled={disabled}
+      id="copy-api-key-button"
+      data-fs-element="CopyApiKeyButton"
     >
       <Copy className="mr-1.5 size-3.5" />
       {label}
