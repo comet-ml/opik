@@ -99,12 +99,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         warning_filters.add_warning_filters()
 
         config = opik_config.OpikConfig()
-        is_monitoring_enabled = (
-            config.enable_litellm_models_monitoring
-            and not config.check_for_known_misconfigurations()
-        )
 
-        if is_monitoring_enabled:
+        if config.enable_litellm_models_monitoring:
             self._litellm_completion = litellm_integration.track_completion()(
                 litellm.completion
             )
