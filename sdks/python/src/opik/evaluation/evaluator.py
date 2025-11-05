@@ -36,6 +36,7 @@ def _try_notifying_about_experiment_completion(
         LOGGER.debug(
             "Failed to notify backend about the experiment completion. Experiment ID: %s",
             experiment.id,
+            exc_info=True,
         )
 
 
