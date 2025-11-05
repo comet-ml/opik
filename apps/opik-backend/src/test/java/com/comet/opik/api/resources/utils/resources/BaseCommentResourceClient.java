@@ -6,12 +6,14 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -104,5 +106,34 @@ public abstract class BaseCommentResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
+    }
+
+    /**
+     * Helper method to add path segments to a WebTarget.
+     * Splits the pathSuffix by "/" and adds each non-empty part as a path segment.
+     */
+    protected WebTarget addPathSegments(WebTarget target, String pathSuffix) {
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+        return target;
+    }
+
+    /**
+     * Helper method to add query parameters to a WebTarget.
+     * Iterates through the queryParams map and adds each entry as a query parameter.
+     */
+    protected WebTarget addQueryParameters(WebTarget target, Map<String, String> queryParams) {
+        if (queryParams != null) {
+            for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+                target = target.queryParam(entry.getKey(), entry.getValue());
+            }
+        }
+        return target;
     }
 }
