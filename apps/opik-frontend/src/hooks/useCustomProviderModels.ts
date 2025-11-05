@@ -3,8 +3,11 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
-import { convertCustomProviderModels } from "@/lib/provider";
-import { buildCustomModelId } from "@/constants/providers";
+import { 
+  buildCustomModelId, 
+  CUSTOM_PROVIDER_MODEL_PREFIX,
+  LEGACY_CUSTOM_PROVIDER_NAME 
+} from "@/constants/providers";
 
 const useCustomProviderModels = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -30,20 +33,22 @@ const useCustomProviderModels = () => {
 
       customConfigs.forEach((customConfig) => {
         if (customConfig.configuration?.models) {
-          const providerName = customConfig.keyName || "default";
+          const providerName = customConfig.keyName || LEGACY_CUSTOM_PROVIDER_NAME;
+          const isLegacyProvider = providerName === LEGACY_CUSTOM_PROVIDER_NAME;
+          
           const models = customConfig.configuration.models
             .split(",")
             .map((model) => {
               const trimmedModel = model.trim();
-              // Build model ID with provider name prefix: {provider-name}/{model-name}
-              const modelId = buildCustomModelId(providerName, trimmedModel);
+              // Build model ID with provider name prefix: {provider}/{provider-name?}/{model-name}
+              const modelId = isLegacyProvider
+                ? trimmedModel
+                : `${CUSTOM_PROVIDER_MODEL_PREFIX}/${buildCustomModelId(providerName, trimmedModel)}`;
 
-              // For display label: hide "default/" prefix for backward compatibility
-              // For other provider names, show the full provider-name/model-name
-              const displayLabel =
-                providerName === "default"
-                  ? trimmedModel
-                  : modelId;
+              // Display label strips the "custom-llm/" prefix for better UX
+              const displayLabel = modelId.startsWith(`${CUSTOM_PROVIDER_MODEL_PREFIX}/`)
+                ? modelId.substring(`${CUSTOM_PROVIDER_MODEL_PREFIX}/`.length)
+                : modelId;
 
               return {
                 value: modelId as PROVIDER_MODEL_TYPE,
