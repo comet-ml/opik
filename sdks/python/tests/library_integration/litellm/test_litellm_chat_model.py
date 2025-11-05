@@ -21,14 +21,14 @@ MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 def test_litellm_chat_model_generate_string__happyflow(fake_backend):
     """Test that LiteLLMChatModel.generate_string creates proper tracking spans."""
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-    
+
     result = model.generate_string("Tell me a short fact about Python programming")
-    
+
     opik.flush_tracker()
-    
+
     assert isinstance(result, str)
     assert len(result) > 0
-    
+
     # Verify trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -59,7 +59,7 @@ def test_litellm_chat_model_generate_string__happyflow(fake_backend):
             )
         ],
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
@@ -67,18 +67,18 @@ def test_litellm_chat_model_generate_string__happyflow(fake_backend):
 def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
     """Test that LiteLLMChatModel creates a child span when called inside @opik.track."""
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-    
+
     @opik.track
     def outer_function(text: str) -> str:
         return model.generate_string(text)
-    
+
     result = outer_function("What is machine learning?")
-    
+
     opik.flush_tracker()
-    
+
     assert isinstance(result, str)
     assert len(result) > 0
-    
+
     # Verify trace structure with nested spans
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -122,7 +122,7 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
             )
         ],
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
@@ -131,14 +131,16 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
 async def test_litellm_chat_model_agenerate_string__happyflow(fake_backend):
     """Test that LiteLLMChatModel.agenerate_string creates proper tracking spans."""
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-    
-    result = await model.agenerate_string("Tell me a short fact about async programming")
-    
+
+    result = await model.agenerate_string(
+        "Tell me a short fact about async programming"
+    )
+
     opik.flush_tracker()
-    
+
     assert isinstance(result, str)
     assert len(result) > 0
-    
+
     # Verify trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -169,7 +171,7 @@ async def test_litellm_chat_model_agenerate_string__happyflow(fake_backend):
             )
         ],
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
@@ -177,27 +179,28 @@ async def test_litellm_chat_model_agenerate_string__happyflow(fake_backend):
 def test_litellm_chat_model_with_response_format__structured_output(fake_backend):
     """Test that LiteLLMChatModel works with response_format for structured output."""
     import pydantic
-    
+
     class SimpleResponse(pydantic.BaseModel):
         answer: str
-    
+
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-    
+
     result = model.generate_string(
-        "What is 2+2? Answer in one word.",
-        response_format=SimpleResponse
+        "What is 2+2? Answer in one word.", response_format=SimpleResponse
     )
-    
+
     opik.flush_tracker()
-    
+
     assert isinstance(result, str)
     assert len(result) > 0
-    
+
     # Verify trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="completion",
-        input=ANY_DICT.containing({"messages": ANY_BUT_NONE}),  # May include response_format
+        input=ANY_DICT.containing(
+            {"messages": ANY_BUT_NONE}
+        ),  # May include response_format
         output={"choices": ANY_BUT_NONE},
         tags=["litellm"],
         metadata=ANY_DICT.containing({"created_from": "litellm"}),
@@ -209,7 +212,9 @@ def test_litellm_chat_model_with_response_format__structured_output(fake_backend
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="completion",
-                input=ANY_DICT.containing({"messages": ANY_BUT_NONE}),  # May include response_format
+                input=ANY_DICT.containing(
+                    {"messages": ANY_BUT_NONE}
+                ),  # May include response_format
                 output={"choices": ANY_BUT_NONE},
                 tags=["litellm"],
                 metadata=ANY_DICT.containing({"created_from": "litellm"}),
@@ -223,7 +228,6 @@ def test_litellm_chat_model_with_response_format__structured_output(fake_backend
             )
         ],
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-

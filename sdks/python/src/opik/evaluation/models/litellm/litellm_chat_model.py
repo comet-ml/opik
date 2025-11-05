@@ -99,7 +99,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         warning_filters.add_warning_filters()
 
         self._engine = litellm
-        
+
         # Create tracked versions of completion methods for Opik monitoring
         # These will be used instead of calling the engine methods directly
         self._litellm_completion = litellm_integration.track_completion()(
