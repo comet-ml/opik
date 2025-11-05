@@ -20,6 +20,15 @@ public class ExperimentSortingFactory extends SortingFactory {
 
     private static final String FEEDBACK_SCORES_PREFIX = "feedback_scores.";
 
+    /**
+     * Parsed parts of a feedback score field.
+     *
+     * @param name the feedback score name (e.g., "hallucination")
+     * @param type the metric type (e.g., "f1_score"), or null if not present
+     */
+    public record ScoreFieldParts(String name, String type) {
+    }
+
     @Override
     public List<String> getSortableFields() {
         return List.of(
@@ -38,53 +47,17 @@ public class ExperimentSortingFactory extends SortingFactory {
 
     @Override
     protected List<SortingField> processFields(@NonNull List<SortingField> sorting) {
-        return sorting.stream()
-                .map(this::ensureBindKeyParam)
-                .toList();
-    }
-
-    private SortingField ensureBindKeyParam(SortingField sortingField) {
-        String field = sortingField.field();
-
-        // Check if it's a feedback_scores field with format: feedback_scores.name.type
-        if (field.startsWith(FEEDBACK_SCORES_PREFIX)) {
-            // Always ensure bindKeyParam is set for dynamic feedback_scores fields
-            if (sortingField.bindKeyParam() == null) {
-                return sortingField.toBuilder()
-                        .bindKeyParam(java.util.UUID.randomUUID().toString().replace("-", ""))
-                        .build();
-            }
-        }
-
-        return sortingField;
+        // No special processing needed - field mapping uses literal SQL strings, not dynamic keys
+        return sorting;
     }
 
     /**
-     * Extracts the feedback score name from a field like "feedback_scores.hallucination.f1_score"
-     * Returns "hallucination"
+     * Parses a feedback score field into its name and type components.
+     *
+     * @param field the field to parse (e.g., "feedback_scores.hallucination.f1_score")
+     * @return the parsed parts, or null if the field is not a feedback_scores field
      */
-    public static String extractScoreName(String field) {
-        if (!field.startsWith(FEEDBACK_SCORES_PREFIX)) {
-            return null;
-        }
-
-        String remainder = field.substring(FEEDBACK_SCORES_PREFIX.length());
-        int secondDot = remainder.indexOf('.');
-
-        if (secondDot > 0) {
-            // Format: feedback_scores.name.type
-            return remainder.substring(0, secondDot);
-        } else {
-            // Format: feedback_scores.name (legacy or avg scores)
-            return remainder;
-        }
-    }
-
-    /**
-     * Extracts the metric type from a field like "feedback_scores.hallucination.f1_score"
-     * Returns "f1_score", or null if not present
-     */
-    public static String extractScoreType(String field) {
+    public static ScoreFieldParts parseScoreField(String field) {
         if (!field.startsWith(FEEDBACK_SCORES_PREFIX)) {
             return null;
         }
@@ -94,9 +67,34 @@ public class ExperimentSortingFactory extends SortingFactory {
 
         if (secondDot > 0 && secondDot < remainder.length() - 1) {
             // Format: feedback_scores.name.type
-            return remainder.substring(secondDot + 1);
+            return new ScoreFieldParts(remainder.substring(0, secondDot), remainder.substring(secondDot + 1));
+        } else {
+            // Format: feedback_scores.name (legacy or avg scores)
+            return new ScoreFieldParts(remainder, null);
         }
+    }
 
-        return null;
+    /**
+     * Extracts the feedback score name from a field like "feedback_scores.hallucination.f1_score"
+     * Returns "hallucination"
+     *
+     * @deprecated Use {@link #parseScoreField(String)} instead
+     */
+    @Deprecated
+    public static String extractScoreName(String field) {
+        ScoreFieldParts parts = parseScoreField(field);
+        return parts != null ? parts.name() : null;
+    }
+
+    /**
+     * Extracts the metric type from a field like "feedback_scores.hallucination.f1_score"
+     * Returns "f1_score", or null if not present
+     *
+     * @deprecated Use {@link #parseScoreField(String)} instead
+     */
+    @Deprecated
+    public static String extractScoreType(String field) {
+        ScoreFieldParts parts = parseScoreField(field);
+        return parts != null ? parts.type() : null;
     }
 }

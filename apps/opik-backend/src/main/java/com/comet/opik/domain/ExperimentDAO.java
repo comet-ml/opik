@@ -849,7 +849,7 @@ class ExperimentDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScoresWithPreComputed(row))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
@@ -923,62 +923,65 @@ class ExperimentDAO {
                 .toList();
     }
 
-    public static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
-        List<FeedbackScoreAverage> feedbackScoresAvg = Optional
-                .ofNullable(row.get("feedback_scores", Map.class))
+    private static final String FEEDBACK_SCORES_TYPE_AVG = "avg";
+
+    /**
+     * Extracts auto-computed average feedback scores from a row.
+     * These are stored in the feedback_scores map and have type "avg".
+     */
+    private static List<FeedbackScoreAverage> extractAutoComputedAverages(Row row) {
+        return Optional.ofNullable(row.get("feedback_scores", Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .orElse(Map.of())
                 .entrySet()
                 .stream()
-                .map(scores -> {
-                    return new FeedbackScoreAverage(scores.getKey(),
-                            BigDecimal.valueOf(scores.getValue().doubleValue()).setScale(SCALE,
-                                    RoundingMode.HALF_EVEN),
-                            "avg");
-                })
+                .map(entry -> new FeedbackScoreAverage(
+                        entry.getKey(),
+                        BigDecimal.valueOf(entry.getValue().doubleValue()).setScale(SCALE, RoundingMode.HALF_EVEN),
+                        FEEDBACK_SCORES_TYPE_AVG))
                 .toList();
-
-        return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
     }
 
-    public static List<FeedbackScoreAverage> getFeedbackScoresWithPreComputed(Row row) {
-        // Get auto-computed averages (type = "avg")
-        List<FeedbackScoreAverage> result = new ArrayList<>();
-
-        Optional.ofNullable(row.get("feedback_scores", Map.class))
-                .map(map -> (Map<String, ? extends Number>) map)
-                .orElse(Map.of())
-                .forEach((name, value) -> result.add(new FeedbackScoreAverage(
-                        name,
-                        BigDecimal.valueOf(value.doubleValue()).setScale(SCALE, RoundingMode.HALF_EVEN),
-                        "avg")));
-
-        // Get pre-computed metrics and flatten
-        String preComputedJson = row.get("pre_computed_metric_aggregates", String.class);
-        Map<String, Map<String, BigDecimal>> preComputed = jsonStringToNestedMap(preComputedJson);
-
-        if (preComputed != null && !preComputed.isEmpty()) {
-            preComputed.forEach((feedbackScoreName,
-                    metrics) -> metrics.forEach((metricType, metricValue) -> result.add(new FeedbackScoreAverage(
-                            feedbackScoreName,
-                            metricValue,
-                            metricType))));
+    /**
+     * Extracts pre-computed metrics from a single JSON string and adds them to the result list.
+     */
+    private static void addPreComputedMetrics(List<FeedbackScoreAverage> result, String preComputedJson) {
+        if (preComputedJson == null || preComputedJson.isBlank()) {
+            return;
         }
+
+        Map<String, Map<String, BigDecimal>> preComputed = jsonStringToNestedMap(preComputedJson);
+        if (preComputed != null && !preComputed.isEmpty()) {
+            preComputed.forEach((feedbackScoreName, metrics) -> metrics.forEach((metricType, metricValue) -> result
+                    .add(new FeedbackScoreAverage(feedbackScoreName, metricValue, metricType))));
+        }
+    }
+
+    /**
+     * Gets feedback scores from a row (auto-computed averages only, no pre-computed metrics).
+     */
+    public static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
+        List<FeedbackScoreAverage> result = extractAutoComputedAverages(row);
+        return result.isEmpty() ? null : result;
+    }
+
+    /**
+     * Gets feedback scores from a row including both auto-computed averages and pre-computed metrics.
+     */
+    public static List<FeedbackScoreAverage> getFeedbackScoresWithPreComputed(Row row) {
+        List<FeedbackScoreAverage> result = new ArrayList<>(extractAutoComputedAverages(row));
+
+        String preComputedJson = row.get("pre_computed_metric_aggregates", String.class);
+        addPreComputedMetrics(result, preComputedJson);
 
         return result.isEmpty() ? null : result;
     }
 
+    /**
+     * Gets feedback scores from an aggregation row, averaging pre-computed metrics across multiple experiments.
+     */
     public static List<FeedbackScoreAverage> getFeedbackScoresFromAggregation(Row row) {
-        // Get auto-computed averages (type = "avg")
-        List<FeedbackScoreAverage> result = new ArrayList<>();
-
-        Optional.ofNullable(row.get("feedback_scores", Map.class))
-                .map(map -> (Map<String, ? extends Number>) map)
-                .orElse(Map.of())
-                .forEach((name, value) -> result.add(new FeedbackScoreAverage(
-                        name,
-                        BigDecimal.valueOf(value.doubleValue()).setScale(SCALE, RoundingMode.HALF_EVEN),
-                        "avg")));
+        List<FeedbackScoreAverage> result = new ArrayList<>(extractAutoComputedAverages(row));
 
         // Get array of pre-computed metrics from all experiments in the group
         List<String> preComputedArray = row.get("pre_computed_metric_aggregates_array", List.class);
@@ -1008,10 +1011,7 @@ class ExperimentDAO {
                         .reduce(BigDecimal.ZERO, BigDecimal::add)
                         .divide(BigDecimal.valueOf(values.size()), SCALE, RoundingMode.HALF_EVEN);
 
-                result.add(new FeedbackScoreAverage(
-                        feedbackScoreName,
-                        avg,
-                        metricType));
+                result.add(new FeedbackScoreAverage(feedbackScoreName, avg, metricType));
             }));
         }
 
@@ -1034,6 +1034,20 @@ class ExperimentDAO {
                         sortingFactory.getSortableFields()));
     }
 
+    // SQL expression constants and templates for feedback score sorting
+    private static final String SQL_FEEDBACK_SCORES_PREFIX = "feedback_scores.";
+    private static final String SQL_FEEDBACK_SCORES_MAP = "fs.feedback_scores";
+    private static final String SQL_PRE_COMPUTED_METRICS = "e.pre_computed_metric_aggregates";
+
+    // SQL function call templates
+    private static final String SQL_TEMPLATE_MAP_CONTAINS = "mapContains(%s, '%s')";
+    private static final String SQL_TEMPLATE_MAP_ACCESS = "%s['%s']";
+    private static final String SQL_TEMPLATE_TO_FLOAT64 = "toFloat64(%s)";
+    private static final String SQL_TEMPLATE_IF_EXPR = "if(%s, %s, NULL)";
+    private static final String SQL_TEMPLATE_JSON_EXTRACT_STRING = "JSONExtractString(%s, '%s')";
+    private static final String SQL_TEMPLATE_TO_FLOAT64_OR_NULL = "toFloat64OrNull(%s)";
+    private static final String SQL_TEMPLATE_COALESCE = "coalesce(%s, %s)";
+
     private Publisher<? extends Result> find(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
@@ -1043,8 +1057,6 @@ class ExperimentDAO {
 
         var sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields(), fieldMapping);
 
-        log.info("Generated ORDER BY: {}", sorting);
-
         int offset = (page - 1) * size;
 
         var template = newFindTemplate(FIND, experimentSearchCriteria);
@@ -1053,10 +1065,7 @@ class ExperimentDAO {
         template.add("limit", size);
         template.add("offset", offset);
 
-        String renderedSql = template.render();
-        log.info("SQL before parameter binding:\n{}", renderedSql);
-
-        var statement = connection.createStatement(renderedSql)
+        var statement = connection.createStatement(template.render())
                 .bind("limit", size)
                 .bind("offset", offset);
 
@@ -1064,45 +1073,56 @@ class ExperimentDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
+    /**
+     * Creates a field mapping for feedback score sorting fields.
+     * Maps feedback_scores fields to SQL expressions that check both auto-computed averages
+     * and pre-computed metrics.
+     */
     private Map<String, String> createFeedbackScoresFieldMapping(List<SortingField> sortingFields) {
         Map<String, String> fieldMapping = new java.util.HashMap<>();
 
         for (SortingField sortingField : sortingFields) {
             String field = sortingField.field();
 
-            if (field.startsWith("feedback_scores.")) {
-                String scoreName = com.comet.opik.api.sorting.ExperimentSortingFactory.extractScoreName(field);
-                String scoreType = com.comet.opik.api.sorting.ExperimentSortingFactory.extractScoreType(field);
-
-                String coalesceExpression;
-
-                if (scoreType != null) {
-                    // Format: feedback_scores.name.type (e.g., feedback_scores.answer_correctness.exact_match)
-                    // Check both auto-computed averages and pre-computed metrics
-                    // Use literal values in the SQL since this is part of the ORDER BY clause
-                    // Use if() to return NULL when map is empty, since empty map returns 0 instead of NULL
-                    // Cast to Nullable(Float64) to ensure type compatibility with toDecimal64OrNull result
-                    coalesceExpression = "coalesce(" +
-                            "if(mapContains(fs.feedback_scores, '" + scoreName + "'), toFloat64(fs.feedback_scores['"
-                            + scoreName + "']), NULL), " +
-                            "toFloat64OrNull(" +
-                            "JSONExtractString(" +
-                            "JSONExtractString(e.pre_computed_metric_aggregates, '" + scoreName + "'), " +
-                            "'" + scoreType + "')))";
-                } else {
-                    // Format: feedback_scores.name (e.g., feedback_scores.answer_correctness)
-                    // Only use auto-computed averages from the map
-                    // Use if() to return NULL when map is empty, since empty map returns 0 instead of NULL
-                    coalesceExpression = "if(mapContains(fs.feedback_scores, '" + scoreName
-                            + "'), toFloat64(fs.feedback_scores['" + scoreName + "']), NULL)";
+            if (field.startsWith(SQL_FEEDBACK_SCORES_PREFIX)) {
+                var parts = com.comet.opik.api.sorting.ExperimentSortingFactory.parseScoreField(field);
+                if (parts != null) {
+                    String expression = buildFeedbackScoreSortExpression(parts.name(), parts.type());
+                    fieldMapping.put(field, expression);
                 }
-
-                // Use field() as the key, not dbField(), since SortingQueryBuilder line 29 uses field() for lookup
-                fieldMapping.put(field, coalesceExpression);
             }
         }
 
         return fieldMapping;
+    }
+
+    /**
+     * Builds a SQL expression for sorting by feedback scores.
+     *
+     * @param scoreName the feedback score name
+     * @param scoreType the metric type, or null for auto-computed averages only
+     * @return the SQL expression for sorting
+     */
+    private String buildFeedbackScoreSortExpression(String scoreName, String scoreType) {
+        // Build expression for auto-computed averages: if(mapContains(fs.feedback_scores, 'name'), toFloat64(fs.feedback_scores['name']), NULL)
+        String mapContainsExpr = SQL_TEMPLATE_MAP_CONTAINS.formatted(SQL_FEEDBACK_SCORES_MAP, scoreName);
+        String mapAccessExpr = SQL_TEMPLATE_MAP_ACCESS.formatted(SQL_FEEDBACK_SCORES_MAP, scoreName);
+        String toFloat64Expr = SQL_TEMPLATE_TO_FLOAT64.formatted(mapAccessExpr);
+        String autoComputedExpr = SQL_TEMPLATE_IF_EXPR.formatted(mapContainsExpr, toFloat64Expr);
+
+        if (scoreType != null) {
+            // Format: feedback_scores.name.type - check both auto-computed and pre-computed
+            // Build nested JSONExtractString: JSONExtractString(JSONExtractString(e.pre_computed_metric_aggregates, 'name'), 'type')
+            String innerJsonExtract = SQL_TEMPLATE_JSON_EXTRACT_STRING.formatted(SQL_PRE_COMPUTED_METRICS, scoreName);
+            String outerJsonExtract = SQL_TEMPLATE_JSON_EXTRACT_STRING.formatted(innerJsonExtract, scoreType);
+            String preComputedExpr = SQL_TEMPLATE_TO_FLOAT64_OR_NULL.formatted(outerJsonExtract);
+
+            // Combine with coalesce: coalesce(autoComputedExpr, preComputedExpr)
+            return SQL_TEMPLATE_COALESCE.formatted(autoComputedExpr, preComputedExpr);
+        } else {
+            // Format: feedback_scores.name - only auto-computed averages
+            return autoComputedExpr;
+        }
     }
 
     private Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria) {

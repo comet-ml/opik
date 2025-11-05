@@ -17,6 +17,7 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -502,7 +503,7 @@ public class ExperimentsResource {
     @GET
     @Path("/feedback-scores/names")
     @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
-            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
@@ -515,8 +516,8 @@ public class ExperimentsResource {
 
         log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
                 experimentIds, workspaceId);
-        com.comet.opik.api.ExperimentFeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getExperimentsFeedbackScoreNamesWithType(experimentIds)
+        FeedbackScoreNames feedbackScoreNames = feedbackScoreService
+                .getExperimentsFeedbackScoreNames(experimentIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",

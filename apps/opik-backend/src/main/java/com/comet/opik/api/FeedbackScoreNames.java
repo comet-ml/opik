@@ -12,6 +12,9 @@ import java.util.List;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record FeedbackScoreNames(List<ScoreName> scores) {
 
-    public record ScoreName(String name) {
+    public record ScoreName(String name, String type) {
+        public ScoreName(String name) {
+            this(name, null);
+        }
     }
 }

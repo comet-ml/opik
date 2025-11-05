@@ -60,6 +60,10 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
 
+    /**
+     * @deprecated Use {@link #getExperimentsFeedbackScoreNames(Set)} instead. This method is kept for backwards compatibility only.
+     */
+    @Deprecated
     Mono<com.comet.opik.api.ExperimentFeedbackScoreNames> getExperimentsFeedbackScoreNamesWithType(
             Set<UUID> experimentIds);
 
@@ -208,18 +212,22 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
-        return dao.getExperimentsFeedbackScoreNames(experimentIds)
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+        return ((FeedbackScoreDAOImpl) dao).getExperimentsFeedbackScoreNamesWithType(experimentIds)
+                .map(scores -> scores.stream()
+                        .map(s -> new FeedbackScoreNames.ScoreName(s.name(), s.type()))
+                        .toList())
                 .map(FeedbackScoreNames::new);
     }
 
+    @Deprecated
     public Mono<com.comet.opik.api.ExperimentFeedbackScoreNames> getExperimentsFeedbackScoreNamesWithType(
             Set<UUID> experimentIds) {
-        return ((FeedbackScoreDAOImpl) dao).getExperimentsFeedbackScoreNamesWithType(experimentIds)
-                .map(scores -> scores.stream()
-                        .map(s -> new com.comet.opik.api.ExperimentFeedbackScoreNames.ScoreName(s.name(), s.type()))
-                        .toList())
-                .map(com.comet.opik.api.ExperimentFeedbackScoreNames::new);
+        return getExperimentsFeedbackScoreNames(experimentIds)
+                .map(feedbackScoreNames -> new com.comet.opik.api.ExperimentFeedbackScoreNames(
+                        feedbackScoreNames.scores().stream()
+                                .map(s -> new com.comet.opik.api.ExperimentFeedbackScoreNames.ScoreName(s.name(),
+                                        s.type()))
+                                .toList()));
     }
 
     @Override
