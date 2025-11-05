@@ -66,6 +66,8 @@ public class TraceThreadListener {
                     }
 
                     // Keep the minimum trace ID (earliest timestamp in UUIDv7)
+                    // Note: UUIDv7 compareTo() works correctly here because UUIDv7s are
+                    // lexicographically ordered by their timestamp component
                     UUID minTraceId = traceId.compareTo(existing.firstTraceId()) < 0
                             ? traceId
                             : existing.firstTraceId();

@@ -114,10 +114,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
     private Mono<TraceThreadIdModel> createThread(String threadId, UUID projectId, Instant timestamp) {
         return Mono.deferContextual(context -> Mono.fromCallable(() -> {
 
-            // Use the provided timestamp to generate a UUIDv7 if available,
-            // otherwise use the current time
-
-            UUID threadModelId = timestamp != null ? idGenerator.generateId(timestamp) : idGenerator.generateId();
+            UUID threadModelId = generateThreadModelId(timestamp);
 
             var threadModel = TraceThreadIdModel.builder()
                     .id(threadModelId)
@@ -147,6 +144,12 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         traceThreadDAO.save(threadModel);
         log.info("Created trace thread with id '{}' and thread id '{}'", threadModel.id(), threadModel.threadId());
         return threadModel;
+    }
+
+    private UUID generateThreadModelId(Instant timestamp) {
+        // Use the provided timestamp to generate a UUIDv7 if available,
+        // otherwise use the current time
+        return timestamp != null ? idGenerator.generateId(timestamp) : idGenerator.generateId();
     }
 
 }

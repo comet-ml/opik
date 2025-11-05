@@ -111,11 +111,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     String threadId = entry.getKey();
                     ThreadTimestamps timestamps = entry.getValue();
 
-                    // Extract timestamp from minimum trace ID for thread model ID generation
-                    Instant minTraceTimestamp = IdGenerator.extractTimestampFromUUIDv7(timestamps.firstTraceId());
+                    // Extract timestamp from earliest trace (first trace in chronological order)
+                    Instant earliestTraceTimestamp = IdGenerator.extractTimestampFromUUIDv7(timestamps.firstTraceId());
 
                     return traceThreadIdService
-                            .getOrCreateTraceThreadId(workspaceId, projectId, threadId, minTraceTimestamp)
+                            .getOrCreateTraceThreadId(workspaceId, projectId, threadId, earliestTraceTimestamp)
                             .map(traceThreadId -> mapToModel(traceThreadId, userName, timestamps.lastUpdatedAt()));
                 }));
     }
