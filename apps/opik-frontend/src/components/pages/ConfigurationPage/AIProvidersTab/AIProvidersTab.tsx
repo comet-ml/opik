@@ -2,14 +2,14 @@ import React, { useMemo, useRef, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
 
 import { convertColumnDataToColumn } from "@/lib/table";
-import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
+import { ProviderObject, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { formatDate } from "@/lib/date";
-import { PROVIDERS, CUSTOM_PROVIDER_DEFAULT_NAME } from "@/constants/providers";
+import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
@@ -20,14 +20,14 @@ import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
-export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
+export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [
   {
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
     accessorFn: (row) =>
       row.provider === PROVIDER_TYPE.CUSTOM
-        ? row.keyName || CUSTOM_PROVIDER_DEFAULT_NAME
+        ? row.provider_name || LEGACY_CUSTOM_PROVIDER_NAME
         : PROVIDERS[row.provider]?.apiKeyName,
   },
   {
@@ -83,24 +83,19 @@ const AIProvidersTab = () => {
     return providerKeys.filter((p) => {
       const providerDetails = PROVIDERS[p.provider];
 
-      // Handle custom providers differently - search by keyName
-      if (p.provider === PROVIDER_TYPE.CUSTOM) {
-        return (
-          p.keyName?.toLowerCase().includes(searchLowerCase) ||
-          p.base_url?.toLowerCase().includes(searchLowerCase)
-        );
-      }
-
       return (
         providerDetails?.apiKeyName?.toLowerCase().includes(searchLowerCase) ||
-        providerDetails?.value?.toLowerCase().includes(searchLowerCase)
+        providerDetails?.value?.toLowerCase().includes(searchLowerCase) ||
+        (p.provider === PROVIDER_TYPE.CUSTOM &&
+          (p.provider_name?.toLowerCase().includes(searchLowerCase) ||
+            p.base_url?.toLowerCase().includes(searchLowerCase)))
       );
     });
   }, [providerKeys, search]);
 
   const columns = useMemo(() => {
     return [
-      ...convertColumnDataToColumn<ProviderKey, ProviderKey>(
+      ...convertColumnDataToColumn<ProviderObject, ProviderObject>(
         DEFAULT_COLUMNS,
         {},
       ),

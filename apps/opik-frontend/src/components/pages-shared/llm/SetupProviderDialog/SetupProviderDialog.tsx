@@ -67,9 +67,9 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
 
       const providerKeyData: Partial<{
         provider: PROVIDER_TYPE;
+        provider_name: string;
         apiKey: string;
         base_url: string;
-        keyName: string;
         configuration: Record<string, string>;
       }> = {
         provider: data.provider as PROVIDER_TYPE,
@@ -83,7 +83,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         "providerName" in data
       ) {
         providerKeyData.base_url = data.url;
-        providerKeyData.keyName = data.providerName;
+        providerKeyData.provider_name = data.providerName;
         providerKeyData.configuration = {
           models: data.models,
         };

@@ -2,8 +2,6 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import isNull from "lodash/isNull";
 import pick from "lodash/pick";
 
-import { PROVIDERS } from "@/constants/providers";
-
 import {
   Select,
   SelectContent,
@@ -24,19 +22,27 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import {
+  getProviderDisplayName,
+  getProviderIcon,
+  parseComposedProviderType,
+} from "@/lib/provider";
 
 interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
   workspaceName: string;
-  onChange: (value: PROVIDER_MODEL_TYPE, provider: PROVIDER_TYPE) => void;
+  onChange: (
+    value: PROVIDER_MODEL_TYPE,
+    provider: COMPOSED_PROVIDER_TYPE,
+  ) => void;
   hasError?: boolean;
-  provider: PROVIDER_TYPE | "";
-  onAddProvider?: (provider: PROVIDER_TYPE) => void;
-  onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
+  provider: COMPOSED_PROVIDER_TYPE | "";
+  onAddProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
+  onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
 }
 
 const STALE_TIME = 1000;
@@ -52,11 +58,14 @@ const PromptModelSelect = ({
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const modelProviderMapRef = useRef<Record<string, PROVIDER_TYPE>>({});
+  const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
+    {},
+  );
 
   const [openConfigDialog, setOpenConfigDialog] = React.useState(false);
   const [filterValue, setFilterValue] = useState("");
-  const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
+  const [openProviderMenu, setOpenProviderMenu] =
+    useState<COMPOSED_PROVIDER_TYPE | null>(null);
   const { getProviderModels } = useLLMProviderModelsData();
 
   const { data } = useProviderKeys(
@@ -74,47 +83,26 @@ const PromptModelSelect = ({
   );
 
   const groupOptions = useMemo(() => {
-    const allProviderModels = getProviderModels();
-
-    // Build a map of configured provider keys
-    // For standard providers: use provider type directly
-    // For custom providers: create dynamic keys like "custom-llm:ollama"
-    const configuredProviderKeys = new Set<string>();
-    configuredProvidersList.forEach((p) => {
-      if (p.provider === PROVIDER_TYPE.CUSTOM) {
-        // For custom providers, add dynamic key
-        const providerKey = p.provider_name
-          ? `${PROVIDER_TYPE.CUSTOM}:${p.provider_name}`
-          : PROVIDER_TYPE.CUSTOM;
-        configuredProviderKeys.add(providerKey);
-      } else {
-        configuredProviderKeys.add(p.provider);
-      }
-    });
-
-    // Filter models by configured provider keys
     const filteredByConfiguredProviders = pick(
-      allProviderModels,
-      Array.from(configuredProviderKeys),
+      getProviderModels(),
+      configuredProvidersList.map((p) => p.ui_composed_provider),
     );
 
-    // Build model-to-provider mapping
     Object.entries(filteredByConfiguredProviders).forEach(
-      ([providerKey, providerModels]) => {
+      ([pn, providerModels]) => {
         providerModels.forEach(({ value }) => {
-          // For custom providers, map to the base PROVIDER_TYPE.CUSTOM
-          const mappedProvider = providerKey.startsWith(
-            `${PROVIDER_TYPE.CUSTOM}:`,
-          )
-            ? PROVIDER_TYPE.CUSTOM
-            : (providerKey as PROVIDER_TYPE);
-          modelProviderMapRef.current[value] = mappedProvider;
+          modelProviderMapRef.current[value] = pn;
         });
       },
     );
 
     return Object.entries(filteredByConfiguredProviders)
-      .map(([providerKey, providerModels]) => {
+      .map(([pn, providerModels]) => {
+        const composedProviderType = pn as COMPOSED_PROVIDER_TYPE;
+        const configuredProvider = configuredProvidersList.find(
+          (p) => p.ui_composed_provider === composedProviderType,
+        )!;
+
         const options = providerModels.map((providerModel) => ({
           label: providerModel.label,
           value: providerModel.value,
@@ -124,34 +112,11 @@ const PromptModelSelect = ({
           return null;
         }
 
-        // Handle custom providers with dynamic labels
-        if (providerKey.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
-          const customProviderName = providerKey.substring(
-            `${PROVIDER_TYPE.CUSTOM}:`.length,
-          );
-          // Find the display name from the configured provider
-          const customConfig = configuredProvidersList.find(
-            (p) =>
-              p.provider === PROVIDER_TYPE.CUSTOM &&
-              p.provider_name === customProviderName,
-          );
-          const displayName = customConfig?.keyName || customProviderName;
-
-          return {
-            label: `${displayName} (Custom)`,
-            options,
-            icon: PROVIDERS[PROVIDER_TYPE.CUSTOM].icon,
-            provider: providerKey as PROVIDER_TYPE,
-          };
-        }
-
-        // Handle standard providers and legacy custom provider
-        const providerType = providerKey as PROVIDER_TYPE;
         return {
-          label: PROVIDERS[providerType].label,
+          label: getProviderDisplayName(configuredProvider),
           options,
-          icon: PROVIDERS[providerType].icon,
-          provider: providerType,
+          icon: getProviderIcon(configuredProvider),
+          composedProviderType: composedProviderType,
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
@@ -184,48 +149,12 @@ const PromptModelSelect = ({
       .filter((filteredGroupedOption) => !isNull(filteredGroupedOption));
   }, [filterValue, groupOptions]);
 
-  const getProviderIcon = useCallback((providerType: PROVIDER_TYPE | "") => {
-    if (!providerType) {
-      return null;
-    }
-
-    // Handle icon for dynamic custom providers
-    if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
-      // For dynamic custom providers, use the custom provider icon
-      return PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
-    }
-
-    // For standard providers, use their specific icon
-    return PROVIDERS[providerType].icon;
-  }, []);
-
-  const getProviderLabel = useCallback(
-    (providerType: PROVIDER_TYPE | "") => {
-      if (!providerType) {
-        return "";
-      }
-
-      // Handle label for dynamic custom providers
-      if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
-        // For dynamic custom providers, get the label from groupOptions
-        const customGroup = groupOptions.find(
-          (o) => o.provider === providerType,
-        );
-        return customGroup ? customGroup.label : "";
-      }
-
-      // For standard providers, use PROVIDERS constant
-      return PROVIDERS[providerType].label;
-    },
-    [groupOptions],
-  );
-
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
       const modelProvider = openProviderMenu
-        ? (openProviderMenu as PROVIDER_TYPE)
+        ? openProviderMenu
         : modelProviderMapRef.current[value];
-      onChange(value, modelProvider);
+      onChange(value, parseComposedProviderType(modelProvider));
     },
     [onChange, openProviderMenu],
   );
@@ -285,17 +214,22 @@ const PromptModelSelect = ({
     return (
       <div>
         {groupOptions.map((group) => (
-          <Popover key={group.label} open={group.provider === openProviderMenu}>
+          <Popover
+            key={group.label}
+            open={group.composedProviderType === openProviderMenu}
+          >
             <PopoverTrigger asChild>
               <div
                 key={group.label}
-                onMouseEnter={() => setOpenProviderMenu(group.provider)}
+                onMouseEnter={() =>
+                  setOpenProviderMenu(group.composedProviderType)
+                }
                 onMouseLeave={() => setOpenProviderMenu(null)}
                 className={cn(
                   "comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground justify-center",
                   {
                     "bg-primary-foreground":
-                      group.provider === openProviderMenu,
+                      group.composedProviderType === openProviderMenu,
                   },
                 )}
               >
@@ -310,7 +244,9 @@ const PromptModelSelect = ({
               align="start"
               className="max-h-[400px] overflow-y-auto p-1"
               sideOffset={-5}
-              onMouseEnter={() => setOpenProviderMenu(group.provider)}
+              onMouseEnter={() =>
+                setOpenProviderMenu(group.composedProviderType)
+              }
               hideWhenDetached
             >
               {group.options.map((option) => {
@@ -331,24 +267,20 @@ const PromptModelSelect = ({
     );
   };
 
-  const renderProviderValueIcon = () => {
-    const Icon = getProviderIcon(provider);
-
-    if (!Icon) {
-      return null;
-    }
-
-    return <Icon className="min-w-3.5 text-foreground" />;
-  };
-
   const renderSelectTrigger = () => {
+    const selectedGroup = groupOptions.find(
+      (o) => o.composedProviderType === provider,
+    );
     const modelName =
-      groupOptions
-        .find((o) => o.provider === provider)
-        ?.options?.find((m) => m.value === value)?.label ?? value;
+      selectedGroup?.options?.find((m) => m.value === value)?.label ?? value;
 
-    const providerLabel = getProviderLabel(provider);
-    const title = providerLabel ? `${providerLabel} ${modelName}` : modelName;
+    const title = `${
+      selectedGroup ? selectedGroup.label + " " : ""
+    }${modelName}`;
+
+    const icon = selectedGroup?.icon ? (
+      <selectedGroup.icon className="min-w-3.5 text-foreground" />
+    ) : null;
 
     return (
       <SelectTrigger
@@ -361,7 +293,7 @@ const PromptModelSelect = ({
           data-testid="select-a-llm-model"
         >
           <div className="flex items-center gap-2">
-            {renderProviderValueIcon()}
+            {icon}
             <span className="truncate">{title}</span>
           </div>
         </SelectValue>

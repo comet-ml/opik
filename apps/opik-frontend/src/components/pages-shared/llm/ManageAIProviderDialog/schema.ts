@@ -12,6 +12,7 @@ export const CloudAIProviderDetailsFormSchema = z.object({
       message: "Provider is required",
     },
   ),
+  composedProviderType: z.string(),
   apiKey: z
     .string({
       required_error: "API key is required",
@@ -23,6 +24,7 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   provider: z.enum([PROVIDER_TYPE.VERTEX_AI], {
     message: "Provider is required",
   }),
+  composedProviderType: z.string(),
   apiKey: z
     .string({
       required_error: "API key is required",
@@ -31,58 +33,42 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   location: z.string(),
 });
 
-export const CustomProviderDetailsFormSchema = z.object({
-  provider: z.enum([PROVIDER_TYPE.CUSTOM], {
-    message: "Provider is required",
-  }),
-  providerName: z
-    .string({
-      required_error: "Provider name is required",
-    })
-    .min(1, { message: "Provider name is required" }),
-  apiKey: z.string(),
-  url: z.string().url(),
-  models: z
-    .string()
-    .min(1, { message: "Models list is required" })
-    .refine(
-      (models) => {
-        const modelsArray = models.split(",").map((m) => m.trim());
+export const CustomProviderDetailsFormSchema = z
+  .object({
+    provider: z.enum([PROVIDER_TYPE.CUSTOM], {
+      message: "Provider is required",
+    }),
+    composedProviderType: z.string(),
+    id: z.string().optional(),
+    providerName: z.string().optional(),
+    apiKey: z.string(),
+    url: z.string().url(),
+    models: z
+      .string()
+      .min(1, { message: "Models list is required" })
+      .refine(
+        (models) => {
+          const modelsArray = models.split(",").map((m) => m.trim());
 
-        return modelsArray.length === uniq(modelsArray).length;
-      },
-      { message: "All model names should be unique" },
-    ),
-});
-
-// Schema for editing existing custom providers (uses provider ID instead of type)
-export const CustomProviderEditFormSchema = z.object({
-  provider: z.string().uuid(), // Provider ID for existing custom providers
-  providerName: z
-    .string({
-      required_error: "Provider name is required",
-    })
-    .min(1, { message: "Provider name is required" }),
-  apiKey: z.string(),
-  url: z.string().url(),
-  models: z
-    .string()
-    .min(1, { message: "Models is required" })
-    .refine(
-      (models) => {
-        const modelsArray = models.split(",").map((m) => m.trim());
-
-        return modelsArray.length === uniq(modelsArray).length;
-      },
-      { message: "All model names should be unique" },
-    ),
-});
+          return modelsArray.length === uniq(modelsArray).length;
+        },
+        { message: "All model names should be unique" },
+      ),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.id && (!data.providerName || data.providerName.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provider name is required",
+        path: ["providerName"],
+      });
+    }
+  });
 
 export const AIProviderFormSchema = z.union([
   CloudAIProviderDetailsFormSchema,
   VertexAIProviderDetailsFormSchema,
   CustomProviderDetailsFormSchema,
-  CustomProviderEditFormSchema,
 ]);
 
 export type AIProviderFormType = z.infer<typeof AIProviderFormSchema>;
