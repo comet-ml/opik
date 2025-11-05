@@ -49,6 +49,7 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -337,10 +338,16 @@ const DatasetItemsPage = () => {
   return (
     <div className="pt-6">
       <div className="mb-4">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-2">
           <h1 className="comet-title-l truncate break-words">
             {dataset?.name}
           </h1>
+          <div className="flex items-center gap-2">
+            <UseDatasetDropdown
+              datasetName={dataset?.name}
+              datasetId={datasetId}
+            />
+          </div>
         </div>
         {dataset?.description && (
           <div className="-mt-3 mb-4 text-muted-slate">
