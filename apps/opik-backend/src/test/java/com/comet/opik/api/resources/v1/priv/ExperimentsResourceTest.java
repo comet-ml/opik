@@ -2040,6 +2040,223 @@ class ExperimentsResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("when sorting by feedback scores with auto-computed averages only, then return page")
+        void whenSortingByFeedbackScoresWithAutoComputedOnly__thenReturnPage(Direction direction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> experimentResourceClient.createPartialExperiment()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s".formatted(scoreForTrace.getFirst().name()),
+                    direction);
+
+            Comparator<Experiment> comparing = Comparator.comparing(
+                    (Experiment experiment) -> experiment.feedbackScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
+                            .findFirst()
+                            .map(FeedbackScoreAverage::value)
+                            .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Experiment::id).reversed());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(comparing)
+                    .toList();
+
+            var expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
+                    null, null, null);
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("when sorting by feedback scores with pre-computed metrics only, then return page")
+        void whenSortingByFeedbackScoresWithPreComputedOnly__thenReturnPage(Direction direction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var scoreName = "hallucination";
+            var metricType = "max";
+            var values = List.of(
+                    BigDecimal.valueOf(0.95),
+                    BigDecimal.valueOf(0.85),
+                    BigDecimal.valueOf(0.90),
+                    BigDecimal.valueOf(0.80),
+                    BigDecimal.valueOf(0.88));
+
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> createExperimentWithPreComputedMetrics(
+                            apiKey, workspaceName, scoreName, metricType, values.get(i)))
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s.%s".formatted(scoreName, metricType),
+                    direction);
+
+            Comparator<Experiment> comparing = Comparator.comparing(
+                    (Experiment experiment) -> experiment.feedbackScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreName) && metricType.equals(score.type()))
+                            .findFirst()
+                            .map(FeedbackScoreAverage::value)
+                            .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Experiment::id).reversed());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(comparing)
+                    .toList();
+
+            var expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
+                    null, null, null);
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("when sorting by feedback scores with both types, then return page")
+        void whenSortingByFeedbackScoresWithBothTypes__thenReturnPage(Direction direction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
+            var scoreName = scoreForTrace.getFirst().name();
+            var metricType = "f1_score";
+            var preComputedValues = List.of(
+                    BigDecimal.valueOf(0.92),
+                    BigDecimal.valueOf(0.88),
+                    BigDecimal.valueOf(0.95),
+                    BigDecimal.valueOf(0.85),
+                    BigDecimal.valueOf(0.90));
+
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> createExperimentWithBothScoreTypes(
+                            apiKey, workspaceName, scoreName, metricType, preComputedValues.get(i), scoreForTrace))
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s.%s".formatted(scoreName, metricType),
+                    direction);
+
+            Comparator<Experiment> comparing = Comparator.comparing(
+                    (Experiment experiment) -> experiment.feedbackScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreName) && metricType.equals(score.type()))
+                            .findFirst()
+                            .map(FeedbackScoreAverage::value)
+                            .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Experiment::id).reversed());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(comparing)
+                    .toList();
+
+            var expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
+                    null, null, null);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"max", "min", "f1_score", "precision", "recall"})
+        @DisplayName("when sorting by feedback scores with different metric types, then return page")
+        void whenSortingByFeedbackScoresWithDifferentMetricTypes__thenReturnPage(String metricType) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var scoreName = "hallucination";
+            var values = List.of(
+                    BigDecimal.valueOf(0.95),
+                    BigDecimal.valueOf(0.85),
+                    BigDecimal.valueOf(0.90));
+
+            var experiments = IntStream.range(0, 3)
+                    .mapToObj(i -> createExperimentWithPreComputedMetrics(
+                            apiKey, workspaceName, scoreName, metricType, values.get(i)))
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s.%s".formatted(scoreName, metricType),
+                    Direction.ASC);
+
+            Comparator<Experiment> comparing = Comparator.comparing(
+                    (Experiment experiment) -> experiment.feedbackScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreName) && metricType.equals(score.type()))
+                            .findFirst()
+                            .map(FeedbackScoreAverage::value)
+                            .orElse(null),
+                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                    .thenComparing(Comparator.comparing(Experiment::id).reversed());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(comparing)
+                    .toList();
+
+            var expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
+                    null, null, null);
+        }
+
         @Test
         @DisplayName("legacy experiments with unknown status should show up as completed")
         void testUnknownStatusExperimentCanBeRetrieved() {
@@ -2677,6 +2894,90 @@ class ExperimentsResourceTest {
                                         .value(avgFromList(List.of(e.getValue())))
                                         .build())
                                 .toList())
+                .build();
+    }
+
+    /**
+     * Creates an experiment with pre-computed metrics only (no auto-computed averages from experiment items).
+     */
+    private Experiment createExperimentWithPreComputedMetrics(
+            String apiKey,
+            String workspaceName,
+            String scoreName,
+            String metricType,
+            BigDecimal value) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .build();
+
+        createAndAssert(experiment, apiKey, workspaceName);
+
+        // Update experiment with pre-computed metrics
+        var preComputedMetrics = Map.of(scoreName, Map.of(metricType, value));
+        var experimentUpdate = ExperimentUpdate.builder()
+                .preComputedMetricAggregates(preComputedMetrics)
+                .build();
+
+        experimentResourceClient.updateExperiment(experiment.id(), experimentUpdate, apiKey, workspaceName,
+                HttpStatus.SC_NO_CONTENT);
+
+        // Get updated experiment
+        var updatedExperiment = getExperiment(experiment.id(), workspaceName, apiKey);
+
+        // Build expected feedback score from pre-computed metric
+        var expectedFeedbackScore = FeedbackScoreAverage.builder()
+                .name(scoreName)
+                .value(value)
+                .type(metricType)
+                .build();
+
+        return updatedExperiment.toBuilder()
+                .feedbackScores(List.of(expectedFeedbackScore))
+                .build();
+    }
+
+    /**
+     * Creates an experiment with both auto-computed averages (from experiment items) and pre-computed metrics.
+     */
+    private Experiment createExperimentWithBothScoreTypes(
+            String apiKey,
+            String workspaceName,
+            String scoreName,
+            String metricType,
+            BigDecimal preComputedValue,
+            List<FeedbackScoreBatchItem> autoComputedScores) {
+        // First create experiment with auto-computed scores (from experiment items)
+        var experiment = generateFullExperiment(apiKey, workspaceName,
+                experimentResourceClient.createPartialExperiment().build(),
+                autoComputedScores);
+
+        // Then update with pre-computed metrics
+        var preComputedMetrics = Map.of(scoreName, Map.of(metricType, preComputedValue));
+        var experimentUpdate = ExperimentUpdate.builder()
+                .preComputedMetricAggregates(preComputedMetrics)
+                .build();
+
+        experimentResourceClient.updateExperiment(experiment.id(), experimentUpdate, apiKey, workspaceName,
+                HttpStatus.SC_NO_CONTENT);
+
+        // Get updated experiment
+        var updatedExperiment = getExperiment(experiment.id(), workspaceName, apiKey);
+
+        // Build expected feedback scores: pre-computed takes precedence, but also include auto-computed averages
+        var expectedFeedbackScores = new ArrayList<>(experiment.feedbackScores());
+
+        // Add or update with pre-computed metric
+        var preComputedScore = FeedbackScoreAverage.builder()
+                .name(scoreName)
+                .value(preComputedValue)
+                .type(metricType)
+                .build();
+
+        // Remove existing auto-computed score (type "avg") for this name if present, then add pre-computed
+        expectedFeedbackScores.removeIf(score -> score.name().equals(scoreName) && "avg".equals(score.type()));
+        expectedFeedbackScores.add(preComputedScore);
+
+        return updatedExperiment.toBuilder()
+                .feedbackScores(expectedFeedbackScores)
                 .build();
     }
 
