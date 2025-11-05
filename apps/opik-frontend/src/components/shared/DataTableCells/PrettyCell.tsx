@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
-import { HelpCircle } from "lucide-react";
 import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
@@ -11,7 +10,6 @@ import { stripImageTags } from "@/lib/llm";
 import useLocalStorageState from "use-local-storage-state";
 import sanitizeHtml from "sanitize-html";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
-import TruncationConfigPopover from "@/components/shared/TruncationConfigPopover/TruncationConfigPopover";
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
@@ -42,17 +40,6 @@ const stripHtmlTags = (text: string): string => {
   return sanitized;
 };
 
-const TruncationLimitExceededMessage: React.FC = () => {
-  return (
-    <TruncationConfigPopover message="Data exceeds preview limit. You can disable truncation in preferences, but this may impact performance and limit pagination to 10 items per page.">
-      <span className="inline-flex cursor-help items-center gap-1">
-        Preview limit exceeded
-        <HelpCircle className="size-3 text-muted-foreground" />
-      </span>
-    </TruncationConfigPopover>
-  );
-};
-
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
@@ -76,23 +63,26 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     [rawValue, maxDataLength, truncationEnabled],
   );
 
-  const response = useMemo(() => {
+  const displayMessage = useMemo(() => {
     if (!value || hasExceededLimit) {
-      return {
-        message: "",
-        prettified: false,
-      };
+      return hasExceededLimit
+        ? rawValue.slice(0, maxDataLength) + "[truncated]"
+        : "-";
     }
 
-    return prettifyMessage(value);
-  }, [value, hasExceededLimit]);
+    const pretty = prettifyMessage(value);
+    const message = isObject(pretty.message)
+      ? JSON.stringify(value, null, 2)
+      : pretty.message || "";
 
-  const message = useMemo(() => {
-    if (isObject(response.message)) {
-      return JSON.stringify(value, null, 2);
+    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
+    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
+    if (pretty.prettified && containsHTML(message)) {
+      return stripHtmlTags(message);
     }
-    return response.message || "";
-  }, [response.message, value]);
+
+    return message;
+  }, [value, hasExceededLimit, rawValue, maxDataLength]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
@@ -102,19 +92,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
-    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
-    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
-    const hasValidHtmlTags = response.prettified && containsHTML(message);
-    const displayMessage = hasValidHtmlTags ? stripHtmlTags(message) : message;
-
     if (isSmall) {
-      if (hasExceededLimit) {
-        return (
-          <span className="comet-code truncate">
-            <TruncationLimitExceededMessage />
-          </span>
-        );
-      }
       return (
         <CellTooltipWrapper content={displayMessage}>
           <span className="comet-code truncate">{displayMessage}</span>
@@ -124,10 +102,10 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
 
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {hasExceededLimit ? <TruncationLimitExceededMessage /> : displayMessage}
+        {displayMessage}
       </div>
     );
-  }, [isSmall, hasExceededLimit, message, response.prettified]);
+  }, [isSmall, displayMessage]);
 
   return (
     <CellWrapper
