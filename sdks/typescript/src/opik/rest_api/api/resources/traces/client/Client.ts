@@ -399,7 +399,19 @@ export class Traces {
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePagePublic>> {
-        const { page, size, projectName, projectId, filters, truncate, stripAttachments, sorting, exclude } = request;
+        const {
+            page,
+            size,
+            projectName,
+            projectId,
+            filters,
+            truncate,
+            stripAttachments,
+            sorting,
+            exclude,
+            fromTime,
+            toTime,
+        } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -435,6 +447,14 @@ export class Traces {
 
         if (exclude != null) {
             _queryParams["exclude"] = exclude;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -1589,7 +1609,7 @@ export class Traces {
         request: OpikApi.GetTraceStatsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, filters } = request;
+        const { projectId, projectName, filters, fromTime, toTime } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
             _queryParams["project_id"] = projectId;
@@ -1601,6 +1621,14 @@ export class Traces {
 
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({

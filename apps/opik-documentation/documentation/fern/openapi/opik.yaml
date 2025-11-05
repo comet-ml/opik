@@ -3827,6 +3827,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace resource
@@ -4099,6 +4113,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace stats resource
@@ -12011,6 +12039,12 @@ components:
             \ for 2 hours, P1D for 1 day). Minimum precision supported is seconds,\
             \ please use a duration with seconds precision or higher. Also, the max\
             \ duration allowed is 7 days."
+        truncation_on_tables:
+          type: boolean
+          description: "Enable or disable data truncation in table views. When disabled,\
+            \ the frontend will limit pagination to prevent performance issues. Default:\
+            \ true (truncation enabled)."
+          example: true
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:
