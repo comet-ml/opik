@@ -21,6 +21,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TestWorkspace;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
@@ -4175,11 +4176,7 @@ class FindSpansResourceTest {
                     .build();
         }
 
-        @ParameterizedTest
-        @DisplayName("filter spans by UUID creation time - includes spans at lower bound, upper bound, and between")
-        @MethodSource("provideBoundaryScenarios")
-        void whenTimeParametersProvided_thenIncludeSpansWithinBounds(
-                String endpoint, SpanPageTestAssertion testAssertion, Comparator<Span> comparator) {
+        private TestWorkspace setupTestWorkspace() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -4187,17 +4184,27 @@ class FindSpansResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            return new TestWorkspace(workspaceName, workspaceId, apiKey, projectName);
+        }
+
+        @ParameterizedTest
+        @DisplayName("filter spans by UUID creation time - includes spans at lower bound, upper bound, and between")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenIncludeSpansWithinBounds(
+                String endpoint, SpanPageTestAssertion testAssertion, Comparator<Span> comparator) {
+            var workspace = setupTestWorkspace();
+
             Instant baseTime = Instant.now();
             Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
             Instant upperBound = baseTime;
 
             // Create spans with UUIDs at specific boundary times
             List<Span> allSpans = new ArrayList<>();
-            allSpans.add(createSpanWithTimestamp(projectName, lowerBound));
-            allSpans.add(createSpanWithTimestamp(projectName, upperBound));
-            allSpans.add(createSpanWithTimestamp(projectName, lowerBound.plus(Duration.ofMinutes(5))));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), lowerBound));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), upperBound));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), lowerBound.plus(Duration.ofMinutes(5))));
 
-            spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(allSpans, workspace.apiKey(), workspace.workspaceName());
 
             var queryParams = Map.of(
                     "from_time", lowerBound.toString(),
@@ -4213,7 +4220,8 @@ class FindSpansResourceTest {
 
             var values = testAssertion.transformTestParams(allSpans, allSpans, List.of());
 
-            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+            testAssertion.runTestAndAssert(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(),
                     values.unexpected(), values.all(), List.of(), queryParams);
         }
 
@@ -4222,12 +4230,7 @@ class FindSpansResourceTest {
         @MethodSource("provideBoundaryScenarios")
         void whenTimeParametersProvided_thenExcludeSpansOutsideBounds(
                 String endpoint, SpanPageTestAssertion testAssertion, Comparator<Span> comparator) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var workspace = setupTestWorkspace();
 
             Instant baseTime = Instant.now();
             Instant lowerBound = baseTime.minus(Duration.ofMinutes(10));
@@ -4237,15 +4240,15 @@ class FindSpansResourceTest {
             List<Span> allSpans = new ArrayList<>();
 
             // Within bounds - indices 0, 1, 2
-            allSpans.add(createSpanWithTimestamp(projectName, lowerBound));
-            allSpans.add(createSpanWithTimestamp(projectName, upperBound));
-            allSpans.add(createSpanWithTimestamp(projectName, lowerBound.plus(Duration.ofMinutes(1))));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), lowerBound));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), upperBound));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), lowerBound.plus(Duration.ofMinutes(1))));
 
             // Outside bounds - indices 3, 4
-            allSpans.add(createSpanWithTimestamp(projectName, lowerBound.minus(Duration.ofMinutes(1))));
-            allSpans.add(createSpanWithTimestamp(projectName, upperBound.plus(Duration.ofMinutes(1))));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), lowerBound.minus(Duration.ofMinutes(1))));
+            allSpans.add(createSpanWithTimestamp(workspace.projectName(), upperBound.plus(Duration.ofMinutes(1))));
 
-            spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(allSpans, workspace.apiKey(), workspace.workspaceName());
 
             var queryParams = Map.of(
                     "from_time", lowerBound.toString(),
@@ -4263,9 +4266,12 @@ class FindSpansResourceTest {
                     .sorted(comparator)
                     .toList();
 
-            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(
+                    allSpans.stream().map(s -> s.toBuilder().projectName(null).build()).toList(), expectedSpans,
+                    unexpectedSpans);
 
-            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+            testAssertion.runTestAndAssert(workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(),
+                    values.expected(),
                     values.unexpected(), values.all(), List.of(), queryParams);
         }
 
@@ -4273,12 +4279,7 @@ class FindSpansResourceTest {
         @DisplayName("time filtering requires both from_time and to_time parameters")
         @ValueSource(strings = {"/spans/stats", "/spans", "/spans/search"})
         void whenOnlyFromTimeProvided_thenReturnBadRequest(String endpoint) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var workspace = setupTestWorkspace();
 
             Instant now = Instant.now();
 
@@ -4290,11 +4291,11 @@ class FindSpansResourceTest {
             }
 
             try (var actualResponse = client.target(url)
-                    .queryParam("project_name", projectName)
+                    .queryParam("project_name", workspace.projectName())
                     .queryParam("from_time", now.toString())
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
+                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
+                    .header(WORKSPACE_HEADER, workspace.workspaceName())
                     .get()) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
