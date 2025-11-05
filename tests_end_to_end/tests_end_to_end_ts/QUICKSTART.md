@@ -171,11 +171,11 @@ test.describe('Feature Name', () => {
 
 Agents use:
 - **Seed test**: `typescript-tests/tests/seed-for-planner.spec.ts`
-- **MCP config**: `.mcp.json` (Model Context Protocol server)
+- **MCP config**: Root `.cursor/mcp.json` (Model Context Protocol server)
 - **Agent definitions**: `.cursor/agents/` directory
 
 For detailed documentation, see:
-- [Playwright Agent Workflow Rule](../../.cursor/rules/playwright-agent-workflow.mdc)
+- [Playwright Agent Workflow Rule](.cursor/rules/playwright-agent-workflow.mdc)
 - [Playwright Test Agents Docs](https://playwright.dev/docs/test-agents)
 
 ## 📁 Project Structure
@@ -258,7 +258,7 @@ npm run test:report
 ## 📖 Next Steps
 
 - **Read full documentation**: `typescript-tests/README.md`
-- **Learn agent workflow**: `.cursor/rules/playwright-agent-workflow.mdc`
+- **Learn agent workflow**: [Playwright Agent Workflow](.cursor/rules/playwright-agent-workflow.mdc)
 - **View existing tests**: `typescript-tests/tests/*/`
 - **Understand fixtures**: `typescript-tests/fixtures/`
 - **Explore page objects**: `typescript-tests/page-objects/`
@@ -274,5 +274,5 @@ After setup, you should be able to:
 ## 📞 Questions?
 
 - Check the full [README](typescript-tests/README.md)
-- Review [Cursor Rules](../../.cursor/rules/playwright-agent-workflow.mdc)
+- Review [Playwright Agent Workflow](.cursor/rules/playwright-agent-workflow.mdc)
 - See [Playwright Agents Documentation](https://playwright.dev/docs/test-agents)

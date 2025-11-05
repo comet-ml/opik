@@ -245,13 +245,14 @@ typescript-tests/
 │   ├── project-metrics.md
 │   ├── dataset-upload.md
 │   └── ...
-├── tests/
-│   ├── seed-for-planner.spec.ts  # Seed test for agents
-│   ├── projects/
-│   │   └── project-metrics.spec.ts  # Generated test
-│   └── ...
-└── .mcp.json                   # MCP server configuration
+└── tests/
+    ├── seed-for-planner.spec.ts  # Seed test for agents
+    ├── projects/
+    │   └── project-metrics.spec.ts  # Generated test
+    └── ...
 ```
+
+**Note:** MCP server configuration is in the root `.cursor/mcp.json` file.
 
 ### Workflow Example
 
@@ -299,8 +300,8 @@ git commit -m "[OPIK-1234] [FE] Add analytics dashboard + E2E test"
 - `playwright-test-generator.md` - Generator agent configuration
 - `playwright-test-healer.md` - Healer agent configuration
 
-**MCP Server:** `.mcp.json`
-- Configures Model Context Protocol server
+**MCP Server:** Root `.cursor/mcp.json`
+- Configures Model Context Protocol server (including `playwright-test` server)
 - Enables agent access to Playwright tools
 
 ### Best Practices
@@ -338,7 +339,7 @@ curl http://localhost:5173
 
 ### Additional Resources
 
-- [Playwright Agent Workflow Rule](../../.cursor/rules/playwright-agent-workflow.mdc) - Detailed workflow documentation
+- [Playwright Agent Workflow Rule](../.cursor/rules/playwright-agent-workflow.mdc) - Detailed workflow documentation
 - [Playwright Test Agents](https://playwright.dev/docs/test-agents) - Official Playwright docs
 - [Quick Start Guide](../QUICKSTART.md) - Quick reference
 
