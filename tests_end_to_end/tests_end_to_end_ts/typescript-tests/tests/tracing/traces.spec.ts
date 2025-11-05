@@ -45,6 +45,20 @@ test.describe('Traces CRUD Tests', () => {
       projectName,
       createTracesDecorator,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that traces created via the @track decorator are properly visible in both the UI and retrievable via SDK.
+
+Steps:
+1. Create a project (handled by fixture)
+2. Create 25 traces using the @track decorator (handled by fixture)
+3. Navigate to the project and open traces view
+4. Verify all 25 traces appear in the UI with correct names
+5. Verify all 25 traces are retrievable via SDK with correct names
+
+This test ensures traces created via decorator are properly synchronized between UI and backend.`
+      });
+
       await verifyTraces(page, projectName, helperClient);
     });
 
@@ -52,8 +66,22 @@ test.describe('Traces CRUD Tests', () => {
       page,
       helperClient,
       projectName,
-      createTracesClient,
+      createTracesClient: _createTracesClient,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that traces created via the low-level client API are properly visible in both the UI and retrievable via SDK.
+
+Steps:
+1. Create a project (handled by fixture)
+2. Create 25 traces using the low-level client API (handled by fixture)
+3. Navigate to the project and open traces view
+4. Verify all 25 traces appear in the UI with correct names
+5. Verify all 25 traces are retrievable via SDK with correct names
+
+This test ensures traces created via low-level client are properly synchronized between UI and backend.`
+      });
+
       await verifyTraces(page, projectName, helperClient);
     });
   });
@@ -63,8 +91,22 @@ test.describe('Traces CRUD Tests', () => {
       page,
       helperClient,
       projectName,
-      createTracesClient,
+      createTracesClient: _createTracesClient,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that traces can be deleted via SDK and the deletion is properly reflected in the UI.
+
+Steps:
+1. Create a project and 10 traces via fixtures
+2. Retrieve the trace list via SDK
+3. Select and delete 2 traces using SDK
+4. Reload the UI and verify deleted traces are no longer visible
+5. Verify deleted traces are not retrievable via SDK
+
+This test ensures SDK trace deletions propagate correctly to the UI.`
+      });
+
       const tracesNumber = 10;
       let traceIdsToDelete: string[];
       let traceNamesToDelete: string[];
@@ -112,8 +154,22 @@ test.describe('Traces CRUD Tests', () => {
       page,
       helperClient,
       projectName,
-      createTracesClient,
+      createTracesClient: _createTracesClient,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that traces can be deleted via UI and the deletion is properly reflected in the SDK.
+
+Steps:
+1. Create a project and 10 traces via fixtures
+2. Navigate to the project traces page
+3. Select and delete 2 traces using the UI
+4. Reload the UI and verify deleted traces are no longer visible
+5. Verify deleted traces are not retrievable via SDK
+
+This test ensures UI trace deletions propagate correctly to the backend.`
+      });
+
       const tracesNumber = 10;
       let traceNamesToDelete: string[];
 

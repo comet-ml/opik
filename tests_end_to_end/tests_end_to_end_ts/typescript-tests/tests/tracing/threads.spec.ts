@@ -43,6 +43,23 @@ test.describe('Threads (Conversations) Tests', () => {
       projectName,
       createThreadsDecorator,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that threads (conversations) created via the @track decorator are correctly displayed with proper message ordering in the UI.
+
+Steps:
+1. Create a project and 3 threads via @track decorator (handled by fixture)
+2. Navigate to the project and switch to threads page
+3. Verify the expected number of threads (3) are visible
+4. For each thread:
+   - Open the thread content
+   - Verify all input messages are present in correct order
+   - Verify all output messages are present in correct order
+   - Close the thread content
+
+This test ensures threads created via decorator maintain proper message ordering and are visible in the UI.`
+      });
+
       await verifyThreads(page, projectName, createThreadsDecorator);
     });
 
@@ -51,6 +68,23 @@ test.describe('Threads (Conversations) Tests', () => {
       projectName,
       createThreadsClient,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that threads (conversations) created via the low-level client API are correctly displayed with proper message ordering in the UI.
+
+Steps:
+1. Create a project and 3 threads via low-level client (handled by fixture)
+2. Navigate to the project and switch to threads page
+3. Verify the expected number of threads (3) are visible
+4. For each thread:
+   - Open the thread content
+   - Verify all input messages are present in correct order
+   - Verify all output messages are present in correct order
+   - Close the thread content
+
+This test ensures threads created via low-level client maintain proper message ordering and are visible in the UI.`
+      });
+
       await verifyThreads(page, projectName, createThreadsClient);
     });
   });
@@ -61,6 +95,23 @@ test.describe('Threads (Conversations) Tests', () => {
       projectName,
       createThreadsClient,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that threads can be deleted via the UI and the removal is properly reflected.
+
+Steps:
+1. Create a project and 3 threads via low-level client (handled by fixture)
+2. Navigate to the project and switch to threads page
+3. Verify initial thread count is 3
+4. Delete 2 threads via UI:
+   - Search for each thread by ID
+   - Delete the thread from the table
+   - Verify the thread is deleted and no longer appears
+5. Clear search and verify remaining thread count
+
+This test ensures threads can be properly deleted via the UI.`
+      });
+
       const threadConfigs = createThreadsClient;
 
       await test.step('Navigate to project and switch to threads page', async () => {
