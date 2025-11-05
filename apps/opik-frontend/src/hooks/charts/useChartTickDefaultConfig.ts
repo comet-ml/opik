@@ -21,6 +21,7 @@ interface UseChartTickDefaultConfigProps {
   numberOfTicks?: number;
   tickPrecision?: number;
   tickFormatter?: (value: number, maxDecimalLength?: number) => string;
+  showMinMaxDomain?: boolean;
 }
 
 const generateEvenlySpacedValues = (
@@ -60,6 +61,7 @@ const useChartTickDefaultConfig = (
     numberOfTicks = DEFAULT_NUMBER_OF_TICKS,
     tickPrecision = DEFAULT_TICK_PRECISION,
     tickFormatter = defaultTickFormatter,
+    showMinMaxDomain = false,
   }: UseChartTickDefaultConfigProps = {},
 ) => {
   const filteredValues = useMemo(() => {
@@ -82,16 +84,58 @@ const useChartTickDefaultConfig = (
     }, 0);
   }, [filteredValues, tickPrecision]);
 
+  const numericDomain = useMemo<[number, number] | null>(() => {
+    if (!showMinMaxDomain || filteredValues.length === 0) return null;
+
+    const minValue = (min(filteredValues) ?? 0) as number;
+    const maxValue = (max(filteredValues) ?? 0) as number;
+    const range = maxValue - minValue;
+    const padding = range * 0.1;
+    const domainMin = Math.max(0, minValue - padding);
+    const domainMax = maxValue + padding;
+
+    return [domainMin, domainMax];
+  }, [filteredValues, showMinMaxDomain]);
+
+  const domain: AxisDomain = useMemo(() => {
+    if (numericDomain) return numericDomain as AxisDomain;
+    if (!showMinMaxDomain) return DEFAULT_DOMAIN;
+    return [0, "max"] as AxisDomain;
+  }, [numericDomain, showMinMaxDomain]);
+
   const ticks = useMemo(() => {
+    if (filteredValues.length === 0) {
+      return [] as number[];
+    }
+
+    if (showMinMaxDomain && numericDomain) {
+      const [domainMin, domainMax] = numericDomain;
+      return generateEvenlySpacedValues(
+        domainMin,
+        domainMax,
+        numberOfTicks,
+        Boolean(maxDecimalNumbersLength),
+      );
+    }
+
     return generateEvenlySpacedValues(
       min([...filteredValues, 0]) as number,
       max(filteredValues) as number,
       numberOfTicks,
       Boolean(maxDecimalNumbersLength),
     );
-  }, [filteredValues, maxDecimalNumbersLength, numberOfTicks]);
+  }, [
+    numericDomain,
+    filteredValues,
+    maxDecimalNumbersLength,
+    numberOfTicks,
+    showMinMaxDomain,
+  ]);
 
   const width = useMemo(() => {
+    if (!ticks.length) {
+      return MIN_Y_AXIS_WIDTH;
+    }
     return Math.min(
       Math.max(
         Math.max(
@@ -115,7 +159,7 @@ const useChartTickDefaultConfig = (
     width,
     ticks,
     yTickFormatter,
-    domain: DEFAULT_DOMAIN,
+    domain,
     interval: DEFAULT_INTERVAL,
   };
 };

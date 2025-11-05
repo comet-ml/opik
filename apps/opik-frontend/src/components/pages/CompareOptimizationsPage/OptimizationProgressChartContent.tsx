@@ -100,6 +100,7 @@ const OptimizationProgressChartContent: React.FC<
   } = useChartTickDefaultConfig(values, {
     tickPrecision: 2,
     numberOfTicks: 3,
+    showMinMaxDomain: true,
   });
 
   const renderHeader = useCallback(
