@@ -45,6 +45,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -988,7 +989,7 @@ class ExperimentDAO {
 
         if (preComputedArray != null && !preComputedArray.isEmpty()) {
             // Collect all metrics from all experiments
-            Map<String, Map<String, List<BigDecimal>>> allMetrics = new java.util.HashMap<>();
+            Map<String, Map<String, List<BigDecimal>>> allMetrics = new HashMap<>();
 
             for (String preComputedJson : preComputedArray) {
                 if (preComputedJson == null || preComputedJson.isBlank()) {
@@ -999,8 +1000,8 @@ class ExperimentDAO {
                 if (preComputed != null && !preComputed.isEmpty()) {
                     preComputed.forEach((feedbackScoreName,
                             metrics) -> metrics.forEach((metricType, metricValue) -> allMetrics
-                                    .computeIfAbsent(feedbackScoreName, k -> new java.util.HashMap<>())
-                                    .computeIfAbsent(metricType, k -> new java.util.ArrayList<>())
+                                    .computeIfAbsent(feedbackScoreName, k -> new HashMap<>())
+                                    .computeIfAbsent(metricType, k -> new ArrayList<>())
                                     .add(metricValue)));
                 }
             }
@@ -1065,9 +1066,18 @@ class ExperimentDAO {
         template.add("limit", size);
         template.add("offset", offset);
 
+        // Check if we need to bind dynamic sorting keys
+        var hasDynamicKeys = experimentSearchCriteria.sortingFields() != null
+                && sortingQueryBuilder.hasDynamicKeys(experimentSearchCriteria.sortingFields());
+
         var statement = connection.createStatement(template.render())
                 .bind("limit", size)
                 .bind("offset", offset);
+
+        // Bind dynamic sorting keys if present
+        if (hasDynamicKeys) {
+            statement = sortingQueryBuilder.bindDynamicKeys(statement, experimentSearchCriteria.sortingFields());
+        }
 
         bindSearchCriteria(statement, experimentSearchCriteria, false);
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
@@ -1079,7 +1089,7 @@ class ExperimentDAO {
      * and pre-computed metrics.
      */
     private Map<String, String> createFeedbackScoresFieldMapping(List<SortingField> sortingFields) {
-        Map<String, String> fieldMapping = new java.util.HashMap<>();
+        Map<String, String> fieldMapping = new HashMap<>();
 
         for (SortingField sortingField : sortingFields) {
             String field = sortingField.field();
@@ -1104,25 +1114,42 @@ class ExperimentDAO {
      * @return the SQL expression for sorting
      */
     private String buildFeedbackScoreSortExpression(String scoreName, String scoreType) {
-        // Build expression for auto-computed averages: if(mapContains(fs.feedback_scores, 'name'), toFloat64(fs.feedback_scores['name']), NULL)
+        String autoComputedExpr = buildAutoComputedExpression(scoreName);
+
+        if (scoreType != null) {
+            String preComputedExpr = buildPreComputedExpression(scoreName, scoreType);
+            return SQL_TEMPLATE_COALESCE.formatted(autoComputedExpr, preComputedExpr);
+        }
+
+        return autoComputedExpr;
+    }
+
+    /**
+     * Builds SQL expression for auto-computed average feedback scores.
+     * Result: if(mapContains(fs.feedback_scores, 'name'), toFloat64(fs.feedback_scores['name']), NULL)
+     *
+     * @param scoreName the feedback score name
+     * @return the SQL expression
+     */
+    private String buildAutoComputedExpression(String scoreName) {
         String mapContainsExpr = SQL_TEMPLATE_MAP_CONTAINS.formatted(SQL_FEEDBACK_SCORES_MAP, scoreName);
         String mapAccessExpr = SQL_TEMPLATE_MAP_ACCESS.formatted(SQL_FEEDBACK_SCORES_MAP, scoreName);
         String toFloat64Expr = SQL_TEMPLATE_TO_FLOAT64.formatted(mapAccessExpr);
-        String autoComputedExpr = SQL_TEMPLATE_IF_EXPR.formatted(mapContainsExpr, toFloat64Expr);
+        return SQL_TEMPLATE_IF_EXPR.formatted(mapContainsExpr, toFloat64Expr);
+    }
 
-        if (scoreType != null) {
-            // Format: feedback_scores.name.type - check both auto-computed and pre-computed
-            // Build nested JSONExtractString: JSONExtractString(JSONExtractString(e.pre_computed_metric_aggregates, 'name'), 'type')
-            String innerJsonExtract = SQL_TEMPLATE_JSON_EXTRACT_STRING.formatted(SQL_PRE_COMPUTED_METRICS, scoreName);
-            String outerJsonExtract = SQL_TEMPLATE_JSON_EXTRACT_STRING.formatted(innerJsonExtract, scoreType);
-            String preComputedExpr = SQL_TEMPLATE_TO_FLOAT64_OR_NULL.formatted(outerJsonExtract);
-
-            // Combine with coalesce: coalesce(autoComputedExpr, preComputedExpr)
-            return SQL_TEMPLATE_COALESCE.formatted(autoComputedExpr, preComputedExpr);
-        } else {
-            // Format: feedback_scores.name - only auto-computed averages
-            return autoComputedExpr;
-        }
+    /**
+     * Builds SQL expression for pre-computed metrics from JSON.
+     * Result: toFloat64OrNull(JSONExtractString(JSONExtractString(e.pre_computed_metric_aggregates, 'name'), 'type'))
+     *
+     * @param scoreName the feedback score name
+     * @param scoreType the metric type
+     * @return the SQL expression
+     */
+    private String buildPreComputedExpression(String scoreName, String scoreType) {
+        String innerJsonExtract = SQL_TEMPLATE_JSON_EXTRACT_STRING.formatted(SQL_PRE_COMPUTED_METRICS, scoreName);
+        String outerJsonExtract = SQL_TEMPLATE_JSON_EXTRACT_STRING.formatted(innerJsonExtract, scoreType);
+        return SQL_TEMPLATE_TO_FLOAT64_OR_NULL.formatted(outerJsonExtract);
     }
 
     private Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria) {

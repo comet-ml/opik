@@ -34,18 +34,11 @@ public class SortingQueryBuilder {
                     String dbField = fieldMapper.apply(sortingField);
 
                     // Skip null handling for JSONExtractRaw fields (they're JSON strings, not maps)
-                    // and coalesce expressions (they already handle nulls)
                     boolean isJsonExtract = dbField.startsWith(JSON_EXTRACT_RAW_PREFIX);
-                    boolean isCoalesce = dbField.startsWith("coalesce(");
 
-                    // Handle null direction for dynamic fields (unless it's a JSON extract or coalesce)
+                    // Handle null direction for dynamic fields (unless it's a JSON extract)
                     if (sortingField.handleNullDirection().isEmpty() || isJsonExtract) {
                         return "%s %s".formatted(dbField, getDirection(sortingField));
-                    } else if (isCoalesce) {
-                        // For coalesce expressions, use NULLS FIRST/LAST instead of tuple
-                        Direction direction = getDirection(sortingField);
-                        String nullsClause = direction == Direction.ASC ? "NULLS FIRST" : "NULLS LAST";
-                        return "%s %s %s".formatted(dbField, direction, nullsClause);
                     } else {
                         return "(%s, %s) %s".formatted(dbField, sortingField.handleNullDirection(),
                                 getDirection(sortingField));

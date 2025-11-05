@@ -29,7 +29,9 @@ public record SortingField(
     }
 
     public String dbField() {
-        if (isDynamic()) {
+        // Dynamic fields require bindKeyParam for proper SQL generation
+        // Fields with field mappings (bindKeyParam = null) should use the mapping instead
+        if (isDynamic() && bindKeyParam != null) {
             return "%s[:%s]".formatted(fieldNamespace(), bindKey());
         }
 
@@ -41,7 +43,9 @@ public record SortingField(
     }
 
     public String handleNullDirection() {
-        if (isDynamic()) {
+        // Only dynamic fields with bindKeyParam need tuple wrapping for null handling
+        // Fields with field mappings (bindKeyParam = null) don't need this
+        if (isDynamic() && bindKeyParam != null) {
             return "mapContains(%s, :%s)".formatted(fieldNamespace(), bindKey());
         } else {
             return "";

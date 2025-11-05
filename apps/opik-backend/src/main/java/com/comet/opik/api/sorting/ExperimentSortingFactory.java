@@ -47,8 +47,25 @@ public class ExperimentSortingFactory extends SortingFactory {
 
     @Override
     protected List<SortingField> processFields(@NonNull List<SortingField> sorting) {
-        // No special processing needed - field mapping uses literal SQL strings, not dynamic keys
-        return sorting;
+        // Feedback score fields use field mappings with literal SQL strings, not dynamic keys
+        // Set bindKeyParam to null so handleNullDirection() returns empty (no tuple wrapping needed)
+        return sorting.stream()
+                .map(this::ensureFeedbackScoresField)
+                .toList();
+    }
+
+    private SortingField ensureFeedbackScoresField(SortingField sortingField) {
+        String field = sortingField.field();
+
+        // Feedback score fields should NOT be treated as dynamic
+        // because they use field mappings with literal SQL strings (coalesce expressions) in ExperimentDAO
+        if (field.startsWith(FEEDBACK_SCORES_PREFIX)) {
+            return sortingField.toBuilder()
+                    .bindKeyParam(null)
+                    .build();
+        }
+
+        return sortingField;
     }
 
     /**
