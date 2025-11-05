@@ -66,7 +66,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const displayMessage = useMemo(() => {
     if (!value || hasExceededLimit) {
       return hasExceededLimit
-        ? rawValue.slice(0, maxDataLength) + "[truncated]"
+        ? rawValue.slice(0, maxDataLength) + " [truncated]"
         : "-";
     }
 
