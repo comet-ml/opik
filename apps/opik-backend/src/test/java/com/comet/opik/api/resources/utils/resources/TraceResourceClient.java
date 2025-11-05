@@ -17,6 +17,7 @@ import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -52,7 +53,6 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchT
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
-import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -127,6 +127,16 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()));
     }
 
+    public Response callFeedbackScoresWithCookie(List<FeedbackScoreBatchItem> score, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()));
+    }
+
     public void threadFeedbackScores(List<FeedbackScoreBatchItemThread> score, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
@@ -156,17 +166,21 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public void feedbackScore(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = callFeedbackScore(entityId, score, workspaceName, apiKey)) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callFeedbackScore(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(entityId.toString())
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(score))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+                .put(Entity.json(score));
     }
 
     public void batchCreateTraces(List<Trace> traces, String apiKey, String workspaceName) {
@@ -204,13 +218,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public void deleteTrace(UUID id, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-
+        try (var actualResponse = callDeleteTrace(id, apiKey, workspaceName)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
@@ -668,6 +676,128 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .post(Entity.json(new TraceBatch(traces)));
     }
 
+    public Response callPostWithCookie(Object body, String sessionToken, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(body));
+    }
+
+    public Response callPostToPathWithCookie(String pathSuffix, Object body, String sessionToken,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        return target
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(body));
+    }
+
+    public Response callPutToPathWithCookie(String pathSuffix, Object body, String sessionToken, String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        return target
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(body));
+    }
+
+    public Response callGetWithQueryParamAndCookie(String queryParamKey, String queryParamValue, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam(queryParamKey, queryParamValue)
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetWithPathAndCookie(String pathSuffix, String queryParamKey, String queryParamValue,
+            String sessionToken, String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix if provided
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        // Add query parameter if provided
+        if (queryParamKey != null && queryParamValue != null) {
+            target = target.queryParam(queryParamKey, queryParamValue);
+        }
+
+        return target
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callSearchTracesStreamWithCookie(TraceSearchStreamRequest streamRequest, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("search")
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(streamRequest));
+    }
+
+    public Response callUpdateTraceWithCookie(UUID id, TraceUpdate traceUpdate, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(traceUpdate));
+    }
+
+    public Response callDeleteTraceWithCookie(UUID id, String sessionToken, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete();
+    }
+
+    public WebTarget getWebTarget(String pathSuffix) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            target = target.path(pathSuffix);
+        }
+        return target;
+    }
+
     public ProjectStats getStats(String projectName, UUID projectId, String apiKey, String workspaceName,
             Map<String, String> queryParams) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -695,5 +825,324 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return actualResponse.readEntity(ProjectStats.class);
         }
+    }
+
+    public Response callDeleteTrace(UUID id, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete();
+    }
+
+    public Trace.TracePage getTraces(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add all query parameters
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            target = target.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        try (var actualResponse = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(Trace.TracePage.class);
+        }
+    }
+
+    public ProjectStats getStats(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stats");
+
+        // Add all query parameters
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(ProjectStats.class);
+        }
+    }
+
+    public Response callGetTraces(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add all query parameters
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            target = target.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetStats(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stats");
+
+        // Add all query parameters
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        return webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetFeedbackScoreNames(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names");
+
+        // Add all query parameters
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        return webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callSearchTraces(TraceSearchStreamRequest streamRequest, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(streamRequest));
+    }
+
+    public Response callGetTracesWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add all query parameters
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            target = target.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetById(UUID id, String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString());
+
+        // Add all query parameters
+        if (queryParams != null) {
+            for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+                target = target.queryParam(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetStats(UUID projectId, String projectName, String apiKey, String workspaceName,
+            Map<String, String> queryParams) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stats");
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+
+        // Add remaining query parameters
+        if (queryParams != null) {
+            for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+                webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetFeedbackScoresToNames(UUID projectId, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names")
+                .queryParam("project_id", projectId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetTraceThreadsWithResponseOnly(String projectName, String apiKey, String workspaceName,
+            List<? extends Filter> filters) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .queryParam("project_name", projectName)
+                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    private static String toURLEncodedQueryParam(List<? extends Filter> filters) {
+        return TestUtils.toURLEncodedQueryParam(filters);
+    }
+
+    public Response callRetrieveThreadResponse(TraceThreadIdentifier identifier, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(identifier));
+    }
+
+    public Response callRetrieveThreadResponseWithCookie(TraceThreadIdentifier identifier, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(identifier));
+    }
+
+    public Response callSearchTracesStream(TraceSearchStreamRequest streamRequest, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(streamRequest));
+    }
+
+    public Response callGetWithPath(String pathSuffix, String queryParamKey, String queryParamValue, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix if provided (e.g., "123", "stats", "feedback-scores/names")
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        // Add query parameter if provided
+        if (queryParamKey != null && queryParamValue != null) {
+            target = target.queryParam(queryParamKey, queryParamValue);
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callPutToPath(String pathSuffix, Object body, String apiKey, String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(body));
+    }
+
+    public Response callPostToPath(String pathSuffix, Object body, String apiKey, String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(body));
+    }
+
+    public Response callDeleteToPath(String pathSuffix, String apiKey, String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        // Add path suffix
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete();
+    }
+
+    public Response callDeleteTraceThreads(DeleteTraceThreads threadIds, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(threadIds));
     }
 }
