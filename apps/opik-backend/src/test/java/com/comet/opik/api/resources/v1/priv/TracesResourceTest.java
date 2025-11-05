@@ -145,7 +145,6 @@ import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB_PR
 import static com.comet.opik.api.validation.InRangeValidator.MIN_ANALYTICS_DB;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -5078,14 +5077,8 @@ class TracesResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
-            var actualResponse = traceResourceClient.getWebTarget("threads")
-                    .queryParam("project_id", projectId)
-                    .queryParam("sorting",
-                            URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
+            var actualResponse = traceResourceClient.callGetTraceThreadsWithSorting(projectId, sortingFields, API_KEY,
+                    TEST_WORKSPACE);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 

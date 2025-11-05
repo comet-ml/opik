@@ -759,7 +759,25 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .delete();
     }
 
-    public WebTarget getWebTarget(String pathSuffix) {
+    public Response callGetTraceThreadsWithSorting(UUID projectId, List<SortingField> sortingFields, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .queryParam("project_id", projectId);
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            target = target.queryParam("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    private WebTarget getWebTarget(String pathSuffix) {
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
         if (pathSuffix != null && !pathSuffix.isEmpty()) {
             target = target.path(pathSuffix);
