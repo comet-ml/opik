@@ -26,11 +26,18 @@ MODALITY_SUPPORT_DOC_URL = (
     "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
 )
 
-def _try_notifying_about_experiment_completion(experiment: experiment.Experiment) -> None:
+
+def _try_notifying_about_experiment_completion(
+    experiment: experiment.Experiment,
+) -> None:
     try:
         experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
     except Exception:
-        LOGGER.debug("Failed to notify backend about the experiment completion. Experiment ID: %s", experiment.id)
+        LOGGER.debug(
+            "Failed to notify backend about the experiment completion. Experiment ID: %s",
+            experiment.id,
+        )
+
 
 def evaluate(
     dataset: dataset.Dataset,
