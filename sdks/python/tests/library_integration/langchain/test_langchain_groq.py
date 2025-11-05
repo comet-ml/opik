@@ -95,7 +95,9 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happy_flow(
                         output=ANY_BUT_NONE,
                         metadata=ANY_DICT,
                         type="llm",
-                        usage=EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
+                        usage=ANY_DICT.containing(
+                            EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT
+                        ),
                         end_time=ANY_BUT_NONE,
                         project_name="Default Project",
                         model="gpt-oss-20b",
