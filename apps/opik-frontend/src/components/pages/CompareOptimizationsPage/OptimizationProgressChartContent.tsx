@@ -16,7 +16,7 @@ import {
   DEFAULT_CHART_GRID_PROPS,
   DEFAULT_CHART_TICK,
 } from "@/constants/chart";
-import useChartTickConfig from "@/components/pages/CompareOptimizationsPage/useChartTickConfig";
+import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import {
   extractSecondaryScoreNames,
   getScoreValue,
@@ -97,9 +97,10 @@ const OptimizationProgressChartContent: React.FC<
     domain,
     yTickFormatter,
     interval: tickInterval,
-  } = useChartTickConfig(values, {
+  } = useChartTickDefaultConfig(values, {
     tickPrecision: 2,
     numberOfTicks: 3,
+    showMinMaxDomain: true,
   });
 
   const renderHeader = useCallback(
