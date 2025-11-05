@@ -341,3 +341,88 @@ export const aggregateMultiAuthorFeedbackScore = (
     reason: aggregatedReason || undefined,
   };
 };
+
+/**
+ * Normalizes feedback scores and pre-computed metric aggregates into a structured format.
+ * Returns Record<string, Record<string, number>> where first key is score name,
+ * second key is aggregate type (e.g., "avg", "min", "max"), value is the numeric value.
+ */
+export const normalizeFeedbackScores = (
+  feedbackScores?: AggregatedFeedbackScore[],
+  preComputedMetricAggregates?: Record<string, Record<string, number>>,
+): Record<string, Record<string, number>> => {
+  const normalized: Record<string, Record<string, number>> = {};
+
+  const scoreNames = new Set<string>();
+  feedbackScores?.forEach((score) => {
+    scoreNames.add(score.name.split(" (")[0]);
+  });
+  if (preComputedMetricAggregates) {
+    Object.keys(preComputedMetricAggregates).forEach((scoreName) => {
+      scoreNames.add(scoreName);
+    });
+  }
+
+  scoreNames.forEach((scoreName) => {
+    const aggregates: Record<string, number> = {};
+
+    const avgScore = feedbackScores?.find(
+      (s) => s.name === scoreName || s.name.split(" (")[0] === scoreName,
+    );
+    if (avgScore?.value !== undefined) {
+      aggregates.avg = avgScore.value;
+    }
+
+    const preComputed = preComputedMetricAggregates?.[scoreName];
+    if (preComputed) {
+      Object.entries(preComputed).forEach(([aggregateType, value]) => {
+        if (aggregateType !== "avg" || !aggregates.avg) {
+          aggregates[aggregateType] = value;
+        }
+      });
+    }
+
+    if (Object.keys(aggregates).length > 0) {
+      normalized[scoreName] = aggregates;
+    }
+  });
+
+  return normalized;
+};
+
+/**
+ * Gets a value from normalized feedback scores structure using a formatted key.
+ * Supports keys like "scoreName (avg)" or just "scoreName" (defaults to avg).
+ */
+export const getScoreValueByKey = (
+  normalizedScores: Record<string, Record<string, number>>,
+  key: string,
+): number | undefined => {
+  const parsed = parseScoreLabel(key);
+  const scoreName = parsed.name;
+  const aggregateType = parsed.type || "avg";
+
+  return normalizedScores[scoreName]?.[aggregateType];
+};
+
+/**
+ * Parses a score label to extract name and type.
+ * Examples:
+ * - "hallucination_metric (min)" -> { name: "hallucination_metric", type: "min" }
+ * - "hallucination_metric" -> { name: "hallucination_metric", type: null }
+ */
+export const parseScoreLabel = (
+  label: string,
+): { name: string; type: string | null } => {
+  const match = label.match(/^(.+?)\s*\((.+)\)$/);
+  if (match) {
+    return {
+      name: match[1],
+      type: match[2],
+    };
+  }
+  return {
+    name: label,
+    type: null,
+  };
+};

@@ -7,43 +7,36 @@ import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 import { Filters } from "@/types/filters";
 import { generatePromptFilters, processFilters } from "@/lib/filters";
+import { normalizeFeedbackScores } from "@/lib/feedback-scores";
 
 const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
 const mergePreComputedMetrics = (experiment: Experiment): Experiment => {
-  // Always update existing feedback_scores to include type in name
-  const existingScoresWithType = (experiment.feedback_scores || []).map(
-    (score) => ({
-      ...score,
-      name: score.type ? `${score.name} (${score.type})` : score.name,
-    }),
+  const normalized = normalizeFeedbackScores(
+    experiment.feedback_scores,
+    experiment.pre_computed_metric_aggregates,
   );
 
-  // If no pre_computed_metric_aggregates, just return with updated names
-  if (!experiment.pre_computed_metric_aggregates) {
-    return {
-      ...experiment,
-      feedback_scores: existingScoresWithType,
-    };
-  }
+  const allScores: AggregatedFeedbackScore[] = [];
 
-  const preComputedScores: AggregatedFeedbackScore[] = [];
+  Object.entries(normalized).forEach(([scoreName, aggregates]) => {
+    const hasMultipleAggregates = Object.keys(aggregates).length > 1;
+    Object.entries(aggregates).forEach(([aggregateType, value]) => {
+      const name = hasMultipleAggregates
+        ? `${scoreName} (${aggregateType})`
+        : scoreName;
 
-  Object.entries(experiment.pre_computed_metric_aggregates).forEach(
-    ([feedbackScoreName, metrics]) => {
-      Object.entries(metrics).forEach(([metricType, metricValue]) => {
-        preComputedScores.push({
-          name: `${feedbackScoreName} (${metricType})`,
-          value: metricValue,
-          type: metricType,
-        });
+      allScores.push({
+        name,
+        value,
+        type: aggregateType,
       });
-    },
-  );
+    });
+  });
 
   return {
     ...experiment,
-    feedback_scores: [...existingScoresWithType, ...preComputedScores],
+    feedback_scores: allScores,
   };
 };
 

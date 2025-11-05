@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import find from "lodash/find";
-import uniq from "lodash/uniq";
 
 import {
   AggregatedFeedbackScore,
@@ -20,6 +19,10 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
+import {
+  normalizeFeedbackScores,
+  getScoreValueByKey,
+} from "@/lib/feedback-scores";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
@@ -35,59 +38,25 @@ export type FeedbackScoreData = {
 
 type FiledValue = string | number | undefined | null;
 
-type FeedbackScoreMap = Record<string, Record<string, number>>;
+type NormalizedFeedbackScoreMap = Record<
+  string,
+  Record<string, Record<string, number>>
+>;
 
 export const getFeedbackScoreMap = ({
   experiments,
-}: GetFeedbackScoreMapArguments): FeedbackScoreMap => {
-  return experiments.reduce<FeedbackScoreMap>((acc, e) => {
-    const scoreMap: Record<string, number> = {};
-
-    // Get all unique score names first
-    const scoreNames = new Set<string>();
-    e.feedback_scores?.forEach((score) => scoreNames.add(score.name));
-
-    // For each score name, add all aggregates as separate entries
-    scoreNames.forEach((scoreName) => {
-      const preComputedAggregates =
-        e.pre_computed_metric_aggregates?.[scoreName];
-
-      if (
-        preComputedAggregates &&
-        Object.keys(preComputedAggregates).length > 0
-      ) {
-        // Add avg from feedback_scores first
-        const avgValue = e.feedback_scores?.find((s) => s.name === scoreName)
-          ?.value;
-        if (avgValue !== undefined) {
-          scoreMap[`${scoreName} (avg)`] = avgValue;
-        }
-
-        // Add all pre-computed aggregates
-        Object.keys(preComputedAggregates).forEach((aggregateKey) => {
-          if (aggregateKey !== "avg") {
-            // Skip avg since we already added it
-            scoreMap[`${scoreName} (${aggregateKey})`] =
-              preComputedAggregates[aggregateKey];
-          }
-        });
-      } else {
-        // Only has avg - add it without suffix
-        const avgValue = e.feedback_scores?.find((s) => s.name === scoreName)
-          ?.value;
-        if (avgValue !== undefined) {
-          scoreMap[scoreName] = avgValue;
-        }
-      }
-    });
-
-    acc[e.id] = scoreMap;
+}: GetFeedbackScoreMapArguments): NormalizedFeedbackScoreMap => {
+  return experiments.reduce<NormalizedFeedbackScoreMap>((acc, e) => {
+    acc[e.id] = normalizeFeedbackScores(
+      e.feedback_scores,
+      e.pre_computed_metric_aggregates,
+    );
     return acc;
   }, {});
 };
 
 interface GetFeedbackScoresForExperimentsAsRowsArguments {
-  feedbackScoresMap: FeedbackScoreMap;
+  feedbackScoresMap: NormalizedFeedbackScoreMap;
   experimentsIds: string[];
 }
 
@@ -95,17 +64,27 @@ export const getFeedbackScoresForExperimentsAsRows = ({
   feedbackScoresMap,
   experimentsIds,
 }: GetFeedbackScoresForExperimentsAsRowsArguments) => {
-  const keys = uniq(
-    Object.values(feedbackScoresMap).reduce<string[]>(
-      (acc, map) => acc.concat(Object.keys(map)),
-      [],
-    ),
-  ).sort();
+  const allKeys = new Set<string>();
+
+  Object.values(feedbackScoresMap).forEach((normalized) => {
+    Object.entries(normalized).forEach(([scoreName, aggregates]) => {
+      const hasMultipleAggregates = Object.keys(aggregates).length > 1;
+      Object.keys(aggregates).forEach((aggregateType) => {
+        const key = hasMultipleAggregates
+          ? `${scoreName} (${aggregateType})`
+          : scoreName;
+        allKeys.add(key);
+      });
+    });
+  });
+
+  const keys = Array.from(allKeys).sort();
 
   return keys.map((key) => {
     const data = experimentsIds.reduce<Record<string, FiledValue>>(
       (acc, id: string) => {
-        acc[id] = feedbackScoresMap[id]?.[key] ?? "-";
+        const value = getScoreValueByKey(feedbackScoresMap[id] || {}, key);
+        acc[id] = value !== undefined ? value : "-";
         return acc;
       },
       {},

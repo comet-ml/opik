@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Experiment } from "@/types/datasets";
 import uniq from "lodash/uniq";
 import { BarDataPoint, RadarDataPoint } from "@/types/chart";
+import { normalizeFeedbackScores } from "@/lib/feedback-scores";
 
 export type ExperimentLabelsMap = Record<string, string>;
 type UseCompareExperimentsChartsDataArgs = {
@@ -27,58 +28,41 @@ const useCompareExperimentsChartsData = ({
     return experiments.slice(0, MAX_VISIBLE_ENTITIES);
   }, [experiments]);
 
+  const normalizedScoreMap = useMemo(() => {
+    if (!isCompare) return {};
+    return experimentsList.reduce<
+      Record<string, Record<string, Record<string, number>>>
+    >((acc, e) => {
+      acc[e.id] = normalizeFeedbackScores(
+        e.feedback_scores,
+        e.pre_computed_metric_aggregates,
+      );
+      return acc;
+    }, {});
+  }, [experimentsList, isCompare]);
+
   const scoreMap = useMemo(() => {
     if (!isCompare) return {};
-    return experimentsList.reduce<Record<string, Record<string, number>>>(
-      (acc, e) => {
-        const scoreMap: Record<string, number> = {};
+    const flatMap: Record<string, Record<string, number>> = {};
 
-        // Get all unique score names
-        const scoreNames = new Set<string>();
-        e.feedback_scores?.forEach((score) => scoreNames.add(score.name));
+    Object.entries(normalizedScoreMap).forEach(([experimentId, normalized]) => {
+      const scoreMap: Record<string, number> = {};
 
-        // For each score name, add all aggregates
-        scoreNames.forEach((scoreName) => {
-          const preComputedAggregates =
-            e.pre_computed_metric_aggregates?.[scoreName];
-
-          if (
-            preComputedAggregates &&
-            Object.keys(preComputedAggregates).length > 0
-          ) {
-            // Add avg from feedback_scores first
-            const avgValue = e.feedback_scores?.find(
-              (s) => s.name === scoreName,
-            )?.value;
-            if (avgValue !== undefined) {
-              scoreMap[`${scoreName} (avg)`] = avgValue;
-            }
-
-            // Add all pre-computed aggregates
-            Object.keys(preComputedAggregates).forEach((aggregateKey) => {
-              if (aggregateKey !== "avg") {
-                // Skip avg since we already added it
-                scoreMap[`${scoreName} (${aggregateKey})`] =
-                  preComputedAggregates[aggregateKey];
-              }
-            });
-          } else {
-            // Only has avg - add it without suffix
-            const avgValue = e.feedback_scores?.find(
-              (s) => s.name === scoreName,
-            )?.value;
-            if (avgValue !== undefined) {
-              scoreMap[scoreName] = avgValue;
-            }
-          }
+      Object.entries(normalized).forEach(([scoreName, aggregates]) => {
+        const hasMultipleAggregates = Object.keys(aggregates).length > 1;
+        Object.keys(aggregates).forEach((aggregateType) => {
+          const key = hasMultipleAggregates
+            ? `${scoreName} (${aggregateType})`
+            : scoreName;
+          scoreMap[key] = aggregates[aggregateType];
         });
+      });
 
-        acc[e.id] = scoreMap;
-        return acc;
-      },
-      {},
-    );
-  }, [experimentsList, isCompare]);
+      flatMap[experimentId] = scoreMap;
+    });
+
+    return flatMap;
+  }, [normalizedScoreMap, isCompare]);
 
   const scoreColumns = useMemo(() => {
     return uniq(

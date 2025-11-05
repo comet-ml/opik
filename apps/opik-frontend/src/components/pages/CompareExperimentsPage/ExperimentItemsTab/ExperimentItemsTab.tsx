@@ -76,6 +76,7 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import useExperimentItemsStatistic from "@/api/datasets/useExperimentItemsStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import { normalizeFeedbackScores } from "@/lib/feedback-scores";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import {
@@ -367,45 +368,25 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       statsMap.set(stat.name, stat);
     });
 
-    // Merge feedback score statistics from experiments
     if (experiments && experiments.length > 0) {
-      // Get all unique feedback score names from all experiments
-      const scoreNames = new Set<string>();
-      experiments.forEach((exp) => {
-        exp.feedback_scores?.forEach((score) => scoreNames.add(score.name));
-      });
+      const normalized = normalizeFeedbackScores(
+        experiments[0]?.feedback_scores,
+        experiments[0]?.pre_computed_metric_aggregates,
+      );
 
-      // For each score, build or merge the statistic
-      scoreNames.forEach((scoreName) => {
+      Object.entries(normalized).forEach(([scoreName, aggregates]) => {
         const statName = `${COLUMN_FEEDBACK_SCORES_ID}.${scoreName}`;
         const existingStat = statsMap.get(statName);
-        const preComputedAggregates =
-          experiments[0]?.pre_computed_metric_aggregates?.[scoreName];
-        const avgValue =
-          experiments[0]?.feedback_scores?.find((s) => s.name === scoreName)
-            ?.value ?? 0;
 
-        if (
-          preComputedAggregates &&
-          Object.keys(preComputedAggregates).length > 0
-        ) {
-          // Has pre-computed aggregates - start with avg from feedback_scores, then merge
-          const aggregateValues: Record<string, number> = {};
+        if (Object.keys(aggregates).length > 1) {
+          const aggregateValues: Record<string, number> = { ...aggregates };
 
-          // Start with avg from feedback_scores or existing stat
           if (
             existingStat?.type === STATISTIC_AGGREGATION_TYPE.AVG &&
             typeof existingStat.value === "number"
           ) {
             aggregateValues.avg = existingStat.value;
-          } else {
-            aggregateValues.avg = avgValue;
           }
-
-          // Merge in pre-computed aggregates
-          Object.keys(preComputedAggregates).forEach((key) => {
-            aggregateValues[key] = preComputedAggregates[key];
-          });
 
           statsMap.set(statName, {
             name: statName,
@@ -413,11 +394,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             value: aggregateValues,
           });
         } else if (!existingStat) {
-          // Only add if not already present (from API)
           statsMap.set(statName, {
             name: statName,
             type: STATISTIC_AGGREGATION_TYPE.AVG,
-            value: avgValue,
+            value: aggregates.avg ?? 0,
           });
         }
       });
@@ -425,8 +405,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
     return Array.from(statsMap.values());
   }, [statisticData, experiments]);
-
-  console.log("columnsStatistic", columnsStatistic);
 
   const noDataText = "There is no data for the selected experiments";
   const dynamicDatasetColumns = useMemo(() => {
