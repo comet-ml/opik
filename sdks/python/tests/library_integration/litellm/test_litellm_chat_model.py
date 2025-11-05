@@ -1,6 +1,7 @@
 import pytest
 
 import opik
+import opik.config
 from opik.evaluation.models.litellm import litellm_chat_model
 from ...testlib import (
     ANY_BUT_NONE,
@@ -231,3 +232,27 @@ def test_litellm_chat_model_with_response_format__structured_output(fake_backend
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_litellm_chat_model_with_monitoring_disabled__no_traces_created(
+    fake_backend, monkeypatch
+):
+    """Test that LiteLLMChatModel respects enable_litellm_models_monitoring config."""
+    # Disable litellm monitoring via config
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+    
+    # Force config reload
+    opik.config._SESSION_CACHE_DICT.clear()
+    
+    # Create model with monitoring disabled
+    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
+    
+    result = model.generate_string("Tell me a short fact")
+    
+    opik.flush_tracker()
+    
+    assert isinstance(result, str)
+    assert len(result) > 0
+    
+    # Verify no traces were created (monitoring was disabled)
+    assert len(fake_backend.trace_trees) == 0

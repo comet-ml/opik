@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 import opik.semantic_version as semantic_version
 import opik.integrations.litellm as litellm_integration
+import opik.config as opik_config
 
 from .. import base_model
 from . import warning_filters, util
@@ -99,15 +100,26 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         warning_filters.add_warning_filters()
 
         self._engine = litellm
-
+        
         # Create tracked versions of completion methods for Opik monitoring
-        # These will be used instead of calling the engine methods directly
-        self._litellm_completion = litellm_integration.track_completion()(
-            self._engine.completion
+        # Check config to see if monitoring is enabled and properly configured
+        config = opik_config.OpikConfig()
+        is_monitoring_enabled = (
+            config.enable_litellm_models_monitoring
+            and not config.check_for_known_misconfigurations()
         )
-        self._litellm_acompletion = litellm_integration.track_completion()(
-            self._engine.acompletion
-        )
+        
+        if is_monitoring_enabled:
+            # Apply tracking decorator
+            self._litellm_completion = litellm_integration.track_completion()(
+                self._engine.completion
+            )
+            self._litellm_acompletion = litellm_integration.track_completion()(
+                self._engine.acompletion
+            )
+        else:
+            self._litellm_completion = self._engine.completion
+            self._litellm_acompletion = self._engine.acompletion
 
     @cached_property
     def supported_params(self) -> Set[str]:
