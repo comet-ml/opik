@@ -392,7 +392,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .queryParam("project_name", projectName)
-                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .queryParam("filters", TestUtils.toURLEncodedQueryParam(filters))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
