@@ -93,7 +93,7 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
             <div className="comet-body-s flex flex-col">
               <span>Run an experiment</span>
               <span className="text-light-slate">
-                Use this dataset to run an experiments using the Python SDK
+                Use this dataset to run an experiment using the Python SDK
               </span>
             </div>
           </DropdownMenuItem>
