@@ -3,7 +3,6 @@ package com.comet.opik.api.validation;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.infrastructure.EncryptionUtils;
-import com.comet.opik.infrastructure.ServiceTogglesHolder;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
@@ -29,15 +28,12 @@ public class ProviderApiKeyValidator
         var providerName = providerApiKey.providerName();
 
         if (provider == LlmProvider.CUSTOM_LLM) {
-            // Only validate provider_name if multi-custom providers feature is enabled
-            if (ServiceTogglesHolder.getServiceToggles().isMultiCustomProvidersSupported()) {
-                if (isBlank(providerName)) {
-                    // For custom providers, provider_name is required and must not be blank
-                    context.buildConstraintViolationWithTemplate("provider_name is required for custom LLM providers")
-                            .addPropertyNode("providerName")
-                            .addConstraintViolation();
-                    return false;
-                }
+            if (isBlank(providerName)) {
+                // For custom providers, provider_name is required and must not be blank
+                context.buildConstraintViolationWithTemplate("provider_name is required for custom LLM providers")
+                        .addPropertyNode("providerName")
+                        .addConstraintViolation();
+                return false;
             }
 
             // If custom provider, no need to validate api key

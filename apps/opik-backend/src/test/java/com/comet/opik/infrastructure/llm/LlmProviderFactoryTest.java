@@ -7,7 +7,6 @@ import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
@@ -56,7 +55,6 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LlmProviderFactoryTest {
     private LlmProviderClientConfig llmProviderClientConfig;
-    private ServiceTogglesConfig serviceTogglesConfig;
 
     private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
     private static final Validator validator = Validators.newValidator();
@@ -69,7 +67,6 @@ class LlmProviderFactoryTest {
                 "src/test/resources/config-test.yml");
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
-        serviceTogglesConfig = config.getServiceToggles();
     }
 
     @SneakyThrows
@@ -173,8 +170,7 @@ class LlmProviderFactoryTest {
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
-        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                serviceTogglesConfig);
+        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig);
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -214,8 +210,7 @@ class LlmProviderFactoryTest {
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
-        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                serviceTogglesConfig);
+        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig);
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException

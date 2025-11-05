@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.http.client.jdk.JdkHttpClient;
@@ -15,19 +14,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.http.HttpClient;
 import java.util.Optional;
-
-import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
 
 @RequiredArgsConstructor
 @Slf4j
 public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
-    private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
@@ -76,10 +71,21 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
+        // Extract provider_name from configuration (null for legacy providers)
+        String providerName = Optional.ofNullable(config.configuration())
+                .map(configuration -> configuration.get("provider_name"))
+                .orElse(null);
+
+        // Extract the actual model name using the provider name
+        String actualModelName = CustomLlmModelNameChecker.extractModelName(modelParameters.name(), providerName);
+
+        log.debug("Cleaned model name from '{}' to '{}' (providerName='{}') for ChatModel",
+                modelParameters.name(), actualModelName, providerName);
+
         var builder = OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
-                .modelName(getModelName(config, modelParameters))
+                .modelName(actualModelName)
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);
@@ -106,27 +112,5 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         return newCustomProviderChatLanguageModel(config, modelParameters);
-    }
-
-    private String getModelName(
-            @NonNull LlmProviderClientApiConfig config, @NonNull LlmAsJudgeModelParameters modelParameters) {
-        // Use multi-provider logic only if the feature is enabled
-        if (serviceTogglesConfig.isMultiCustomProvidersSupported()) {
-            // Extract provider_name from configuration (null for legacy providers)
-            String providerName = Optional.ofNullable(config.configuration())
-                    .map(configuration -> configuration.get("provider_name"))
-                    .orElse(null);
-
-            // Extract the actual model name using the provider name
-            String actualModelName = CustomLlmModelNameChecker.extractModelName(modelParameters.name(), providerName);
-
-            log.debug("Cleaned model name from '{}' to '{}' (providerName='{}') for ChatModel",
-                    modelParameters.name(), actualModelName, providerName);
-
-            return actualModelName;
-        }
-
-        // Legacy behavior: just strip the "custom-llm/" prefix
-        return modelParameters.name().replace(CUSTOM_LLM_MODEL_PREFIX, "");
     }
 }

@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.ServiceTogglesHolder;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
@@ -105,7 +104,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
         EncryptionUtils.setConfig(configuration);
-        ServiceTogglesHolder.setConfig(configuration);
 
         // Resources
         var jersey = environment.jersey();

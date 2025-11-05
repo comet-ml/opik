@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -16,9 +15,8 @@ public class CustomLlmModule extends AbstractModule {
     @Singleton
     @Named("customLlmGenerator")
     public CustomLlmClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
-        return new CustomLlmClientGenerator(config, serviceTogglesConfig);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        return new CustomLlmClientGenerator(config);
     }
 
     @Provides
