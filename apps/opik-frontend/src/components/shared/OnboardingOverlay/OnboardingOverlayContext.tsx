@@ -56,8 +56,13 @@ export const OnboardingProvider: React.FunctionComponent<
 
       // Manually trigger PostHog pageview for hash changes
       // replaceState doesn't trigger automatic pageview tracking
-      if (posthog.__loaded) {
-        posthog.capture("$pageview");
+      try {
+        if (posthog.is_capturing()) {
+          posthog.capture("$pageview");
+        }
+      } catch (error) {
+        // PostHog may not be initialized or available
+        // Silently fail to not break the user experience
       }
     }
   }, [currentStep]);
