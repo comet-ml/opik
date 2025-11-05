@@ -74,7 +74,7 @@ def evaluate(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • scoring_inputs — a dictionary containing the dataset item content,
+                • dataset_item — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
                 • task_span - the data collected during the LLM task execution [optional].
 
@@ -240,7 +240,7 @@ def evaluate_experiment(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • scoring_inputs — a dictionary containing the dataset item content,
+                • dataset_item — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
                 • task_span - the data collected during the LLM task execution [optional].
 
@@ -416,7 +416,7 @@ def evaluate_prompt(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • scoring_inputs — a dictionary containing the dataset item content,
+                • dataset_item — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
                 • task_span - the data collected during the LLM task execution [optional].
 
