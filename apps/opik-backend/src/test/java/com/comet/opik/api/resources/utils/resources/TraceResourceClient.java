@@ -685,17 +685,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public Response callPostToPathWithCookie(String pathSuffix, Object body, String sessionToken,
             String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
+        WebTarget target = addPathSegments(client.target(RESOURCE_PATH.formatted(baseURI)), pathSuffix);
 
         return target
                 .request()
@@ -705,17 +695,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callPutToPathWithCookie(String pathSuffix, Object body, String sessionToken, String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
+        WebTarget target = addPathSegments(client.target(RESOURCE_PATH.formatted(baseURI)), pathSuffix);
 
         return target
                 .request()
@@ -736,17 +716,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public Response callGetWithPathAndCookie(String pathSuffix, String queryParamKey, String queryParamValue,
             String sessionToken, String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix if provided
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
+        WebTarget target = addPathSegments(client.target(RESOURCE_PATH.formatted(baseURI)), pathSuffix);
 
         // Add query parameter if provided
         if (queryParamKey != null && queryParamValue != null) {
@@ -883,17 +853,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public Response callGetWithPath(String pathSuffix, String queryParamKey, String queryParamValue, String apiKey,
             String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix if provided (e.g., "123", "stats", "feedback-scores/names")
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
+        WebTarget target = addPathSegments(client.target(RESOURCE_PATH.formatted(baseURI)), pathSuffix);
 
         // Add query parameter if provided
         if (queryParamKey != null && queryParamValue != null) {
@@ -908,17 +868,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callPutToPath(String pathSuffix, Object body, String apiKey, String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
+        WebTarget target = addPathSegments(client.target(RESOURCE_PATH.formatted(baseURI)), pathSuffix);
 
         return target
                 .request()
@@ -928,17 +878,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callPostToPath(String pathSuffix, Object body, String apiKey, String workspaceName) {
-        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
-
-        // Add path suffix
-        if (pathSuffix != null && !pathSuffix.isEmpty()) {
-            String[] pathParts = pathSuffix.split("/");
-            for (String part : pathParts) {
-                if (!part.isEmpty()) {
-                    target = target.path(part);
-                }
-            }
-        }
+        WebTarget target = addPathSegments(client.target(RESOURCE_PATH.formatted(baseURI)), pathSuffix);
 
         return target
                 .request()
@@ -955,5 +895,21 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(threadIds));
+    }
+
+    /**
+     * Helper method to add path segments to a WebTarget.
+     * Splits the pathSuffix by "/" and adds each non-empty part as a path segment.
+     */
+    private WebTarget addPathSegments(WebTarget target, String pathSuffix) {
+        if (pathSuffix != null && !pathSuffix.isEmpty()) {
+            String[] pathParts = pathSuffix.split("/");
+            for (String part : pathParts) {
+                if (!part.isEmpty()) {
+                    target = target.path(part);
+                }
+            }
+        }
+        return target;
     }
 }
