@@ -159,7 +159,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         const spans = validRowsFromFetch.filter((r) => isObjectSpan(r));
 
         // If we have only traces, use the new enriched endpoint
-        if (traces.length > 0 && spans.length === 0) {
+        if (hasOnlyTraces) {
           addTracesToDataset(
             {
               workspaceName,
@@ -179,7 +179,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               onSuccess: () => onItemsAdded(dataset, true, false),
             },
           );
-        } else if (spans.length > 0 && traces.length === 0) {
+        } else if (hasOnlySpans) {
           // If we have only spans, use the new enriched endpoint for spans
           addSpansToDataset(
             {
@@ -254,6 +254,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       onItemsAdded,
       toast,
       enrichmentOptions,
+      hasOnlyTraces,
+      hasOnlySpans,
     ],
   );
 
