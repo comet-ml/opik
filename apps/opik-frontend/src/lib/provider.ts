@@ -55,9 +55,9 @@ export const convertCustomProviderModel = (
   providerName: string,
   toAPI = false,
 ) => {
-  const prefix = `${CUSTOM_PROVIDER_MODEL_PREFIX}/${
-    providerName ? providerName + "/" : ""
-  }`;
+  const prefix = providerName
+    ? `${CUSTOM_PROVIDER_MODEL_PREFIX}/${providerName}/`
+    : `${CUSTOM_PROVIDER_MODEL_PREFIX}/`;
 
   if (toAPI) {
     return prefix + model;
