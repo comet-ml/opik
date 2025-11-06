@@ -7,8 +7,10 @@ import com.comet.opik.api.resources.utils.TestArgs;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import lombok.RequiredArgsConstructor;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -28,6 +30,8 @@ public final class TraceStreamTestAssertion implements TracePageTestAssertion<Tr
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(List.copyOf(filters))
+                .fromTime(Optional.ofNullable(queryParams.get("from_time")).map(Instant::parse).orElse(null))
+                .toTime(Optional.ofNullable(queryParams.get("to_time")).map(Instant::parse).orElse(null))
                 .limit(limit > 0 ? limit : null)
                 .build();
 

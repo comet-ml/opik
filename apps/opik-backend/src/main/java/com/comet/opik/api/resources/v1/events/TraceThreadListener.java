@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -43,32 +44,45 @@ public class TraceThreadListener {
                 event.workspaceId(),
                 event.projectIds());
 
-        Map<UUID, Map<String, Instant>> projectThreadIds = new HashMap<>();
+        Map<UUID, Map<String, ThreadTimestamps>> projectThreadInfo = new HashMap<>();
 
         event.traces().forEach(trace -> {
             UUID projectId = trace.projectId();
             String threadId = trace.threadId();
 
             if (StringUtils.isNotBlank(threadId)) {
-                Map<String, Instant> threadIdAndLastUpdatedAt = projectThreadIds
+                Map<String, ThreadTimestamps> threadInfo = projectThreadInfo
                         .computeIfAbsent(projectId, id -> new HashMap<>());
 
-                // Keeps the most recent lastUpdatedAt for each threadId
-                threadIdAndLastUpdatedAt.computeIfPresent(threadId,
-                        (id, currentTime) -> {
-                            Instant newTime = Optional.ofNullable(trace.lastUpdatedAt())
-                                    .orElseGet(Instant::now);
-                            return newTime.isAfter(currentTime) ? newTime : currentTime;
-                        });
+                // Track both the minimum trace ID (for thread model ID generation)
+                // and the most recent lastUpdatedAt (for thread updates)
+                threadInfo.compute(threadId, (id, existing) -> {
+                    Instant lastUpdatedAt = Optional.ofNullable(trace.lastUpdatedAt())
+                            .orElseGet(Instant::now);
+                    UUID traceId = trace.id();
 
-                // If the threadId is not present, add it with the lastUpdatedAt
-                threadIdAndLastUpdatedAt.computeIfAbsent(threadId, id -> Optional.ofNullable(trace.lastUpdatedAt())
-                        .orElseGet(Instant::now));
+                    if (existing == null) {
+                        return new ThreadTimestamps(traceId, lastUpdatedAt);
+                    }
 
+                    // Keep the minimum trace ID (earliest timestamp in UUIDv7)
+                    // Note: UUIDv7 compareTo() works correctly here because UUIDv7s are
+                    // lexicographically ordered by their timestamp component
+                    UUID minTraceId = traceId.compareTo(existing.firstTraceId()) < 0
+                            ? traceId
+                            : existing.firstTraceId();
+
+                    // Keep the most recent lastUpdatedAt
+                    Instant maxLastUpdatedAt = lastUpdatedAt.isAfter(existing.lastUpdatedAt())
+                            ? lastUpdatedAt
+                            : existing.lastUpdatedAt();
+
+                    return new ThreadTimestamps(minTraceId, maxLastUpdatedAt);
+                });
             }
         });
 
-        processEvent(event, projectThreadIds)
+        processEvent(event, projectThreadInfo)
                 .doOnError(error -> {
                     log.error(
                             "Fail to process TracesCreated event for workspace: '{}', projectIds: '{}', error: '{}'",
@@ -84,21 +98,21 @@ public class TraceThreadListener {
     }
 
     private Flux<Void> processEvent(TracesCreated event,
-            Map<UUID, Map<String, Instant>> projectThreadIdAndLastUpdateAts) {
+            Map<UUID, Map<String, ThreadTimestamps>> projectThreadInfo) {
 
-        return Flux.fromIterable(projectThreadIdAndLastUpdateAts.entrySet())
+        return Flux.fromIterable(projectThreadInfo.entrySet())
                 .flatMap(entry -> {
                     UUID projectId = entry.getKey();
-                    Map<String, Instant> threadIdAndLastUpdateAts = entry.getValue();
-                    return processProjectTraceThread(event, projectId, threadIdAndLastUpdateAts);
+                    Map<String, ThreadTimestamps> threadInfo = entry.getValue();
+                    return processProjectTraceThread(event, projectId, threadInfo);
                 });
     }
 
     private Mono<Void> processProjectTraceThread(TracesCreated event, UUID projectId,
-            Map<String, Instant> threadIdAndLastUpdateAts) {
+            Map<String, ThreadTimestamps> threadInfo) {
         log.info("Processing trace threads for workspace: '{}', projectId: '{}', threadIds: '[{}]'",
-                event.workspaceId(), projectId, threadIdAndLastUpdateAts.keySet());
-        return traceThreadService.processTraceThreads(threadIdAndLastUpdateAts, projectId);
+                event.workspaceId(), projectId, threadInfo.keySet());
+        return traceThreadService.processTraceThreads(threadInfo, projectId);
     }
 
     /**
