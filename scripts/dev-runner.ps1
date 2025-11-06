@@ -1055,18 +1055,31 @@ function Restart-Services {
 
 # Function for quick restart (only rebuild backend, keep infrastructure running)
 function Invoke-QuickRestart {
-    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend only) ==="
-    Write-LogInfo "Step 1/6: Stopping frontend..."
+    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend (if needed), Infrastructure (if not running)) ==="
+    
+    # Check if infrastructure is running, start it if not
+    Write-LogInfo "Step 1/8: Checking Docker infrastructure..."
+    if (Test-LocalBeFe) {
+        Write-LogSuccess "Docker infrastructure is already running"
+    }
+    else {
+        Write-LogWarning "Docker infrastructure is not running, starting it..."
+        Start-LocalBeFe
+        Write-LogInfo "Running DB migrations..."
+        Invoke-DbMigrations
+    }
+    
+    Write-LogInfo "Step 2/8: Stopping frontend..."
     Stop-Frontend
-    Write-LogInfo "Step 2/6: Stopping backend..."
+    Write-LogInfo "Step 3/8: Stopping backend..."
     Stop-Backend
-    Write-LogInfo "Step 3/6: Building backend..."
+    Write-LogInfo "Step 4/8: Building backend..."
     Build-Backend
-    Write-LogInfo "Step 4/6: Starting backend..."
+    Write-LogInfo "Step 5/8: Starting backend..."
     Start-Backend
     
     # Check if package.json has changed since last npm install
-    Write-LogInfo "Step 5/6: Checking frontend dependencies..."
+    Write-LogInfo "Step 6/8: Checking frontend dependencies..."
     $packageJson = Join-Path $script:FRONTEND_DIR "package.json"
     $packageLock = Join-Path $script:FRONTEND_DIR "package-lock.json"
     $nodeModules = Join-Path $script:FRONTEND_DIR "node_modules"
@@ -1093,8 +1106,10 @@ function Invoke-QuickRestart {
         Build-Frontend
     }
     
-    Write-LogInfo "Step 6/6: Starting frontend..."
+    Write-LogInfo "Step 7/8: Starting frontend..."
     Start-Frontend
+    Write-LogInfo "Step 8/8: Creating demo data..."
+    New-DemoData -Mode "--local-be-fe"
     Write-LogSuccess "=== Quick Restart Complete ==="
     Test-Services
 }

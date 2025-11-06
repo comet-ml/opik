@@ -759,18 +759,30 @@ restart_services() {
 
 # Function for quick restart (only rebuild backend, keep infrastructure running)
 quick_restart_services() {
-    log_info "=== Quick Restart (Backend Only) ==="
-    log_info "Step 1/6: Stopping frontend..."
+    log_info "=== Quick Restart & Build (Backend, Frontend (if needed), Infrastructure (if not running)) ==="
+    
+    # Check if infrastructure is running, start it if not
+    log_info "Step 1/8: Checking Docker infrastructure..."
+    if verify_local_be_fe; then
+        log_success "Docker infrastructure is already running"
+    else
+        log_warning "Docker infrastructure is not running, starting it..."
+        start_local_be_fe
+        log_info "Running DB migrations..."
+        run_db_migrations
+    fi
+    
+    log_info "Step 2/8: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/6: Stopping backend..."
+    log_info "Step 3/8: Stopping backend..."
     stop_backend
-    log_info "Step 3/6: Building backend..."
+    log_info "Step 4/8: Building backend..."
     build_backend
-    log_info "Step 4/6: Starting backend..."
+    log_info "Step 5/8: Starting backend..."
     start_backend
     
     # Check if package.json has changed since last npm install
-    log_info "Step 5/6: Checking frontend dependencies..."
+    log_info "Step 6/8: Checking frontend dependencies..."
     local package_json="$FRONTEND_DIR/package.json"
     local package_lock="$FRONTEND_DIR/package-lock.json"
     local node_modules="$FRONTEND_DIR/node_modules"
@@ -794,8 +806,10 @@ quick_restart_services() {
         build_frontend
     fi
     
-    log_info "Step 6/6: Starting frontend..."
+    log_info "Step 7/8: Starting frontend..."
     start_frontend
+    log_info "Step 8/8: Creating demo data..."
+    create_demo_data "--local-be-fe"
     log_success "=== Quick Restart Complete ==="
     verify_services
 }
