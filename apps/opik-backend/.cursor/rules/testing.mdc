@@ -387,6 +387,10 @@ static Stream<Arguments> sortingTestCases() {
 }
 ```
 
+### **Test Data Generation in Parameterized Tests**
+
+For test data generation in parameterized tests, follow the [PODAM guidelines](#podam-configuration) above. Let the factory generate random values and only override when necessary for the specific test scenario.
+
 ### **Test Method Parameters**
 
 **Pattern**: For sorting tests, use `Comparator<T>` as the parameter type instead of `Function<T, Comparable<?>>`.
@@ -400,30 +404,6 @@ void sortEvaluators(String field, String direction,
 void sortEvaluators(String field, String direction,
         Comparator<AutomationRuleEvaluator<?>> comparator)
 ```
-
-### **Proper Imports for Parameterized Tests**
-
-**Always use imports** instead of fully qualified class names in test signatures:
-
-```java
-// ❌ BAD: Fully qualified class names
-static Stream<org.junit.jupiter.params.provider.Arguments> sortingTestCases() {
-    return Stream.of(
-        org.junit.jupiter.params.provider.Arguments.of(...)
-    );
-}
-
-// ✅ GOOD: Proper imports
-import org.junit.jupiter.params.provider.Arguments;
-
-static Stream<Arguments> sortingTestCases() {
-    return Stream.of(
-        Arguments.of(...)
-    );
-}
-```
-
-**Note**: For test data generation in parameterized tests, follow the [PODAM guidelines](#podam-configuration) above. Let the factory generate random values and only override when necessary for the specific test scenario.
 
 ### **Pagination Testing**
 
@@ -623,10 +603,10 @@ class UserIntegrationTest {
 
 ```java
 // ✅ Good: Run specific tests
-mvn test -Dtest=UserServiceTest#shouldCreateUser_whenValidRequest
+mvn test -Dtest="UserServiceTest#shouldCreateUser_whenValidRequest"
 
 // ✅ Good: Run test class
-mvn test -Dtest=UserServiceTest
+mvn test -Dtest="UserServiceTest"
 
 // ❌ Bad: Run entire test suite for development
 mvn test

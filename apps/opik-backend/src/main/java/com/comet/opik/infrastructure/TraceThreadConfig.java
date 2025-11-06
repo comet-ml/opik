@@ -75,6 +75,9 @@ public class TraceThreadConfig implements StreamConfiguration {
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration pendingMessageDuration;
 
+    @JsonProperty
+    @Min(1) @Max(10) private int maxRetries;
+
     @Override
     @JsonIgnore
     public Codec getCodec() {

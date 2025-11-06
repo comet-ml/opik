@@ -53,6 +53,7 @@ public class AlertEventEvaluationService {
             case PROMPT_CREATED, PROMPT_COMMITTED, PROMPT_DELETED, EXPERIMENT_FINISHED -> true;
             case TRACE_FEEDBACK_SCORE, TRACE_THREAD_FEEDBACK_SCORE, TRACE_ERRORS, TRACE_GUARDRAILS_TRIGGERED ->
                 isWithinProjectScope(alertEvent, triggers);
+            default -> false;
         };
     }
 
