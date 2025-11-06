@@ -60,13 +60,6 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
 
-    /**
-     * @deprecated Use {@link #getExperimentsFeedbackScoreNames(Set)} instead. This method is kept for backwards compatibility only.
-     */
-    @Deprecated
-    Mono<com.comet.opik.api.ExperimentFeedbackScoreNames> getExperimentsFeedbackScoreNamesWithType(
-            Set<UUID> experimentIds);
-
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
@@ -217,17 +210,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         .map(s -> new FeedbackScoreNames.ScoreName(s.name(), s.type()))
                         .toList())
                 .map(FeedbackScoreNames::new);
-    }
-
-    @Deprecated
-    public Mono<com.comet.opik.api.ExperimentFeedbackScoreNames> getExperimentsFeedbackScoreNamesWithType(
-            Set<UUID> experimentIds) {
-        return getExperimentsFeedbackScoreNames(experimentIds)
-                .map(feedbackScoreNames -> new com.comet.opik.api.ExperimentFeedbackScoreNames(
-                        feedbackScoreNames.scores().stream()
-                                .map(s -> new com.comet.opik.api.ExperimentFeedbackScoreNames.ScoreName(s.name(),
-                                        s.type()))
-                                .toList()));
     }
 
     @Override

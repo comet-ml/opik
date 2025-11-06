@@ -90,28 +90,4 @@ public class ExperimentSortingFactory extends SortingFactory {
             return new ScoreFieldParts(remainder, null);
         }
     }
-
-    /**
-     * Extracts the feedback score name from a field like "feedback_scores.hallucination.f1_score"
-     * Returns "hallucination"
-     *
-     * @deprecated Use {@link #parseScoreField(String)} instead
-     */
-    @Deprecated
-    public static String extractScoreName(String field) {
-        ScoreFieldParts parts = parseScoreField(field);
-        return parts != null ? parts.name() : null;
-    }
-
-    /**
-     * Extracts the metric type from a field like "feedback_scores.hallucination.f1_score"
-     * Returns "f1_score", or null if not present
-     *
-     * @deprecated Use {@link #parseScoreField(String)} instead
-     */
-    @Deprecated
-    public static String extractScoreType(String field) {
-        ScoreFieldParts parts = parseScoreField(field);
-        return parts != null ? parts.type() : null;
-    }
 }
