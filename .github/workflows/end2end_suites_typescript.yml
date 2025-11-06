@@ -122,7 +122,8 @@ jobs:
                 export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests/${ALLURE_RESULTS}"
 
                 # Run tests with allurectl watch for TestOps integration
-                allurectl watch -- npx playwright test
+                # Using --no-testplan to avoid missing testplan.json error
+                allurectl watch --no-testplan -- npx playwright test
 
             - name: Upload Allure Results
               if: always()
