@@ -10,7 +10,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 public class ProviderApiKeyValidator
         implements
-        ConstraintValidator<ProviderApiKeyValidation, ProviderApiKey> {
+            ConstraintValidator<ProviderApiKeyValidation, ProviderApiKey> {
 
     private volatile ProviderApiKeyValidation constraintAnnotation;
 

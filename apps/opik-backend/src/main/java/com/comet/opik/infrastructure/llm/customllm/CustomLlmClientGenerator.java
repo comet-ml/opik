@@ -110,7 +110,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
     @Override
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
-                                  @NonNull LlmAsJudgeModelParameters modelParameters) {
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
         return newCustomProviderChatLanguageModel(config, modelParameters);
     }
 }
