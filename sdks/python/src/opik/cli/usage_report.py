@@ -4,10 +4,11 @@ import datetime
 import json
 import os
 import sys
+import traceback
 import webbrowser
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import click
 import matplotlib.pyplot as plt
@@ -31,6 +32,9 @@ from tqdm import tqdm
 import opik
 
 console = Console()
+
+# Constants
+MAX_PAGINATION_PAGES = 1000  # Safety limit to avoid infinite loops in pagination
 
 
 def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> Dict[str, float]:
@@ -93,6 +97,121 @@ def format_datetime_key(dt: datetime.datetime, unit: str) -> str:
         raise ValueError(f"Unsupported unit: {unit}")
 
 
+def _parse_and_normalize_datetime(
+    dt_str: Any, reference_tz: Optional[datetime.tzinfo]
+) -> Optional[datetime.datetime]:
+    """
+    Parse a datetime string and normalize it with respect to a reference timezone.
+
+    Args:
+        dt_str: Datetime string or datetime object to parse
+        reference_tz: Reference timezone to use for naive datetimes
+
+    Returns:
+        Parsed datetime object, or None if parsing fails
+    """
+    if not dt_str:
+        return None
+
+    try:
+        # If already a datetime object, return it
+        if isinstance(dt_str, datetime.datetime):
+            return dt_str
+
+        # Parse ISO format datetime string
+        if isinstance(dt_str, str):
+            # Handle with or without timezone
+            if "T" in dt_str:
+                if dt_str.endswith("Z"):
+                    dt = datetime.datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                elif "+" in dt_str or dt_str.count("-") > 2:
+                    dt = datetime.datetime.fromisoformat(dt_str)
+                else:
+                    # Naive datetime
+                    dt = datetime.datetime.fromisoformat(dt_str)
+                    if reference_tz is not None:
+                        # Make naive date timezone-aware
+                        dt = dt.replace(tzinfo=reference_tz)
+                return dt
+            else:
+                # Not a valid datetime string
+                return None
+        else:
+            return dt_str
+    except (ValueError, TypeError):
+        return None
+
+
+def _normalize_timezone_for_comparison(
+    dt: datetime.datetime,
+    query_start_date: datetime.datetime,
+    query_end_date: datetime.datetime,
+) -> Tuple[datetime.datetime, datetime.datetime, datetime.datetime]:
+    """
+    Normalize timezones for date comparison.
+
+    Args:
+        dt: Datetime to normalize
+        query_start_date: Start date for comparison
+        query_end_date: End date for comparison
+
+    Returns:
+        Tuple of (normalized_dt, normalized_start_date, normalized_end_date)
+    """
+    # Handle timezone differences
+    if dt.tzinfo is None and query_start_date.tzinfo is not None:
+        dt = dt.replace(tzinfo=query_start_date.tzinfo)
+        start_date_aware = query_start_date
+        end_date_aware = query_end_date
+    elif dt.tzinfo is not None and query_start_date.tzinfo is None:
+        start_date_aware = query_start_date.replace(tzinfo=dt.tzinfo)
+        end_date_aware = query_end_date.replace(tzinfo=dt.tzinfo)
+    else:
+        start_date_aware = query_start_date
+        end_date_aware = query_end_date
+
+    return dt, start_date_aware, end_date_aware
+
+
+def _extract_metric_data(
+    projects: List[Dict[str, Any]],
+    all_periods: List[str],
+    metric_key: str,
+    aggregation_fn: Optional[Callable[[Any], float]] = None,
+) -> List[List[float]]:
+    """
+    Extract metric data from projects for all periods.
+
+    Args:
+        projects: List of project dictionaries with metrics_by_unit
+        all_periods: List of period keys (e.g., "2024-01", "2024-02")
+        metric_key: Key to extract from period_metrics (e.g., "trace_count", "cost")
+        aggregation_fn: Optional function to aggregate metric values.
+                       If None, uses default: sum dict values or use scalar value.
+
+    Returns:
+        List of lists, where each inner list contains metric values for one period
+        across all projects
+    """
+    metric_data = []
+    for period in all_periods:
+        period_values = []
+        for project in projects:
+            period_metrics = project["metrics_by_unit"].get(period, {})
+            metric_value = period_metrics.get(metric_key, 0)
+
+            if aggregation_fn:
+                metric_value = aggregation_fn(metric_value)
+            elif isinstance(metric_value, dict):
+                # Default: sum all dict values
+                metric_value = sum(metric_value.values()) if metric_value else 0
+
+            period_values.append(float(metric_value) if metric_value else 0.0)
+        metric_data.append(period_values)
+
+    return metric_data
+
+
 def _process_experiment_for_stats(
     experiment_dict: Dict[str, Any],
     experiment_by_unit: Dict[str, int],
@@ -115,40 +234,19 @@ def _process_experiment_for_stats(
     # Extract created_at from raw dict (handles missing fields gracefully)
     created_at_str = experiment_dict.get("created_at")
     if created_at_str:
-        try:
-            # Parse ISO format datetime string
-            if isinstance(created_at_str, str):
-                # Handle with or without timezone
-                if "T" in created_at_str:
-                    if created_at_str.endswith("Z"):
-                        exp_date = datetime.datetime.fromisoformat(
-                            created_at_str.replace("Z", "+00:00")
-                        )
-                    elif "+" in created_at_str or created_at_str.count("-") > 2:
-                        exp_date = datetime.datetime.fromisoformat(created_at_str)
-                    else:
-                        # Naive datetime
-                        exp_date = datetime.datetime.fromisoformat(created_at_str)
-                        if start_date and start_date.tzinfo is not None:
-                            # Make naive date timezone-aware
+        # Parse datetime using helper function
+        reference_tz = start_date.tzinfo if start_date else None
+        exp_date = _parse_and_normalize_datetime(created_at_str, reference_tz)
 
-                            exp_date = exp_date.replace(tzinfo=start_date.tzinfo)
-                else:
-                    # Not a valid datetime string
-                    without_date = 1
-                    return (in_range, without_date, outside_range)
-            else:
-                exp_date = created_at_str
-
-            # Handle timezone differences
-            if exp_date.tzinfo is None and query_start_date.tzinfo is not None:
-                exp_date = exp_date.replace(tzinfo=query_start_date.tzinfo)
-            elif exp_date.tzinfo is not None and query_start_date.tzinfo is None:
-                start_date_aware = query_start_date.replace(tzinfo=exp_date.tzinfo)
-                end_date_aware = query_end_date.replace(tzinfo=exp_date.tzinfo)
-            else:
-                start_date_aware = query_start_date
-                end_date_aware = query_end_date
+        if exp_date is None:
+            without_date = 1
+        else:
+            # Normalize timezones for comparison
+            exp_date, start_date_aware, end_date_aware = (
+                _normalize_timezone_for_comparison(
+                    exp_date, query_start_date, query_end_date
+                )
+            )
 
             # Check if within date range
             if exp_date.tzinfo is not None:
@@ -163,8 +261,6 @@ def _process_experiment_for_stats(
                 experiment_by_unit[unit_key] += 1
             else:
                 outside_range = 1
-        except (ValueError, TypeError):
-            without_date = 1
     else:
         without_date = 1
 
@@ -297,27 +393,12 @@ def extract_project_data(
                     if dataset.created_at:
                         dataset_date = dataset.created_at
 
-                        # Handle timezone differences
-                        if (
-                            dataset_date.tzinfo is None
-                            and query_start_date.tzinfo is not None
-                        ):
-                            dataset_date = dataset_date.replace(
-                                tzinfo=query_start_date.tzinfo
+                        # Normalize timezones for comparison
+                        dataset_date, start_date_aware, end_date_aware = (
+                            _normalize_timezone_for_comparison(
+                                dataset_date, query_start_date, query_end_date
                             )
-                        elif (
-                            dataset_date.tzinfo is not None
-                            and query_start_date.tzinfo is None
-                        ):
-                            start_date_aware = query_start_date.replace(
-                                tzinfo=dataset_date.tzinfo
-                            )
-                            end_date_aware = query_end_date.replace(
-                                tzinfo=dataset_date.tzinfo
-                            )
-                        else:
-                            start_date_aware = query_start_date
-                            end_date_aware = query_end_date
+                        )
 
                         # Check if within date range
                         if dataset_date.tzinfo is not None:
@@ -351,16 +432,14 @@ def extract_project_data(
                 page += 1
 
                 # Safety check to avoid infinite loops
-                if page > 1000:
+                if page > MAX_PAGINATION_PAGES:
                     console.print(
-                        "[yellow]    Warning: Stopped pagination after 1000 pages to avoid infinite loop[/yellow]"
+                        f"[yellow]    Warning: Stopped pagination after {MAX_PAGINATION_PAGES} pages to avoid infinite loop[/yellow]"
                     )
                     break
 
     except Exception as e:
         console.print(f"[yellow]Warning: Could not get dataset counts: {e}[/yellow]")
-        import traceback
-
         traceback.print_exc()
 
     all_data["datasets_by_unit"] = dict(dataset_by_unit)
@@ -564,16 +643,14 @@ def extract_project_data(
                 page += 1
 
                 # Safety check to avoid infinite loops
-                if page > 1000:
+                if page > MAX_PAGINATION_PAGES:
                     console.print(
-                        "[yellow]    Warning: Stopped pagination after 1000 pages to avoid infinite loop[/yellow]"
+                        f"[yellow]    Warning: Stopped pagination after {MAX_PAGINATION_PAGES} pages to avoid infinite loop[/yellow]"
                     )
                     break
 
     except Exception as e:
         console.print(f"[yellow]Warning: Could not get experiment counts: {e}[/yellow]")
-        import traceback
-
         traceback.print_exc()
 
     all_data["experiments_by_unit"] = dict(experiment_by_unit)
@@ -714,27 +791,12 @@ def extract_project_data(
                         if trace.start_time:
                             trace_date = trace.start_time
 
-                            # Handle timezone differences
-                            if (
-                                trace_date.tzinfo is None
-                                and query_start_date.tzinfo is not None
-                            ):
-                                trace_date = trace_date.replace(
-                                    tzinfo=query_start_date.tzinfo
+                            # Normalize timezones for comparison
+                            trace_date, start_date_aware, end_date_aware = (
+                                _normalize_timezone_for_comparison(
+                                    trace_date, query_start_date, query_end_date
                                 )
-                            elif (
-                                trace_date.tzinfo is not None
-                                and query_start_date.tzinfo is None
-                            ):
-                                start_date_aware = query_start_date.replace(
-                                    tzinfo=trace_date.tzinfo
-                                )
-                                end_date_aware = query_end_date.replace(
-                                    tzinfo=trace_date.tzinfo
-                                )
-                            else:
-                                start_date_aware = query_start_date
-                                end_date_aware = query_end_date
+                            )
 
                             # Check if within date range
                             if trace_date.tzinfo is not None:
@@ -948,64 +1010,26 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     project_names = [p["project_name"] for p in projects]
     n_periods = len(all_periods)
 
-    # Trace count data
-    trace_data = []
-    for period in all_periods:
-        period_values = []
-        for project in projects:
-            period_metrics = project["metrics_by_unit"].get(period, {})
-            trace_count = period_metrics.get("trace_count", 0)
-            if isinstance(trace_count, dict):
-                # If it's a dict, sum all values
-                trace_count = sum(trace_count.values()) if trace_count else 0
-            period_values.append(float(trace_count) if trace_count else 0.0)
-        trace_data.append(period_values)
-
-    # Token count data (using total_tokens if available, otherwise sum)
-    token_data = []
-    for period in all_periods:
-        period_values = []
-        for project in projects:
-            period_metrics = project["metrics_by_unit"].get(period, {})
-            token_count = period_metrics.get("token_count", {})
-            if isinstance(token_count, dict):
-                # Use total_tokens if available, otherwise sum all token types
-                if "total_tokens" in token_count:
-                    token_value = float(token_count["total_tokens"])
-                else:
-                    token_value = (
-                        sum(float(v) for v in token_count.values())
-                        if token_count
-                        else 0.0
-                    )
+    # Helper function for token count aggregation
+    def aggregate_token_count(token_count: Any) -> float:
+        """Aggregate token count: use total_tokens if available, otherwise sum all values."""
+        if isinstance(token_count, dict):
+            if "total_tokens" in token_count:
+                return float(token_count["total_tokens"])
             else:
-                token_value = float(token_count) if token_count else 0.0
-            period_values.append(token_value)
-        token_data.append(period_values)
+                return (
+                    sum(float(v) for v in token_count.values()) if token_count else 0.0
+                )
+        else:
+            return float(token_count) if token_count else 0.0
 
-    # Cost data
-    cost_data = []
-    for period in all_periods:
-        period_values = []
-        for project in projects:
-            period_metrics = project["metrics_by_unit"].get(period, {})
-            cost = period_metrics.get("cost", 0)
-            if isinstance(cost, dict):
-                cost = sum(cost.values()) if cost else 0
-            period_values.append(float(cost) if cost else 0.0)
-        cost_data.append(period_values)
-
-    # Span count data
-    span_data = []
-    for period in all_periods:
-        period_values = []
-        for project in projects:
-            period_metrics = project["metrics_by_unit"].get(period, {})
-            span_count = period_metrics.get("span_count", 0)
-            if isinstance(span_count, dict):
-                span_count = sum(span_count.values()) if span_count else 0
-            period_values.append(float(span_count) if span_count else 0.0)
-        span_data.append(period_values)
+    # Extract metric data using helper function
+    trace_data = _extract_metric_data(projects, all_periods, "trace_count")
+    token_data = _extract_metric_data(
+        projects, all_periods, "token_count", aggregate_token_count
+    )
+    cost_data = _extract_metric_data(projects, all_periods, "cost")
+    span_data = _extract_metric_data(projects, all_periods, "span_count")
 
     # Format period labels for display based on unit
     period_labels = []
@@ -1350,16 +1374,7 @@ def create_individual_chart(
 
     if chart_type == "trace_count":
         # Trace count data
-        trace_data = []
-        for period in all_periods:
-            period_values = []
-            for project in projects:
-                period_metrics = project["metrics_by_unit"].get(period, {})
-                trace_count = period_metrics.get("trace_count", 0)
-                if isinstance(trace_count, dict):
-                    trace_count = sum(trace_count.values()) if trace_count else 0
-                period_values.append(float(trace_count) if trace_count else 0.0)
-            trace_data.append(period_values)
+        trace_data = _extract_metric_data(projects, all_periods, "trace_count")
 
         # Get top projects for trace count
         top_indices, others_data, labels, colors = _get_top_projects_and_others(
@@ -1384,26 +1399,25 @@ def create_individual_chart(
         ax.set_title(f"Trace Count by {unit_label} (Stacked by Project)")
 
     elif chart_type == "token_count":
-        # Token count data
-        token_data = []
-        for period in all_periods:
-            period_values = []
-            for project in projects:
-                period_metrics = project["metrics_by_unit"].get(period, {})
-                token_count = period_metrics.get("token_count", {})
-                if isinstance(token_count, dict):
-                    if "total_tokens" in token_count:
-                        token_value = float(token_count["total_tokens"])
-                    else:
-                        token_value = (
-                            sum(float(v) for v in token_count.values())
-                            if token_count
-                            else 0.0
-                        )
+        # Helper function for token count aggregation
+        def aggregate_token_count(token_count: Any) -> float:
+            """Aggregate token count: use total_tokens if available, otherwise sum all values."""
+            if isinstance(token_count, dict):
+                if "total_tokens" in token_count:
+                    return float(token_count["total_tokens"])
                 else:
-                    token_value = float(token_count) if token_count else 0.0
-                period_values.append(token_value)
-            token_data.append(period_values)
+                    return (
+                        sum(float(v) for v in token_count.values())
+                        if token_count
+                        else 0.0
+                    )
+            else:
+                return float(token_count) if token_count else 0.0
+
+        # Token count data
+        token_data = _extract_metric_data(
+            projects, all_periods, "token_count", aggregate_token_count
+        )
 
         # Get top projects for token count
         top_indices, others_data, labels, colors = _get_top_projects_and_others(
@@ -1440,16 +1454,7 @@ def create_individual_chart(
 
     elif chart_type == "cost":
         # Cost data
-        cost_data = []
-        for period in all_periods:
-            period_values = []
-            for project in projects:
-                period_metrics = project["metrics_by_unit"].get(period, {})
-                cost = period_metrics.get("cost", 0)
-                if isinstance(cost, dict):
-                    cost = sum(cost.values()) if cost else 0
-                period_values.append(float(cost) if cost else 0.0)
-            cost_data.append(period_values)
+        cost_data = _extract_metric_data(projects, all_periods, "cost")
 
         # Get top projects for cost
         top_indices, others_data, labels, colors = _get_top_projects_and_others(
@@ -1498,16 +1503,7 @@ def create_individual_chart(
 
     elif chart_type == "span_count":
         # Span count data
-        span_data = []
-        for period in all_periods:
-            period_values = []
-            for project in projects:
-                period_metrics = project["metrics_by_unit"].get(period, {})
-                span_count = period_metrics.get("span_count", 0)
-                if isinstance(span_count, dict):
-                    span_count = sum(span_count.values()) if span_count else 0
-                period_values.append(float(span_count) if span_count else 0.0)
-            span_data.append(period_values)
+        span_data = _extract_metric_data(projects, all_periods, "span_count")
 
         # Get top projects for span count
         top_indices, others_data, labels, colors = _get_top_projects_and_others(
@@ -1598,8 +1594,6 @@ def create_individual_chart(
         console.print(
             f"[yellow]Warning: Could not save chart {chart_type}: {e}[/yellow]"
         )
-        import traceback
-
         traceback.print_exc()
         return None
 
@@ -1860,8 +1854,6 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
             console.print(
                 f"[yellow]Warning: Error creating chart {chart_title}: {chart_error}[/yellow]"
             )
-            import traceback
-
             traceback.print_exc()
             continue  # Skip this chart and continue with others
 
@@ -2028,8 +2020,6 @@ def usage_report(
                 console.print(
                     f"[yellow]Warning: Could not generate PDF report: {e}[/yellow]"
                 )
-                import traceback
-
                 traceback.print_exc()
 
     except Exception as e:
