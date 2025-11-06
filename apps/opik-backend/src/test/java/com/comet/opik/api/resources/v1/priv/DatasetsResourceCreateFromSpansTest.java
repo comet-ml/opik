@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -19,6 +20,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.SpanEnrichmentService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -198,9 +200,9 @@ class DatasetsResourceCreateFromSpansTest {
         spanResourceClient.createComment(comment, span1.id(), apiKey, workspaceName, 201);
 
         // Create request with all enrichment options
-        var request = com.comet.opik.api.CreateDatasetItemsFromSpansRequest.builder()
+        var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span1.id(), span2.id()))
-                .enrichmentOptions(com.comet.opik.domain.SpanEnrichmentService.SpanEnrichmentOptions.builder()
+                .enrichmentOptions(SpanEnrichmentService.SpanEnrichmentOptions.builder()
                         .includeTags(true)
                         .includeFeedbackScores(true)
                         .includeComments(true)
@@ -315,10 +317,10 @@ class DatasetsResourceCreateFromSpansTest {
         spanResourceClient.createComment(comment, span.id(), apiKey, workspaceName, 201);
 
         // Create request with no enrichment options (all disabled)
-        var request = com.comet.opik.api.CreateDatasetItemsFromSpansRequest.builder()
+        var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span.id()))
                 .enrichmentOptions(
-                        com.comet.opik.domain.SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
+                        SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
                 .build();
 
         // Call endpoint
@@ -352,10 +354,10 @@ class DatasetsResourceCreateFromSpansTest {
 
         UUID nonExistentDatasetId = UUID.randomUUID();
 
-        var request = com.comet.opik.api.CreateDatasetItemsFromSpansRequest.builder()
+        var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(UUID.randomUUID()))
                 .enrichmentOptions(
-                        com.comet.opik.domain.SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
+                        SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
                 .build();
 
         try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(nonExistentDatasetId,
@@ -378,10 +380,10 @@ class DatasetsResourceCreateFromSpansTest {
         var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        var request = com.comet.opik.api.CreateDatasetItemsFromSpansRequest.builder()
+        var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of())
                 .enrichmentOptions(
-                        com.comet.opik.domain.SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
+                        SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
                 .build();
 
         try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(datasetId, request, apiKey,
@@ -420,14 +422,15 @@ class DatasetsResourceCreateFromSpansTest {
                 .tags(null)
                 .metadata(null)
                 .usage(null)
+                .provider(null)
                 .build();
 
         spanResourceClient.createSpan(span, apiKey, workspaceName);
 
         // Create request with ALL enrichment options enabled
-        var request = com.comet.opik.api.CreateDatasetItemsFromSpansRequest.builder()
+        var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span.id()))
-                .enrichmentOptions(com.comet.opik.domain.SpanEnrichmentService.SpanEnrichmentOptions.builder()
+                .enrichmentOptions(SpanEnrichmentService.SpanEnrichmentOptions.builder()
                         .includeTags(true)
                         .includeFeedbackScores(true)
                         .includeComments(true)
