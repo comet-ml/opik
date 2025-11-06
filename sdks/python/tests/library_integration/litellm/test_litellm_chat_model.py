@@ -1,7 +1,7 @@
 import pytest
+import pydantic
 
 import opik
-import opik.config
 from opik.evaluation.models.litellm import litellm_chat_model
 from ...testlib import (
     ANY_BUT_NONE,
@@ -19,18 +19,16 @@ pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
 
-def test_litellm_chat_model_generate_string__happyflow(fake_backend):
-    """Test that LiteLLMChatModel.generate_string creates proper tracking spans."""
+def test_litellm_chat_model_generate_string__happyflow(fake_backend, monkeypatch):
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+    
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-
     result = model.generate_string("Tell me a short fact about Python programming")
-
     opik.flush_tracker()
 
     assert isinstance(result, str)
     assert len(result) > 0
 
-    # Verify trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="completion",
@@ -65,8 +63,11 @@ def test_litellm_chat_model_generate_string__happyflow(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
-    """Test that LiteLLMChatModel creates a child span when called inside @opik.track."""
+def test_litellm_chat_model_nested_in_track__creates_child_span(
+    fake_backend, monkeypatch
+):
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+    
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
 
     @opik.track
@@ -74,18 +75,16 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
         return model.generate_string(text)
 
     result = outer_function("What is machine learning?")
-
     opik.flush_tracker()
 
     assert isinstance(result, str)
     assert len(result) > 0
 
-    # Verify trace structure with nested spans
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="outer_function",
         input={"text": "What is machine learning?"},
-        output={"output": ANY_STRING},  # Output is wrapped in a dict
+        output={"output": ANY_STRING},
         tags=None,
         metadata=None,
         start_time=ANY_BUT_NONE,
@@ -97,7 +96,7 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
                 type="general",
                 name="outer_function",
                 input={"text": "What is machine learning?"},
-                output={"output": ANY_STRING},  # Output is wrapped in a dict
+                output={"output": ANY_STRING},
                 tags=None,
                 metadata=None,
                 start_time=ANY_BUT_NONE,
@@ -129,20 +128,20 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(fake_backend):
 
 
 @pytest.mark.asyncio
-async def test_litellm_chat_model_agenerate_string__happyflow(fake_backend):
-    """Test that LiteLLMChatModel.agenerate_string creates proper tracking spans."""
+async def test_litellm_chat_model_agenerate_string__happyflow(
+    fake_backend, monkeypatch
+):
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+    
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-
     result = await model.agenerate_string(
         "Tell me a short fact about async programming"
     )
-
     opik.flush_tracker()
 
     assert isinstance(result, str)
     assert len(result) > 0
 
-    # Verify trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="acompletion",
@@ -177,31 +176,27 @@ async def test_litellm_chat_model_agenerate_string__happyflow(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_litellm_chat_model_with_response_format__structured_output(fake_backend):
-    """Test that LiteLLMChatModel works with response_format for structured output."""
-    import pydantic
+def test_litellm_chat_model_with_response_format__structured_output(
+    fake_backend, monkeypatch
+):
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
     class SimpleResponse(pydantic.BaseModel):
         answer: str
 
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-
     result = model.generate_string(
         "What is 2+2? Answer in one word.", response_format=SimpleResponse
     )
-
     opik.flush_tracker()
 
     assert isinstance(result, str)
     assert len(result) > 0
 
-    # Verify trace structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="completion",
-        input=ANY_DICT.containing(
-            {"messages": ANY_BUT_NONE}
-        ),  # May include response_format
+        input=ANY_DICT.containing({"messages": ANY_BUT_NONE}),
         output={"choices": ANY_BUT_NONE},
         tags=["litellm"],
         metadata=ANY_DICT.containing({"created_from": "litellm"}),
@@ -213,9 +208,7 @@ def test_litellm_chat_model_with_response_format__structured_output(fake_backend
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="completion",
-                input=ANY_DICT.containing(
-                    {"messages": ANY_BUT_NONE}
-                ),  # May include response_format
+                input=ANY_DICT.containing({"messages": ANY_BUT_NONE}),
                 output={"choices": ANY_BUT_NONE},
                 tags=["litellm"],
                 metadata=ANY_DICT.containing({"created_from": "litellm"}),
@@ -237,22 +230,12 @@ def test_litellm_chat_model_with_response_format__structured_output(fake_backend
 def test_litellm_chat_model_with_monitoring_disabled__no_traces_created(
     fake_backend, monkeypatch
 ):
-    """Test that LiteLLMChatModel respects enable_litellm_models_monitoring config."""
-    # Disable litellm monitoring via config
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
 
-    # Force config reload
-    opik.config._SESSION_CACHE_DICT.clear()
-
-    # Create model with monitoring disabled
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
-
     result = model.generate_string("Tell me a short fact")
-
     opik.flush_tracker()
 
     assert isinstance(result, str)
     assert len(result) > 0
-
-    # Verify no traces were created (monitoring was disabled)
     assert len(fake_backend.trace_trees) == 0
