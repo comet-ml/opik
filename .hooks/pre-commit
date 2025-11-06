@@ -46,3 +46,23 @@ else
   echo "No frontend files changed. Skipping lint and typecheck."
 fi
 
+# Check for staged Python SDK files
+if git diff --cached --name-only | grep -E '^sdks/python/'; then
+  echo "Python SDK files have been changed. Running lint..."
+
+  cd scripts || exit 1
+
+  # Run lint with auto-fix
+  if ! ./dev-runner.sh --lint-sdk; then
+    echo "Lint failed. Please fix the remaining linting issues before committing."
+    exit 1
+  fi
+
+  # Add any potentially modified files by lint back to the index
+  git add -u
+
+  cd .. || exit 1
+else
+  echo "No Python SDK files changed. Skipping lint."
+fi
+

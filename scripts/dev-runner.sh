@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/apps/opik-backend"
 FRONTEND_DIR="$PROJECT_ROOT/apps/opik-frontend"
+PYTHON_SDK_DIR="$PROJECT_ROOT/sdks/python"
 BACKEND_PID_FILE="/tmp/opik-backend.pid"
 FRONTEND_PID_FILE="/tmp/opik-frontend.pid"
 
@@ -209,6 +210,20 @@ lint_backend() {
         log_success "Backend linting completed successfully"
     else
         log_error "Backend linting failed"
+        exit 1
+    fi
+}
+
+# Function to lint Python SDK
+lint_python_sdk() {
+    require_command pre-commit
+    log_info "Linting Python SDK..."
+    cd "$PYTHON_SDK_DIR" || { log_error "Python SDK directory not found"; exit 1; }
+
+    if pre-commit run --all-files --show-diff-on-failure; then
+        log_success "Python SDK linting completed successfully"
+    else
+        log_error "Python SDK linting failed"
         exit 1
     fi
 }
@@ -865,14 +880,15 @@ show_usage() {
     echo "  --be-only-verify   - Verify status of Docker infrastructure and FE, and backend process"
     echo ""
     echo "Other options:"
-    echo "  --build-be     - Build backend"
-    echo "  --build-fe     - Build frontend"
-    echo "  --migrate      - Run database migrations"
-    echo "  --lint-be      - Lint backend code"
-    echo "  --lint-fe      - Lint frontend code"
-    echo "  --debug        - Enable debug mode (meant to be combined with other flags)"
-    echo "  --logs         - Show logs for backend and frontend services"
-    echo "  --help         - Show this help message"
+    echo "  --build-be         - Build backend"
+    echo "  --build-fe         - Build frontend"
+    echo "  --migrate          - Run database migrations"
+    echo "  --lint-be          - Lint backend code"
+    echo "  --lint-fe          - Lint frontend code"
+    echo "  --lint-python-sdk  - Lint Python SDK code"
+    echo "  --debug            - Enable debug mode (meant to be combined with other flags)"
+    echo "  --logs             - Show logs for backend and frontend services"
+    echo "  --help             - Show this help message"
     echo ""
     echo "Environment Variables:"
     echo "  DEBUG_MODE=true  - Enable debug mode"
@@ -979,6 +995,9 @@ case "${1:-}" in
         ;;
     "--lint-be")
         lint_backend
+        ;;
+    "--lint-python-sdk")
+        lint_python_sdk
         ;;
     "--help")
         show_usage
