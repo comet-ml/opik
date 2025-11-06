@@ -1104,7 +1104,17 @@ class SpansResourceTest {
             if (MapUtils.isNotEmpty(usage) || isMetadataCost(metadata)) {
                 assertThat(expectedCost.compareTo(BigDecimal.ZERO) > 0).isTrue();
             }
-            var span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            // Update expected span to include provider in metadata (as the backend does on retrieval)
+            JsonNode expectedMetadata = JsonUtils.prependField(
+                    metadata,
+                    Span.SpanField.PROVIDER.getValue(),
+                    provider);
+            var expectedSpanWithProviderInMetadata = expectedSpan.toBuilder()
+                    .metadata(expectedMetadata)
+                    .build();
+
+            var span = getAndAssert(expectedSpanWithProviderInMetadata, API_KEY, TEST_WORKSPACE);
             assertThat(span.totalEstimatedCost())
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
@@ -1114,6 +1124,42 @@ class SpansResourceTest {
 
         boolean isMetadataCost(JsonNode metadata) {
             return getCostFromMetadata(metadata).compareTo(BigDecimal.ZERO) > 0;
+        }
+
+        @Test
+        void createAndGetSpan__providerInMetadata() {
+            String provider = "anthropic";
+            String model = "claude-3-5-sonnet-latest";
+
+            // Create span with custom metadata
+            JsonNode customMetadata = JsonUtils.getJsonNodeFromString(
+                    "{\"custom_field\":\"custom_value\",\"another_field\":\"another_value\"}");
+
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .model(model)
+                    .provider(provider)
+                    .metadata(customMetadata)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve span from the API
+            var actualSpan = spanResourceClient.getById(expectedSpan.id(), TEST_WORKSPACE, API_KEY);
+
+            // Verify provider appears in metadata
+            assertThat(actualSpan.metadata()).isNotNull();
+            assertThat(actualSpan.metadata().has("provider")).isTrue();
+            assertThat(actualSpan.metadata().get("provider").asText()).isEqualTo(provider);
+
+            // Verify custom metadata fields are still present after provider
+            assertThat(actualSpan.metadata().has("custom_field")).isTrue();
+            assertThat(actualSpan.metadata().get("custom_field").asText()).isEqualTo("custom_value");
+            assertThat(actualSpan.metadata().has("another_field")).isTrue();
+            assertThat(actualSpan.metadata().get("another_field").asText()).isEqualTo("another_value");
+
+            // Verify top-level provider field still exists
+            assertThat(actualSpan.provider()).isEqualTo(provider);
         }
 
         Stream<Arguments> createAndGetCost() {
@@ -2492,7 +2538,11 @@ class SpansResourceTest {
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
             var updatedSpan = expectedSpan.toBuilder().metadata(metadata).build();
             var actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
-            assertThat(actualSpan.metadata()).isEqualTo(metadata);
+
+            // Prepare expected metadata with provider injected (if span has provider)
+            var expectedMetadata = JsonUtils.prependField(
+                    metadata, Span.SpanField.PROVIDER.getValue(), expectedSpan.provider());
+            assertThat(actualSpan.metadata()).isEqualTo(expectedMetadata);
         }
 
         Stream<Arguments> updateOnlyModel() {

@@ -603,10 +603,10 @@ class UserIntegrationTest {
 
 ```java
 // ✅ Good: Run specific tests
-mvn test -Dtest=UserServiceTest#shouldCreateUser_whenValidRequest
+mvn test -Dtest="UserServiceTest#shouldCreateUser_whenValidRequest"
 
 // ✅ Good: Run test class
-mvn test -Dtest=UserServiceTest
+mvn test -Dtest="UserServiceTest"
 
 // ❌ Bad: Run entire test suite for development
 mvn test
