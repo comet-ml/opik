@@ -20,6 +20,9 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -280,7 +283,7 @@ public class JsonUtils {
      * @return new JsonNode with field at the beginning, or original metadata if fieldValue is null/blank
      */
     public static JsonNode injectStringFieldIntoMetadata(JsonNode metadata, String fieldName, String fieldValue) {
-        if (fieldValue == null || fieldValue.isBlank()) {
+        if (StringUtils.isBlank(fieldValue)) {
             return metadata;
         }
 
@@ -298,7 +301,7 @@ public class JsonUtils {
      * @return new JsonNode with field at the beginning, or original metadata if fieldValues is null/empty
      */
     public static JsonNode injectArrayFieldIntoMetadata(JsonNode metadata, String fieldName, List<String> fieldValues) {
-        if (fieldValues == null || fieldValues.isEmpty()) {
+        if (CollectionUtils.isEmpty(fieldValues)) {
             return metadata;
         }
 
