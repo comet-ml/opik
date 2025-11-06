@@ -319,10 +319,10 @@ function Invoke-FrontendLint {
             Write-LogError "Frontend linting failed"
             exit 1
         }
-        
+
         Write-LogInfo "Typechecking frontend..."
         npm run typecheck
-        
+
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "Frontend typechecking completed successfully"
         }
@@ -437,7 +437,7 @@ function Wait-BackendReady {
     $maxWait = 60
     $count = 0
     $backendReady = $false
-    
+
     while ($count -lt $maxWait) {
         try {
             $response = Invoke-WebRequest -Uri "http://localhost:8080/health-check" -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
@@ -449,15 +449,15 @@ function Wait-BackendReady {
         catch {
             # Continue waiting
         }
-        
+
         Start-Sleep -Seconds 1
         $count++
-        
+
         # Check if backend process is still running
         if (Test-Path $script:BACKEND_PID_FILE) {
             $backendPid = Get-Content $script:BACKEND_PID_FILE
             $process = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
-            
+
             if (-not $process) {
                 Write-LogError "Backend process died while waiting for it to be ready"
                 Write-LogError "Check logs:"
@@ -468,7 +468,7 @@ function Wait-BackendReady {
             }
         }
     }
-    
+
     if ($backendReady) {
         Write-LogSuccess "Backend is ready and accepting connections"
         if ($script:DEBUG_MODE) {
@@ -886,13 +886,13 @@ function Show-AccessInformation {
 
 function New-DemoData {
     param([string]$Mode)
-    
+
     Write-LogInfo "Creating demo data..."
     Push-Location $script:PROJECT_ROOT
-    
+
     try {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
-        
+
         if (Test-Path $opikScript) {
             & $opikScript $Mode --demo-data
             if ($?) {
@@ -1064,15 +1064,15 @@ function Invoke-QuickRestart {
     Build-Backend
     Write-LogInfo "Step 4/6: Starting backend..."
     Start-Backend
-    
+
     # Check if package.json has changed since last npm install
     Write-LogInfo "Step 5/6: Checking frontend dependencies..."
     $packageJson = Join-Path $script:FRONTEND_DIR "package.json"
     $packageLock = Join-Path $script:FRONTEND_DIR "package-lock.json"
     $nodeModules = Join-Path $script:FRONTEND_DIR "node_modules"
-    
+
     $needsInstall = $false
-    
+
     if (-not (Test-Path $nodeModules)) {
         Write-LogInfo "node_modules not found, will install dependencies"
         $needsInstall = $true
@@ -1088,12 +1088,71 @@ function Invoke-QuickRestart {
     else {
         Write-LogInfo "Frontend dependencies are up to date, skipping npm install"
     }
-    
+
     if ($needsInstall) {
         Build-Frontend
     }
-    
+
     Write-LogInfo "Step 6/6: Starting frontend..."
+    Start-Frontend
+    Write-LogSuccess "=== Quick Restart Complete ==="
+    Test-Services
+}
+
+# Function for quick restart (only rebuild backend, keep infrastructure running)
+function Invoke-QuickRestart {
+    Write-LogInfo "=== Quick Restart (Backend, Frontend (if needed), Infrastructure (if not running)) ==="
+
+    # Check if infrastructure is running, start if not
+    Write-LogInfo "Step 1/7: Checking infrastructure..."
+    if (Test-Infrastructure) {
+        Write-LogInfo "Infrastructure is already running, skipping infrastructure start"
+    }
+    else {
+        Write-LogWarning "Infrastructure is not running, starting it now..."
+        Start-Infrastructure
+        Write-LogInfo "Running DB migrations..."
+        Invoke-DbMigrations
+    }
+
+    Write-LogInfo "Step 2/7: Stopping frontend..."
+    Stop-Frontend
+    Write-LogInfo "Step 3/7: Stopping backend..."
+    Stop-Backend
+    Write-LogInfo "Step 4/7: Building backend..."
+    Build-Backend
+    Write-LogInfo "Step 5/7: Starting backend..."
+    Start-Backend
+
+    # Check if package.json has changed since last npm install
+    Write-LogInfo "Step 6/7: Checking frontend dependencies..."
+    $packageJson = Join-Path $script:FRONTEND_DIR "package.json"
+    $packageLock = Join-Path $script:FRONTEND_DIR "package-lock.json"
+    $nodeModules = Join-Path $script:FRONTEND_DIR "node_modules"
+
+    $needsInstall = $false
+
+    if (-not (Test-Path $nodeModules)) {
+        Write-LogInfo "node_modules not found, will install dependencies"
+        $needsInstall = $true
+    }
+    elseif (-not (Test-Path $packageLock)) {
+        Write-LogInfo "package-lock.json not found, will install dependencies"
+        $needsInstall = $true
+    }
+    elseif ((Get-Item $packageJson).LastWriteTime -gt (Get-Item $packageLock).LastWriteTime) {
+        Write-LogInfo "package.json is newer than package-lock.json, will install dependencies"
+        $needsInstall = $true
+    }
+    else {
+        Write-LogInfo "Frontend dependencies are up to date, skipping npm install"
+    }
+
+    if ($needsInstall) {
+        Build-Frontend
+    }
+
+    Write-LogInfo "Step 7/7: Starting frontend..."
     Start-Frontend
     Write-LogSuccess "=== Quick Restart Complete ==="
     Test-Services
