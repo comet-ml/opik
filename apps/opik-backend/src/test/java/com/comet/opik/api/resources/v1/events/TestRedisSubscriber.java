@@ -55,14 +55,26 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     }
 
     /**
-     * Factory method for creating a subscriber that always fails.
+     * Factory method for creating a subscriber that always fails with a non-retryable exception.
      */
-    public static TestRedisSubscriber failingSubscriber(
+    public static TestRedisSubscriber failingNoRetriesSubscriber(
             StreamConfiguration config,
             RedissonReactiveClient redisson) {
         return createSubscriber(config, redisson, msg -> {
-            log.warn("Received message (will fail): '{}'", msg);
-            return Mono.error(new RuntimeException("Test failure for message '%s'".formatted(msg)));
+            log.warn("Received message (will fail without retries): '{}'", msg);
+            return Mono.error(new NullPointerException("Test non-retryable failure for message '%s'".formatted(msg)));
+        });
+    }
+
+    /**
+     * Factory method for creating a subscriber that always fails with a retryable exception.
+     */
+    public static TestRedisSubscriber failingRetriesSubscriber(
+            StreamConfiguration config,
+            RedissonReactiveClient redisson) {
+        return createSubscriber(config, redisson, msg -> {
+            log.warn("Received message (will fail with retries): '{}'", msg);
+            return Mono.error(new RuntimeException("Test retryable failure for message '%s'".formatted(msg)));
         });
     }
 

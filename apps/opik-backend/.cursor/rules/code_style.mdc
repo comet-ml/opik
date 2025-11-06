@@ -63,6 +63,45 @@ private static final Map<Field, String> FIELD_MAP = new EnumMap<>(
         .build());
 ```
 
+## Import Statements
+
+### Use Imports Instead of Inline Fully-Qualified Class Names
+
+**Rule**: Always use import statements at the top of the file instead of inline fully-qualified class names, unless there is a name collision.
+
+```java
+// ❌ BAD: Using inline fully-qualified class name
+public void processMessage(String message) {
+    lenient().when(stream.listPending(any(org.redisson.api.stream.StreamPendingRangeArgs.class)))
+        .thenReturn(Mono.just(List.of()));
+}
+
+// ✅ GOOD: Using import statement
+import org.redisson.api.stream.StreamPendingRangeArgs;
+
+public void processMessage(String message) {
+    lenient().when(stream.listPending(any(StreamPendingRangeArgs.class)))
+        .thenReturn(Mono.just(List.of()));
+}
+```
+
+**Exception - Name Collision**: Only use fully-qualified names when there's a naming conflict:
+
+```java
+// ✅ ACCEPTABLE: When two classes have the same name
+import com.comet.opik.api.User;
+
+public void processUsers(com.external.lib.User externalUser, User internalUser) {
+    // Both User classes needed, one must be fully-qualified
+}
+```
+
+**Benefits**:
+- Improves code readability
+- Makes dependencies clear at the top of the file
+- Follows Java conventions
+- Easier to maintain and refactor
+
 ## Related Rules
 
 - [Code Quality Guidelines](mdc:apps/opik-backend/.cursor/rules/code_quality.mdc)
