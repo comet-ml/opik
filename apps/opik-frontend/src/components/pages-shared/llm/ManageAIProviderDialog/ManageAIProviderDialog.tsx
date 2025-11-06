@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MessageCircleWarning } from "lucide-react";
-import { z } from "zod";
 import get from "lodash/get";
 import isFunction from "lodash/isFunction";
 
@@ -37,7 +36,7 @@ import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/Provide
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import {
-  AIProviderFormSchema,
+  createAIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
@@ -76,10 +75,15 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
 
-  const form: UseFormReturn<AIProviderFormType> = useForm<
-    z.infer<typeof AIProviderFormSchema>
-  >({
-    resolver: zodResolver(AIProviderFormSchema),
+  const existingProviderNames = useMemo(() => {
+    return configuredProvidersList
+      ?.filter((p) => p.provider === PROVIDER_TYPE.CUSTOM)
+      .map((p) => p.provider_name)
+      .filter(Boolean) as string[];
+  }, [configuredProvidersList]);
+
+  const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
+    resolver: zodResolver(createAIProviderFormSchema(existingProviderNames)),
     defaultValues: {
       provider: providerKey?.provider,
       composedProviderType: providerKey?.ui_composed_provider,
@@ -176,15 +180,33 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const deleteProviderKeyHandler = useCallback(() => {
     if (calculatedProviderKey) {
-      deleteMutate({
-        providerId: calculatedProviderKey.id,
-      });
-    }
+      deleteMutate(
+        {
+          providerId: calculatedProviderKey.id,
+        },
+        {
+          onSuccess: () => {
+            if (isFunction(onDeleteProvider)) {
+              onDeleteProvider(calculatedProviderKey.ui_composed_provider);
+            }
 
-    if (isFunction(onDeleteProvider)) {
-      onDeleteProvider(provider as PROVIDER_TYPE);
+            form.reset({
+              provider: undefined,
+              composedProviderType: "",
+              id: undefined,
+              apiKey: "",
+              location: "",
+              url: "",
+              providerName: "",
+              models: "",
+            });
+            setSelectedProviderId(undefined);
+            setConfirmOpen(false);
+          },
+        },
+      );
     }
-  }, [provider, calculatedProviderKey, onDeleteProvider, deleteMutate]);
+  }, [calculatedProviderKey, onDeleteProvider, deleteMutate, form]);
 
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
@@ -265,7 +287,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             );
                             field.onChange(p);
                           }}
-                          configuredProvidersList={configuredProvidersList}
+                          configuredProvidersList={
+                            configuredProvidersList ??
+                            (providerKey ? [providerKey] : undefined)
+                          }
                           hasError={Boolean(validationErrors?.message)}
                         />
                       </FormControl>

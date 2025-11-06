@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 
 import {
   Dialog,
@@ -40,14 +39,17 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   );
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
-  const form: UseFormReturn<AIProviderFormType> = useForm<
-    z.infer<typeof AIProviderFormSchema>
-  >({
+  const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
       provider: PROVIDER_TYPE.OPEN_AI,
+      composedProviderType: "",
       apiKey: "",
-    },
+      location: "",
+      url: "",
+      models: "",
+      providerName: "",
+    } as AIProviderFormType,
   });
 
   const handleProviderSelect = useCallback(

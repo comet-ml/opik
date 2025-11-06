@@ -115,7 +115,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       return (
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
-            <Icon className="text-foreground" />
+            <Icon />
             {label}
           </div>
         </div>

@@ -33,42 +33,60 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   location: z.string(),
 });
 
-export const CustomProviderDetailsFormSchema = z
-  .object({
-    provider: z.enum([PROVIDER_TYPE.CUSTOM], {
-      message: "Provider is required",
-    }),
-    composedProviderType: z.string(),
-    id: z.string().optional(),
-    providerName: z.string().optional(),
-    apiKey: z.string(),
-    url: z.string().url(),
-    models: z
-      .string()
-      .min(1, { message: "Models list is required" })
-      .refine(
-        (models) => {
-          const modelsArray = models.split(",").map((m) => m.trim());
+export const createCustomProviderDetailsFormSchema = (
+  existingProviderNames?: string[],
+) =>
+  z
+    .object({
+      provider: z.enum([PROVIDER_TYPE.CUSTOM], {
+        message: "Provider is required",
+      }),
+      composedProviderType: z.string(),
+      id: z.string().optional(),
+      providerName: z.string().optional(),
+      apiKey: z.string(),
+      url: z.string().url(),
+      models: z
+        .string()
+        .min(1, { message: "Models list is required" })
+        .refine(
+          (models) => {
+            const modelsArray = models.split(",").map((m) => m.trim());
 
-          return modelsArray.length === uniq(modelsArray).length;
-        },
-        { message: "All model names should be unique" },
-      ),
-  })
-  .superRefine((data, ctx) => {
-    if (!data.id && (!data.providerName || data.providerName.length === 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Provider name is required",
-        path: ["providerName"],
-      });
-    }
-  });
+            return modelsArray.length === uniq(modelsArray).length;
+          },
+          { message: "All model names should be unique" },
+        ),
+    })
+    .superRefine((data, ctx) => {
+      if (!data.id && (!data.providerName || data.providerName.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Provider name is required",
+          path: ["providerName"],
+        });
+      }
 
-export const AIProviderFormSchema = z.union([
-  CloudAIProviderDetailsFormSchema,
-  VertexAIProviderDetailsFormSchema,
-  CustomProviderDetailsFormSchema,
-]);
+      if (
+        !data.id &&
+        data.providerName &&
+        existingProviderNames?.includes(data.providerName)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Provider name already exists",
+          path: ["providerName"],
+        });
+      }
+    });
+
+export const createAIProviderFormSchema = (existingProviderNames?: string[]) =>
+  z.union([
+    CloudAIProviderDetailsFormSchema,
+    VertexAIProviderDetailsFormSchema,
+    createCustomProviderDetailsFormSchema(existingProviderNames),
+  ]);
+
+export const AIProviderFormSchema = createAIProviderFormSchema();
 
 export type AIProviderFormType = z.infer<typeof AIProviderFormSchema>;

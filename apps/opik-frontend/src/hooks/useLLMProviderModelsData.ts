@@ -1651,7 +1651,7 @@ const useLLMProviderModelsData = () => {
       const providerType = parseComposedProviderType(composedProviderType);
 
       if (composedProviderType && providerType) {
-        if (PROVIDERS[providerType].defaultModel) {
+        if (PROVIDERS[providerType]?.defaultModel) {
           return PROVIDERS[providerType].defaultModel;
         } else {
           return first(getProviderModels()[composedProviderType])?.value ?? "";

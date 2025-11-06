@@ -47,7 +47,7 @@ const PromptModelConfigs = ({
   configs,
   onChange,
 }: PromptModelConfigsProps) => {
-  const provider: PROVIDER_TYPE | "" =
+  const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
 
   const getProviderForm = () => {
@@ -110,7 +110,7 @@ const PromptModelConfigs = ({
     return;
   };
 
-  const disabled = provider === "" || isEmpty(configs);
+  const disabled = !composedProviderType || isEmpty(configs);
 
   return (
     <DropdownMenu>
