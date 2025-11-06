@@ -9,10 +9,10 @@ import { containsHTML } from "@/lib/utils";
 import { stripImageTags } from "@/lib/llm";
 import useLocalStorageState from "use-local-storage-state";
 import sanitizeHtml from "sanitize-html";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
-const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
 
 /**
  * Strips HTML/Markdown tags from text to show clean plain text
@@ -41,6 +41,7 @@ const stripHtmlTags = (text: string): string => {
 };
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
+  const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
   });
@@ -58,27 +59,30 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   }, [value]);
 
   const hasExceededLimit = useMemo(
-    () => rawValue.length > maxDataLength,
-    [rawValue, maxDataLength],
+    () => truncationEnabled && rawValue.length > maxDataLength,
+    [rawValue, maxDataLength, truncationEnabled],
   );
 
-  const response = useMemo(() => {
+  const displayMessage = useMemo(() => {
     if (!value || hasExceededLimit) {
-      return {
-        message: "",
-        prettified: false,
-      };
+      return hasExceededLimit
+        ? rawValue.slice(0, maxDataLength) + " [truncated]"
+        : "-";
     }
 
-    return prettifyMessage(value);
-  }, [value, hasExceededLimit]);
+    const pretty = prettifyMessage(value);
+    const message = isObject(pretty.message)
+      ? JSON.stringify(value, null, 2)
+      : pretty.message || "";
 
-  const message = useMemo(() => {
-    if (isObject(response.message)) {
-      return JSON.stringify(value, null, 2);
+    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
+    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
+    if (pretty.prettified && containsHTML(message)) {
+      return stripHtmlTags(message);
     }
-    return response.message || "";
-  }, [response.message, value]);
+
+    return message;
+  }, [value, hasExceededLimit, rawValue, maxDataLength]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
@@ -88,38 +92,20 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
-    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
-    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
-    const hasValidHtmlTags = response.prettified && containsHTML(message);
-    const displayMessage = hasValidHtmlTags ? stripHtmlTags(message) : message;
-
     if (isSmall) {
       return (
-        <CellTooltipWrapper
-          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
-        >
-          <span className="comet-code truncate">
-            {hasExceededLimit
-              ? rawValue.slice(0, maxDataLength) + "..."
-              : displayMessage}
-          </span>
+        <CellTooltipWrapper content={displayMessage}>
+          <span className="comet-code truncate">{displayMessage}</span>
         </CellTooltipWrapper>
       );
     }
 
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
+        {displayMessage}
       </div>
     );
-  }, [
-    isSmall,
-    hasExceededLimit,
-    message,
-    rawValue,
-    maxDataLength,
-    response.prettified,
-  ]);
+  }, [isSmall, displayMessage]);
 
   return (
     <CellWrapper

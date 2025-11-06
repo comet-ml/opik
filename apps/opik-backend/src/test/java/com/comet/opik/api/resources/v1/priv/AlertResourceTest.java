@@ -7,6 +7,8 @@ import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
@@ -32,6 +34,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
@@ -73,8 +77,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -90,6 +94,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -144,7 +149,7 @@ class AlertResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -173,6 +178,8 @@ class AlertResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private DatasetResourceClient datasetResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -182,6 +189,8 @@ class AlertResourceTest {
         projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
         traceResourceClient = new TraceResourceClient(client, baseUrl);
         guardrailsResourceClient = new GuardrailsResourceClient(client, baseUrl);
+        datasetResourceClient = new DatasetResourceClient(client, baseUrl);
+        experimentResourceClient = new ExperimentResourceClient(client, baseUrl, factory);
 
         ClientSupportUtils.config(client);
 
@@ -223,7 +232,11 @@ class AlertResourceTest {
 
             var alert = Alert.builder()
                     .name("Test Alert: " + UUID.randomUUID())
-                    .webhook(factory.manufacturePojo(Webhook.class))
+                    .webhook(factory.manufacturePojo(Webhook.class).toBuilder()
+                            .createdBy(null)
+                            .createdAt(null)
+                            .secretToken(UUID.randomUUID().toString())
+                            .build())
                     .build();
 
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
@@ -1569,6 +1582,57 @@ class AlertResourceTest {
                     .isEqualTo(guardrail);
         }
 
+        @Test
+        @DisplayName("Success: should successfully send experiment finished event to webhook")
+        void testExperimentFinishedEvent__whenWebhookServerReceivesAlert() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            UUID datasetId = datasetResourceClient.createDataset(dataset, mock.getLeft(), mock.getRight());
+
+            // Create alert with webhook
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.EXPERIMENT_FINISHED)
+                    .build());
+
+            // First create an alert for the event
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create experiments
+            List<Experiment> expectedExperiments = IntStream.range(0, 3)
+                    .mapToObj(i -> experimentResourceClient.createPartialExperiment()
+                            .datasetName(dataset.name())
+                            .build())
+                    .toList();
+
+            Set<UUID> experimentIds = expectedExperiments.stream()
+                    .map(experiment -> experimentResourceClient.create(experiment, mock.getLeft(), mock.getRight()))
+                    .collect(Collectors.toSet());
+
+            // Finish experiments to trigger the event
+            experimentResourceClient.finishExperiments(experimentIds, mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Experiment> actualExperiments = JsonUtils.readCollectionValue(payload, List.class, Experiment.class);
+
+            assertThat(actualExperiments).hasSize(3);
+
+            // Verify that all experiment IDs match
+            Set<UUID> actualExperimentIds = actualExperiments.stream()
+                    .map(Experiment::id)
+                    .collect(Collectors.toSet());
+            assertThat(actualExperimentIds).containsExactlyInAnyOrderElementsOf(experimentIds);
+
+            // Verify dataset ID is correct for all experiments
+            actualExperiments.forEach(experiment -> {
+                assertThat(experiment.datasetId()).isEqualTo(datasetId);
+            });
+        }
+
         static Stream<Arguments> traceGuardrailsTriggeredProjectScopeProvider() {
             return Stream.of(
                     Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
@@ -2076,6 +2140,52 @@ class AlertResourceTest {
                     List.of("*Traces with Guardrails Triggered:*\n", expectedUrl));
         }
 
+        @ParameterizedTest
+        @MethodSource("alertTypeProvider")
+        @DisplayName("Success: should send webhook formatted experiment finished event")
+        void testExperimentFinishedEvent(AlertType alertType) {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            UUID datasetId = datasetResourceClient.createDataset(dataset, mock.getLeft(), mock.getRight());
+
+            // Create alert with webhook
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.EXPERIMENT_FINISHED)
+                    .build(), alertType);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create experiments
+            List<Experiment> experiments = IntStream.range(0, 3)
+                    .mapToObj(i -> experimentResourceClient.createPartialExperiment()
+                            .datasetName(dataset.name())
+                            .build())
+                    .toList();
+
+            Set<UUID> experimentIds = experiments.stream()
+                    .map(experiment -> experimentResourceClient.create(experiment, mock.getLeft(), mock.getRight()))
+                    .collect(Collectors.toSet());
+
+            // Finish experiments to trigger the event
+            experimentResourceClient.finishExperiments(experimentIds, mock.getLeft(), mock.getRight());
+
+            // Construct expected URLs
+            var expectedDetails = new ArrayList<String>();
+            expectedDetails.add("*Experiments Finished:*\n");
+            experimentIds.forEach(experimentId -> {
+                String expectedUrl = String.format(
+                        BASE_URL + "/%s/experiments/%s/compare?experiments=%%5B%%22%s%%22%%5D",
+                        mock.getRight(), datasetId, experimentId);
+                expectedDetails.add(expectedUrl);
+            });
+
+            // Verify webhook payload based on alert type
+            verifyPayload(alertType, 1, "Experiment Finished", expectedDetails);
+        }
+
         @Test
         @DisplayName("Success: should send webhook with fallback block when trace errors exceed Slack text limit")
         void testTraceErrorsEventWithFallback() {
@@ -2376,7 +2486,10 @@ class AlertResourceTest {
                     AlertEventType.PROMPT_CREATED,
                     AlertEventType.PROMPT_COMMITTED,
                     AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
-                    AlertEventType.PROMPT_DELETED);
+                    AlertEventType.PROMPT_DELETED,
+                    AlertEventType.EXPERIMENT_FINISHED,
+                    AlertEventType.TRACE_COST,
+                    AlertEventType.TRACE_LATENCY);
 
             // Verify that each example is a non-empty string
             webhookExamples.responseExamples().values().forEach(example -> {

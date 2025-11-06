@@ -72,4 +72,28 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
                 ? streamConfig.getLongPollingDuration()
                 : onlineScoringConfig.getLongPollingDuration();
     }
+
+    @Override
+    public int getClaimIntervalRatio() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getClaimIntervalRatio() != null
+                ? streamConfig.getClaimIntervalRatio()
+                : onlineScoringConfig.getClaimIntervalRatio();
+    }
+
+    @Override
+    public Duration getPendingMessageDuration() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getPendingMessageDuration() != null
+                ? streamConfig.getPendingMessageDuration()
+                : onlineScoringConfig.getPendingMessageDuration();
+    }
+
+    @Override
+    public int getMaxRetries() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getMaxRetries() != null
+                ? streamConfig.getMaxRetries()
+                : onlineScoringConfig.getMaxRetries();
+    }
 }

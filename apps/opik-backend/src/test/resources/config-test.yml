@@ -223,12 +223,24 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: 5
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals (global default)
+  claimIntervalRatio: 10
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming (global default)
+  pendingMessageDuration: 10m
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10, global default)
+  maxRetries: 3
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
   ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
   ## longPollingDuration: (optional, but highly recommended) per stream long polling duration, overrides global value
   ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
+  ## claimIntervalRatio: (optional) per stream claim interval ratio, overrides global value
+  ## pendingMessageDuration: (optional) per stream pending message duration, overrides global value
+  ## maxRetries: (optional) per stream max retries, overrides global value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
@@ -237,6 +249,9 @@ onlineScoring:
       poolingInterval: # Empty - will use global default
       longPollingDuration: # Empty - will use global default
       consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
@@ -244,6 +259,9 @@ onlineScoring:
       poolingInterval: # Empty - will use global default
       longPollingDuration: # Empty - will use global default
       consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
     - scorer: trace_thread_llm_as_judge
       streamName: stream_scoring_trace_thread_llm_as_judge
       codec: java
@@ -251,6 +269,9 @@ onlineScoring:
       poolingInterval: # Empty - will use global default
       longPollingDuration: # Empty - will use global default
       consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
     - scorer: trace_thread_user_defined_metric_python
       streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
@@ -258,6 +279,9 @@ onlineScoring:
       poolingInterval: # Empty - will use global default
       longPollingDuration: # Empty - will use global default
       consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
 
 # LLM providers client configuration
 llmProviderClient:
@@ -397,6 +421,15 @@ traceThreadConfig:
   # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: 2000
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: 10
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: 10m
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10)
+  maxRetries: 3
 
 # Job timeout configuration
 jobTimeout:
@@ -464,6 +497,12 @@ webhook:
   # Default: 1s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: 1s
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: 10
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: 10m
   debouncing:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint

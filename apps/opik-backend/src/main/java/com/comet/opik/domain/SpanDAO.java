@@ -693,6 +693,21 @@ class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_BY_TRACE_IDS = """
+            SELECT
+                s.*,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                    NULL) AS duration
+            FROM spans s
+            WHERE workspace_id = :workspace_id
+            AND trace_id IN :trace_ids
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
+
     private static final String SELECT_BY_PROJECT_ID = """
             WITH comments_final AS (
               SELECT
@@ -885,6 +900,7 @@ class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1026,6 +1042,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1233,6 +1250,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1702,6 +1720,27 @@ class SpanDAO {
     }
 
     @WithSpan
+    public Flux<Span> getByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting spans for '{}' traces", traceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_BY_TRACE_IDS)
+                            .bind("trace_ids", traceIds.toArray(new UUID[0]));
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_by_trace_ids");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(this::mapToDto);
+    }
+
+    @WithSpan
     public Mono<Long> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
@@ -1994,6 +2033,12 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        if (spanSearchCriteria.uuidFromTime() != null) {
+            template.add("uuid_from_time", spanSearchCriteria.uuidFromTime());
+            template.add("uuid_to_time", spanSearchCriteria.uuidToTime());
+        }
         return template;
     }
 
@@ -2010,6 +2055,13 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        Optional.ofNullable(spanSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> {
+                    statement.bind("uuid_from_time", uuid_from_time);
+                    statement.bind("uuid_to_time", spanSearchCriteria.uuidToTime());
+                });
     }
 
     @WithSpan

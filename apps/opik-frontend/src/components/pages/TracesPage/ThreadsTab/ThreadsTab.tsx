@@ -73,6 +73,7 @@ import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -230,6 +231,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectId,
   projectName,
 }) => {
+  const truncationEnabled = useTruncationEnabled();
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -312,7 +314,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       placeholderData: keepPreviousData,
@@ -657,7 +659,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </PageBodyStickyContainer>
       <TraceDetailsPanel
         projectId={projectId}

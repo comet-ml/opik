@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.redisson.client.codec.Codec;
 import org.redisson.codec.CompositeCodec;
@@ -39,11 +40,11 @@ public class TraceThreadConfig implements StreamConfiguration {
     @Min(1) private int consumerBatchSize;
 
     @Valid @JsonProperty
-    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval;
 
     @Valid @JsonProperty
-    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
     private Duration longPollingDuration;
 
@@ -67,10 +68,19 @@ public class TraceThreadConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @Min(1) @Max(10_000) private int closeTraceThreadMaxItemPerRun;
 
+    @JsonProperty
+    @Min(2) private int claimIntervalRatio;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration pendingMessageDuration;
+
+    @JsonProperty
+    @Min(1) @Max(10) private int maxRetries;
+
     @Override
     @JsonIgnore
     public Codec getCodec() {
         return CODEC;
     }
-
 }

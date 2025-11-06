@@ -6,6 +6,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
 import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
+import useWorkspaceConfigMutation from "@/api/workspaces/useWorkspaceConfigMutation";
 import { formatIso8601Duration } from "@/lib/date";
 
 import {
@@ -18,9 +19,12 @@ import {
   WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING,
   WORKSPACE_PREFERENCES_QUERY_PARAMS,
   WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT,
+  WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE,
 } from "./constants";
 import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
+import { EditThreadTimeoutFormValues } from "./EditThreadTimeoutForm";
+import EditTruncationToggleDialog from "./EditTruncationToggleDialog";
 import useAppStore from "@/store/AppStore";
 
 const WorkspacePreferencesTab: React.FC = () => {
@@ -28,6 +32,7 @@ const WorkspacePreferencesTab: React.FC = () => {
   const { data: workspaceConfig, isPending } = useWorkspaceConfig({
     workspaceName: workspaceName,
   });
+  const { mutate: updateWorkspaceConfig } = useWorkspaceConfigMutation();
 
   const [editPreferenceOpen, setEditPreferenceOpen] = useQueryParam(
     WORKSPACE_PREFERENCES_QUERY_PARAMS.EDIT_PREFERENCE,
@@ -41,6 +46,10 @@ const WorkspacePreferencesTab: React.FC = () => {
     workspaceConfig?.timeout_to_mark_thread_as_inactive ??
     WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT;
 
+  const truncationToggleValue =
+    workspaceConfig?.truncation_on_tables ??
+    WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE;
+
   const data = useMemo(
     () => [
       {
@@ -48,8 +57,13 @@ const WorkspacePreferencesTab: React.FC = () => {
         value: formatIso8601Duration(threadTimeoutValue) ?? "Not set",
         type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
       },
+      {
+        name: "Data truncation in tables",
+        value: truncationToggleValue ? "Enabled" : "Disabled",
+        type: WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
+      },
     ],
-    [threadTimeoutValue],
+    [threadTimeoutValue, truncationToggleValue],
   );
 
   const getPreferencesDialogConfig = useCallback(
@@ -70,6 +84,52 @@ const WorkspacePreferencesTab: React.FC = () => {
       setEditPreferenceOpen(row.type);
     },
     [setEditPreferenceOpen],
+  );
+
+  const mergeConfigUpdate = useCallback(
+    (
+      updates: Partial<{
+        timeout_to_mark_thread_as_inactive: string | null;
+        truncation_on_tables: boolean;
+      }>,
+    ) => {
+      updateWorkspaceConfig({
+        config: {
+          timeout_to_mark_thread_as_inactive:
+            updates.timeout_to_mark_thread_as_inactive !== undefined
+              ? updates.timeout_to_mark_thread_as_inactive
+              : workspaceConfig?.timeout_to_mark_thread_as_inactive ?? null,
+          truncation_on_tables:
+            updates.truncation_on_tables !== undefined
+              ? updates.truncation_on_tables
+              : workspaceConfig?.truncation_on_tables ?? null,
+        },
+      });
+    },
+    [
+      updateWorkspaceConfig,
+      workspaceConfig?.timeout_to_mark_thread_as_inactive,
+      workspaceConfig?.truncation_on_tables,
+    ],
+  );
+
+  const handleThreadTimeoutSubmit = useCallback(
+    (values: EditThreadTimeoutFormValues) => {
+      mergeConfigUpdate({
+        timeout_to_mark_thread_as_inactive:
+          values.timeout_to_mark_thread_as_inactive,
+      });
+    },
+    [mergeConfigUpdate],
+  );
+
+  const handleTruncationToggleSubmit = useCallback(
+    (enabled: boolean) => {
+      mergeConfigUpdate({
+        truncation_on_tables: enabled,
+      });
+    },
+    [mergeConfigUpdate],
   );
 
   const columns = useMemo(() => {
@@ -104,6 +164,15 @@ const WorkspacePreferencesTab: React.FC = () => {
           WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
         )}
         defaultValue={threadTimeoutValue}
+        onSubmit={handleThreadTimeoutSubmit}
+      />
+
+      <EditTruncationToggleDialog
+        {...getPreferencesDialogConfig(
+          WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
+        )}
+        currentValue={truncationToggleValue}
+        onConfirm={handleTruncationToggleSubmit}
       />
     </>
   );

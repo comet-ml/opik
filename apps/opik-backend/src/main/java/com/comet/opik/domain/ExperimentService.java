@@ -17,6 +17,7 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -49,6 +50,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED;
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
@@ -471,6 +473,35 @@ public class ExperimentService {
 
         return experimentDAO.getExperimentWorkspaces(experimentIds)
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
+    }
+
+    @WithSpan
+    public Mono<Void> finishExperiments(@NonNull Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            log.info("Finishing experiments, count '{}', workspaceId '{}'", ids.size(), workspaceId);
+
+            return experimentDAO.getByIds(ids)
+                    .collectList()
+                    .doOnNext(experiments -> {
+                        if (CollectionUtils.isNotEmpty(experiments)) {
+                            log.info("Raising alert event for finished experiments, count '{}'", experiments.size());
+                            eventBus.post(AlertEvent.builder()
+                                    .eventType(EXPERIMENT_FINISHED)
+                                    .workspaceId(workspaceId)
+                                    .workspaceName(workspaceName)
+                                    .userName(userName)
+                                    .payload(experiments)
+                                    .build());
+                        }
+                    })
+                    .then();
+        });
     }
 
     @WithSpan

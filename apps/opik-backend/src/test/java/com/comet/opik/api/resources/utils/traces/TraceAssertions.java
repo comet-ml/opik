@@ -11,7 +11,10 @@ import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguratio
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,6 +32,35 @@ public class TraceAssertions {
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
             "feedbackScores.valueByAuthor"};
+
+    public static final Map<Trace.TraceField, Function<Trace, Trace>> EXCLUDE_FUNCTIONS = new EnumMap<>(
+            Trace.TraceField.class);
+
+    static {
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.NAME, it -> it.toBuilder().name(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.START_TIME, it -> it.toBuilder().startTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.END_TIME, it -> it.toBuilder().endTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.INPUT, it -> it.toBuilder().input(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.OUTPUT, it -> it.toBuilder().output(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.METADATA, it -> it.toBuilder().metadata(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.TAGS, it -> it.toBuilder().tags(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.USAGE, it -> it.toBuilder().usage(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.COMMENTS, it -> it.toBuilder().comments(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.GUARDRAILS_VALIDATIONS,
+                it -> it.toBuilder().guardrailsValidations(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_COUNT, it -> it.toBuilder().spanCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LLM_SPAN_COUNT, it -> it.toBuilder().llmSpanCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.TOTAL_ESTIMATED_COST,
+                it -> it.toBuilder().totalEstimatedCost(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
+    }
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);

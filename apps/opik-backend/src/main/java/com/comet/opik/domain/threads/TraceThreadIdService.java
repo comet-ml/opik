@@ -20,7 +20,10 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @ImplementedBy(TraceThreadIdServiceImpl.class)
 interface TraceThreadIdService {
@@ -30,6 +33,8 @@ interface TraceThreadIdService {
     Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
 
     Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(UUID threadModelId);
+
+    Mono<Map<UUID, String>> getTraceThreadIdsByThreadModelIds(List<UUID> threadModelIds);
 
 }
 
@@ -79,6 +84,25 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
                 handle -> handle.attach(TraceThreadIdDAO.class).findByThreadModelId(threadModelId)))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> getTraceThreadIdsByThreadModelIds(@NonNull List<UUID> threadModelIds) {
+        Preconditions.checkArgument(!threadModelIds.isEmpty(),
+                "Thread model IDs cannot be null or empty");
+
+        return Mono.fromCallable(() -> {
+            var threadModels = transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
+                    handle -> handle.attach(TraceThreadIdDAO.class).findByThreadModelIds(threadModelIds));
+
+            log.info("Fetched '{}' thread models for '{}' thread model IDs", threadModels.size(),
+                    threadModelIds.size());
+
+            return threadModels.stream()
+                    .collect(Collectors.toMap(
+                            TraceThreadIdModel::id,
+                            TraceThreadIdModel::threadId));
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<TraceThreadIdModel> getTraceThreadId(String threadId, UUID projectId) {

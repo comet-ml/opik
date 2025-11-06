@@ -236,6 +236,7 @@ const usePromptDatasetItemCombination = ({
           datasetName,
           datasetItemId: datasetItemId,
           selectedRuleIds,
+          datasetItemData,
         });
 
         if (

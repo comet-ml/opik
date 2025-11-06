@@ -85,6 +85,8 @@ interface TraceDAO {
 
     Mono<Trace> findById(UUID id, Connection connection);
 
+    Flux<Trace> findByIds(List<UUID> ids, Connection connection);
+
     Mono<TraceDetails> getTraceDetailsById(UUID id, Connection connection);
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
@@ -327,7 +329,7 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String SELECT_BY_ID = """
+    private static final String SELECT_BY_IDS = """
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -345,7 +347,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
-                   AND entity_id = :id
+                   AND entity_id IN :ids
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -364,7 +366,7 @@ class TraceDAOImpl implements TraceDAO {
                FROM authored_feedback_scores FINAL
                WHERE entity_type = 'trace'
                  AND workspace_id = :workspace_id
-                 AND entity_id = :id
+                 AND entity_id IN :ids
              ),
              feedback_scores_with_ranking AS (
                  SELECT workspace_id,
@@ -452,7 +454,7 @@ class TraceDAOImpl implements TraceDAO {
                             NULL) AS duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND id = :id
+                AND id IN :ids
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS t
@@ -465,7 +467,7 @@ class TraceDAOImpl implements TraceDAO {
                     type
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                  AND trace_id = :id
+                  AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
@@ -484,7 +486,7 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
-                    AND entity_id = :id
+                    AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
@@ -530,7 +532,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM guardrails
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
-                    AND entity_id = :id
+                    AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
@@ -779,6 +781,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -993,6 +996,7 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
@@ -1410,6 +1414,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -2541,16 +2546,6 @@ class TraceDAOImpl implements TraceDAO {
         return template;
     }
 
-    private Flux<? extends Result> getById(UUID id, Connection connection) {
-        var statement = connection.createStatement(SELECT_BY_ID)
-                .bind("id", id);
-
-        Segment segment = startSegment("traces", "Clickhouse", "getById");
-
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> endSegment(segment));
-    }
-
     private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
         var statement = connection.createStatement(SELECT_DETAILS_BY_ID)
                 .bind("id", id);
@@ -2588,9 +2583,24 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
-        return getById(id, connection)
-                .flatMap(result -> mapToDto(result, Set.of()))
+        return findByIds(List.of(id), connection)
                 .singleOrEmpty();
+    }
+
+    @Override
+    @WithSpan
+    public Flux<Trace> findByIds(@NonNull List<UUID> ids, @NonNull Connection connection) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Finding traces by IDs in batch, count '{}'", ids.size());
+
+        var statement = connection.createStatement(SELECT_BY_IDS)
+                .bind("ids", ids.toArray(UUID[]::new));
+
+        Segment segment = startSegment("traces", "Clickhouse", "findByIds");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .flatMap(result -> mapToDto(result, Set.of()));
     }
 
     @Override
@@ -2885,6 +2895,13 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
+
+        // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> {
+                    template.add("uuid_from_time", uuid_from_time);
+                    template.add("uuid_to_time", traceSearchCriteria.uuidToTime());
+                });
         return template;
     }
 
@@ -2900,6 +2917,12 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        if (traceSearchCriteria.uuidFromTime() != null && traceSearchCriteria.uuidToTime() != null) {
+            statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
+            statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
+        }
     }
 
     @Override
