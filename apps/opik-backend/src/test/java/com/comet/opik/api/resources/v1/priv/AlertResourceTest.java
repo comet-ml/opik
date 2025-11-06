@@ -2488,8 +2488,8 @@ class AlertResourceTest {
                     AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
                     AlertEventType.PROMPT_DELETED,
                     AlertEventType.EXPERIMENT_FINISHED,
-                    AlertEventType.COST,
-                    AlertEventType.LATENCY);
+                    AlertEventType.TRACE_COST,
+                    AlertEventType.TRACE_LATENCY);
 
             // Verify that each example is a non-empty string
             webhookExamples.responseExamples().values().forEach(example -> {

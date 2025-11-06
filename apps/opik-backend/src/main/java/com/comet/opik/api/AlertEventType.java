@@ -18,8 +18,8 @@ public enum AlertEventType {
     TRACE_GUARDRAILS_TRIGGERED("trace:guardrails_triggered"),
     PROMPT_DELETED("prompt:deleted"),
     EXPERIMENT_FINISHED("experiment:finished"),
-    COST("cost"),
-    LATENCY("latency");
+    TRACE_COST("trace:cost"),
+    TRACE_LATENCY("trace:latency");
 
     @JsonValue
     private final String value;

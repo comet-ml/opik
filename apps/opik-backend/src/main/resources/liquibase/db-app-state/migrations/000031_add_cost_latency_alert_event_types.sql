@@ -12,8 +12,8 @@ ALTER TABLE alert_triggers
     'trace:guardrails_triggered',
     'prompt:deleted',
     'experiment:finished',
-    'cost',
-    'latency'
+    'trace:cost',
+    'trace:latency'
     ) NOT NULL;
 
 --rollback empty
