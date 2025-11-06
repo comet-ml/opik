@@ -155,7 +155,7 @@ export const useExperimentsTableConfig = <
     [groups],
   );
 
-    // Check if grouping by dataset
+  // Check if grouping by dataset
   const isGroupingByDataset = useMemo(
     () => groups.some((g) => g.field === COLUMN_DATASET_ID),
     [groups],

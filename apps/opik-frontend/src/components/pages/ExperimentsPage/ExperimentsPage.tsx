@@ -407,14 +407,17 @@ const ExperimentsPage: React.FC = () => {
     // Handle no grouping case - group by dataset for charts
     const deepestExpandedGroups = !hasGroups
       ? Object.entries(
-          experiments.reduce<Record<string, GroupedExperiment[]>>((acc, exp) => {
-            const datasetId = exp.dataset_id || "no_dataset";
-            if (!acc[datasetId]) {
-              acc[datasetId] = [];
-            }
-            acc[datasetId].push(exp);
-            return acc;
-          }, {}),
+          experiments.reduce<Record<string, GroupedExperiment[]>>(
+            (acc, exp) => {
+              const datasetId = exp.dataset_id || "no_dataset";
+              if (!acc[datasetId]) {
+                acc[datasetId] = [];
+              }
+              acc[datasetId].push(exp);
+              return acc;
+            },
+            {},
+          ),
         ).map(([datasetId, datasetExperiments]) => ({
           id: datasetId,
           name: [
