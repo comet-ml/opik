@@ -468,27 +468,31 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                                 .deliveryCount(deliveryCount)
                                 .build()),
                         CONSUMER_SCHEDULER_THREAD_CAP_SIZE) // Parallelism for delivery count Redis queries
-                .filter(failure -> {
-                    // Filter out if max limit not reached, these are claimed and retried, so no ack and remove
-                    if (failure.deliveryCount() < config.getMaxRetries()) {
-                        log.warn("Retryable error for messageId '{}', deliveryCount '{}', will retry",
-                                failure.messageId(), failure.deliveryCount(), failure.error());
-                        return false;
-                    }
-                    // Max retries reached, will ack and remove
-                    return true;
-                })
-                .map(maxRetriesFailure -> {
-                    // TODO: Send to the dead letter queue (DLQ) for further analysis
-                    log.error("Max retries reached for messageId '{}', removing from stream",
-                            maxRetriesFailure.messageId(), maxRetriesFailure.error());
-                    return maxRetriesFailure.messageId();
-                })
+                .filter(this::maxRetriesReached)
+                .map(this::handleMaxRetriesReached)
                 .collectList() // Emits an empty list if the sequence is empty
                 .flatMap(maxRetries ->
                 // Delete all non-retryable combined with max retries reached
                 ackAndRemoveMessages(Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList()))
                 .thenReturn(processingResults);
+    }
+
+    private boolean maxRetriesReached(ProcessingResult failure) {
+        // Filter out if max limit not reached, these are claimed and retried, so no ack and remove
+        if (failure.deliveryCount() < config.getMaxRetries()) {
+            log.warn("Retryable error for messageId '{}', deliveryCount '{}', will retry",
+                    failure.messageId(), failure.deliveryCount(), failure.error());
+            return false;
+        }
+        // Max retries reached, will ack and remove
+        return true;
+    }
+
+    private StreamMessageId handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
+        // TODO: Send to the dead letter queue (DLQ) for further analysis
+        log.error("Max retries reached for messageId '{}', removing from stream",
+                maxRetriesFailure.messageId(), maxRetriesFailure.error());
+        return maxRetriesFailure.messageId();
     }
 
     private Mono<Long> ackAndRemoveMessages(List<StreamMessageId> messageIds) {
@@ -550,6 +554,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     /**
      * The delivery count indicates how many times a message has been delivered to consumers.
+     * Uses {@link PendingEntry#getLastTimeDelivered()} which returns number of times that a given message was delivered.
      *
      * @param messageId the message ID to query
      * @return Mono with the delivery count (0 if not found or on error)
