@@ -27,6 +27,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   GroupedExperiment,
@@ -100,6 +101,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
       nameKey: "dataset_name",
       idKey: "dataset_id",
       resource: RESOURCE_TYPE.dataset,
+      enableTooltip: true,
     },
   },
   {
@@ -107,6 +109,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
+    customMeta: {
+      rawValueKey: "created_at",
+    },
   },
   {
     id: "created_by",

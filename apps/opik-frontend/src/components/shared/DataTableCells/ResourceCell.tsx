@@ -18,6 +18,17 @@ type CustomMeta = {
   getSearch?: (cellData: unknown) => Record<string, string | number>;
   getParams?: (cellData: unknown) => Record<string, string | number>;
   getIsDeleted?: (cellData: unknown) => boolean;
+  enableTooltip?: boolean;
+};
+
+const RESOURCE_TOOLTIP_MAP = {
+  [RESOURCE_TYPE.project]: "Navigate to project",
+  [RESOURCE_TYPE.dataset]: "Navigate to dataset",
+  [RESOURCE_TYPE.prompt]: "Navigate to prompt",
+  [RESOURCE_TYPE.experiment]: "Navigate to experiment",
+  [RESOURCE_TYPE.optimization]: "Navigate to optimization",
+  [RESOURCE_TYPE.trial]: "Navigate to trial",
+  [RESOURCE_TYPE.annotationQueue]: "Navigate to annotation queue",
 };
 
 const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -30,6 +41,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getSearch,
     getParams,
     getIsDeleted,
+    enableTooltip = false,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -39,6 +51,11 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
   const isDeleted = isFunction(getIsDeleted)
     ? getIsDeleted(cellData)
     : undefined;
+
+  const tooltipContent =
+    enableTooltip && name
+      ? `${RESOURCE_TOOLTIP_MAP[resource]} ${name}`
+      : undefined;
 
   return (
     <CellWrapper
@@ -54,6 +71,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           search={search}
           params={params}
           isDeleted={isDeleted}
+          tooltipContent={tooltipContent}
         />
       ) : (
         "-"
@@ -81,6 +99,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getIsDeleted,
     countAggregationKey,
     explainer,
+    enableTooltip = false,
   } = (custom ?? {}) as GroupCustomMeta;
 
   const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -101,6 +120,11 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
 
   const countText = isNumber(count) ? `(${count})` : "";
 
+  const tooltipContent =
+    enableTooltip && name
+      ? `${RESOURCE_TOOLTIP_MAP[resource]} ${name}`
+      : undefined;
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -115,6 +139,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           search={search}
           params={params}
           isDeleted={isDeleted}
+          tooltipContent={tooltipContent}
         />
       ) : (
         <div>-</div>
