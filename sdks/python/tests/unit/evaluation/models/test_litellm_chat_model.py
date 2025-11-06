@@ -27,9 +27,9 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
             choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
         )
 
-    def acompletion(model, messages, **kwargs):
+    async def acompletion(model, messages, **kwargs):
         # Async version for testing
-        return completion(model, messages, **kwargs)
+        return await completion(model, messages, **kwargs)
 
     def get_supported_openai_params(model):
         return list(supported_params)
