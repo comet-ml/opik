@@ -10,7 +10,7 @@ from .export import export
 from .healthcheck import healthcheck
 from .import_command import import_data
 from .proxy import proxy
-from .usage_report import usage_report
+from .usage_report import usage_report  # Import from usage_report package
 
 __version__: str = "0.0.0+dev"
 try:
