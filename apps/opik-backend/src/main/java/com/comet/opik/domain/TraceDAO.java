@@ -22,6 +22,8 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.pagination.CursorPaginationRequest;
+import com.comet.opik.infrastructure.pagination.CursorPaginationResponse;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.comet.opik.utils.TruncationUtils;
@@ -88,6 +90,11 @@ interface TraceDAO {
     Mono<TraceDetails> getTraceDetailsById(UUID id, Connection connection);
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
+
+    Mono<CursorPaginationResponse<Trace>> findWithCursor(
+            CursorPaginationRequest paginationRequest,
+            TraceSearchCriteria traceSearchCriteria,
+            Connection connection);
 
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId, Connection connection);
 
@@ -781,6 +788,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(has_cursor)> AND (last_updated_at, id) <cursor_direction> (:cursor_timestamp, :cursor_id) <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
@@ -2722,6 +2730,26 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
+    public Mono<CursorPaginationResponse<Trace>> findWithCursor(
+            @NonNull CursorPaginationRequest paginationRequest,
+            @NonNull TraceSearchCriteria traceSearchCriteria,
+            @NonNull Connection connection) {
+
+        return getTracesByCursor(paginationRequest, traceSearchCriteria, connection)
+                .flatMapMany(result -> mapToDto(result, traceSearchCriteria.exclude()))
+                .collectList()
+                .map(traces -> CursorPaginationResponse.from(
+                        traces,
+                        paginationRequest.getLimit(),
+                        trace -> new com.comet.opik.infrastructure.pagination.Cursor(
+                                trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : trace.createdAt(),
+                                trace.id()
+                        )
+                ));
+    }
+
+    @Override
+    @WithSpan
     public Mono<Void> partialInsert(
             @NonNull UUID projectId,
             @NonNull TraceUpdate traceUpdate,
@@ -2796,6 +2824,72 @@ class TraceDAOImpl implements TraceDAO {
         bindSearchCriteria(traceSearchCriteria, statement);
 
         Segment segment = startSegment("traces", "Clickhouse", "find");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment));
+    }
+
+    private Mono<? extends Result> getTracesByCursor(
+            CursorPaginationRequest paginationRequest,
+            TraceSearchCriteria traceSearchCriteria,
+            Connection connection) {
+
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+
+        bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
+
+        // Add cursor condition if present
+        if (paginationRequest.getCursor() != null) {
+            var cursor = com.comet.opik.infrastructure.pagination.Cursor.decode(paginationRequest.getCursor());
+            template.add("has_cursor", true);
+
+            // Direction determines comparison operator
+            if (paginationRequest.getDirection() == CursorPaginationRequest.Direction.FORWARD) {
+                template.add("cursor_direction", "<");
+            } else {
+                template.add("cursor_direction", ">");
+            }
+        }
+
+        var finalTemplate = template;
+        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
+                .ifPresent(sortFields -> {
+                    if (sortFields.contains("feedback_scores")) {
+                        finalTemplate.add("sort_has_feedback_scores", true);
+                    }
+
+                    if (hasSpanStatistics(sortFields)) {
+                        finalTemplate.add("sort_has_span_statistics", true);
+                    }
+
+                    finalTemplate.add("sort_fields", sortFields);
+                });
+
+        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
+
+        template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
+
+        // Fetch limit + 1 to determine if there are more results
+        int fetchLimit = paginationRequest.getLimit() + 1;
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", traceSearchCriteria.projectId())
+                .bind("limit", fetchLimit);
+
+        // Bind cursor parameters if present
+        if (paginationRequest.getCursor() != null) {
+            var cursor = com.comet.opik.infrastructure.pagination.Cursor.decode(paginationRequest.getCursor());
+            statement.bind("cursor_timestamp", cursor.getTimestamp());
+            statement.bind("cursor_id", cursor.getId());
+        }
+
+        if (hasDynamicKeys) {
+            statement = sortingQueryBuilder.bindDynamicKeys(statement, traceSearchCriteria.sortingFields());
+        }
+
+        bindSearchCriteria(traceSearchCriteria, statement);
+
+        Segment segment = startSegment("traces", "Clickhouse", "findWithCursor");
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> endSegment(segment));

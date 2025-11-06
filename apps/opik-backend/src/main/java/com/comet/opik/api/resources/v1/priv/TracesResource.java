@@ -39,6 +39,8 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.pagination.CursorPaginationRequest;
+import com.comet.opik.infrastructure.pagination.CursorPaginationResponse;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -55,6 +57,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
@@ -169,6 +172,73 @@ public class TracesResource {
         log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(), workspaceId);
 
         return Response.ok(tracePage).build();
+    }
+
+    @GET
+    @Path("/cursor")
+    @Operation(
+            operationId = "getTracesByProjectWithCursor",
+            summary = "Get traces by project using cursor-based pagination",
+            description = "Get traces by project using efficient cursor-based pagination for better performance on large datasets",
+            responses = {
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Paginated trace resource",
+                            content = @Content(schema = @Schema(implementation = CursorPaginationResponse.class)))
+            })
+    @JsonView(Trace.View.Public.class)
+    public Response getTracesByProjectWithCursor(
+            @QueryParam("cursor") @Schema(description = "Pagination cursor from previous response") String cursor,
+            @QueryParam("limit") @Min(1) @Max(1000) @DefaultValue("50") @Schema(description = "Number of items to return (max 1000)") int limit,
+            @QueryParam("direction") @DefaultValue("FORWARD") @Schema(description = "Pagination direction (FORWARD or BACKWARD)") CursorPaginationRequest.Direction direction,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references; if false, downloads and reinjects attachments") boolean stripAttachments,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("exclude") String exclude) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
+        var sortingFields = traceSortingFactory.newSorting(sorting);
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        var metadata = workspaceMetadataService
+                .getProjectMetadata(workspaceId, projectId, projectName)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .filters(traceFilters)
+                .truncate(truncate)
+                .stripAttachments(stripAttachments)
+                .sortingFields(sortingFields)
+                .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
+                .build();
+
+        var paginationRequest = CursorPaginationRequest.builder()
+                .cursor(cursor)
+                .limit(limit)
+                .direction(direction)
+                .build();
+
+        log.info("Get traces with cursor by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        CursorPaginationResponse<Trace> response = service.findWithCursor(paginationRequest, searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found traces with cursor by '{}', count '{}' on workspaceId '{}'", searchCriteria, response.getSize(), workspaceId);
+
+        return Response.ok(response).build();
     }
 
     @POST

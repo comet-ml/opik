@@ -29,6 +29,8 @@ import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.pagination.CursorPaginationRequest;
+import com.comet.opik.infrastructure.pagination.CursorPaginationResponse;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -88,6 +90,10 @@ public interface TraceService {
     Mono<Void> delete(Set<UUID> ids, UUID projectId);
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
+
+    Mono<CursorPaginationResponse<Trace>> findWithCursor(
+            CursorPaginationRequest paginationRequest,
+            TraceSearchCriteria criteria);
 
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
@@ -520,6 +526,31 @@ class TraceServiceImpl implements TraceService {
                             return Mono.just(tracePage);
                         }))
                 .switchIfEmpty(Mono.just(TracePage.empty(page, traceSortingFactory.getSortableFields())));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<CursorPaginationResponse<Trace>> findWithCursor(
+            @NonNull CursorPaginationRequest paginationRequest,
+            @NonNull TraceSearchCriteria criteria) {
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(resolvedCriteria -> template
+                        .nonTransaction(connection -> dao.findWithCursor(paginationRequest, resolvedCriteria, connection))
+                        .flatMap(response -> {
+                            // If stripAttachments=false, reinject attachments into all traces
+                            var reinjectAttachments = !resolvedCriteria.stripAttachments();
+                            if (reinjectAttachments && !response.getContent().isEmpty()) {
+                                return Flux.fromIterable(response.getContent())
+                                        .concatMap(trace -> attachmentReinjectorService
+                                                .reinjectAttachments(trace, reinjectAttachments))
+                                        .collectList()
+                                        .map(reinjectedTraces -> response.toBuilder()
+                                                .content(reinjectedTraces)
+                                                .build());
+                            }
+                            return Mono.just(response);
+                        }))
+                .switchIfEmpty(Mono.just(CursorPaginationResponse.empty()));
     }
 
     @Override

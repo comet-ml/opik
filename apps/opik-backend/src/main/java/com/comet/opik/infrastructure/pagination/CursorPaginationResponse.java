@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Value;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Response object for cursor-based pagination.
@@ -116,6 +117,47 @@ public class CursorPaginationResponse<T> {
                 .content(List.of())
                 .hasMore(false)
                 .size(0)
+                .build();
+    }
+
+    /**
+     * Create a cursor pagination response from a list of items.
+     * This method automatically determines if there are more items and creates appropriate cursors.
+     *
+     * @param items the items retrieved (may be limit + 1 items)
+     * @param limit the requested page size
+     * @param cursorExtractor function to extract cursor from an item
+     * @param <T> the type of items
+     * @return paginated response
+     */
+    public static <T> CursorPaginationResponse<T> from(
+            List<T> items,
+            int limit,
+            Function<T, Cursor> cursorExtractor) {
+
+        if (items == null || items.isEmpty()) {
+            return empty();
+        }
+
+        // Check if we fetched more than the limit (indicates more pages exist)
+        boolean hasMore = items.size() > limit;
+
+        // Get actual items (remove the extra item if we fetched limit + 1)
+        List<T> content = hasMore ? items.subList(0, limit) : items;
+
+        // Generate next cursor from the last item in the page
+        String nextCursor = null;
+        if (hasMore && !content.isEmpty()) {
+            T lastItem = content.get(content.size() - 1);
+            Cursor cursor = cursorExtractor.apply(lastItem);
+            nextCursor = cursor.encode();
+        }
+
+        return CursorPaginationResponse.<T>builder()
+                .content(content)
+                .nextCursor(nextCursor)
+                .hasMore(hasMore)
+                .size(content.size())
                 .build();
     }
 
