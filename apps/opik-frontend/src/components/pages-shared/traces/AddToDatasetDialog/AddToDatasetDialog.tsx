@@ -26,6 +26,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAddTracesToDatasetMutation from "@/api/datasets/useAddTracesToDatasetMutation";
+import useAddSpansToDatasetMutation from "@/api/datasets/useAddSpansToDatasetMutation";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,15 @@ import { ToastAction } from "@/components/ui/toast";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 
 const DEFAULT_SIZE = 100;
+
+type EnrichmentOptions = {
+  includeSpans: boolean;
+  includeTags: boolean;
+  includeFeedbackScores: boolean;
+  includeComments: boolean;
+  includeUsage: boolean;
+  includeMetadata: boolean;
+};
 
 type AddToDatasetDialogProps = {
   getDataForExport: () => Promise<Array<Trace | Span>>;
@@ -77,6 +87,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const { mutate } = useDatasetItemBatchMutation();
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
+  const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
   const { data, isPending } = useDatasetsList(
     {
@@ -106,6 +117,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   }, [validRows]);
 
   const hasOnlyTraces = validTraces.length > 0 && validSpans.length === 0;
+  const hasOnlySpans = validSpans.length > 0 && validTraces.length === 0;
 
   const noValidRows = validRows.length === 0;
   const partialValid = validRows.length !== selectedRows.length;
@@ -156,7 +168,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         const spans = validRowsFromFetch.filter((r) => isObjectSpan(r));
 
         // If we have only traces, use the new enriched endpoint
-        if (traces.length > 0 && spans.length === 0) {
+        if (hasOnlyTraces) {
           addTracesToDataset(
             {
               workspaceName,
@@ -176,8 +188,28 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               onSuccess: () => onItemsAdded(dataset, true, false),
             },
           );
+        } else if (hasOnlySpans) {
+          // If we have only spans, use the new enriched endpoint for spans
+          addSpansToDataset(
+            {
+              workspaceName,
+              datasetId: dataset.id,
+              spanIds: spans.map((s) => s.id),
+              enrichmentOptions: {
+                include_tags: enrichmentOptions.includeTags,
+                include_feedback_scores:
+                  enrichmentOptions.includeFeedbackScores,
+                include_comments: enrichmentOptions.includeComments,
+                include_usage: enrichmentOptions.includeUsage,
+                include_metadata: enrichmentOptions.includeMetadata,
+              },
+            },
+            {
+              onSuccess: () => onItemsAdded(dataset, false, true),
+            },
+          );
         } else {
-          // For spans or mixed content, use the old endpoint
+          // For mixed content, use the old endpoint
           mutate(
             {
               workspaceName,
@@ -226,10 +258,13 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       setOpen,
       mutate,
       addTracesToDataset,
+      addSpansToDataset,
       workspaceName,
       onItemsAdded,
       toast,
       enrichmentOptions,
+      hasOnlyTraces,
+      hasOnlySpans,
     ],
   );
 
@@ -310,6 +345,85 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     return null;
   };
 
+  const renderEnrichmentCheckbox = (
+    id: string,
+    label: string,
+    checked: boolean,
+    field: keyof EnrichmentOptions,
+  ) => (
+    <div className="flex items-center space-x-2">
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(checked) =>
+          setEnrichmentOptions((prev) => ({
+            ...prev,
+            [field]: checked === true,
+          }))
+        }
+      />
+      <Label htmlFor={id} className="comet-body-s cursor-pointer font-normal">
+        {label}
+      </Label>
+    </div>
+  );
+
+  const renderMetadataConfiguration = (
+    type: "trace" | "span",
+    includeNestedSpans: boolean = false,
+  ) => (
+    <Accordion type="single" collapsible defaultValue="" className="mb-4">
+      <AccordionItem value="metadata" className="border-t">
+        <AccordionTrigger>
+          {type === "trace"
+            ? "Trace metadata configuration"
+            : "Span metadata configuration"}
+        </AccordionTrigger>
+        <AccordionContent className="px-3">
+          <div className="grid grid-cols-2 gap-3">
+            {includeNestedSpans &&
+              renderEnrichmentCheckbox(
+                "include-spans",
+                "Nested spans",
+                enrichmentOptions.includeSpans,
+                "includeSpans",
+              )}
+            {renderEnrichmentCheckbox(
+              `include-tags${type === "span" ? "-span" : ""}`,
+              "Tags",
+              enrichmentOptions.includeTags,
+              "includeTags",
+            )}
+            {renderEnrichmentCheckbox(
+              `include-feedback-scores${type === "span" ? "-span" : ""}`,
+              "Feedback scores",
+              enrichmentOptions.includeFeedbackScores,
+              "includeFeedbackScores",
+            )}
+            {renderEnrichmentCheckbox(
+              `include-comments${type === "span" ? "-span" : ""}`,
+              "Comments",
+              enrichmentOptions.includeComments,
+              "includeComments",
+            )}
+            {renderEnrichmentCheckbox(
+              `include-usage${type === "span" ? "-span" : ""}`,
+              "Usage metrics",
+              enrichmentOptions.includeUsage,
+              "includeUsage",
+            )}
+            {renderEnrichmentCheckbox(
+              `include-metadata${type === "span" ? "-span" : ""}`,
+              "Metadata",
+              enrichmentOptions.includeMetadata,
+              "includeMetadata",
+            )}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -324,132 +438,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
               ]}
             />
-            {hasOnlyTraces && (
-              <Accordion
-                type="single"
-                collapsible
-                defaultValue=""
-                className="mb-4"
-              >
-                <AccordionItem value="metadata" className="border-t">
-                  <AccordionTrigger>
-                    Trace metadata configuration
-                  </AccordionTrigger>
-                  <AccordionContent className="px-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="include-spans"
-                          checked={enrichmentOptions.includeSpans}
-                          onCheckedChange={(checked) =>
-                            setEnrichmentOptions((prev) => ({
-                              ...prev,
-                              includeSpans: checked === true,
-                            }))
-                          }
-                        />
-                        <Label
-                          htmlFor="include-spans"
-                          className="comet-body-s cursor-pointer font-normal"
-                        >
-                          Nested spans
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="include-tags"
-                          checked={enrichmentOptions.includeTags}
-                          onCheckedChange={(checked) =>
-                            setEnrichmentOptions((prev) => ({
-                              ...prev,
-                              includeTags: checked === true,
-                            }))
-                          }
-                        />
-                        <Label
-                          htmlFor="include-tags"
-                          className="comet-body-s cursor-pointer font-normal"
-                        >
-                          Tags
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="include-feedback-scores"
-                          checked={enrichmentOptions.includeFeedbackScores}
-                          onCheckedChange={(checked) =>
-                            setEnrichmentOptions((prev) => ({
-                              ...prev,
-                              includeFeedbackScores: checked === true,
-                            }))
-                          }
-                        />
-                        <Label
-                          htmlFor="include-feedback-scores"
-                          className="comet-body-s cursor-pointer font-normal"
-                        >
-                          Feedback scores
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="include-comments"
-                          checked={enrichmentOptions.includeComments}
-                          onCheckedChange={(checked) =>
-                            setEnrichmentOptions((prev) => ({
-                              ...prev,
-                              includeComments: checked === true,
-                            }))
-                          }
-                        />
-                        <Label
-                          htmlFor="include-comments"
-                          className="comet-body-s cursor-pointer font-normal"
-                        >
-                          Comments
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="include-usage"
-                          checked={enrichmentOptions.includeUsage}
-                          onCheckedChange={(checked) =>
-                            setEnrichmentOptions((prev) => ({
-                              ...prev,
-                              includeUsage: checked === true,
-                            }))
-                          }
-                        />
-                        <Label
-                          htmlFor="include-usage"
-                          className="comet-body-s cursor-pointer font-normal"
-                        >
-                          Usage metrics
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="include-metadata"
-                          checked={enrichmentOptions.includeMetadata}
-                          onCheckedChange={(checked) =>
-                            setEnrichmentOptions((prev) => ({
-                              ...prev,
-                              includeMetadata: checked === true,
-                            }))
-                          }
-                        />
-                        <Label
-                          htmlFor="include-metadata"
-                          className="comet-body-s cursor-pointer font-normal"
-                        >
-                          Metadata
-                        </Label>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            )}
+            {hasOnlyTraces && renderMetadataConfiguration("trace", true)}
+            {hasOnlySpans && renderMetadataConfiguration("span")}
             <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select a dataset</h3>
               <Button
