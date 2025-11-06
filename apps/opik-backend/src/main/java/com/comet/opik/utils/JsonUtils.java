@@ -272,16 +272,7 @@ public class JsonUtils {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
     }
 
-    /**
-     * Injects a field at the beginning of metadata JsonNode.
-     * Creates a new ObjectNode with the field first, followed by existing metadata fields.
-     *
-     * @param metadata existing metadata JsonNode (can be null)
-     * @param fieldName name of the field to inject
-     * @param fieldValue value to inject (String)
-     * @return new JsonNode with field at the beginning, or original metadata if fieldValue is null/blank
-     */
-    public static JsonNode injectStringFieldIntoMetadata(
+    public static JsonNode prependStringFieldIntoMetadata(
             JsonNode metadata,
             @NonNull String fieldName,
             String fieldValue) {
@@ -290,19 +281,10 @@ public class JsonUtils {
         }
 
         TextNode valueNode = MAPPER.getNodeFactory().textNode(fieldValue);
-        return injectFieldIntoMetadata(metadata, fieldName, valueNode);
+        return prependFieldIntoMetadata(metadata, fieldName, valueNode);
     }
 
-    /**
-     * Injects a field with array value at the beginning of metadata JsonNode.
-     * Creates a new ObjectNode with the field first, followed by existing metadata fields.
-     *
-     * @param metadata existing metadata JsonNode (can be null)
-     * @param fieldName name of the field to inject
-     * @param fieldValues list of strings to inject as array
-     * @return new JsonNode with field at the beginning, or original metadata if fieldValues is null/empty
-     */
-    public static JsonNode injectArrayFieldIntoMetadata(
+    public static JsonNode prependArrayFieldIntoMetadata(
             JsonNode metadata,
             @NonNull String fieldName,
             List<String> fieldValues) {
@@ -313,30 +295,20 @@ public class JsonUtils {
         ArrayNode arrayNode = MAPPER.createArrayNode();
         fieldValues.forEach(arrayNode::add);
 
-        return injectFieldIntoMetadata(metadata, fieldName, arrayNode);
+        return prependFieldIntoMetadata(metadata, fieldName, arrayNode);
     }
 
-    private static JsonNode injectFieldIntoMetadata(
+    private static JsonNode prependFieldIntoMetadata(
             JsonNode metadata,
             @NonNull String fieldKey,
             @NonNull JsonNode fieldValue) {
-        // 1. Create result and inject the payload field
         ObjectNode result = MAPPER.createObjectNode();
         result.set(fieldKey, fieldValue);
 
-        // 2. Delegate copying the common metadata fields
-        return copyMetadataFields(metadata, result);
+        return copyJsonNode(metadata, result);
     }
 
-    /**
-     * Copies existing fields from metadata into the 'result' ObjectNode,
-     * maintaining insertion order after any fields already in 'result'.
-     *
-     * @param metadata The existing metadata to copy fields from (must be an object, or null)
-     * @param result The ObjectNode already containing the injected field(s).
-     * @return The final ObjectNode with all fields.
-     */
-    private static ObjectNode copyMetadataFields(JsonNode metadata, @NonNull ObjectNode result) {
+    private static ObjectNode copyJsonNode(JsonNode metadata, @NonNull ObjectNode result) {
         if (metadata != null && metadata.isObject()) {
             result.setAll((ObjectNode) metadata);
         }

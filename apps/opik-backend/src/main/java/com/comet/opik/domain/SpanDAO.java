@@ -2251,7 +2251,7 @@ class SpanDAO {
                 .orElse(null);
 
         // Inject provider as first field in metadata
-        return JsonUtils.injectStringFieldIntoMetadata(
+        return JsonUtils.prependStringFieldIntoMetadata(
                 baseMetadata, SpanField.PROVIDER.getValue(), provider);
     }
 }

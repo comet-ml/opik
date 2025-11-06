@@ -1106,7 +1106,7 @@ class SpansResourceTest {
             }
 
             // Update expected span to include provider in metadata (as the backend does on retrieval)
-            JsonNode expectedMetadata = JsonUtils.injectStringFieldIntoMetadata(
+            JsonNode expectedMetadata = JsonUtils.prependStringFieldIntoMetadata(
                     metadata,
                     Span.SpanField.PROVIDER.getValue(),
                     provider);
@@ -2540,7 +2540,7 @@ class SpansResourceTest {
             var actualSpan = getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
 
             // Prepare expected metadata with provider injected (if span has provider)
-            var expectedMetadata = JsonUtils.injectStringFieldIntoMetadata(
+            var expectedMetadata = JsonUtils.prependStringFieldIntoMetadata(
                     metadata, Span.SpanField.PROVIDER.getValue(), expectedSpan.provider());
             assertThat(actualSpan.metadata()).isEqualTo(expectedMetadata);
         }
