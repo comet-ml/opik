@@ -408,7 +408,12 @@ def test_manually_created_trace_and_span__happyflow(
         input={"input": "trace-input"},
         output={"output": "trace-output"},
         tags=["trace-tag"],
-        metadata={"trace-metadata-key": "trace-metadata-value"},
+        metadata={
+            "providers": [
+                provider_name
+            ],  # BE injects "providers" array as first field in metadata of trace
+            "trace-metadata-key": "trace-metadata-value",
+        },
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
@@ -422,7 +427,10 @@ def test_manually_created_trace_and_span__happyflow(
         input={"input": "span-input"},
         output={"output": "span-output"},
         tags=["span-tag"],
-        metadata={"span-metadata-key": "span-metadata-value"},
+        metadata={
+            "provider": provider_name,  # BE injects "provider" string as first field in metadata of span
+            "span-metadata-key": "span-metadata-value",
+        },
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
         model=model_name,
         provider=provider_name,

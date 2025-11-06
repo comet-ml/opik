@@ -4,6 +4,8 @@ import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
@@ -56,6 +58,38 @@ public class SpanAssertions {
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor"};
 
+    /**
+     * Prepares a span for assertion by injecting provider into metadata if provider is set.
+     * This mirrors the backend behavior where provider is automatically injected into metadata.
+     *
+     * @param span the span to prepare
+     * @return a new span with provider injected into metadata if provider is present
+     */
+    private static Span prepareSpanForAssertion(Span span) {
+        if (span.provider() == null || span.provider().isBlank()) {
+            return span;
+        }
+
+        JsonNode metadataWithProvider = JsonUtils.prependField(
+                span.metadata(), Span.SpanField.PROVIDER.getValue(), span.provider());
+
+        return span.toBuilder()
+                .metadata(metadataWithProvider)
+                .build();
+    }
+
+    /**
+     * Prepares a list of spans for assertion by injecting provider into metadata.
+     *
+     * @param spans the spans to prepare
+     * @return a new list of spans with provider injected into metadata where applicable
+     */
+    private static List<Span> prepareSpansForAssertion(List<Span> spans) {
+        return spans.stream()
+                .map(SpanAssertions::prepareSpanForAssertion)
+                .toList();
+    }
+
     public static void assertPage(SpanPage actualPage, int page, int expectedPageSize, int expectedTotal) {
         assertThat(actualPage.page()).isEqualTo(page);
         assertThat(actualPage.size()).isEqualTo(expectedPageSize);
@@ -69,21 +103,41 @@ public class SpanAssertions {
     public static void assertSpan(List<Span> actualSpans, List<Span> expectedSpans, List<Span> unexpectedSpans,
             String userName) {
 
+        // Automatically prepare expected spans with actual provider injected into metadata
+        // We need to use actual provider because it's from the database
+        var preparedExpectedSpans = expectedSpans.stream()
+                .map(expected -> {
+                    var actual = actualSpans.stream()
+                            .filter(a -> a.id().equals(expected.id()))
+                            .findFirst()
+                            .orElse(null);
+                    if (actual == null) {
+                        return prepareSpanForAssertion(expected);
+                    }
+                    // Use actual provider for metadata injection
+                    var expectedWithActualProvider = expected.toBuilder()
+                            .provider(actual.provider())
+                            .build();
+                    return prepareSpanForAssertion(expectedWithActualProvider);
+                })
+                .toList();
+
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS)
                 .ignoringCollectionOrderInFields("tags")
-                .isEqualTo(expectedSpans);
+                .isEqualTo(preparedExpectedSpans);
 
-        assertIgnoredFields(actualSpans, expectedSpans, userName);
+        assertIgnoredFields(actualSpans, preparedExpectedSpans, userName);
 
         if (!unexpectedSpans.isEmpty()) {
+            var preparedUnexpectedSpans = prepareSpansForAssertion(unexpectedSpans);
             assertThat(actualSpans)
                     .usingRecursiveComparison()
                     .ignoringFields(IGNORED_FIELDS)
                     .ignoringCollectionOrderInFields("tags")
-                    .isNotEqualTo(unexpectedSpans);
+                    .isNotEqualTo(preparedUnexpectedSpans);
         }
     }
 
