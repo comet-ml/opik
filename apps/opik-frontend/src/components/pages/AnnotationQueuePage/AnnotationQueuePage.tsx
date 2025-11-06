@@ -95,51 +95,46 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       >
         <div className="mb-1 flex gap-4 overflow-x-auto">
           {annotationQueue?.created_at && (
-            <TooltipWrapper content="The date and time when this annotation queue was created">
-              <DateTag date={annotationQueue.created_at} />
+            <TooltipWrapper content="Queue creation time">
+              <div>
+                <DateTag date={annotationQueue.created_at} />
+              </div>
             </TooltipWrapper>
           )}
           {annotationQueue?.scope && (
-            <TooltipWrapper content="Indicates whether this queue contains Traces or Threads for review">
-              <div>
-                <Tag variant="blue" size="md">
-                  {capitalize(annotationQueue.scope)}
-                </Tag>
-              </div>
+            <TooltipWrapper content="Queue scope (Traces or Threads)">
+              <Tag variant="blue" size="md">
+                {capitalize(annotationQueue.scope)}
+              </Tag>
             </TooltipWrapper>
           )}
           {annotationQueue?.project_id && (
-            <TooltipWrapper
-              content={`Navigate to project page: ${annotationQueue.project_name}`}
-            >
-              <div>
-                <ResourceLink
-                  id={annotationQueue.project_id}
-                  name={annotationQueue.project_name}
-                  resource={RESOURCE_TYPE.project}
-                  asTag
-                />
-              </div>
-            </TooltipWrapper>
+            <ResourceLink
+              id={annotationQueue.project_id}
+              name={annotationQueue.project_name}
+              resource={RESOURCE_TYPE.project}
+              tooltipContent={`Navigate to project: ${annotationQueue.project_name}`}
+              asTag
+            />
           )}
           {annotationQueue && (
             <AnnotationQueueProgressTag annotationQueue={annotationQueue} />
           )}
         </div>
-        <TooltipWrapper content="Feedback scores collected for items in this queue">
-          <div className="flex h-11 items-center gap-2">
+        <div className="flex h-11 items-center gap-2">
+          <TooltipWrapper content="Feedback scores">
             <PenLine className="size-4 shrink-0" />
-            <div className="flex gap-1 overflow-x-auto">
-              {allocatedFeedbackScores.map((feedbackScore) => (
-                <FeedbackScoreTag
-                  key={feedbackScore.name + feedbackScore.value}
-                  label={feedbackScore.name}
-                  value={feedbackScore.value}
-                />
-              ))}
-            </div>
+          </TooltipWrapper>
+          <div className="flex gap-1 overflow-x-auto">
+            {allocatedFeedbackScores.map((feedbackScore) => (
+              <FeedbackScoreTag
+                key={feedbackScore.name + feedbackScore.value}
+                label={feedbackScore.name}
+                value={feedbackScore.value}
+              />
+            ))}
           </div>
-        </TooltipWrapper>
+        </div>
       </PageBodyStickyContainer>
       <Tabs
         defaultValue="items"
