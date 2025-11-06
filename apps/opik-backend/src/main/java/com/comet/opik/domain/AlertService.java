@@ -66,7 +66,7 @@ public interface AlertService {
 
     Alert getById(UUID id);
 
-    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
+    List<Alert> findAllByWorkspaceAndEventTypes(String workspaceId, Set<AlertEventType> eventTypes);
 
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
@@ -244,9 +244,25 @@ class AlertServiceImpl implements AlertService {
                     ]
                     """,
             AlertEventType.TRACE_COST,
-            "\"Total cost has exceeded the defined threshold 10 USD in the last 30 minutes\"",
+            """
+                    {
+                      "event_type": "TRACE_COST",
+                      "metric_value": "150.75",
+                      "threshold": "100.00",
+                      "window_seconds": "3600",
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb"
+                    }
+                    """,
             AlertEventType.TRACE_LATENCY,
-            "\"Average Latency has exceeded the defined threshold 5 seconds in the last 30 minutes\""));
+            """
+                    {
+                      "event_type": "TRACE_LATENCY",
+                      "metric_value": "5250.5000",
+                      "threshold": "5000.0000",
+                      "window_seconds": "1800",
+                      "project_ids": ""
+                    }
+                    """));
 
     private static final Alert DUMMY_ALERT = Alert.builder()
             .id(UUID.fromString("01234567-89ab-cdef-0123-456789abcdef"))
@@ -339,13 +355,17 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
-    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
-        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventTypes", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventTypes(String workspaceId, @NonNull Set<AlertEventType> eventTypes) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventTypes '{}'", workspaceId, eventTypes);
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
-            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
+            Set<String> eventTypeValues = eventTypes.stream()
+                    .map(AlertEventType::getValue)
+                    .collect(java.util.stream.Collectors.toSet());
+
+            return alertDAO.findByWorkspaceAndEventTypes(workspaceId, eventTypeValues);
         });
     }
 

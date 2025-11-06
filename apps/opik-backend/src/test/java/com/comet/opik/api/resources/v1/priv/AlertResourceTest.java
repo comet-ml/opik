@@ -40,7 +40,6 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.api.resources.v1.events.webhooks.AlertEventEvaluationService;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayload;
@@ -101,6 +100,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
+import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -130,7 +130,8 @@ class AlertResourceTest {
 
     private static final String[] ALERT_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "webhook.name", "webhook.secretToken", "webhook.createdAt", "webhook.lastUpdatedAt",
+            "lastUpdatedBy", "workspaceId", "webhook.name", "webhook.secretToken", "webhook.createdAt",
+            "webhook.lastUpdatedAt",
             "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
 
     private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
@@ -1268,7 +1269,7 @@ class AlertResourceTest {
                                     AlertTriggerConfig.builder()
                                             .type(AlertTriggerConfigType.SCOPE_PROJECT)
                                             .configValue(Map.of(
-                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    PROJECT_IDS_CONFIG_KEY,
                                                     JsonUtils.writeValueAsString(Set.of(projectId))))
                                             .build()))
                             .build()));
@@ -1419,7 +1420,7 @@ class AlertResourceTest {
                                     AlertTriggerConfig.builder()
                                             .type(AlertTriggerConfigType.SCOPE_PROJECT)
                                             .configValue(Map.of(
-                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    PROJECT_IDS_CONFIG_KEY,
                                                     JsonUtils.writeValueAsString(Set.of(projectId))))
                                             .build()))
                             .build()));
@@ -1478,7 +1479,7 @@ class AlertResourceTest {
                                     AlertTriggerConfig.builder()
                                             .type(AlertTriggerConfigType.SCOPE_PROJECT)
                                             .configValue(Map.of(
-                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    PROJECT_IDS_CONFIG_KEY,
                                                     JsonUtils.writeValueAsString(Set.of(projectId))))
                                             .build()))
                             .build()));
@@ -1644,7 +1645,7 @@ class AlertResourceTest {
                                     AlertTriggerConfig.builder()
                                             .type(AlertTriggerConfigType.SCOPE_PROJECT)
                                             .configValue(Map.of(
-                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    PROJECT_IDS_CONFIG_KEY,
                                                     JsonUtils.writeValueAsString(Set.of(projectId))))
                                             .build()))
                             .build()));
