@@ -294,8 +294,16 @@ def extract_project_data(
     # Use wide date ranges to capture all data when auto-detecting
     query_start_date = start_date
     if query_start_date is None:
-        # Use a very early date to ensure we get all data
-        query_start_date = datetime.datetime(2000, 1, 1)
+        # Use environment variable OPIK_DEFAULT_START_DATE if set, else use start of current year
+        env_start_date = os.environ.get("OPIK_DEFAULT_START_DATE")
+        if env_start_date:
+            try:
+                query_start_date = datetime.datetime.strptime(env_start_date, "%Y-%m-%d")
+            except ValueError:
+                console.print(f"[yellow]Warning: Invalid OPIK_DEFAULT_START_DATE format. Using start of current year.[/yellow]")
+                query_start_date = datetime.datetime(datetime.datetime.now().year, 1, 1)
+        else:
+            query_start_date = datetime.datetime(datetime.datetime.now().year, 1, 1)
 
     query_end_date = end_date
     if query_end_date is None:
