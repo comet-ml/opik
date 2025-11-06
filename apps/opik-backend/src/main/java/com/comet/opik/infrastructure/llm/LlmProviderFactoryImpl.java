@@ -141,17 +141,15 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     /**
      * Checks if a model is configured for a specific custom LLM provider.
-     * Handles both legacy format (custom-llm/model-name) and new format (custom-llm/provider-name/model-name).
+     * Uses direct string comparison between the requested model and configured models.
      *
-     * For legacy providers (provider_name = null):
-     *   - Model format: "custom-llm/model-name" (e.g., "custom-llm/mistralai/Mistral-7B-Instruct-v0.3")
-     *   - Configured: "model-name" (e.g., "mistralai/Mistral-7B-Instruct-v0.3")
-     *   - We strip "custom-llm/" and match against configured models
+     * The database stores models in the same format as they are requested:
+     *   - Legacy format: "custom-llm/model-name" (e.g., "custom-llm/mistralai/Mistral-7B-Instruct-v0.3")
+     *   - Named provider format: "custom-llm/provider-name/model-name" (e.g., "custom-llm/ollama/llama-3.2")
      *
-     * For new providers (provider_name set):
-     *   - Model format: "custom-llm/provider-name/model-name" (e.g., "custom-llm/ollama/llama-3.2")
-     *   - Configured: "model-name" (e.g., "llama-3.2")
-     *   - We strip "custom-llm/provider-name/" and match against configured models
+     * @param model The full model identifier from the request
+     * @param providerApiKey The provider configuration from the database
+     * @return true if the model is in the provider's configured model list
      */
     private boolean isModelConfiguredForProvider(String model, ProviderApiKey providerApiKey) {
         var configuredModels = Optional.ofNullable(providerApiKey.configuration())
@@ -163,34 +161,13 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return false;
         }
 
-        // Validate that this is a custom LLM model
         if (!CustomLlmModelNameChecker.isCustomLlmModel(model)) {
             return false;
         }
 
-        // Extract the actual model name
-        String extractedModelName;
-        try {
-            extractedModelName = CustomLlmModelNameChecker.extractModelName(model, providerApiKey.providerName());
-        } catch (IllegalArgumentException e) {
-            log.warn("Failed to extract model name from '{}' for provider '{}' with providerName '{}': {}",
-                    model, providerApiKey.provider(), providerApiKey.providerName(), e.getMessage());
-            return false;
-        }
-
-        // Check if this model is in the configured models list
-        // Handle both cases: configured models with or without "custom-llm/" prefix (backwards compatibility)
         return Arrays.stream(configuredModels.split(","))
                 .map(String::trim)
-                .anyMatch(configuredModel -> {
-                    // Strip "custom-llm/" prefix from the configured model if present
-                    String normalizedConfiguredModel = configuredModel;
-                    if (configuredModel.startsWith(CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX)) {
-                        normalizedConfiguredModel = configuredModel.substring(
-                                CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX.length());
-                    }
-                    return extractedModelName.equals(normalizedConfiguredModel);
-                });
+                .anyMatch(configuredModel -> model.equals(configuredModel));
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
