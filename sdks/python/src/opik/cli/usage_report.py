@@ -4,13 +4,16 @@ import datetime
 import json
 import os
 import sys
+import time
 import traceback
 import webbrowser
 from collections import defaultdict
+from datetime import timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import click
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from reportlab.lib import colors
@@ -34,13 +37,11 @@ import opik
 console = Console()
 
 # Constants
-# MAX_PAGINATION_PAGES sets a safety limit to avoid infinite loops in pagination.
-# With a page size of 1000, this allows for up to 1 million items. For large workspaces, you can override
-# this limit by setting the OPIK_MAX_PAGINATION_PAGES environment variable to a higher value.
-try:
-    MAX_PAGINATION_PAGES = int(os.environ.get("OPIK_MAX_PAGINATION_PAGES", "1000"))
-except ValueError:
-    MAX_PAGINATION_PAGES = 1000
+MAX_PAGINATION_PAGES = 1000  # Safety limit to avoid infinite loops in pagination
+# Maximum number of trace results to fetch per project when counting spans.
+# This limit prevents excessive API calls for projects with very large trace counts.
+# If a project has more traces than this limit, span counts may be incomplete.
+MAX_TRACE_RESULTS = 10000
 
 
 def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> Dict[str, float]:
@@ -304,9 +305,13 @@ def extract_project_data(
         env_start_date = os.environ.get("OPIK_DEFAULT_START_DATE")
         if env_start_date:
             try:
-                query_start_date = datetime.datetime.strptime(env_start_date, "%Y-%m-%d")
+                query_start_date = datetime.datetime.strptime(
+                    env_start_date, "%Y-%m-%d"
+                )
             except ValueError:
-                console.print(f"[yellow]Warning: Invalid OPIK_DEFAULT_START_DATE format. Using start of current year.[/yellow]")
+                console.print(
+                    "[yellow]Warning: Invalid OPIK_DEFAULT_START_DATE format. Using start of current year.[/yellow]"
+                )
                 query_start_date = datetime.datetime(datetime.datetime.now().year, 1, 1)
         else:
             query_start_date = datetime.datetime(datetime.datetime.now().year, 1, 1)
@@ -759,8 +764,6 @@ def extract_project_data(
                                 return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
                             else:
                                 # Timezone-aware - convert to UTC and format
-                                from datetime import timezone
-
                                 utc_dt = dt.astimezone(timezone.utc)
                                 return utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -773,7 +776,7 @@ def extract_project_data(
                     traces = client.search_traces(
                         project_name=project_name,
                         filter_string=filter_string,
-                        max_results=10000,  # Adjust if needed
+                        max_results=MAX_TRACE_RESULTS,
                     )
 
                     # For each trace, get span count
@@ -950,8 +953,6 @@ def _get_top_projects_and_others(
         others_data = [0.0] * len(metric_data)
 
     # Generate colors for top projects + Others
-    import matplotlib.colors as mcolors
-
     colors_list = []
     colormaps = [
         plt.cm.tab20,
@@ -1577,28 +1578,37 @@ def create_individual_chart(
         plt.savefig(chart_filename, dpi=300, bbox_inches="tight")
         plt.close()
 
-        # Small delay to ensure file is fully written to disk
-        import time
+        # Ensure file is fully written to disk using file system sync operations
+        # Retry loop to handle cases where file system hasn't fully flushed
+        max_retries = 10
+        retry_delay = 0.1
+        file_ready = False
 
-        time.sleep(0.1)
+        for attempt in range(max_retries):
+            if os.path.exists(chart_filename):
+                try:
+                    # Try to open the file to ensure it's accessible
+                    with open(chart_filename, "rb") as f:
+                        # Force file system sync
+                        f.flush()
+                        os.fsync(f.fileno())
 
-        # Verify file was actually created and is readable
-        if not os.path.exists(chart_filename):
+                    # Verify file has content (size > 0)
+                    if os.path.getsize(chart_filename) > 0:
+                        # Verify file is readable
+                        if os.access(chart_filename, os.R_OK):
+                            file_ready = True
+                            break
+                except (OSError, IOError):
+                    # File may still be writing, wait and retry
+                    pass
+
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+
+        if not file_ready:
             console.print(
-                f"[yellow]Warning: Chart file was not created: {chart_filename}[/yellow]"
-            )
-            return None
-
-        if not os.access(chart_filename, os.R_OK):
-            console.print(
-                f"[yellow]Warning: Chart file is not readable: {chart_filename}[/yellow]"
-            )
-            return None
-
-        # Verify file has content (size > 0)
-        if os.path.getsize(chart_filename) == 0:
-            console.print(
-                f"[yellow]Warning: Chart file is empty: {chart_filename}[/yellow]"
+                f"[yellow]Warning: Chart file was not ready after {max_retries} attempts: {chart_filename}[/yellow]"
             )
             return None
 
@@ -1918,6 +1928,7 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
 )
 @click.option(
     "--open",
+    "open_pdf",
     is_flag=True,
     help="Automatically open the generated PDF report in the default viewer.",
 )
