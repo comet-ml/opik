@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
@@ -36,6 +37,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -43,12 +45,15 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.ContentType;
@@ -125,6 +130,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+@Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Project Metrics Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -134,39 +140,40 @@ class ProjectMetricsResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphabetic(10);
+    private static final String WORKSPACE_NAME = RandomStringUtils.secure().nextAlphabetic(10);
     private static final Random RANDOM = new Random();
 
     private static final int TIME_BUCKET_4 = 4;
     private static final int TIME_BUCKET_3 = 3;
     private static final int TIME_BUCKET_1 = 1;
 
-    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
-    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
+            .newClickHouseContainer(zookeeperContainer);
+    private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(redisContainer, clickHouseContainer, mysql, zookeeperContainer).join();
 
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
+                .newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME);
 
-        MigrationUtils.runMysqlDbMigration(MYSQL);
-        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
+        MigrationUtils.runMysqlDbMigration(mysql);
+        MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                mysql.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), redisContainer.getRedisURI());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private String baseURI;
     private ClientSupport client;
@@ -347,6 +354,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Number of traces")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class NumberOfTracesTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -354,7 +362,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // create traces in several buckets
@@ -383,7 +391,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // create traces in several buckets
@@ -503,7 +511,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             Map<String, Integer> emptyTraces = new HashMap<>() {
@@ -523,10 +531,14 @@ class ProjectMetricsResourceTest {
 
         private List<Trace> createTraces(String projectName, Instant marker, int count) {
             List<Trace> traces = IntStream.range(0, count)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .startTime(marker.plus(i, ChronoUnit.SECONDS))
-                            .build())
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .build();
+                    })
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
@@ -538,6 +550,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Feedback scores")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FeedbackScoresTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -545,7 +558,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
@@ -569,12 +582,14 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+            Instant traceStartTime = subtract(marker, TIME_BUCKET_3, interval).plus(6, ChronoUnit.SECONDS);
             var traceForFilter = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .startTime(subtract(marker, TIME_BUCKET_3, interval).plus(6, ChronoUnit.SECONDS))
+                    .startTime(traceStartTime)
+                    .id(generateUUIDForTimestamp(traceStartTime))
                     .build();
 
             var scoresMinus3ForFilter = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval),
@@ -639,7 +654,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
@@ -665,11 +680,13 @@ class ProjectMetricsResourceTest {
             return IntStream.range(0, tracesCount)
                     .mapToObj(i -> {
                         // create a trace
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
                         Trace trace = traceForFilter != null
                                 ? traceForFilter
                                 : factory.manufacturePojo(Trace.class).toBuilder()
                                         .projectName(projectName)
-                                        .startTime(marker.plus(i, ChronoUnit.SECONDS))
+                                        .startTime(traceStartTime)
+                                        .id(generateUUIDForTimestamp(traceStartTime))
                                         .build();
 
                         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -705,6 +722,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Thread feedback scores")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadFeedbackScoresTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -712,7 +730,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
@@ -739,7 +757,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
@@ -771,11 +789,13 @@ class ProjectMetricsResourceTest {
 
             assertThat(createdThread.feedbackScores().size()).isEqualTo(5);
 
+            Instant traceStartTime = subtract(marker, TIME_BUCKET_3, interval).plus(40, ChronoUnit.SECONDS);
             // create one more trace for a thread to have some data for filtering
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .threadId(threadForFilterId)
-                    .startTime(subtract(marker, TIME_BUCKET_3, interval).plus(40, ChronoUnit.SECONDS))
+                    .startTime(traceStartTime)
+                    .id(generateUUIDForTimestamp(traceStartTime))
                     .build();
 
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -825,7 +845,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
@@ -868,15 +888,14 @@ class ProjectMetricsResourceTest {
             var score = IntStream.range(0, threadIds.size())
                     .mapToObj(i -> {
                         String threadId = threadIds.get(i);
-                        // open the thread first
-                        traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
-                                WORKSPACE_NAME);
 
                         // create a trace in the thread to ensure the thread exists
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
                         Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                                 .projectName(projectName)
                                 .threadId(threadId)
-                                .startTime(marker.plus(i, ChronoUnit.SECONDS))
+                                .startTime(traceStartTime)
+                                .id(generateUUIDForTimestamp(traceStartTime))
                                 .build();
 
                         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -908,6 +927,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Token usage")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TokenUsageTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -915,7 +935,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
@@ -939,7 +959,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
@@ -992,7 +1012,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             getAndAssertEmpty(projectId, interval, marker);
@@ -1007,7 +1027,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
@@ -1026,10 +1046,14 @@ class ProjectMetricsResourceTest {
         private Pair<List<Trace>, List<Span>> createTracesWithSpans(
                 String projectName, Instant marker, List<String> usageNames, int tracesCount) {
             List<Trace> traces = IntStream.range(0, tracesCount)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .startTime(marker.plusSeconds(i))
-                            .build())
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .build();
+                    })
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
@@ -1082,6 +1106,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Cost")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CostTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -1089,7 +1114,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var costMinus3 = Map.of(ProjectMetricsDAO.NAME_COST,
@@ -1115,7 +1140,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var tracesWithSpans = createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), 6);
@@ -1167,7 +1192,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
@@ -1192,10 +1217,14 @@ class ProjectMetricsResourceTest {
                 String projectName, Instant marker, int traceCount) {
 
             List<Trace> traces = IntStream.range(0, traceCount)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .startTime(marker.plusSeconds(i))
-                            .build())
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plusSeconds(i);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .build();
+                    })
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
@@ -1222,6 +1251,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Duration")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DurationTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -1229,7 +1259,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             List<BigDecimal> durationsMinus3 = createTraces(projectName, subtract(marker, TIME_BUCKET_3, interval));
@@ -1274,7 +1304,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var startTime = subtract(marker, TIME_BUCKET_3, interval).plusMillis(RANDOM.nextInt(50));
@@ -1358,7 +1388,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             Map<String, BigDecimal> empty = new HashMap<>() {
@@ -1395,16 +1425,28 @@ class ProjectMetricsResourceTest {
         private List<Trace> createTraces(String projectName, Instant marker, int tracesCount, Instant startTime,
                 Instant endTime) {
             List<Trace> traces = IntStream.range(0, tracesCount)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .startTime(startTime != null ? startTime : marker.plusMillis(RANDOM.nextInt(50, 100)))
-                            .endTime(endTime != null ? endTime : marker.plusMillis(RANDOM.nextInt(100, 1000)))
-                            .build())
+                    .mapToObj(i -> {
+                        Instant traceStartTime = startTime != null
+                                ? startTime
+                                : marker.plusMillis(RANDOM.nextInt(50, 100));
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .endTime(endTime != null ? endTime : marker.plusMillis(RANDOM.nextInt(100, 1000)))
+                                .build();
+                    })
                     .toList();
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
             return traces;
+        }
+
+        private java.util.UUID generateUUIDForTimestamp(Instant timestamp) {
+            byte[] randomBytes = new byte[8];
+            RANDOM.nextBytes(randomBytes);
+            return OpenTelemetryMapper.convertOtelIdToUUIDv7(randomBytes, timestamp.toEpochMilli());
         }
 
         private List<BigDecimal> calculateQuantiles(List<Trace> traces) {
@@ -1422,6 +1464,7 @@ class ProjectMetricsResourceTest {
     @DisplayName("Guardrails failed count")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GuardrailsFailedCountTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
@@ -1429,7 +1472,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var guardrailsMinus3 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
@@ -1456,7 +1499,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var tracesWithGuardrails = createTracesWithGuardrails(projectName,
@@ -1512,7 +1555,7 @@ class ProjectMetricsResourceTest {
             mockTargetWorkspace();
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             getAndAssertEmpty(projectId, interval, marker);
@@ -1520,16 +1563,21 @@ class ProjectMetricsResourceTest {
 
         private Long createTracesWithGuardrails(String projectName, Instant marker) {
             List<Trace> traces = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .startTime(marker.plusSeconds(i))
-                            .build())
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .build();
+                    })
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
             return traces.stream()
                     .map(trace -> {
-                        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                        List<Guardrail> guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(),
+                                randomUUID(),
                                 trace.projectName());
                         guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
                         return guardrails;
@@ -1542,10 +1590,14 @@ class ProjectMetricsResourceTest {
         private Pair<List<Trace>, List<Long>> createTracesWithGuardrails(String projectName, Instant marker,
                 int tracesCount) {
             List<Trace> traces = IntStream.range(0, tracesCount)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .startTime(marker.plusSeconds(i))
-                            .build())
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .build();
+                    })
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
@@ -1589,12 +1641,13 @@ class ProjectMetricsResourceTest {
     @DisplayName("Thread count")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadCountTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
-            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(
                     factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
                     WORKSPACE_NAME);
@@ -1629,7 +1682,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Create traces with different thread_ids at different times with different thread counts
@@ -1688,7 +1741,7 @@ class ProjectMetricsResourceTest {
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
-            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(
                     factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
                     WORKSPACE_NAME);
@@ -1704,22 +1757,22 @@ class ProjectMetricsResourceTest {
                 Integer tracesPerThread) {
             // Create traces with different thread_ids to simulate multiple threads
             List<String> threadIds = IntStream.range(0, threadCount)
-                    .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
+                    .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
                     .toList();
-
-            // Open threads first
-            threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
-                    WORKSPACE_NAME));
 
             // Create multiple traces per thread to test that threads are counted, not traces
             var tracesForThreads = IntStream.range(0, threadIds.size()).mapToObj(threadIdIdx -> {
                 List<Trace> traces = IntStream
                         .range(0, tracesPerThread == null || threadIdIdx != 0 ? 2 : tracesPerThread) // 2 traces per thread except for the first thread, needed for number of messages filter
-                        .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                                .projectName(projectName)
-                                .threadId(threadIds.get(threadIdIdx))
-                                .startTime(marker.plusSeconds(threadIdIdx * (i + 1)))
-                                .build())
+                        .mapToObj(i -> {
+                            Instant traceStartTime = marker.plusSeconds((long) threadIdIdx * (i + 1));
+                            return factory.manufacturePojo(Trace.class).toBuilder()
+                                    .id(generateUUIDForTimestamp(traceStartTime))
+                                    .projectName(projectName)
+                                    .threadId(threadIds.get(threadIdIdx))
+                                    .startTime(traceStartTime)
+                                    .build();
+                        })
                         .toList();
                 traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
@@ -1745,16 +1798,21 @@ class ProjectMetricsResourceTest {
         }
     }
 
+    private UUID generateUUIDForTimestamp(Instant traceStartTime) {
+        return generator.construct(traceStartTime.toEpochMilli());
+    }
+
     @Nested
     @DisplayName("Thread duration")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadDurationTest {
+
         @ParameterizedTest
         @EnumSource(TimeInterval.class)
         void happyPath(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
-            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(
                     factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
                     WORKSPACE_NAME);
@@ -1800,7 +1858,7 @@ class ProjectMetricsResourceTest {
             TimeInterval interval = TimeInterval.HOURLY;
 
             Instant marker = getIntervalStart(interval);
-            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Create thread durations with specific patterns for filtering
@@ -1881,7 +1939,7 @@ class ProjectMetricsResourceTest {
         void emptyData(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
-            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(
                     factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
                     WORKSPACE_NAME);
@@ -1908,14 +1966,10 @@ class ProjectMetricsResourceTest {
                 Integer tracesCount) {
             // Create different threads with different durations
             List<String> threadIds = IntStream.range(0, 3)
-                    .mapToObj(i -> RandomStringUtils.randomAlphabetic(10))
+                    .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
                     .toList();
 
             List<Double> threadDurations = new java.util.ArrayList<>();
-
-            // Open threads first
-            threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY,
-                    WORKSPACE_NAME));
 
             // Create traces with specific durations for each thread
             for (int i = 0; i < threadIds.size(); i++) {
@@ -1937,6 +1991,7 @@ class ProjectMetricsResourceTest {
                             Instant traceEnd = j == (numTraces - 1) ? threadEndTime : traceStart.plusMillis(100);
 
                             return factory.manufacturePojo(Trace.class).toBuilder()
+                                    .id(generateUUIDForTimestamp(traceStart))
                                     .projectName(projectName)
                                     .threadId(threadId)
                                     .startTime(traceStart)

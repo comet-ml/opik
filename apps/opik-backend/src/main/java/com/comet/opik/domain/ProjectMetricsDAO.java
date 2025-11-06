@@ -176,12 +176,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             traces_filtered AS (
                 SELECT
                     id,
-                    start_time,
+                    UUIDv7ToDateTime(toUUID(id)) as trace_time,
                     duration
                 FROM (
                     SELECT
                         id,
-                        start_time,
                         if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
@@ -195,8 +194,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                    AND id BETWEEN :uuid_from_time AND :uuid_to_time
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -227,8 +225,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND thread_id \\<> ''
-                  AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                  AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -244,7 +240,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND thread_id IN (SELECT thread_id FROM traces_final)
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -325,7 +321,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    t.start_time as start_time,
+                    UUIDv7ToDateTime(toUUID(tt.thread_model_id)) as trace_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -405,7 +401,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -418,13 +414,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES = """
             %s, feedback_scores_deduplication AS (
-                SELECT t.start_time,
+                SELECT t.trace_time,
                         fs.name,
                         fs.value
                 FROM feedback_scores_final fs
@@ -438,20 +434,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
-                SELECT t.start_time,
+                SELECT t.trace_time,
                         fs.name,
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         thread_model_id,
-                        start_time
+                        trace_time
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
             )
@@ -463,13 +459,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_TOKEN_USAGE = """
             %s, spans_dedup AS (
-                SELECT t.start_time as start_time,
+                SELECT t.trace_time as trace_time,
                        name,
                        value
                 FROM traces_filtered t
@@ -492,13 +488,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_COST = """
             %s, spans_dedup AS (
-                SELECT t.start_time AS start_time,
+                SELECT t.trace_time AS trace_time,
                        s.total_estimated_cost AS value
                 FROM traces_filtered t
                 JOIN (
@@ -517,7 +513,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -532,7 +528,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -545,7 +541,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
@@ -567,7 +563,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             WITH FILL
                 FROM <fill_from>
-                TO parseDateTimeBestEffort(:end_time)
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
@@ -698,9 +694,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         var template = new ST(query)
                 .add("step", intervalToSql(request.interval()))
                 .add("bucket", wrapWeekly(request.interval(),
-                        "toStartOfInterval(start_time, %s)".formatted(intervalToSql(request.interval()))))
+                        "toStartOfInterval(trace_time, %s)".formatted(intervalToSql(request.interval()))))
                 .add("fill_from", wrapWeekly(request.interval(),
-                        "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
+                        "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
                                 .formatted(intervalToSql(request.interval()))));
 
         Optional.ofNullable(request.traceFilters())
@@ -730,8 +726,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
-                .bind("start_time", request.intervalStart().toString())
-                .bind("end_time", request.intervalEnd().toString());
+                .bind("uuid_from_time", request.uuidFromTime().toString())
+                .bind("uuid_to_time", request.uuidToTime().toString());
 
         Optional.ofNullable(request.traceFilters())
                 .ifPresent(filters -> {

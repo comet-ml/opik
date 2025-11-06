@@ -11,6 +11,7 @@ import lombok.NonNull;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -21,5 +22,7 @@ public record ProjectMetricRequest(
         @NonNull Instant intervalStart,
         @NonNull Instant intervalEnd,
         List<TraceFilter> traceFilters,
-        List<TraceThreadFilter> threadFilters) {
+        List<TraceThreadFilter> threadFilters,
+        UUID uuidFromTime,
+        UUID uuidToTime) {
 }

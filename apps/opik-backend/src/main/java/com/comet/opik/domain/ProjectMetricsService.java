@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -29,10 +30,12 @@ public interface ProjectMetricsService {
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
-            @NonNull ProjectService projectService) {
+            @NonNull ProjectService projectService,
+            @NonNull InstantToUUIDMapper instantToUUIDMapper) {
         projectMetricHandler = Map.of(
                 MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
                 MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount,
@@ -44,18 +47,26 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 MetricType.DURATION, projectMetricsDAO::getDuration,
                 MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
         this.projectService = projectService;
+        this.instantToUUIDMapper = instantToUUIDMapper;
     }
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         // Will throw an error in case we try to get a private project with public visibility
         projectService.get(projectId);
-        return getMetricHandler(request.metricType())
-                .apply(projectId, request)
+
+        // Enrich request with UUID bounds derived from time parameters for efficient ID-based filtering
+        var enrichedRequest = request.toBuilder()
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(request.intervalStart()))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
+                .build();
+
+        return getMetricHandler(enrichedRequest.metricType())
+                .apply(projectId, enrichedRequest)
                 .map(dataPoints -> ProjectMetricResponse.builder()
                         .projectId(projectId)
-                        .metricType(request.metricType())
-                        .interval(request.interval())
+                        .metricType(enrichedRequest.metricType())
+                        .interval(enrichedRequest.interval())
                         .results(entriesToResults(dataPoints))
                         .build());
     }
