@@ -47,6 +47,9 @@ public class AlertPayloadAdapter {
     private static final TypeReference<List<Experiment>> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
     };
 
+    private static final TypeReference<String> STRING_TYPE_REFERENCE = new TypeReference<>() {
+    };
+
     public static WebhookEvent<Map<String, Object>> prepareWebhookPayload(
             @NonNull WebhookEvent<Map<String, Object>> event) {
 
@@ -99,6 +102,7 @@ public class AlertPayloadAdapter {
             case TRACE_THREAD_FEEDBACK_SCORE -> LIST_THREAD_SCORE_TYPE_REFERENCE;
             case TRACE_GUARDRAILS_TRIGGERED -> LIST_GUARDRAIL_TYPE_REFERENCE;
             case EXPERIMENT_FINISHED -> EXPERIMENT_TYPE_REFERENCE;
+            default -> STRING_TYPE_REFERENCE;
         };
     }
 }
