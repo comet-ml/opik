@@ -7,6 +7,7 @@ export interface ModelConfig {
   ui_selector: string;
   enabled: boolean;
   test_playground: boolean;
+  test_online_scoring: boolean;
 }
 
 export interface ProviderConfig {
@@ -78,6 +79,41 @@ export class ModelConfigLoader {
 
       for (const model of providerConfig.models) {
         if (model.enabled && model.test_playground && this.config.test_config.only_test_enabled) {
+          models.push({
+            providerName,
+            modelConfig: model,
+            providerConfig,
+          });
+        }
+      }
+    }
+
+    return models;
+  }
+
+  getEnabledModelsForOnlineScoring(): Array<{
+    providerName: string;
+    modelConfig: ModelConfig;
+    providerConfig: ProviderConfig;
+  }> {
+    const models: Array<{
+      providerName: string;
+      modelConfig: ModelConfig;
+      providerConfig: ProviderConfig;
+    }> = [];
+
+    const providers = this.getProviders();
+
+    for (const [providerName, providerConfig] of Object.entries(providers)) {
+      if (!this.providerHasApiKeys(providerConfig)) {
+        if (this.config.test_config.skip_missing_api_keys) {
+          console.log(`Skipping ${providerName} - missing API keys`);
+          continue;
+        }
+      }
+
+      for (const model of providerConfig.models) {
+        if (model.enabled && model.test_online_scoring && this.config.test_config.only_test_enabled) {
           models.push({
             providerName,
             modelConfig: model,
