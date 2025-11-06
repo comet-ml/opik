@@ -226,7 +226,9 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
 ];
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_DATASET_ID,
   "created_at",
+  "duration.p50",
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];
@@ -402,15 +404,30 @@ const ExperimentsPage: React.FC = () => {
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
 
-    // Handle no grouping case - create a single group with all visible experiments
+    // Handle no grouping case - group by dataset for charts
     const deepestExpandedGroups = !hasGroups
-      ? [
-          {
-            id: "visible_experiments",
-            name: "Visible experiments",
-            experiments,
-          },
-        ]
+      ? Object.entries(
+          experiments.reduce<Record<string, GroupedExperiment[]>>(
+            (acc, exp) => {
+              const datasetId = exp.dataset_id || "no_dataset";
+              if (!acc[datasetId]) {
+                acc[datasetId] = [];
+              }
+              acc[datasetId].push(exp);
+              return acc;
+            },
+            {},
+          ),
+        ).map(([datasetId, datasetExperiments]) => ({
+          id: datasetId,
+          name: [
+            {
+              label: "Dataset",
+              value: datasetExperiments[0]?.dataset_name || "Undefined",
+            },
+          ],
+          experiments: datasetExperiments,
+        }))
       : flattenGroups
           .filter(
             (group) =>

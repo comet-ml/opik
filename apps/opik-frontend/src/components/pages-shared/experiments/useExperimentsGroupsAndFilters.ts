@@ -14,7 +14,6 @@ import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelec
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
-import { SORT_DIRECTION } from "@/types/sorting";
 
 export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -30,15 +29,7 @@ export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
-const DEFAULT_GROUPS: Groups = [
-  {
-    id: "default_groups",
-    field: "dataset_id",
-    type: COLUMN_TYPE.string,
-    direction: SORT_DIRECTION.ASC,
-    key: "",
-  },
-];
+const DEFAULT_GROUPS: Groups = [];
 
 export type UseExperimentsGroupsAndFiltersProps = {
   storageKeyPrefix: string;
