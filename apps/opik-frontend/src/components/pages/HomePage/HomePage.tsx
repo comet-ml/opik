@@ -5,6 +5,7 @@ import WorkspaceStatisticSection from "@/components/pages/HomePage/WorkspaceStat
 import OverallPerformanceSection from "@/components/pages/HomePage/OverallPerformanceSection";
 import ObservabilitySection from "@/components/pages/HomePage/ObservabilitySection";
 import EvaluationSection from "@/components/pages/HomePage/EvaluationSection";
+import OptimizationRunsSection from "@/components/pages/HomePage/OptimizationRunsSection";
 import WelcomeBanner from "@/components/pages/HomePage/WecomeBanner";
 
 const SHOW_WELCOME_MESSAGE_KEY = "home-welcome-message";
@@ -30,6 +31,7 @@ const HomePage = () => {
       <OverallPerformanceSection />
       <ObservabilitySection />
       <EvaluationSection />
+      <OptimizationRunsSection />
     </div>
   );
 };

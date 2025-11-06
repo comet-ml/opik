@@ -4,6 +4,7 @@ import EvaluationSection from "@/components/pages/HomePage/EvaluationSection";
 import GetStartedSection from "@/components/pages/HomePage/GetStartedSection";
 import { calculateWorkspaceName } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
+import OptimizationRunsSection from "./OptimizationRunsSection";
 
 const OldHomePage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -18,6 +19,7 @@ const OldHomePage = () => {
       <GetStartedSection />
       <ObservabilitySection />
       <EvaluationSection />
+      <OptimizationRunsSection />
     </div>
   );
 };
