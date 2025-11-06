@@ -4,10 +4,13 @@ import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
+import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import FeedbackScoreTagCell from "@/components/shared/DataTableCells/FeedbackScoreTagCell";
 import OptimizationStatusCell from "@/components/pages/OptimizationsPage/OptimizationStatusCell";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import Loader from "@/components/shared/Loader/Loader";
@@ -19,6 +22,9 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Optimization } from "@/types/optimizations";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
+import { toString } from "@/lib/utils";
+import { getFeedbackScore } from "@/lib/feedback-scores";
+import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 
 const COLUMNS_WIDTH_KEY = "home-optimizations-columns-width";
 
@@ -49,6 +55,23 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
         idKey: "dataset_id",
         resource: RESOURCE_TYPE.dataset,
       },
+    },
+    {
+      id: "optimizer",
+      label: "Optimizer",
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) => {
+        const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
+        return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+      },
+    },
+    {
+      id: "objective_name",
+      label: "Best score",
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row) =>
+        getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+      cell: FeedbackScoreTagCell as never,
     },
     {
       id: "status",
