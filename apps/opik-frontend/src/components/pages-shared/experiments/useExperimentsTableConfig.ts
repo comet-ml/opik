@@ -155,6 +155,20 @@ export const useExperimentsTableConfig = <
     [groups],
   );
 
+    // Check if grouping by dataset
+  const isGroupingByDataset = useMemo(
+    () => groups.some((g) => g.field === COLUMN_DATASET_ID),
+    [groups],
+  );
+
+  // Filter out dataset column when grouping by dataset
+  const effectiveSelectedColumns = useMemo(() => {
+    if (isGroupingByDataset) {
+      return selectedColumns.filter((col) => col !== COLUMN_DATASET_ID);
+    }
+    return selectedColumns;
+  }, [selectedColumns, isGroupingByDataset]);
+
   const columns = useMemo(() => {
     const groupColumns = groups.map((group) => {
       const label = calculateGroupLabel(group);
@@ -235,12 +249,12 @@ export const useExperimentsTableConfig = <
       ...groupColumns,
       ...convertColumnDataToColumn<T, T>(defaultColumns, {
         columnsOrder,
-        selectedColumns,
+        selectedColumns: effectiveSelectedColumns,
         sortableColumns: sortableBy,
       }),
       ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
-        selectedColumns,
+        selectedColumns: effectiveSelectedColumns,
         sortableColumns: sortableBy,
       }),
     ];
@@ -259,7 +273,7 @@ export const useExperimentsTableConfig = <
     sortableBy,
     groups,
     columnsOrder,
-    selectedColumns,
+    effectiveSelectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
     defaultColumns,
