@@ -3530,7 +3530,7 @@ class TraceDAOImpl implements TraceDAO {
                 .orElse(null);
 
         // Inject providers as first field in metadata
-        return JsonUtils.prependArrayFieldIntoMetadata(
+        return JsonUtils.prependField(
                 baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
     }
 }

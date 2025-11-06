@@ -70,7 +70,7 @@ public class SpanAssertions {
             return span;
         }
 
-        JsonNode metadataWithProvider = JsonUtils.prependStringFieldIntoMetadata(
+        JsonNode metadataWithProvider = JsonUtils.prependField(
                 span.metadata(), Span.SpanField.PROVIDER.getValue(), span.provider());
 
         return span.toBuilder()

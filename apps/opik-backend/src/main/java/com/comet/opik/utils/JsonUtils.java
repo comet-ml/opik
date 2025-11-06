@@ -272,7 +272,7 @@ public class JsonUtils {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
     }
 
-    public static JsonNode prependStringFieldIntoMetadata(
+    public static JsonNode prependField(
             JsonNode jsonNode,
             @NonNull String fieldName,
             String fieldValue) {
@@ -284,7 +284,7 @@ public class JsonUtils {
         return prependField(jsonNode, fieldName, valueNode);
     }
 
-    public static JsonNode prependArrayFieldIntoMetadata(
+    public static JsonNode prependField(
             JsonNode jsonNode,
             @NonNull String fieldName,
             List<String> fieldValues) {

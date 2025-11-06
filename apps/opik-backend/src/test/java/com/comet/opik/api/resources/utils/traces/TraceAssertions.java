@@ -48,7 +48,7 @@ public class TraceAssertions {
             return trace;
         }
 
-        JsonNode metadataWithProviders = JsonUtils.prependArrayFieldIntoMetadata(
+        JsonNode metadataWithProviders = JsonUtils.prependField(
                 trace.metadata(), Trace.TraceField.PROVIDERS.getValue(), trace.providers());
 
         return trace.toBuilder()
