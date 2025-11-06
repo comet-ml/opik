@@ -2,7 +2,7 @@ import dataclasses
 
 from typing import Dict, Any, List, Optional
 from opik.types import FeedbackScoreDict
-from opik.rest_api.types import experiment_item_compare
+from opik.rest_api.types import experiment_item_compare, dataset_item_compare
 
 
 @dataclasses.dataclass
@@ -46,3 +46,17 @@ class ExperimentItemContent:
             evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
         )
+
+    @classmethod
+    def from_rest_experiment_item_compare_and_dataset_item_compare(
+        cls,
+        experiment_item: experiment_item_compare.ExperimentItemCompare,
+        dataset_item: dataset_item_compare.DatasetItemCompare,
+    ) -> "ExperimentItemContent":
+        item_content = cls.from_rest_experiment_item_compare(experiment_item)
+
+        item_content.dataset_item_data = dataset_item.data
+        if item_content.dataset_item_data is not None:
+            item_content.dataset_item_data.update({"id": dataset_item.id})
+
+        return item_content
