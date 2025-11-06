@@ -345,7 +345,8 @@ def create_litellm_agent_class(
     def _derive_class_name(name: str) -> str:
         # Strip non-alphanumeric characters and leading digits so the generated class
         # name is a valid Python identifier.
-        cleaned = re.sub(r"\W|^(?=\d)", "", name.title())
+        cleaned = re.sub(r"\W|^(?=\d)", "", name)
+        cleaned = cleaned.title()
         return f"{cleaned}LiteLLMAgent" if cleaned else "LiteLLMAgent"
 
     class LiteLLMAgent(OptimizableAgent):
