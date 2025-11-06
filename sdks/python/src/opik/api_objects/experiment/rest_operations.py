@@ -6,7 +6,7 @@ from opik.rest_api import OpikApi
 from opik.rest_api.types import experiment_public
 from . import experiment_item
 
-from .. import rest_stream_parser, opik_query_language
+from .. import rest_stream_parser
 
 
 def get_experiment_data_by_name(
@@ -50,30 +50,16 @@ def get_experiments_data_by_name(
 
 def find_experiment_items_for_dataset(
     rest_client: OpikApi,
-    dataset_name: str,
+    dataset_id: str,
     experiment_ids: List[str],
     max_results: int,
     truncate: bool,
-    filter_string: Optional[str] = None,
+    filter_expression: Optional[str] = None,
 ) -> List[experiment_item.ExperimentItemContent]:
-    # get dataset id
-    dataset_id = rest_client.datasets.get_dataset_by_identifier(
-        dataset_name=dataset_name
-    ).id
-
     PAGE_SIZE = 100
 
     collected_items: List[experiment_item.ExperimentItemContent] = []
     experiment_ids_json = json.dumps(experiment_ids)
-
-    if filter_string is not None:
-        filter_expressions = json.dumps(
-            opik_query_language.OpikQueryLanguage(
-                filter_string
-            ).get_filter_expressions()
-        )
-    else:
-        filter_expressions = None
 
     page_number = 1
     while len(collected_items) < max_results:
@@ -84,7 +70,7 @@ def find_experiment_items_for_dataset(
                 size=PAGE_SIZE,
                 experiment_ids=experiment_ids_json,
                 truncate=truncate,
-                filters=filter_expressions,
+                filters=filter_expression,
             )
         )
 
@@ -98,10 +84,14 @@ def find_experiment_items_for_dataset(
             if dataset_item.experiment_items is not None:
                 for experiment_item_compare in dataset_item.experiment_items:
                     # Convert to domain objects
-                    experiment_item_content = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare_and_dataset_item_compare(
-                        experiment_item=experiment_item_compare,
-                        dataset_item=dataset_item,
+                    dataset_item_data = dataset_item.data
+                    if dataset_item_data is not None:
+                        dataset_item_data.update({"id": dataset_item.id})
+                    experiment_item_content = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
+                        value=experiment_item_compare,
+                        dataset_item_data=dataset_item_data,
                     )
+
                     experiment_items.append(experiment_item_content)
 
         if not experiment_items:
