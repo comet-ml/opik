@@ -44,7 +44,7 @@ def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> Dict[str, f
     Returns:
         Dictionary mapping time period key to total value
     """
-    unit_data = defaultdict(float)
+    unit_data: Dict[str, float] = defaultdict(float)
 
     if metrics_response.results:
         for result in metrics_response.results:
@@ -95,7 +95,7 @@ def format_datetime_key(dt: datetime.datetime, unit: str) -> str:
 
 def _process_experiment_for_stats(
     experiment_dict: Dict[str, Any],
-    experiment_by_unit: defaultdict,
+    experiment_by_unit: Dict[str, int],
     all_dates: List[datetime.datetime],
     query_start_date: datetime.datetime,
     query_end_date: datetime.datetime,
@@ -209,15 +209,16 @@ def extract_project_data(
     console.print(f"[blue]Workspace: {workspace}[/blue]")
     if auto_detect_start or auto_detect_end:
         date_msg = "Date range will be auto-detected from collected data"
-        if auto_detect_start and not auto_detect_end:
+        if auto_detect_start and not auto_detect_end and end_date:
             date_msg += f" (end date: {end_date.strftime('%Y-%m-%d')})"
-        elif not auto_detect_start and auto_detect_end:
+        elif not auto_detect_start and auto_detect_end and start_date:
             date_msg += f" (start date: {start_date.strftime('%Y-%m-%d')})"
         console.print(f"[blue]{date_msg}[/blue]")
     else:
-        console.print(
-            f"[blue]Extracting data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}[/blue]"
-        )
+        if start_date and end_date:
+            console.print(
+                f"[blue]Extracting data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}[/blue]"
+            )
     console.print(f"[blue]Aggregating by: {unit}[/blue]\n")
 
     # Initialize client for the workspace
@@ -235,9 +236,9 @@ def extract_project_data(
     console.print(f"[blue]Found {len(projects)} project(s)[/blue]\n")
 
     # Track all dates collected for auto-detection
-    all_dates = []
+    all_dates: List[datetime.datetime] = []
 
-    all_data = {
+    all_data: Dict[str, Any] = {
         "workspace": workspace,
         "extraction_date": datetime.datetime.now().isoformat(),
         "date_range": {"start": None, "end": None},
@@ -249,14 +250,14 @@ def extract_project_data(
     }
 
     # Get experiment counts by unit (workspace-level)
-    experiment_by_unit = defaultdict(int)
+    experiment_by_unit: Dict[str, int] = defaultdict(int)
     total_experiments_processed = 0
     total_experiments_in_range = 0
     experiments_without_date = 0
     experiments_outside_range = 0
 
     # Get dataset counts (workspace-level)
-    dataset_by_unit = defaultdict(int)
+    dataset_by_unit: Dict[str, int] = defaultdict(int)
     total_datasets_processed = 0
     total_datasets_in_range = 0
     datasets_without_date = 0
@@ -447,7 +448,7 @@ def extract_project_data(
             leave=False,
         ) as pbar:
             while True:
-                experiments_list = []
+                experiments_list: List[Dict[str, Any]] = []
 
                 if use_rest_client:
                     # Use REST client method (handles parameters correctly)
@@ -464,11 +465,13 @@ def extract_project_data(
                         # Convert to dict format for processing
                         experiments_dict_list = []
                         for exp in experiments_list:
-                            exp_dict = (
-                                exp.model_dump()
-                                if hasattr(exp, "model_dump")
-                                else exp.dict()
-                            )
+                            if hasattr(exp, "model_dump"):
+                                exp_dict = exp.model_dump()
+                            elif hasattr(exp, "dict"):
+                                exp_dict = exp.dict()
+                            else:
+                                # Already a dict
+                                exp_dict = exp  # type: ignore[assignment]
                             experiments_dict_list.append(exp_dict)
                         experiments_list = experiments_dict_list
                     except Exception:
@@ -620,7 +623,9 @@ def extract_project_data(
                 )
                 # Token usage has multiple result types (total_tokens, prompt_tokens, etc.)
                 # We'll aggregate all of them
-                token_by_unit = defaultdict(lambda: defaultdict(float))
+                token_by_unit: Dict[str, Dict[str, float]] = defaultdict(
+                    lambda: defaultdict(float)
+                )
                 if token_response.results:
                     for result in token_response.results:
                         token_type = result.name or "unknown"
@@ -648,7 +653,7 @@ def extract_project_data(
                                     all_dates.append(data_point.time)
 
                 # Get span counts by getting all traces and using their span_count field
-                span_by_unit = defaultdict(int)
+                span_by_unit: Dict[str, int] = defaultdict(int)
                 try:
                     # Get all traces for this project within the date range
                     # Use a filter string to limit by date range
@@ -656,7 +661,7 @@ def extract_project_data(
                     if query_start_date and query_end_date:
                         # Format dates for filter (ISO 8601 format with timezone)
                         # API expects format like "2024-01-01T00:00:00Z"
-                        def format_date_for_filter(dt):
+                        def format_date_for_filter(dt: datetime.datetime) -> str:
                             """Format datetime for filter string with timezone."""
                             if dt.tzinfo is None:
                                 # Naive datetime - assume UTC and add Z
@@ -784,12 +789,14 @@ def extract_project_data(
         if auto_detect_start:
             all_data["date_range"]["start"] = actual_start.isoformat()
         else:
-            all_data["date_range"]["start"] = start_date.isoformat()
+            if start_date:
+                all_data["date_range"]["start"] = start_date.isoformat()
 
         if auto_detect_end:
             all_data["date_range"]["end"] = actual_end.isoformat()
         else:
-            all_data["date_range"]["end"] = end_date.isoformat()
+            if end_date:
+                all_data["date_range"]["end"] = end_date.isoformat()
 
         if auto_detect_start or auto_detect_end:
             # Format dates nicely for display
@@ -928,10 +935,10 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
         return
 
     # Collect all time periods across all projects
-    all_periods = set()
+    all_periods_set = set()
     for project in projects:
-        all_periods.update(project["metrics_by_unit"].keys())
-    all_periods = sorted(all_periods)
+        all_periods_set.update(project["metrics_by_unit"].keys())
+    all_periods: List[str] = sorted(all_periods_set)
 
     if not all_periods:
         console.print(f"[yellow]No {unit}ly data available for charting.[/yellow]")
@@ -939,7 +946,6 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
 
     # Prepare data arrays for each metric
     project_names = [p["project_name"] for p in projects]
-    n_projects = len(project_names)
     n_periods = len(all_periods)
 
     # Trace count data
@@ -1067,9 +1073,9 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, trace_labels[: len(top_indices)])
     ):
-        values = [trace_data[j][project_idx] for j in range(n_periods)]
+        values: List[float] = [trace_data[j][project_idx] for j in range(n_periods)]
         ax1.bar(x, values, width, label=label, bottom=bottom, color=trace_colors[idx])
-        bottom = [bottom[j] + values[j] for j in range(n_periods)]
+        bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
     # Add "Others" if present
     if others_data and any(v > 0 for v in others_data):
@@ -1108,9 +1114,9 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, token_labels[: len(top_indices)])
     ):
-        values = [token_data[j][project_idx] for j in range(n_periods)]
+        values: List[float] = [token_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
         ax2.bar(x, values, width, label=label, bottom=bottom, color=token_colors[idx])
-        bottom = [bottom[j] + values[j] for j in range(n_periods)]
+        bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
     # Add "Others" if present
     if others_data and any(v > 0 for v in others_data):
@@ -1161,9 +1167,9 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, cost_labels[: len(top_indices)])
     ):
-        values = [cost_data[j][project_idx] for j in range(n_periods)]
+        values: List[float] = [cost_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
         ax3.bar(x, values, width, label=label, bottom=bottom, color=cost_colors[idx])
-        bottom = [bottom[j] + values[j] for j in range(n_periods)]
+        bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
     # Add "Others" if present
     if others_data and any(v > 0 for v in others_data):
@@ -1226,9 +1232,9 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, span_labels[: len(top_indices)])
     ):
-        values = [span_data[j][project_idx] for j in range(n_periods)]
+        values: List[float] = [span_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
         ax6.bar(x, values, width, label=label, bottom=bottom, color=span_colors[idx])
-        bottom = [bottom[j] + values[j] for j in range(n_periods)]
+        bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
     # Add "Others" if present
     if others_data and any(v > 0 for v in others_data):
@@ -1295,17 +1301,16 @@ def create_individual_chart(
         return None
 
     # Collect all time periods across all projects
-    all_periods = set()
+    all_periods_set = set()
     for project in projects:
-        all_periods.update(project["metrics_by_unit"].keys())
-    all_periods = sorted(all_periods)
+        all_periods_set.update(project["metrics_by_unit"].keys())
+    all_periods: List[str] = sorted(all_periods_set)
 
     if not all_periods:
         return None
 
     # Prepare data arrays for each metric
     project_names = [p["project_name"] for p in projects]
-    n_projects = len(project_names)
     n_periods = len(all_periods)
 
     # Format period labels for display based on unit
@@ -1365,9 +1370,9 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values = [trace_data[j][project_idx] for j in range(n_periods)]
+            values: List[float] = [trace_data[j][project_idx] for j in range(n_periods)]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
-            bottom = [bottom[j] + values[j] for j in range(n_periods)]
+            bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
         # Add "Others" if present
         if others_data and any(v > 0 for v in others_data):
@@ -1409,9 +1414,9 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values = [token_data[j][project_idx] for j in range(n_periods)]
+            values: List[float] = [token_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
-            bottom = [bottom[j] + values[j] for j in range(n_periods)]
+            bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
         # Add "Others" if present
         if others_data and any(v > 0 for v in others_data):
@@ -1455,9 +1460,9 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values = [cost_data[j][project_idx] for j in range(n_periods)]
+            values: List[float] = [cost_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
-            bottom = [bottom[j] + values[j] for j in range(n_periods)]
+            bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
         # Add "Others" if present
         if others_data and any(v > 0 for v in others_data):
@@ -1513,9 +1518,9 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values = [span_data[j][project_idx] for j in range(n_periods)]
+            values: List[float] = [span_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
-            bottom = [bottom[j] + values[j] for j in range(n_periods)]
+            bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
         # Add "Others" if present
         if others_data and any(v > 0 for v in others_data):
@@ -1626,12 +1631,12 @@ def calculate_statistics(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     projects = data.get("projects", [])
-    all_periods = set()
+    all_periods_set = set()
 
     for project in projects:
         if "metrics_by_unit" in project and "error" not in project:
             stats["projects_with_data"] += 1
-            all_periods.update(project["metrics_by_unit"].keys())
+            all_periods_set.update(project["metrics_by_unit"].keys())
 
             for period_metrics in project["metrics_by_unit"].values():
                 # Trace count
@@ -1669,7 +1674,7 @@ def calculate_statistics(data: Dict[str, Any]) -> Dict[str, Any]:
     # Experiment count
     experiments_by_unit = data.get("experiments_by_unit", {})
     stats["total_experiments"] = sum(experiments_by_unit.values())
-    stats["periods_with_data"] = len(all_periods)
+    stats["periods_with_data"] = len(all_periods_set)
 
     return stats
 
@@ -1712,7 +1717,6 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
         textColor=colors.HexColor("#2c3e50"),
         spaceAfter=12,
     )
-    normal_style = styles["Normal"]
 
     # Title page / First page with statistics
     story.append(Paragraph("Opik Usage Report", title_style))
@@ -1920,7 +1924,7 @@ def usage_report(
     unit: str,
     output: str,
     no_charts: bool,
-    open: bool,
+    open_pdf: bool,
 ) -> None:
     """
     Extract Opik usage data for a workspace.
@@ -2002,7 +2006,7 @@ def usage_report(
                 console.print(f"[green]PDF report saved to {pdf_filename}[/green]")
 
                 # Open PDF if --open flag is set
-                if open:
+                if open_pdf:
                     pdf_path = os.path.abspath(pdf_filename)
                     if os.path.exists(pdf_path):
                         webbrowser.open(f"file://{pdf_path}")
