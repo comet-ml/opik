@@ -1,11 +1,9 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Comment;
-import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Span;
+import com.comet.opik.utils.EnrichmentUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -16,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -87,14 +84,16 @@ public class SpanEnrichmentService {
         if (options.includeFeedbackScores()) {
             Optional.ofNullable(span.feedbackScores())
                     .filter(scores -> !scores.isEmpty())
-                    .ifPresent(scores -> enrichedData.set("feedback_scores", buildFeedbackScoresNode(scores)));
+                    .ifPresent(scores -> enrichedData.set("feedback_scores",
+                            EnrichmentUtils.buildFeedbackScoresNode(scores)));
         }
 
         // Include comments if requested
         if (options.includeComments()) {
             Optional.ofNullable(span.comments())
                     .filter(comments -> !comments.isEmpty())
-                    .ifPresent(comments -> enrichedData.set("comments", buildCommentsNode(comments)));
+                    .ifPresent(comments -> enrichedData.set("comments",
+                            EnrichmentUtils.buildCommentsNode(comments)));
         }
 
         // Include usage if requested
@@ -113,49 +112,6 @@ public class SpanEnrichmentService {
         // Convert ObjectNode to Map<String, JsonNode>
         return enrichedData.properties().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    /**
-     * Builds a JSON array node for feedback scores, excluding timestamp fields.
-     * This avoids serialization issues with Instant fields.
-     *
-     * @param feedbackScores The feedback scores to convert
-     * @return An ArrayNode containing the feedback scores without timestamps
-     */
-    private ArrayNode buildFeedbackScoresNode(List<FeedbackScore> feedbackScores) {
-        ArrayNode scoresArray = JsonUtils.getMapper().createArrayNode();
-        for (var score : feedbackScores) {
-            ObjectNode scoreNode = JsonUtils.getMapper().createObjectNode();
-            scoreNode.put("name", score.name());
-            Optional.ofNullable(score.categoryName())
-                    .ifPresent(categoryName -> scoreNode.put("category_name", categoryName));
-            scoreNode.put("value", score.value());
-            Optional.ofNullable(score.reason())
-                    .ifPresent(reason -> scoreNode.put("reason", reason));
-            scoreNode.put("source", score.source().toString());
-
-            scoresArray.add(scoreNode);
-        }
-        return scoresArray;
-    }
-
-    /**
-     * Builds a JSON array node for comments, excluding timestamp fields.
-     * This avoids serialization issues with Instant fields.
-     *
-     * @param comments The comments to convert
-     * @return An ArrayNode containing the comments without timestamps
-     */
-    private ArrayNode buildCommentsNode(List<Comment> comments) {
-        ArrayNode commentsArray = JsonUtils.getMapper().createArrayNode();
-        for (var comment : comments) {
-            ObjectNode commentNode = JsonUtils.getMapper().createObjectNode();
-            commentNode.put("id", comment.id().toString());
-            commentNode.put("text", comment.text());
-            // Omit createdAt, lastUpdatedAt, createdBy, lastUpdatedBy as they're not essential for dataset items
-            commentsArray.add(commentNode);
-        }
-        return commentsArray;
     }
 
     /**
