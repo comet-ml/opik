@@ -21,7 +21,7 @@ MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
 def test_litellm_chat_model_generate_string__happyflow(fake_backend, monkeypatch):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
-    
+
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
     result = model.generate_string("Tell me a short fact about Python programming")
     opik.flush_tracker()
@@ -67,7 +67,7 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(
     fake_backend, monkeypatch
 ):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
-    
+
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
 
     @opik.track
@@ -132,7 +132,7 @@ async def test_litellm_chat_model_agenerate_string__happyflow(
     fake_backend, monkeypatch
 ):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
-    
+
     model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
     result = await model.agenerate_string(
         "Tell me a short fact about async programming"
