@@ -78,6 +78,7 @@ type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
+  tooltipContent?: string;
   asTag?: boolean;
   isDeleted?: boolean;
 };
@@ -88,6 +89,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   id,
   search,
   params,
+  tooltipContent = "",
   asTag = false,
   isDeleted = false,
 }) => {
@@ -112,7 +114,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       disabled={deleted}
     >
       {asTag ? (
-        <TooltipWrapper content={text} stopClickPropagation>
+        <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <Tag
             size="md"
             variant="gray"
