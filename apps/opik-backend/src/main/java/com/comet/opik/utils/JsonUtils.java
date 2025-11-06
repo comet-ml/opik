@@ -273,44 +273,44 @@ public class JsonUtils {
     }
 
     public static JsonNode prependStringFieldIntoMetadata(
-            JsonNode metadata,
+            JsonNode jsonNode,
             @NonNull String fieldName,
             String fieldValue) {
         if (StringUtils.isBlank(fieldValue)) {
-            return metadata;
+            return jsonNode;
         }
 
         TextNode valueNode = MAPPER.getNodeFactory().textNode(fieldValue);
-        return prependFieldIntoMetadata(metadata, fieldName, valueNode);
+        return prependField(jsonNode, fieldName, valueNode);
     }
 
     public static JsonNode prependArrayFieldIntoMetadata(
-            JsonNode metadata,
+            JsonNode jsonNode,
             @NonNull String fieldName,
             List<String> fieldValues) {
         if (CollectionUtils.isEmpty(fieldValues)) {
-            return metadata;
+            return jsonNode;
         }
 
         ArrayNode arrayNode = MAPPER.createArrayNode();
         fieldValues.forEach(arrayNode::add);
 
-        return prependFieldIntoMetadata(metadata, fieldName, arrayNode);
+        return prependField(jsonNode, fieldName, arrayNode);
     }
 
-    private static JsonNode prependFieldIntoMetadata(
-            JsonNode metadata,
+    private static JsonNode prependField(
+            JsonNode jsonNode,
             @NonNull String fieldKey,
             @NonNull JsonNode fieldValue) {
         ObjectNode result = MAPPER.createObjectNode();
         result.set(fieldKey, fieldValue);
 
-        return copyJsonNode(metadata, result);
+        return copyJsonNode(jsonNode, result);
     }
 
-    private static ObjectNode copyJsonNode(JsonNode metadata, @NonNull ObjectNode result) {
-        if (metadata != null && metadata.isObject()) {
-            result.setAll((ObjectNode) metadata);
+    private static ObjectNode copyJsonNode(JsonNode jsonNode, @NonNull ObjectNode result) {
+        if (jsonNode != null && jsonNode.isObject()) {
+            result.setAll((ObjectNode) jsonNode);
         }
 
         return result;
