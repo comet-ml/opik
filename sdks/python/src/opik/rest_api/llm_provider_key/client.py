@@ -85,6 +85,7 @@ class LlmProviderKeyClient:
         provider: ProviderApiKeyWriteProvider,
         api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        provider_name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
@@ -100,6 +101,9 @@ class LlmProviderKeyClient:
         api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        provider_name : typing.Optional[str]
+            Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). Should not be set for standard providers (OpenAI, Anthropic, etc.).
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -124,6 +128,7 @@ class LlmProviderKeyClient:
             provider=provider,
             api_key=api_key,
             name=name,
+            provider_name=provider_name,
             headers=headers,
             configuration=configuration,
             base_url=base_url,
@@ -164,6 +169,7 @@ class LlmProviderKeyClient:
         *,
         api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        provider_name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
@@ -179,6 +185,9 @@ class LlmProviderKeyClient:
         api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        provider_name : typing.Optional[str]
+            Provider name - can be set to migrate legacy custom LLM providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM providers.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -203,6 +212,7 @@ class LlmProviderKeyClient:
             id,
             api_key=api_key,
             name=name,
+            provider_name=provider_name,
             headers=headers,
             configuration=configuration,
             base_url=base_url,
@@ -289,6 +299,7 @@ class AsyncLlmProviderKeyClient:
         provider: ProviderApiKeyWriteProvider,
         api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        provider_name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
@@ -304,6 +315,9 @@ class AsyncLlmProviderKeyClient:
         api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        provider_name : typing.Optional[str]
+            Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). Should not be set for standard providers (OpenAI, Anthropic, etc.).
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -331,6 +345,7 @@ class AsyncLlmProviderKeyClient:
             provider=provider,
             api_key=api_key,
             name=name,
+            provider_name=provider_name,
             headers=headers,
             configuration=configuration,
             base_url=base_url,
@@ -374,6 +389,7 @@ class AsyncLlmProviderKeyClient:
         *,
         api_key: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        provider_name: typing.Optional[str] = OMIT,
         headers: typing.Optional[typing.Dict[str, str]] = OMIT,
         configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
         base_url: typing.Optional[str] = OMIT,
@@ -389,6 +405,9 @@ class AsyncLlmProviderKeyClient:
         api_key : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        provider_name : typing.Optional[str]
+            Provider name - can be set to migrate legacy custom LLM providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM providers.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -416,6 +435,7 @@ class AsyncLlmProviderKeyClient:
             id,
             api_key=api_key,
             name=name,
+            provider_name=provider_name,
             headers=headers,
             configuration=configuration,
             base_url=base_url,

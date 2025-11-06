@@ -1419,7 +1419,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)>AND id BETWEEN :uuid_from_time AND :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -1532,7 +1532,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM trace_threads final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)>
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
+                <endif>
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -1733,7 +1737,7 @@ class TraceDAOImpl implements TraceDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
-                LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -1810,7 +1814,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM trace_threads final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)>
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
+                <endif>
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -2039,7 +2047,7 @@ class TraceDAOImpl implements TraceDAO {
                 GROUP BY
                     t.workspace_id, t.project_id, t.thread_id
             ) AS t
-            LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+            <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -2936,7 +2944,7 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
 
         // Bind UUID BETWEEN bounds for time-based filtering
-        if (traceSearchCriteria.uuidFromTime() != null && traceSearchCriteria.uuidToTime() != null) {
+        if (traceSearchCriteria.uuidFromTime() != null) {
             statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
             statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
         }

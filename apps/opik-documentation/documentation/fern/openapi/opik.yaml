@@ -3332,6 +3332,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Spans resource
@@ -3592,6 +3606,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Span stats resource
@@ -9714,6 +9742,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9763,6 +9799,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9808,6 +9852,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9828,6 +9880,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - can be set to migrate legacy custom LLM providers\
+            \ to the new multi-provider format. Once set, it cannot be changed. Should\
+            \ only be set for custom LLM providers."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -11325,6 +11385,16 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+        from_time:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     SpanUpdate:
       required:
       - trace_id
