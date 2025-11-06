@@ -1055,10 +1055,10 @@ function Restart-Services {
 
 # Function for quick restart (only rebuild backend, keep infrastructure running)
 function Invoke-QuickRestart {
-    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend (if needed), Infrastructure (if not running)) ==="
+    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend only) ==="
     
     # Check if infrastructure is running, start it if not
-    Write-LogInfo "Step 1/8: Checking Docker infrastructure..."
+    Write-LogInfo "Step 1/7: Checking Docker infrastructure..."
     if (Test-LocalBeFe) {
         Write-LogSuccess "Docker infrastructure is already running"
     }
@@ -1069,17 +1069,17 @@ function Invoke-QuickRestart {
         Invoke-DbMigrations
     }
     
-    Write-LogInfo "Step 2/8: Stopping frontend..."
+    Write-LogInfo "Step 2/7: Stopping frontend..."
     Stop-Frontend
-    Write-LogInfo "Step 3/8: Stopping backend..."
+    Write-LogInfo "Step 3/7: Stopping backend..."
     Stop-Backend
-    Write-LogInfo "Step 4/8: Building backend..."
+    Write-LogInfo "Step 4/7: Building backend..."
     Build-Backend
-    Write-LogInfo "Step 5/8: Starting backend..."
+    Write-LogInfo "Step 5/7: Starting backend..."
     Start-Backend
     
     # Check if package.json has changed since last npm install
-    Write-LogInfo "Step 6/8: Checking frontend dependencies..."
+    Write-LogInfo "Step 6/7: Checking frontend dependencies..."
     $packageJson = Join-Path $script:FRONTEND_DIR "package.json"
     $packageLock = Join-Path $script:FRONTEND_DIR "package-lock.json"
     $nodeModules = Join-Path $script:FRONTEND_DIR "node_modules"
@@ -1106,10 +1106,8 @@ function Invoke-QuickRestart {
         Build-Frontend
     }
     
-    Write-LogInfo "Step 7/8: Starting frontend..."
+    Write-LogInfo "Step 7/7: Starting frontend..."
     Start-Frontend
-    Write-LogInfo "Step 8/8: Creating demo data..."
-    New-DemoData -Mode "--local-be-fe"
     Write-LogSuccess "=== Quick Restart Complete ==="
     Test-Services
 }
