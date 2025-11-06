@@ -5,3 +5,4 @@ pytest-cov
 pytest-env
 deepdiff
 orderly_set==5.3.2  # Pinned version for stability
+pytest-deepassert==0.3.0

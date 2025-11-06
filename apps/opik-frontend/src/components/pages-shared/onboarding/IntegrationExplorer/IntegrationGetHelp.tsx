@@ -27,6 +27,8 @@ const IntegrationGetHelp: React.FunctionComponent<IntegrationGetHelpProps> = ({
         size="sm"
         onClick={() => handleOpenChange(true)}
         className={className}
+        id="integration-get-help-button"
+        data-fs-element="IntegrationGetHelpButton"
       >
         <HelpCircle className="mr-1.5 size-3.5" />
         {label}
