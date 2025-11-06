@@ -1941,14 +1941,18 @@ def usage_report(
     WORKSPACE: Workspace name to extract data from.
 
     Examples:
-      # Extract data with auto-detected date range, aggregated by month (default)
-      opik usage-report my-workspace
 
-      # Extract data aggregated by week
-      opik usage-report my-workspace --unit week
+      Extract data with auto-detected date range, aggregated by month (default):
 
-      # Extract data for specific date range, aggregated by day
-      opik usage-report my-workspace --start-date 2024-01-01 --end-date 2024-12-31 --unit day
+        opik usage-report my-workspace
+
+      Extract data aggregated by week:
+
+        opik usage-report my-workspace --unit week
+
+      Extract data for specific date range, aggregated by day:
+
+        opik usage-report my-workspace --start-date 2024-01-01 --end-date 2024-12-31 --unit day
     """
     try:
         # Get API key from context (set by main CLI)
@@ -1968,6 +1972,11 @@ def usage_report(
         data = extract_project_data(
             workspace, api_key, start_date_obj, end_date_obj, unit
         )
+
+        # Calculate and add summary statistics to the data
+        console.print("[blue]Calculating summary statistics...[/blue]")
+        stats = calculate_statistics(data)
+        data["statistics"] = stats
 
         # Save to JSON file
         console.print(f"\n[cyan]{'='*60}[/cyan]")
