@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict, List, Union
+from typing import Callable, Dict, List
 
 from . import evaluation_result
 from .metrics import experiment_metric_result

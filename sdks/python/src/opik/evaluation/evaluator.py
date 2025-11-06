@@ -197,11 +197,9 @@ def _evaluate_task(
     if experiment_metrics is not None and len(experiment_metrics) > 0:
         from . import experiment_metrics_helpers
 
-        pre_computed_aggregates = (
-            experiment_metrics_helpers.compute_experiment_metrics(
-                experiment_metrics=experiment_metrics,
-                evaluation_result_=evaluation_result_,
-            )
+        pre_computed_aggregates = experiment_metrics_helpers.compute_experiment_metrics(
+            experiment_metrics=experiment_metrics,
+            evaluation_result_=evaluation_result_,
         )
 
         if pre_computed_aggregates:
@@ -515,11 +513,9 @@ def evaluate_prompt(
     if experiment_metrics is not None and len(experiment_metrics) > 0:
         from . import experiment_metrics_helpers
 
-        pre_computed_aggregates = (
-            experiment_metrics_helpers.compute_experiment_metrics(
-                experiment_metrics=experiment_metrics,
-                evaluation_result_=evaluation_result_,
-            )
+        pre_computed_aggregates = experiment_metrics_helpers.compute_experiment_metrics(
+            experiment_metrics=experiment_metrics,
+            evaluation_result_=evaluation_result_,
         )
 
         if pre_computed_aggregates:
@@ -650,4 +646,5 @@ def evaluate_optimization_trial(
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
+        experiment_metrics=None,
     )

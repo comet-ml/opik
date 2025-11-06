@@ -99,12 +99,14 @@ if __name__ == "__main__":
     )
 
     # Insert some sample data
-    dataset.insert([
-        {"input": "hello", "expected_output": "hello"},
-        {"input": "world", "expected_output": "world"},
-        {"input": "test", "expected_output": "different"},  # This will fail
-        {"input": "opik", "expected_output": "opik"},
-    ])
+    dataset.insert(
+        [
+            {"input": "hello", "expected_output": "hello"},
+            {"input": "world", "expected_output": "world"},
+            {"input": "test", "expected_output": "different"},  # This will fail
+            {"input": "opik", "expected_output": "opik"},
+        ]
+    )
 
     # Run evaluation with experiment metrics
     results = evaluate(
