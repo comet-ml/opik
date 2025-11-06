@@ -219,6 +219,53 @@ describe("AddToDatasetDialog", () => {
     expect(screen.getByLabelText("Metadata")).toBeInTheDocument();
   });
 
+  it("should have all span enrichment checkboxes checked by default", () => {
+    const propsWithSpan = {
+      ...defaultProps,
+      selectedRows: [mockSpan],
+      getDataForExport: vi.fn(async () => [mockSpan]),
+    };
+
+    render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
+
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Span metadata configuration");
+    fireEvent.click(accordionButton);
+
+    // Spans don't have "Nested spans" option, but all others should be checked
+    expect(screen.getByLabelText("Tags")).toBeChecked();
+    expect(screen.getByLabelText("Feedback scores")).toBeChecked();
+    expect(screen.getByLabelText("Comments")).toBeChecked();
+    expect(screen.getByLabelText("Usage metrics")).toBeChecked();
+    expect(screen.getByLabelText("Metadata")).toBeChecked();
+  });
+
+  it("should allow unchecking span enrichment options", async () => {
+    const propsWithSpan = {
+      ...defaultProps,
+      selectedRows: [mockSpan],
+      getDataForExport: vi.fn(async () => [mockSpan]),
+    };
+
+    render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
+
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Span metadata configuration");
+    fireEvent.click(accordionButton);
+
+    const tagsCheckbox = screen.getByLabelText("Tags");
+    const usageCheckbox = screen.getByLabelText("Usage metrics");
+
+    fireEvent.click(tagsCheckbox);
+    fireEvent.click(usageCheckbox);
+
+    await waitFor(() => {
+      expect(tagsCheckbox).not.toBeChecked();
+      expect(usageCheckbox).not.toBeChecked();
+    });
+    expect(screen.getByLabelText("Feedback scores")).toBeChecked();
+  });
+
   it("should not display enrichment checkboxes when mixed traces and spans are selected", () => {
     const propsWithMixed = {
       ...defaultProps,
@@ -405,6 +452,48 @@ describe("AddToDatasetDialog", () => {
             include_comments: true,
             include_usage: false,
             include_metadata: true,
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should respect unchecked enrichment options when adding spans", async () => {
+    const propsWithSpan = {
+      ...defaultProps,
+      selectedRows: [mockSpan],
+      getDataForExport: vi.fn(async () => [mockSpan]),
+    };
+
+    render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
+
+    // Expand the accordion first
+    const accordionButton = screen.getByText("Span metadata configuration");
+    fireEvent.click(accordionButton);
+
+    // Uncheck some options
+    fireEvent.click(screen.getByLabelText("Tags"));
+    fireEvent.click(screen.getByLabelText("Comments"));
+    fireEvent.click(screen.getByLabelText("Metadata"));
+
+    // Select the dataset
+    const dataset = screen.getByText("Test Dataset 1");
+    fireEvent.click(dataset);
+
+    // Click the "Add to dataset" button
+    const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
+    fireEvent.click(addButton);
+
+    await waitFor(() => {
+      expect(mockAddSpansToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enrichmentOptions: {
+            include_tags: false,
+            include_feedback_scores: true,
+            include_comments: false,
+            include_usage: true,
+            include_metadata: false,
           },
         }),
         expect.any(Object),
