@@ -1,6 +1,8 @@
 import { Page, Locator, expect } from '@playwright/test';
 
 export class RulesPage {
+  private static readonly DEFAULT_CLICK_TIMEOUT = 2000;
+
   readonly page: Page;
   readonly onlineEvaluationTab: Locator;
   readonly createRuleButton: Locator;
@@ -97,7 +99,7 @@ export class RulesPage {
 
     // Try to click the option if it exists, otherwise just proceed (for projects with no traces)
     try {
-      await this.page.getByRole('option', { name: 'output.output' }).click({ timeout: 2000 });
+      await this.page.getByRole('option', { name: 'output.output' }).click({ timeout: RulesPage.DEFAULT_CLICK_TIMEOUT });
     } catch (error) {
       console.log('No output.output option found (no recent traces), proceeding with manual entry');
       await this.page.keyboard.press('Escape'); // Close any open dropdown

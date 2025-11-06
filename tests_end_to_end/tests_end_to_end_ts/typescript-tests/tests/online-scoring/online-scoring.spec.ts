@@ -5,6 +5,11 @@ import { ProjectsPage } from '../../page-objects/projects.page';
 import { AIProviderSetupHelper } from '../../helpers/ai-provider-setup-helper';
 import { modelConfigLoader } from '../../helpers/model-config-loader';
 
+// Timeout constants
+const RULE_ACTIVATION_TIMEOUT = 10000; // 10 seconds for rule to fully activate in backend
+const PAGE_REFRESH_TIMEOUT = 2000; // 2 seconds wait after page refresh
+const POST_RELOAD_TIMEOUT = 1000; // 1 second wait after page reload
+
 const enabledModels = modelConfigLoader.getEnabledModelsForOnlineScoring();
 
 test.describe('Online Scoring Tests', () => {
@@ -78,7 +83,7 @@ test.describe('Online Scoring Tests', () => {
 
         console.log('Rule created successfully - waiting for rule to fully activate before creating traces');
         // CRITICAL: Wait for the rule to fully activate in the backend before creating traces
-        await page.waitForTimeout(10000);
+        await page.waitForTimeout(RULE_ACTIVATION_TIMEOUT);
       });
 
       await test.step('Create traces AFTER rule exists (critical: rule must exist first!)', async () => {
@@ -87,37 +92,37 @@ test.describe('Online Scoring Tests', () => {
         console.log('Traces created - they should be automatically scored by the rule');
       });
 
-            await test.step('Navigate to traces and verify moderation column appears', async () => {
-              await projectsPage.goto();
-              await projectsPage.clickProject(createProjectApi);
-              console.log('Successfully navigated to project traces');
+      await test.step('Navigate to traces and verify moderation column appears', async () => {
+        await projectsPage.goto();
+        await projectsPage.clickProject(createProjectApi);
+        console.log('Successfully navigated to project traces');
 
-              // The Moderation column might not appear immediately, try refreshing
-              let columnFound = false;
-              const maxAttempts = 5;
+        // The Moderation column might not appear immediately, try refreshing
+        let columnFound = false;
+        const maxAttempts = 5;
 
-              for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                try {
-                  // Wait for the Moderation column to exist in the DOM
-                  // The column appears as a cell in the table header, not as a proper columnheader role
-                  const moderationColumn = page.getByText('Moderation', { exact: false });
-                  await expect(moderationColumn).toBeAttached({ timeout: 5000 });
-                  console.log(`Moderation column is attached (attempt ${attempt})!`);
-                  columnFound = true;
-                  break;
-                } catch (error) {
-                  if (attempt < maxAttempts) {
-                    console.log(`Moderation column not visible yet (attempt ${attempt}), refreshing page...`);
-                    await page.reload();
-                    await page.waitForTimeout(2000);
-                  }
-                }
-              }
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            // Wait for the Moderation column to exist in the DOM
+            // The column appears as a cell in the table header, not as a proper columnheader role
+            const moderationColumn = page.getByText('Moderation', { exact: false });
+            await expect(moderationColumn).toBeAttached({ timeout: 5000 });
+            console.log(`Moderation column is attached (attempt ${attempt})!`);
+            columnFound = true;
+            break;
+          } catch (error) {
+            if (attempt < maxAttempts) {
+              console.log(`Moderation column not visible yet (attempt ${attempt}), refreshing page...`);
+              await page.reload();
+              await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
+            }
+          }
+        }
 
-              if (!columnFound) {
-                throw new Error(`Moderation column did not appear after ${maxAttempts} attempts and refreshes`);
-              }
-            });
+        if (!columnFound) {
+          throw new Error(`Moderation column did not appear after ${maxAttempts} attempts and refreshes`);
+        }
+      });
 
       await test.step('Verify moderation scores are present', async () => {
         // All traces should have moderation scores of 0 (safe content)
@@ -166,10 +171,10 @@ test.describe('Online Scoring Tests', () => {
           }
 
           if (attempt < maxRetries) {
-            console.log(`Scores not populated yet, waiting 2 seconds before retry...`);
-            await page.waitForTimeout(2000);
+            console.log(`Scores not populated yet, waiting before retry...`);
+            await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
             await page.reload();
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(POST_RELOAD_TIMEOUT);
           }
         }
 
