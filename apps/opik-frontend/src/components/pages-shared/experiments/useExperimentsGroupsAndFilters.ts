@@ -45,7 +45,7 @@ export const useExperimentsGroupsAndFilters = ({
   promptId,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
-    localStorageKey: `${storageKeyPrefix}-columns-groups-v2`,
+    localStorageKey: `${storageKeyPrefix}-columns-groups`,
     queryKey: `groups`,
     defaultValue: DEFAULT_GROUPS,
     queryParamConfig: JsonParam,
