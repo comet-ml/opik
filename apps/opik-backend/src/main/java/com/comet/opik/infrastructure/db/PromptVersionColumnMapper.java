@@ -37,6 +37,8 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .metadata(jsonNode.get("metadata"))
                 .changeDescription(jsonNode.get("change_description").asText())
                 .type(PromptType.fromString(jsonNode.get("type").asText()))
+                .templateStructure(
+                        jsonNode.has("template_structure") ? jsonNode.get("template_structure").asText() : "string")
                 .variables(TemplateParseUtils.extractVariables(jsonNode.get("template").asText(),
                         PromptType.fromString(jsonNode.get("type").asText())))
                 .createdAt(Instant.from(FORMATTER.parse(jsonNode.get("created_at").asText())))

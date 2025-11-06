@@ -1370,6 +1370,33 @@ class Opik:
         )
         return Prompt.from_fern_prompt_version(name, prompt_version)
 
+    def create_chat_prompt(
+        self,
+        name: str,
+        messages: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+        type: PromptType = PromptType.MUSTACHE,
+    ) -> "ChatPrompt":
+        """
+        Creates a new chat prompt with the given name and message templates.
+        If a chat prompt with the same name already exists, it will create a new version if the messages differ.
+
+        Parameters:
+            name: The name of the chat prompt.
+            messages: List of message dictionaries with 'role' and 'content' fields.
+            metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
+
+        Returns:
+            A ChatPrompt object containing details of the created or retrieved chat prompt.
+
+        Raises:
+            ApiError: If there is an error during the creation of the prompt.
+        """
+        from opik.api_objects.prompt import ChatPrompt
+
+        return ChatPrompt(name=name, messages=messages, metadata=metadata, type=type)
+
     def get_prompt(
         self,
         name: str,

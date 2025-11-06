@@ -20,6 +20,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { parseContentWithImages } from "@/lib/llm";
+import ChatPromptView from "./ChatPromptView";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -86,6 +87,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     return parseContentWithImages(activeVersion?.template || "");
   }, [activeVersion?.template]);
 
+  const isChatPrompt = useMemo(() => {
+    return activeVersion?.template_structure === "chat";
+  }, [activeVersion?.template_structure]);
+
   if (!prompt) {
     return <Loader />;
   }
@@ -115,7 +120,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
-          <p className="comet-body-s-accented text-foreground">Prompt</p>
+          <p className="comet-body-s-accented text-foreground">
+            {isChatPrompt ? "Chat Messages" : "Prompt"}
+          </p>
+          {isChatPrompt ? (
+            <ChatPromptView template={activeVersion?.template || ""} />
+          ) : (
+            <>
           <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
             {displayText}
           </code>
@@ -131,6 +142,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 preview={true}
                 align="start"
               />
+                </>
+              )}
             </>
           )}
           {activeVersion?.metadata && (

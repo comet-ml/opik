@@ -40,6 +40,8 @@ public record PromptVersion(
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) PromptType type,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) @Schema(description = "template structure: 'string' (default) or 'chat'") @Nullable String templateStructure,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Set<String> variables,

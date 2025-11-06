@@ -25,7 +25,11 @@ import {
   AccordionTrigger,
   Accordion,
 } from "@/components/ui/accordion";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Prompt } from "@/types/prompts";
+import { LLMMessage } from "@/types/llm";
+import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
@@ -56,6 +60,10 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const [description, setDescription] = useState(
     defaultPrompt?.description || "",
   );
+  const [templateStructure, setTemplateStructure] = useState<"string" | "chat">("string");
+  const [messages, setMessages] = useState<LLMMessage[]>([
+    generateDefaultLLMPromptMessage(),
+  ]);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -72,9 +80,16 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const { mutate: updateMutate } = usePromptUpdateMutation();
 
   const isEdit = !!defaultPrompt;
-  const isValid = Boolean(name.length && (isEdit || template.length));
+  const isChatPrompt = templateStructure === "chat";
+  const isValid = Boolean(
+    name.length && (isEdit || (isChatPrompt ? messages.length > 0 : template.length))
+  );
   const title = isEdit ? "Edit prompt" : "Create a new prompt";
   const submitText = isEdit ? "Update prompt" : "Create prompt";
+
+  const handleAddMessage = useCallback(() => {
+    setMessages((prev) => [...prev, generateDefaultLLMPromptMessage()]);
+  }, []);
 
   const onPromptCreated = useCallback(
     (prompt: Prompt) => {
@@ -98,11 +113,22 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
       return setShowInvalidJSON(true);
     }
 
+    // For chat prompts, convert messages to JSON string
+    const promptTemplate = isChatPrompt
+      ? JSON.stringify(
+          messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          }))
+        )
+      : template;
+
     createMutate(
       {
         prompt: {
           name,
-          template,
+          template: promptTemplate,
+          template_structure: templateStructure,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
           ...(description && { description }),
         },
@@ -115,6 +141,9 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     createMutate,
     name,
     template,
+    templateStructure,
+    isChatPrompt,
+    messages,
     description,
     setOpen,
     setShowInvalidJSON,
@@ -156,6 +185,31 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           </div>
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
+              <Label htmlFor="templateStructure">Prompt Type</Label>
+              <RadioGroup
+                value={templateStructure}
+                onValueChange={(value) => setTemplateStructure(value as "string" | "chat")}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="string" id="string" />
+                  <Label htmlFor="string" className="font-normal cursor-pointer">
+                    String prompt - Single text template
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="chat" id="chat" />
+                  <Label htmlFor="chat" className="font-normal cursor-pointer">
+                    Chat prompt - Array of messages with roles
+                  </Label>
+                </div>
+              </RadioGroup>
+              <Description>
+                Choose string for single text prompts or chat for conversation-style prompts with multiple messages.
+              </Description>
+            </div>
+          )}
+          {!isEdit && !isChatPrompt && (
+            <div className="flex flex-col gap-2 pb-4">
               <Label htmlFor="template">Prompt</Label>
               <Textarea
                 id="template"
@@ -172,7 +226,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
               </Description>
             </div>
           )}
-          {!isEdit && (
+          {!isEdit && !isChatPrompt && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
               <PromptMessageImageTags
@@ -180,6 +234,22 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                 setImages={setImages}
                 align="start"
               />
+            </div>
+          )}
+          {!isEdit && isChatPrompt && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label>Chat Messages</Label>
+              <div className="h-[400px] rounded-md border bg-primary-foreground">
+                <LLMPromptMessages
+                  messages={messages}
+                  onChange={setMessages}
+                  onAddMessage={handleAddMessage}
+                  hidePromptActions
+                />
+              </div>
+              <Description>
+                Create your chat prompt with multiple messages. Each message has a role (system, user, assistant) and content.
+              </Description>
             </div>
           )}
           <div className="flex flex-col gap-2 border-t border-border pb-4">

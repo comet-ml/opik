@@ -1,0 +1,154 @@
+import copy
+import json
+from typing import Any, Dict, List, Optional
+
+from opik.rest_api.types import PromptVersionDetail
+from .chat_prompt_template import ChatPromptTemplate
+from .types import PromptType
+from opik.api_objects.prompt import client as prompt_client
+
+
+class ChatPrompt:
+    """
+    ChatPrompt class represents a chat-style prompt with a name, message array template and commit hash.
+    Similar to Prompt but uses a list of chat messages instead of a string template.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        messages: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+        type: PromptType = PromptType.MUSTACHE,
+    ) -> None:
+        """
+        Initializes a new instance of the ChatPrompt class.
+        Creates a new chat prompt using the opik client and sets the initial state.
+
+        Parameters:
+            name: The name for the prompt.
+            messages: List of message dictionaries with 'role' and 'content' fields.
+            metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
+        """
+
+        self._chat_template = ChatPromptTemplate(messages=messages, template_type=type)
+        self._name = name
+        self._metadata = metadata
+        self._type = type
+        self._messages = messages
+
+        self._sync_with_backend()
+
+    def _sync_with_backend(self) -> None:
+        from opik.api_objects import opik_client
+
+        opik_client_ = opik_client.get_client_cached()
+        prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
+        
+        # Convert messages array to JSON string for backend storage
+        messages_str = json.dumps(self._messages)
+        
+        prompt_version = prompt_client_.create_prompt(
+            name=self._name,
+            prompt=messages_str,
+            metadata=self._metadata,
+            type=self._type,
+            template_structure="chat",
+        )
+
+        self._commit = prompt_version.commit
+        self.__internal_api__prompt_id__ = prompt_version.prompt_id
+        self.__internal_api__version_id__ = prompt_version.id
+
+    @property
+    def name(self) -> str:
+        """The name of the prompt."""
+        return self._name
+
+    @property
+    def messages(self) -> List[Dict[str, Any]]:
+        """The chat messages template."""
+        return copy.deepcopy(self._messages)
+
+    @property
+    def commit(self) -> Optional[str]:
+        """The commit hash of the prompt."""
+        return self._commit
+
+    @property
+    def metadata(self) -> Optional[Dict[str, Any]]:
+        """The metadata dictionary associated with the prompt"""
+        return copy.deepcopy(self._metadata)
+
+    @property
+    def type(self) -> PromptType:
+        """The prompt type of the prompt."""
+        return self._type
+
+    def format(
+        self,
+        variables: Dict[str, Any],
+        supported_modalities: Optional[Dict[str, bool]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Renders the chat template with provided variables.
+
+        Args:
+            variables: Dictionary of variables to substitute in the template.
+            supported_modalities: Optional dictionary of supported modalities.
+
+        Returns:
+            A list of rendered message dictionaries.
+        """
+        return self._chat_template.format(
+            variables=variables,
+            supported_modalities=supported_modalities,
+        )
+
+    @classmethod
+    def from_fern_prompt_version(
+        cls,
+        name: str,
+        prompt_version: PromptVersionDetail,
+    ) -> "ChatPrompt":
+        # will not call __init__ to avoid API calls, create new instance with __new__
+        chat_prompt = cls.__new__(cls)
+
+        chat_prompt.__internal_api__version_id__ = prompt_version.id
+        chat_prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
+
+        chat_prompt._name = name
+        
+        # Parse messages from JSON string
+        messages = json.loads(prompt_version.template)
+        chat_prompt._messages = messages
+        chat_prompt._chat_template = ChatPromptTemplate(
+            messages=messages,
+            template_type=PromptType(prompt_version.type) or PromptType.MUSTACHE,
+        )
+        chat_prompt._commit = prompt_version.commit
+        chat_prompt._metadata = prompt_version.metadata
+        chat_prompt._type = prompt_version.type
+        return chat_prompt
+
+
+def to_info_dict(chat_prompt: ChatPrompt) -> Dict[str, Any]:
+    info_dict: Dict[str, Any] = {
+        "name": chat_prompt.name,
+        "version": {
+            "messages": chat_prompt.messages,
+            "template_structure": "chat",
+        },
+    }
+    if chat_prompt.__internal_api__prompt_id__ is not None:
+        info_dict["id"] = chat_prompt.__internal_api__prompt_id__
+
+    if chat_prompt.commit is not None:
+        info_dict["version"]["commit"] = chat_prompt.commit
+
+    if chat_prompt.__internal_api__version_id__ is not None:
+        info_dict["version"]["id"] = chat_prompt.__internal_api__version_id__
+
+    return info_dict
+

@@ -18,6 +18,7 @@ class PromptClient:
         prompt: str,
         metadata: Optional[Dict[str, Any]],
         type: PromptType = PromptType.MUSTACHE,
+        template_structure: str = "string",
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -25,20 +26,49 @@ class PromptClient:
         Parameters:
         - name: The name of the prompt.
         - prompt: The template content for the prompt.
+        - metadata: Optional metadata for the prompt.
+        - type: The template type (MUSTACHE or JINJA2).
+        - template_structure: Either "string" (default) or "chat".
 
         Returns:
         - A Prompt object for the provided prompt name and template.
         """
         prompt_version = self._get_latest_version(name)
 
+        # For chat prompts, compare parsed JSON to avoid formatting differences
+        templates_equal = False
+        existing_template_structure = None
+        if prompt_version is not None:
+            existing_template_structure = getattr(prompt_version, 'template_structure', None)
+            
+            # If template_structure is None (field not in API response yet), infer from template content
+            if existing_template_structure is None:
+                # Temporarily infer until OpenAPI types are regenerated
+                try:
+                    json.loads(prompt_version.template)
+                    existing_template_structure = 'chat'
+                except (json.JSONDecodeError, TypeError):
+                    existing_template_structure = 'string'
+            
+            if existing_template_structure == "chat":
+                try:
+                    existing_messages = json.loads(prompt_version.template)
+                    new_messages = json.loads(prompt)
+                    templates_equal = existing_messages == new_messages
+                except (json.JSONDecodeError, TypeError):
+                    templates_equal = prompt_version.template == prompt
+            else:
+                templates_equal = prompt_version.template == prompt
+
         if (
             prompt_version is None
-            or prompt_version.template != prompt
+            or not templates_equal
             or prompt_version.metadata != metadata
             or prompt_version.type != type.value
+            or existing_template_structure != template_structure
         ):
             prompt_version = self._create_new_version(
-                name=name, prompt=prompt, type=type, metadata=metadata
+                name=name, prompt=prompt, type=type, metadata=metadata, template_structure=template_structure
             )
 
         return prompt_version
@@ -49,11 +79,13 @@ class PromptClient:
         prompt: str,
         type: PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
+        template_structure: str = "string",
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
             template=prompt,
             metadata=metadata,
             type=type,
+            template_structure=template_structure,
         )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
