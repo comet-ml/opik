@@ -26,6 +26,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAddTracesToDatasetMutation from "@/api/datasets/useAddTracesToDatasetMutation";
+import useAddSpansToDatasetMutation from "@/api/datasets/useAddSpansToDatasetMutation";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const { mutate } = useDatasetItemBatchMutation();
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
+  const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
   const { data, isPending } = useDatasetsList(
     {
@@ -106,6 +108,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   }, [validRows]);
 
   const hasOnlyTraces = validTraces.length > 0 && validSpans.length === 0;
+  const hasOnlySpans = validSpans.length > 0 && validTraces.length === 0;
 
   const noValidRows = validRows.length === 0;
   const partialValid = validRows.length !== selectedRows.length;
@@ -176,8 +179,28 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               onSuccess: () => onItemsAdded(dataset, true, false),
             },
           );
+        } else if (spans.length > 0 && traces.length === 0) {
+          // If we have only spans, use the new enriched endpoint for spans
+          addSpansToDataset(
+            {
+              workspaceName,
+              datasetId: dataset.id,
+              spanIds: spans.map((s) => s.id),
+              enrichmentOptions: {
+                include_tags: enrichmentOptions.includeTags,
+                include_feedback_scores:
+                  enrichmentOptions.includeFeedbackScores,
+                include_comments: enrichmentOptions.includeComments,
+                include_usage: enrichmentOptions.includeUsage,
+                include_metadata: enrichmentOptions.includeMetadata,
+              },
+            },
+            {
+              onSuccess: () => onItemsAdded(dataset, false, true),
+            },
+          );
         } else {
-          // For spans or mixed content, use the old endpoint
+          // For mixed content, use the old endpoint
           mutate(
             {
               workspaceName,
@@ -226,6 +249,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       setOpen,
       mutate,
       addTracesToDataset,
+      addSpansToDataset,
       workspaceName,
       onItemsAdded,
       toast,
@@ -440,6 +464,114 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                         />
                         <Label
                           htmlFor="include-metadata"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Metadata
+                        </Label>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
+            {hasOnlySpans && (
+              <Accordion
+                type="single"
+                collapsible
+                defaultValue=""
+                className="mb-4"
+              >
+                <AccordionItem value="metadata" className="border-t">
+                  <AccordionTrigger>
+                    Span metadata configuration
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-tags-span"
+                          checked={enrichmentOptions.includeTags}
+                          onCheckedChange={(checked) =>
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeTags: checked === true,
+                            }))
+                          }
+                        />
+                        <Label
+                          htmlFor="include-tags-span"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Tags
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-feedback-scores-span"
+                          checked={enrichmentOptions.includeFeedbackScores}
+                          onCheckedChange={(checked) =>
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeFeedbackScores: checked === true,
+                            }))
+                          }
+                        />
+                        <Label
+                          htmlFor="include-feedback-scores-span"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Feedback scores
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-comments-span"
+                          checked={enrichmentOptions.includeComments}
+                          onCheckedChange={(checked) =>
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeComments: checked === true,
+                            }))
+                          }
+                        />
+                        <Label
+                          htmlFor="include-comments-span"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Comments
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-usage-span"
+                          checked={enrichmentOptions.includeUsage}
+                          onCheckedChange={(checked) =>
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeUsage: checked === true,
+                            }))
+                          }
+                        />
+                        <Label
+                          htmlFor="include-usage-span"
+                          className="comet-body-s cursor-pointer font-normal"
+                        >
+                          Usage metrics
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="include-metadata-span"
+                          checked={enrichmentOptions.includeMetadata}
+                          onCheckedChange={(checked) =>
+                            setEnrichmentOptions((prev) => ({
+                              ...prev,
+                              includeMetadata: checked === true,
+                            }))
+                          }
+                        />
+                        <Label
+                          htmlFor="include-metadata-span"
                           className="comet-body-s cursor-pointer font-normal"
                         >
                           Metadata
