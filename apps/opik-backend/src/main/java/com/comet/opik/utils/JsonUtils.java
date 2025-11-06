@@ -19,7 +19,6 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
-
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -282,7 +281,10 @@ public class JsonUtils {
      * @param fieldValue value to inject (String)
      * @return new JsonNode with field at the beginning, or original metadata if fieldValue is null/blank
      */
-    public static JsonNode injectStringFieldIntoMetadata(JsonNode metadata, String fieldName, String fieldValue) {
+    public static JsonNode injectStringFieldIntoMetadata(
+            JsonNode metadata,
+            @NonNull String fieldName,
+            String fieldValue) {
         if (StringUtils.isBlank(fieldValue)) {
             return metadata;
         }
@@ -300,7 +302,10 @@ public class JsonUtils {
      * @param fieldValues list of strings to inject as array
      * @return new JsonNode with field at the beginning, or original metadata if fieldValues is null/empty
      */
-    public static JsonNode injectArrayFieldIntoMetadata(JsonNode metadata, String fieldName, List<String> fieldValues) {
+    public static JsonNode injectArrayFieldIntoMetadata(
+            JsonNode metadata,
+            @NonNull String fieldName,
+            List<String> fieldValues) {
         if (CollectionUtils.isEmpty(fieldValues)) {
             return metadata;
         }
@@ -313,8 +318,8 @@ public class JsonUtils {
 
     private static JsonNode injectFieldIntoMetadata(
             JsonNode metadata,
-            String fieldKey,
-            JsonNode fieldValue) {
+            @NonNull String fieldKey,
+            @NonNull JsonNode fieldValue) {
         // 1. Create result and inject the payload field
         ObjectNode result = MAPPER.createObjectNode();
         result.set(fieldKey, fieldValue);
@@ -331,7 +336,7 @@ public class JsonUtils {
      * @param result The ObjectNode already containing the injected field(s).
      * @return The final ObjectNode with all fields.
      */
-    private static ObjectNode copyMetadataFields(JsonNode metadata, ObjectNode result) {
+    private static ObjectNode copyMetadataFields(JsonNode metadata, @NonNull ObjectNode result) {
         if (metadata != null && metadata.isObject()) {
             result.setAll((ObjectNode) metadata);
         }
