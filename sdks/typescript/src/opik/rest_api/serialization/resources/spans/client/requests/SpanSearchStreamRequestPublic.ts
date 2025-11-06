@@ -20,6 +20,8 @@ export const SpanSearchStreamRequestPublic: core.serialization.Schema<
     limit: core.serialization.number().optional(),
     lastRetrievedId: core.serialization.property("last_retrieved_id", core.serialization.string().optional()),
     truncate: core.serialization.boolean().optional(),
+    fromTime: core.serialization.property("from_time", core.serialization.date().optional()),
+    toTime: core.serialization.property("to_time", core.serialization.date().optional()),
 });
 
 export declare namespace SpanSearchStreamRequestPublic {
@@ -32,5 +34,7 @@ export declare namespace SpanSearchStreamRequestPublic {
         limit?: number | null;
         last_retrieved_id?: string | null;
         truncate?: boolean | null;
+        from_time?: string | null;
+        to_time?: string | null;
     }
 }

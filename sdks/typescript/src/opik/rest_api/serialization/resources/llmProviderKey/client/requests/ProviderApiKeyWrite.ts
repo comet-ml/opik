@@ -14,6 +14,7 @@ export const ProviderApiKeyWrite: core.serialization.Schema<
     provider: ProviderApiKeyWriteProvider,
     apiKey: core.serialization.property("api_key", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
+    providerName: core.serialization.property("provider_name", core.serialization.string().optional()),
     headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     configuration: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     baseUrl: core.serialization.property("base_url", core.serialization.string().optional()),
@@ -24,6 +25,7 @@ export declare namespace ProviderApiKeyWrite {
         provider: ProviderApiKeyWriteProvider.Raw;
         api_key?: string | null;
         name?: string | null;
+        provider_name?: string | null;
         headers?: Record<string, string> | null;
         configuration?: Record<string, string> | null;
         base_url?: string | null;

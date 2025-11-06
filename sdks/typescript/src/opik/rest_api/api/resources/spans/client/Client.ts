@@ -243,6 +243,8 @@ export class Spans {
             stripAttachments,
             sorting,
             exclude,
+            fromTime,
+            toTime,
         } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -289,6 +291,14 @@ export class Spans {
 
         if (exclude != null) {
             _queryParams["exclude"] = exclude;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -1163,7 +1173,7 @@ export class Spans {
         request: OpikApi.GetSpanStatsRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, traceId, type: type_, filters } = request;
+        const { projectId, projectName, traceId, type: type_, filters, fromTime, toTime } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
             _queryParams["project_id"] = projectId;
@@ -1185,6 +1195,14 @@ export class Spans {
 
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({

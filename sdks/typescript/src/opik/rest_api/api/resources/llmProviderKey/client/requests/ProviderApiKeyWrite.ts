@@ -14,6 +14,8 @@ export interface ProviderApiKeyWrite {
     provider: OpikApi.ProviderApiKeyWriteProvider;
     apiKey?: string;
     name?: string;
+    /** Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). Should not be set for standard providers (OpenAI, Anthropic, etc.). */
+    providerName?: string;
     headers?: Record<string, string>;
     configuration?: Record<string, string>;
     baseUrl?: string;

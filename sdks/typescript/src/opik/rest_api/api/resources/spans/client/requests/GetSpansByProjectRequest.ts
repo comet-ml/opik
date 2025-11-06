@@ -20,4 +20,6 @@ export interface GetSpansByProjectRequest {
     stripAttachments?: boolean;
     sorting?: string;
     exclude?: string;
+    fromTime?: Date;
+    toTime?: Date;
 }
