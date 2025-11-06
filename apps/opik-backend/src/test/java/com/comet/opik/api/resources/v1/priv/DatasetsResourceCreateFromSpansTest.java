@@ -271,7 +271,7 @@ class DatasetsResourceCreateFromSpansTest {
         var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        // Create trace and span
+        // Create trace and span WITH metadata
         String projectName = GENERATOR.generate().toString();
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .projectName(projectName)
@@ -284,11 +284,37 @@ class DatasetsResourceCreateFromSpansTest {
                 .traceId(trace.id())
                 .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
                 .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response\"}"))
+                .tags(Set.of("tag1", "tag2"))
+                .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value\"}"))
+                .usage(Map.of("tokens", 100))
                 .build();
 
         spanResourceClient.createSpan(span, apiKey, workspaceName);
 
-        // Create request with no enrichment options
+        // Add feedback scores to span
+        var feedbackScore = FeedbackScoreBatchItem.builder()
+                .id(span.id())
+                .projectName(projectName)
+                .name("accuracy")
+                .value(BigDecimal.valueOf(0.95))
+                .reason("High accuracy")
+                .source(ScoreSource.SDK)
+                .build();
+
+        spanResourceClient.feedbackScores(List.of(feedbackScore), apiKey, workspaceName);
+
+        // Add comment to span
+        var comment = new Comment(
+                null,
+                "Test comment",
+                null,
+                null,
+                null,
+                null);
+
+        spanResourceClient.createComment(comment, span.id(), apiKey, workspaceName, 201);
+
+        // Create request with no enrichment options (all disabled)
         var request = com.comet.opik.api.CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span.id()))
                 .enrichmentOptions(
@@ -306,8 +332,13 @@ class DatasetsResourceCreateFromSpansTest {
         var item = actualEntity.content().getFirst();
         assertThat(item.data()).containsKey("input");
         assertThat(item.data()).containsKey("expected_output");
+
+        // Verify enrichment fields are NOT included even though they exist on the span
         assertThat(item.data()).doesNotContainKey("tags");
         assertThat(item.data()).doesNotContainKey("metadata");
+        assertThat(item.data()).doesNotContainKey("feedback_scores");
+        assertThat(item.data()).doesNotContainKey("comments");
+        assertThat(item.data()).doesNotContainKey("usage");
     }
 
     @Test
