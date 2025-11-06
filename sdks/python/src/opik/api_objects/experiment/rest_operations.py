@@ -1,16 +1,14 @@
 import json
 from typing import List, Optional
 
-import opik.exceptions as exceptions
-from opik.rest_api import OpikApi
-from opik.rest_api.types import experiment_public
 from . import experiment_item
-
 from .. import rest_stream_parser
+from ... import exceptions, rest_api
+from ...rest_api.types import experiment_public
 
 
 def get_experiment_data_by_name(
-    rest_client: OpikApi, name: str
+    rest_client: rest_api.OpikApi, name: str
 ) -> experiment_public.ExperimentPublic:
     # TODO: this method is deprecated and should be removed after
     #  deprecated Opik.get_experiment_by_name() will be removed.
@@ -25,7 +23,7 @@ def get_experiment_data_by_name(
 
 
 def get_experiments_data_by_name(
-    rest_client: OpikApi,
+    rest_client: rest_api.OpikApi,
     name: str,
     max_results: Optional[int] = None,
 ) -> List[experiment_public.ExperimentPublic]:
@@ -49,7 +47,7 @@ def get_experiments_data_by_name(
 
 
 def find_experiment_items_for_dataset(
-    rest_client: OpikApi,
+    rest_client: rest_api.OpikApi,
     dataset_id: str,
     experiment_ids: List[str],
     max_results: int,

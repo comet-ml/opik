@@ -4,19 +4,19 @@ import opik
 from opik.api_objects.experiment import experiment_item
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
-from testlib import assert_equal
+
 from . import verifiers
-from ..testlib import ANY_BUT_NONE
+from ..testlib import assert_equal, ANY_BUT_NONE
 
 
 def llm_task(item: Dict[str, Any]):
-    if item["input"] == {"question": "What is the of capital of Ukraine?"}:
+    if item["input"] == {"question": "What is the capital of Ukraine?"}:
         return {"output": "Kyiv"}
-    if item["input"] == {"question": "What is the of capital of France?"}:
+    if item["input"] == {"question": "What is the capital of France?"}:
         return {"output": "Paris"}
-    if item["input"] == {"question": "What is the of capital of Germany?"}:
+    if item["input"] == {"question": "What is the capital of Germany?"}:
         return {"output": "Berlin"}
-    if item["input"] == {"question": "What is the of capital of Poland?"}:
+    if item["input"] == {"question": "What is the capital of Poland?"}:
         return {"output": "Krakow"}
 
     raise AssertionError(
@@ -46,15 +46,15 @@ def test__find_experiment_items_for_dataset__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the of capital of Germany?"},
+                "input": {"question": "What is the capital of Germany?"},
                 "expected_model_output": {"output": "Berlin"},
             },
             {
-                "input": {"question": "What is the of capital of Poland?"},
+                "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
             {
-                "input": {"question": "What is the of capital of Ukraine?"},
+                "input": {"question": "What is the capital of Ukraine?"},
                 "expected_model_output": {"output": "Kyiv"},
             },
         ]
@@ -102,7 +102,7 @@ def test__find_experiment_items_for_dataset__happy_path(
             dataset_item_data={
                 "expected_model_output": {"output": "Kyiv"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the of capital of Ukraine?"},
+                "input": {"question": "What is the capital of Ukraine?"},
             },
             evaluation_task_output={"output": "Kyiv"},
             feedback_scores=[
@@ -121,7 +121,7 @@ def test__find_experiment_items_for_dataset__happy_path(
             dataset_item_data={
                 "expected_model_output": {"output": "Warsaw"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the of capital of Poland?"},
+                "input": {"question": "What is the capital of Poland?"},
             },
             evaluation_task_output={"output": "Krakow"},
             feedback_scores=[
@@ -140,7 +140,7 @@ def test__find_experiment_items_for_dataset__happy_path(
             dataset_item_data={
                 "expected_model_output": {"output": "Berlin"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the of capital of Germany?"},
+                "input": {"question": "What is the capital of Germany?"},
             },
             evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
@@ -173,15 +173,15 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the of capital of Germany?"},
+                "input": {"question": "What is the capital of Germany?"},
                 "expected_model_output": {"output": "Berlin"},
             },
             {
-                "input": {"question": "What is the of capital of Poland?"},
+                "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
             {
-                "input": {"question": "What is the of capital of Ukraine?"},
+                "input": {"question": "What is the capital of Ukraine?"},
                 "expected_model_output": {"output": "Kyiv"},
             },
         ]
@@ -230,7 +230,7 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
             dataset_item_data={
                 "expected_model_output": {"output": "Warsaw"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the of capital of Poland?"},
+                "input": {"question": "What is the capital of Poland?"},
             },
             evaluation_task_output={"output": "Krakow"},
             feedback_scores=[
