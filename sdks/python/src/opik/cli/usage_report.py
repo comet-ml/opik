@@ -34,7 +34,13 @@ import opik
 console = Console()
 
 # Constants
-MAX_PAGINATION_PAGES = 1000  # Safety limit to avoid infinite loops in pagination
+# MAX_PAGINATION_PAGES sets a safety limit to avoid infinite loops in pagination.
+# With a page size of 1000, this allows for up to 1 million items. For large workspaces, you can override
+# this limit by setting the OPIK_MAX_PAGINATION_PAGES environment variable to a higher value.
+try:
+    MAX_PAGINATION_PAGES = int(os.environ.get("OPIK_MAX_PAGINATION_PAGES", "1000"))
+except ValueError:
+    MAX_PAGINATION_PAGES = 1000
 
 
 def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> Dict[str, float]:
