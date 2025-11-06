@@ -4654,12 +4654,15 @@ class GetTracesByProjectResourceTest {
 
         private final TraceStatsAssertion traceStatsAssertion = new TraceStatsAssertion(traceResourceClient);
         private final TraceTestAssertion traceTestAssertion = new TraceTestAssertion(traceResourceClient, USER);
+        private final TraceStreamTestAssertion traceStreamTestAssertion = new TraceStreamTestAssertion(
+                traceResourceClient, USER);
 
         // Scenario 1: Boundary condition testing - traces at exact lower bound, upper bound, and in between
         private Stream<Arguments> provideBoundaryScenarios() {
             return Stream.of(
                     Arguments.of("/traces/stats", traceStatsAssertion),
-                    Arguments.of("/traces", traceTestAssertion));
+                    Arguments.of("/traces", traceTestAssertion),
+                    Arguments.of("/traces/stream", traceStreamTestAssertion));
         }
 
         @ParameterizedTest
@@ -4745,7 +4748,8 @@ class GetTracesByProjectResourceTest {
         private Stream<Arguments> provideFormatParsingScenarios() {
             return Stream.of(
                     Arguments.of("/traces/stats", traceStatsAssertion),
-                    Arguments.of("/traces", traceTestAssertion));
+                    Arguments.of("/traces", traceTestAssertion),
+                    Arguments.of("/traces/stream", traceStreamTestAssertion));
         }
 
         @ParameterizedTest

@@ -7,6 +7,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.filter.Field;
@@ -31,6 +32,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -71,6 +73,8 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -256,6 +260,13 @@ class FindTraceThreadsResourceTest {
                 .flatMap(span -> span.usage().entrySet().stream())
                 .map(entry -> Map.entry(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+    }
+
+    private void assertTheadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
+            List<TraceThread> expectedThreads, List<TraceThreadFilter> filters) {
+        var actualThreads = traceResourceClient.searchTraceThreadsStream(projectName, projectId, apiKey,
+                workspaceName, filters);
+        TraceAssertions.assertThreads(expectedThreads, actualThreads);
     }
 
     @Nested
@@ -758,13 +769,6 @@ class FindTraceThreadsResourceTest {
             assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
         }
 
-        private void assertTheadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
-                List<TraceThread> expectedThreads, List<TraceThreadFilter> filters) {
-            var actualThreads = traceResourceClient.searchTraceThreadsStream(projectName, projectId, apiKey,
-                    workspaceName, filters);
-            TraceAssertions.assertThreads(expectedThreads, actualThreads);
-        }
-
         @ParameterizedTest
         @EnumSource(Direction.class)
         @DisplayName("When sorting threads by feedback score, then threads are returned in correct order")
@@ -1212,6 +1216,267 @@ class FindTraceThreadsResourceTest {
         }
 
         return calculateEstimatedCost(spans);
+    }
+
+    @Nested
+    @DisplayName("Find Trace Threads With Time Filtering:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindTraceThreadsTimeFilteringTests {
+
+        private void createAndCloseThreads(List<Trace> traces, String projectName, String apiKey,
+                String workspaceName) {
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            Mono.delay(Duration.ofMillis(1000)).block();
+
+            traces.stream()
+                    .map(Trace::threadId)
+                    .distinct()
+                    .forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null, projectName, apiKey,
+                            workspaceName));
+
+            Mono.delay(Duration.ofMillis(1000)).block();
+        }
+
+        private void assertTimeFilteredThreads(boolean stream, List<TraceThread> expectedThreads, String projectName,
+                Instant fromTime, Instant toTime, String apiKey, String workspaceName) {
+            if (!stream) {
+                // Paginated endpoint orders by: last_updated_at DESC
+                // Threads are closed sequentially, so last closed appears first
+                var sortedExpected = new ArrayList<>(expectedThreads);
+                Collections.reverse(sortedExpected);
+
+                var queryParams = Map.of(
+                        "from_time", fromTime.toString(),
+                        "to_time", toTime.toString());
+                assertThreadPage(projectName, null, sortedExpected, List.of(), queryParams, apiKey, workspaceName);
+            } else {
+                // Stream endpoint orders by: thread_model_id DESC (based on first trace timestamp)
+                var sortedExpected = expectedThreads.stream()
+                        .sorted(Comparator.comparing(TraceThread::startTime).reversed())
+                        .toList();
+
+                var request = TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .fromTime(fromTime)
+                        .toTime(toTime)
+                        .build();
+
+                var actualThreads = traceResourceClient.searchTraceThreadsStream(request, apiKey, workspaceName);
+                TraceAssertions.assertThreads(sortedExpected, actualThreads);
+            }
+        }
+
+        // Scenario 1: Boundary condition testing - threads with traces at exact lower bound, upper bound, and in between
+        @ParameterizedTest
+        @DisplayName("filter trace threads by UUID creation time - includes threads within bounds")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenIncludeThreadsWithinBounds(boolean stream) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofMinutes(20));
+            Instant upperBound = baseTime.plus(Duration.ofMinutes(20));
+
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            lowerBound.plus(Duration.ofMinutes(5)), "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime, "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            upperBound.minus(Duration.ofMinutes(5)), "Within bounds"));
+
+            createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            List<TraceThread> expectedThreads = allTraces.stream()
+                    .map(trace -> getExpectedThreads(List.of(trace), projectId, trace.threadId(), List.of(),
+                            TraceThreadStatus.INACTIVE).getFirst())
+                    .toList();
+
+            assertTimeFilteredThreads(stream, expectedThreads, projectName, lowerBound, upperBound, apiKey,
+                    workspaceName);
+        }
+
+        // Scenario 2: ISO-8601 format parsing with extended time range
+        @ParameterizedTest
+        @DisplayName("time parameters in ISO-8601 format parse correctly and filter trace threads")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersInISO8601Format_thenReturnFilteredThreads(boolean stream) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant referenceTime = Instant.now();
+            Instant startTime = referenceTime.minus(Duration.ofHours(2));
+            Instant endTime = referenceTime.plus(Duration.ofHours(1));
+            Instant withinBoundsTime = referenceTime.minus(Duration.ofMinutes(30));
+            Instant outsideBoundsTime = endTime.plus(Duration.ofMinutes(30));
+
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            startTime.plus(Duration.ofMinutes(10)), "Should be included: near start of range"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), withinBoundsTime,
+                            "Should be included: within range"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            endTime.minus(Duration.ofMinutes(10)), "Should be included: near end of range"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), outsideBoundsTime,
+                            "Should NOT be included: outside range"));
+
+            createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            // Expected: first 3 threads (within bounds)
+            List<Trace> expectedTraces = allTraces.subList(0, 3);
+            List<TraceThread> expectedThreads = expectedTraces.stream()
+                    .map(trace -> getExpectedThreads(List.of(trace), projectId, trace.threadId(), List.of(),
+                            TraceThreadStatus.INACTIVE).getFirst())
+                    .toList();
+
+            assertTimeFilteredThreads(stream, expectedThreads, projectName, startTime, endTime, apiKey, workspaceName);
+        }
+
+        // Scenario 3: Threads outside bounds should be excluded
+        @ParameterizedTest
+        @DisplayName("filter trace threads by UUID creation time - excludes threads outside bounds")
+        @MethodSource("provideBoundaryScenarios")
+        void whenTimeParametersProvided_thenExcludeThreadsOutsideBounds(boolean stream) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofHours(1));
+            Instant upperBound = baseTime.plus(Duration.ofHours(1));
+
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            lowerBound.plus(Duration.ofMinutes(10)), "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime, "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            upperBound.minus(Duration.ofMinutes(10)), "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            lowerBound.minus(Duration.ofMinutes(10)), "Outside bounds (before lower)"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            upperBound.plus(Duration.ofMinutes(10)), "Outside bounds (after upper)"));
+
+            createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            // Expected: first 3 threads (within bounds) - exclude outside traces
+            List<Trace> expectedTraces = allTraces.subList(0, 3);
+            List<TraceThread> expectedThreads = expectedTraces.stream()
+                    .map(trace -> getExpectedThreads(List.of(trace), projectId, trace.threadId(), List.of(),
+                            TraceThreadStatus.INACTIVE).getFirst())
+                    .toList();
+
+            assertTimeFilteredThreads(stream, expectedThreads, projectName, lowerBound, upperBound, apiKey,
+                    workspaceName);
+        }
+
+        // Scenario 4: Incomplete time parameters should be rejected
+        @ParameterizedTest
+        @DisplayName("time filtering requires both from_time and to_time parameters")
+        @MethodSource("provideBoundaryScenarios")
+        void whenOnlyFromTimeProvided_thenReturnBadRequest(boolean stream) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant now = Instant.now();
+
+            if (!stream) {
+                var queryParams = Map.of("from_time", now.toString());
+                var actualResponse = traceResourceClient.callGetTraceThreadsWithQueryParams(projectName, null,
+                        queryParams, apiKey, workspaceName);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            } else {
+                var request = TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .fromTime(now)
+                        .build();
+
+                try (var response = traceResourceClient.callSearchTraceThreadsWithRequest(request, apiKey,
+                        workspaceName)) {
+                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @DisplayName("from_time must be before to_time")
+        @MethodSource("provideBoundaryScenarios")
+        void whenFromTimeAfterToTime_thenReturnBadRequest(boolean stream) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Instant now = Instant.now();
+            Instant earlier = now.minus(Duration.ofMinutes(10));
+
+            // from_time (now) is after to_time (earlier) - should fail
+            if (!stream) {
+                var queryParams = Map.of(
+                        "from_time", now.toString(),
+                        "to_time", earlier.toString());
+                var actualResponse = traceResourceClient.callGetTraceThreadsWithQueryParams(projectName, null,
+                        queryParams, apiKey, workspaceName);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            } else {
+                var request = TraceThreadSearchStreamRequest.builder()
+                        .projectName(projectName)
+                        .fromTime(now)
+                        .toTime(earlier)
+                        .build();
+
+                try (var response = traceResourceClient.callSearchTraceThreadsWithRequest(request, apiKey,
+                        workspaceName)) {
+                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                }
+            }
+        }
+
+        private Stream<Arguments> provideBoundaryScenarios() {
+            return Stream.of(
+                    Arguments.of(false), // Non-stream (paginated)
+                    Arguments.of(true) // Stream search
+            );
+        }
+
+        private Trace createTraceAtTimestamp(String projectName, String threadId, Instant timestamp, String comment) {
+            return createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .id(generateUUIDForTimestamp(timestamp))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .build();
+        }
+
+        private UUID generateUUIDForTimestamp(Instant timestamp) {
+            byte[] zeroBytes = new byte[8];
+            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes,
+                    timestamp.toEpochMilli());
+        }
     }
 
 }
