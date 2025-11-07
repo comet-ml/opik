@@ -33,19 +33,22 @@ const AppDebugInfo = () => {
         <div className="flex items-center">
           <AppNetworkStatus />
         </div>
-        <div
-          className="flex items-center gap-2"
-          onClick={() => {
-            copy(APP_VERSION);
-            toast({ description: "Successfully copied version" });
-          }}
-        >
-          <span className="comet-body-s-accented truncate flex items-center gap-2">
-            <OpikIcon className="size-5" />
-            OPIK VERSION {APP_VERSION}
-          </span>
-          <Copy className="size-4 shrink-0" />
-        </div>
+
+        {APP_VERSION && (
+          <div
+            className="flex items-center gap-2"
+            onClick={() => {
+              copy(APP_VERSION);
+              toast({ description: "Successfully copied version" });
+            }}
+          >
+            <span className="comet-body-s-accented truncate flex items-center gap-2">
+              <OpikIcon className="size-5" />
+              OPIK VERSION {APP_VERSION}
+            </span>
+            <Copy className="size-4 shrink-0" />
+          </div>
+        )}
       </>
     )
   );
