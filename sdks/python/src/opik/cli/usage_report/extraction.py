@@ -243,16 +243,10 @@ def extract_project_data(
 
     # Get experiment counts by unit (workspace-level)
     try:
-        # Try using REST client method first (handles parameters correctly)
-        # If that fails due to validation errors, fall back to raw HTTP
-        use_rest_client = True
-        total_experiments = None
-        httpx_client = client.rest_client._client_wrapper.httpx_client
-
+        # Use REST client method (handles parameters correctly)
+        # Filter by type="regular" to match UI behavior (UI only shows regular experiments)
+        # Note: types parameter needs to be JSON-encoded array string
         try:
-            # Test if REST client works by getting first page
-            # Filter by type="regular" to match UI behavior (UI only shows regular experiments)
-            # Note: types parameter needs to be JSON-encoded array string
             test_page = client.rest_client.experiments.find_experiments(
                 page=1,
                 size=1000,
@@ -262,27 +256,35 @@ def extract_project_data(
                 dataset_deleted=False,  # Filter out experiments with deleted datasets
             )
             total_experiments = test_page.total or 0
-        except Exception:
-            # Fall back to raw HTTP if REST client has validation issues
-            use_rest_client = False
-            # Get total count from raw HTTP request
-            # Filter by type="regular" to match UI behavior
-            # Note: types parameter needs to be JSON-encoded array string
-            response = httpx_client.request(
-                "v1/private/experiments",
-                method="GET",
-                params={
-                    "page": 1,
-                    "size": 1000,
-                    "types": json.dumps(
-                        ["regular"]
-                    ),  # Filter to only regular experiments (matches UI)
-                    "dataset_deleted": False,
-                },
-            )
-            if response.status_code >= 200 and response.status_code < 300:
-                response_data = response.json()
-                total_experiments = response_data.get("total", 0)
+        except Exception as api_error:
+            # Handle Pydantic validation errors from malformed API responses
+            error_str = str(api_error)
+            if "dataset_name" in error_str and (
+                "Field required" in error_str or "missing" in error_str.lower()
+            ):
+                # Try to get raw response to get total count
+                try:
+                    httpx_client = client.rest_client._client_wrapper.httpx_client
+                    response = httpx_client.request(
+                        "v1/private/experiments",
+                        method="GET",
+                        params={
+                            "page": 1,
+                            "size": 1000,
+                            "types": json.dumps(["regular"]),
+                            "dataset_deleted": False,
+                        },
+                    )
+                    if response.status_code >= 200 and response.status_code < 300:
+                        response_data = response.json()
+                        total_experiments = response_data.get("total", 0)
+                    else:
+                        total_experiments = 0
+                except Exception:
+                    total_experiments = 0
+            else:
+                # Re-raise other errors
+                raise api_error
 
         page = 1  # API uses 1-indexed pagination
 
@@ -295,85 +297,178 @@ def extract_project_data(
             leave=False,
         ) as pbar:
             while True:
-                experiments_list: List[Dict[str, Any]] = []
-
-                if use_rest_client:
-                    # Use REST client method (handles parameters correctly)
-                    try:
-                        experiments_page = client.rest_client.experiments.find_experiments(
-                            page=page,
-                            size=1000,
-                            types=json.dumps(
-                                ["regular"]
-                            ),  # Filter to only regular experiments (matches UI)
-                            dataset_deleted=False,  # Filter out experiments with deleted datasets
-                        )
-                        experiments_list = experiments_page.content or []
-                        # Convert to dict format for processing
-                        experiments_dict_list = []
-                        for exp in experiments_list:
-                            if hasattr(exp, "model_dump"):
-                                exp_dict = exp.model_dump()
-                            elif hasattr(exp, "dict"):
-                                exp_dict = exp.dict()
-                            else:
-                                # Already a dict
-                                exp_dict = exp  # type: ignore[assignment]
-                        experiments_dict_list.append(exp_dict)
-                        experiments_list = experiments_dict_list
-                    except Exception:
-                        # If validation fails, switch to raw HTTP for remaining pages
-                        use_rest_client = False
-                        httpx_client = client.rest_client._client_wrapper.httpx_client
-                        # Fall through to fetch using raw HTTP
-
-                if not use_rest_client:
-                    # Make direct HTTP request to bypass Pydantic validation
-                    # Filter by type="regular" and exclude deleted datasets to match UI behavior
-                    # Note: types parameter needs to be JSON-encoded array string
-                    response = httpx_client.request(
-                        "v1/private/experiments",
-                        method="GET",
-                        params={
-                            "page": page,
-                            "size": 1000,
-                            "types": json.dumps(
-                                ["regular"]
-                            ),  # Filter to only regular experiments (matches UI)
-                            "dataset_deleted": False,  # Boolean should be handled by encode_query
-                        },
+                # Use REST client method (handles parameters correctly)
+                try:
+                    experiments_page = client.rest_client.experiments.find_experiments(
+                        page=page,
+                        size=1000,
+                        types=json.dumps(
+                            ["regular"]
+                        ),  # Filter to only regular experiments (matches UI)
+                        dataset_deleted=False,  # Filter out experiments with deleted datasets
                     )
+                    experiments_list = experiments_page.content or []
+                except Exception as api_error:
+                    # Handle Pydantic validation errors from malformed API responses
+                    # Some experiments may be missing required fields like dataset_name
+                    error_str = str(api_error)
+                    if "dataset_name" in error_str and (
+                        "Field required" in error_str or "missing" in error_str.lower()
+                    ):
+                        # Try to get raw response and manually filter out invalid experiments
+                        try:
+                            httpx_client = (
+                                client.rest_client._client_wrapper.httpx_client
+                            )
+                            response = httpx_client.request(
+                                "v1/private/experiments",
+                                method="GET",
+                                params={
+                                    "page": page,
+                                    "size": 1000,
+                                    "types": json.dumps(["regular"]),
+                                    "dataset_deleted": False,
+                                },
+                            )
+                            if (
+                                response.status_code >= 200
+                                and response.status_code < 300
+                            ):
+                                response_data = response.json()
+                                experiments_list = response_data.get("content", [])
+                                # Note: We process experiments even if they're missing dataset_name
+                                # since process_experiment_for_stats only needs created_at
+                            else:
+                                # If raw request also fails, try with smaller page size as fallback
+                                console.print(
+                                    f"[yellow]    Warning: Could not fetch page {page} (HTTP {response.status_code}). Trying smaller page size...[/yellow]"
+                                )
+                                try:
+                                    # Try with smaller page size to potentially avoid the problematic experiment
+                                    small_response = httpx_client.request(
+                                        "v1/private/experiments",
+                                        method="GET",
+                                        params={
+                                            "page": page,
+                                            "size": 100,  # Smaller page size
+                                            "types": json.dumps(["regular"]),
+                                            "dataset_deleted": False,
+                                        },
+                                    )
+                                    if (
+                                        small_response.status_code >= 200
+                                        and small_response.status_code < 300
+                                    ):
+                                        small_response_data = small_response.json()
+                                        experiments_list = small_response_data.get(
+                                            "content", []
+                                        )
+                                        console.print(
+                                            f"[yellow]    Successfully fetched page {page} with smaller page size. Got {len(experiments_list)} experiment(s).[/yellow]"
+                                        )
+                                    else:
+                                        # If smaller page size also fails, skip this page
+                                        console.print(
+                                            f"[yellow]    Warning: Could not fetch page {page} even with smaller page size. Skipping page (may lose some experiments).[/yellow]"
+                                        )
+                                        experiments_list = []
+                                        page += 1
+                                        continue
+                                except Exception:
+                                    # If smaller page size request fails, skip this page
+                                    console.print(
+                                        f"[yellow]    Warning: Could not fetch page {page} even with smaller page size. Skipping page (may lose some experiments).[/yellow]"
+                                    )
+                                    experiments_list = []
+                                    page += 1
+                                    continue
+                        except Exception as raw_error:
+                            # If raw request fails, try smaller page size as last resort
+                            console.print(
+                                f"[yellow]    Warning: Could not fetch page {page} due to error: {raw_error}. Trying smaller page size...[/yellow]"
+                            )
+                            try:
+                                httpx_client = (
+                                    client.rest_client._client_wrapper.httpx_client
+                                )
+                                small_response = httpx_client.request(
+                                    "v1/private/experiments",
+                                    method="GET",
+                                    params={
+                                        "page": page,
+                                        "size": 100,  # Smaller page size
+                                        "types": json.dumps(["regular"]),
+                                        "dataset_deleted": False,
+                                    },
+                                )
+                                if (
+                                    small_response.status_code >= 200
+                                    and small_response.status_code < 300
+                                ):
+                                    small_response_data = small_response.json()
+                                    experiments_list = small_response_data.get(
+                                        "content", []
+                                    )
+                                    console.print(
+                                        f"[yellow]    Successfully fetched page {page} with smaller page size. Got {len(experiments_list)} experiment(s).[/yellow]"
+                                    )
+                                else:
+                                    # If smaller page size also fails, skip this page
+                                    console.print(
+                                        f"[yellow]    Warning: Could not fetch page {page} even with smaller page size. Skipping page (may lose some experiments).[/yellow]"
+                                    )
+                                    experiments_list = []
+                                    page += 1
+                                    continue
+                            except Exception:
+                                # If smaller page size request also fails, skip this page
+                                console.print(
+                                    f"[yellow]    Warning: Could not fetch page {page} even with smaller page size. Skipping page (may lose some experiments).[/yellow]"
+                                )
+                                experiments_list = []
+                                page += 1
+                                continue
+                    else:
+                        # Re-raise other errors
+                        raise api_error
 
-                    # Check for HTTP errors
-                    if response.status_code < 200 or response.status_code >= 300:
+                # Convert to dict format for processing
+                experiments_dict_list = []
+                for exp in experiments_list:
+                    try:
+                        if hasattr(exp, "model_dump"):
+                            # Use mode='python' to get native Python types and exclude_unset to avoid validation issues
+                            exp_dict = exp.model_dump(mode="python", exclude_unset=True)
+                        elif hasattr(exp, "dict"):
+                            exp_dict = exp.dict(exclude_unset=True)
+                        else:
+                            # Already a dict
+                            exp_dict = exp  # type: ignore[assignment]
+                        experiments_dict_list.append(exp_dict)
+                    except Exception as e:
+                        # Skip experiments that can't be converted (e.g., missing required fields)
                         console.print(
-                            f"[yellow]    Warning: HTTP {response.status_code} when fetching experiments[/yellow]"
+                            f"[yellow]    Warning: Skipping experiment due to conversion error: {e}[/yellow]"
                         )
-                        break
-
-                    # Parse JSON directly to avoid Pydantic validation issues
-                    response_data = response.json()
-                    experiments_list = response_data.get("content", [])
+                        continue
+                experiments_list = experiments_dict_list
 
                 if not experiments_list or len(experiments_list) == 0:
                     break
 
                 # Filter experiments to only include those with existing (non-deleted) datasets
                 # This matches the UI behavior - UI only shows experiments whose datasets still exist
-                # Experiments with deleted datasets may have missing or None dataset_name fields
+                # Note: We still process experiments without dataset_name since process_experiment_for_stats
+                # only needs created_at, but we filter out experiments whose datasets don't exist
                 filtered_experiments = []
                 skipped_count = 0
                 for experiment_dict in experiments_list:
                     dataset_name = experiment_dict.get("dataset_name")
-                    # Skip experiments that:
-                    # 1. Have no dataset_name (None or missing) - these are from deleted datasets
-                    # 2. Have a dataset_name that doesn't exist in our list of existing datasets
-                    if not dataset_name:
-                        # Missing dataset_name indicates deleted dataset
-                        skipped_count += 1
-                        continue
+                    # Skip experiments that have a dataset_name but the dataset doesn't exist
+                    # (experiments without dataset_name are still processed)
                     if (
-                        existing_dataset_names
+                        dataset_name
+                        and existing_dataset_names
                         and dataset_name not in existing_dataset_names
                     ):
                         # Dataset doesn't exist (was deleted)
@@ -382,7 +477,7 @@ def extract_project_data(
                     filtered_experiments.append(experiment_dict)
 
                 # Count experiments by month based on created_at
-                # Only process filtered experiments (those with existing datasets)
+                # Process all experiments (including those without dataset_name)
                 for experiment_dict in filtered_experiments:
                     total_experiments_processed += 1
                     in_range, without_date, outside_range = (
