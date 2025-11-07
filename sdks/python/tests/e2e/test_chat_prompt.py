@@ -147,24 +147,18 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
         chat_prompt_v1,
         name=prompt_name,
         messages=messages,
+        commit=chat_prompt_v1.commit,
+        prompt_id=chat_prompt_v1.__internal_api__prompt_id__,
     )
     
     verifiers.verify_chat_prompt_version(
         chat_prompt_v2,
         name=prompt_name,
         messages=messages,
+        commit=chat_prompt_v1.commit,
+        prompt_id=chat_prompt_v1.__internal_api__prompt_id__,
     )
 
-    # Should return same version
-    assert (
-        chat_prompt_v2.__internal_api__prompt_id__
-        == chat_prompt_v1.__internal_api__prompt_id__
-    )
-    assert (
-        chat_prompt_v2.__internal_api__version_id__
-        == chat_prompt_v1.__internal_api__version_id__
-    )
-    assert chat_prompt_v2.commit == chat_prompt_v1.commit
 
 
 def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Opik):

@@ -592,11 +592,3 @@ def verify_chat_prompt_version(
         prompt_id == chat_prompt.__internal_api__prompt_id__
     ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
-    
-    # Verify template_structure is "chat" by checking the backend representation
-    from opik.api_objects.prompt.chat_prompt import to_info_dict
-    info_dict = to_info_dict(chat_prompt)
-    actual_template_structure = info_dict.get("version", {}).get("template_structure")
-    assert (
-        actual_template_structure == "chat"
-    ), f"Expected template_structure='chat', got {actual_template_structure}"

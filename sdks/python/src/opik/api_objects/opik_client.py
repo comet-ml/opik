@@ -23,8 +23,8 @@ from .attachment import converters as attachment_converters
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
-from .prompt import Prompt, PromptType
-from .prompt.client import PromptClient
+from . import prompt as prompt_module
+from .prompt import client as prompt_client
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
 from .. import (
@@ -911,8 +911,8 @@ class Opik:
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
-        prompt: Optional[Prompt] = None,
-        prompts: Optional[List[Prompt]] = None,
+        prompt: Optional[prompt_module.Prompt] = None,
+        prompts: Optional[List[prompt_module.Prompt]] = None,
         type: Literal["regular", "trial", "mini-batch"] = "regular",
         optimization_id: Optional[str] = None,
     ) -> experiment.Experiment:
@@ -1347,8 +1347,8 @@ class Opik:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptType = PromptType.MUSTACHE,
-    ) -> Prompt:
+        type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+    ) -> prompt_module.Prompt:
         """
         Creates a new prompt with the given name and template.
         If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
@@ -1364,19 +1364,19 @@ class Opik:
         Raises:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
-        prompt_client = PromptClient(self._rest_client)
-        prompt_version = prompt_client.create_prompt(
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        prompt_version = prompt_client_.create_prompt(
             name=name, prompt=prompt, metadata=metadata, type=type
         )
-        return Prompt.from_fern_prompt_version(name, prompt_version)
+        return prompt_module.Prompt.from_fern_prompt_version(name, prompt_version)
 
     def create_chat_prompt(
         self,
         name: str,
         messages: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptType = PromptType.MUSTACHE,
-    ) -> "ChatPrompt":
+        type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+    ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
         If a chat prompt with the same name already exists, it will create a new version if the messages differ.
@@ -1393,15 +1393,13 @@ class Opik:
         Raises:
             ApiError: If there is an error during the creation of the prompt.
         """
-        from opik.api_objects.prompt import ChatPrompt
-
-        return ChatPrompt(name=name, messages=messages, metadata=metadata, type=type)
+        return prompt_module.ChatPrompt(name=name, messages=messages, metadata=metadata, type=type)
 
     def get_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> Optional[Prompt]:
+    ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
 
@@ -1412,14 +1410,14 @@ class Opik:
         Returns:
             Prompt: The details of the specified prompt.
         """
-        prompt_client = PromptClient(self._rest_client)
-        fern_prompt_version = prompt_client.get_prompt(name=name, commit=commit)
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        fern_prompt_version = prompt_client_.get_prompt(name=name, commit=commit)
         if fern_prompt_version is None:
             return None
 
-        return Prompt.from_fern_prompt_version(name, fern_prompt_version)
+        return prompt_module.Prompt.from_fern_prompt_version(name, fern_prompt_version)
 
-    def get_prompt_history(self, name: str) -> List[Prompt]:
+    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
         """
         Retrieve all the prompt versions history for a given prompt name.
 
@@ -1429,15 +1427,15 @@ class Opik:
         Returns:
             List[Prompt]: A list of Prompt instances for the given name.
         """
-        prompt_client = PromptClient(self._rest_client)
-        fern_prompt_versions = prompt_client.get_all_prompt_versions(name=name)
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
         result = [
-            Prompt.from_fern_prompt_version(name, version)
+            prompt_module.Prompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
 
-    def get_all_prompts(self, name: str) -> List[Prompt]:
+    def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
         """
         DEPRECATED: Please use Opik.get_prompt_history() instead.
         Retrieve all the prompt versions history for a given prompt name.
@@ -1446,14 +1444,14 @@ class Opik:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of Prompt instances for the given name.
+            List[prompt_module.Prompt]: A list of Prompt instances for the given name.
         """
         LOGGER.warning(
             "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
         )
         return self.get_prompt_history(name)
 
-    def search_prompts(self, filter_string: Optional[str] = None) -> List[Prompt]:
+    def search_prompts(self, filter_string: Optional[str] = None) -> List[prompt_module.Prompt]:
         """
         Retrieve the latest prompt versions for the given search parameters.
 
@@ -1489,10 +1487,10 @@ class Opik:
             oql = opik_query_language.OpikQueryLanguage(filter_string)
             parsed_filters = oql.get_filter_expressions()
 
-        prompt_client = PromptClient(self._rest_client)
-        name_and_versions = prompt_client.search_prompts(parsed_filters=parsed_filters)
-        prompts: List[Prompt] = [
-            Prompt.from_fern_prompt_version(prompt_name, version)
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
+        prompts: List[prompt_module.Prompt] = [
+            prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
             for (prompt_name, version) in name_and_versions
         ]
         return prompts
