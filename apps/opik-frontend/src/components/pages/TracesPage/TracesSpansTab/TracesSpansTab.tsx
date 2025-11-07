@@ -229,7 +229,7 @@ const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
-const TRACES_SPANS_DATE_RANGE_KEY = "traces_spans_range";
+const DATE_RANGE_KEY = "range";
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
@@ -252,7 +252,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     minDate,
     maxDate,
   } = useMetricDateRangeWithQuery({
-    key: TRACES_SPANS_DATE_RANGE_KEY,
+    key: DATE_RANGE_KEY,
   });
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
