@@ -58,13 +58,17 @@ def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
         "reference": "test",
     }
 
-def compute_hallucination_stats(test_results: List[test_result.TestResult]) -> List[score_result.ScoreResult]:
+
+def compute_hallucination_stats(
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
     return [
         score_result.ScoreResult(
             name="hallucination_metric (max)",
             value=max([x.score_results[0].value for x in test_results]),
         )
     ]
+
 
 results = evaluate(
     experiment_name="My experiment",
