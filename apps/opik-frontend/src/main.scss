@@ -627,16 +627,6 @@
   }
 }
 
-/* Specific styling for MarkdownHighlighter component only */
-.comet-markdown-highlighter {
-  /* Make H2 about the same size as strong elements */
-  h2 {
-    @apply text-base font-medium; /* Same size as base text but medium weight like strong */
-    margin-top: 1rem;
-    margin-bottom: 0.5rem;
-  }
-}
-
 .comet-button-badge {
   position: relative;
   --size: 10px;
