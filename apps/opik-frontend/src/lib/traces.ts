@@ -9,6 +9,8 @@ import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { safelyParseJSON } from "@/lib/utils";
+import isEmpty from "lodash/isEmpty";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -371,6 +373,62 @@ const prettifyDemoProjectLogic = (
   return undefined;
 };
 
+const prettifyCustomMessagingLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  if (
+    config.type === "input" &&
+    isObject(message) &&
+    "prompt" in message &&
+    isArray(message.prompt)
+  ) {
+    const userMessages = message.prompt.filter(
+      (m) =>
+        isObject(m) &&
+        "role" in m &&
+        m.role === "user" &&
+        "content" in m &&
+        isString(m.content) &&
+        m.content !== "",
+    );
+
+    if (userMessages.length > 0) {
+      return last(userMessages).content;
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "candidates" in message &&
+    isArray(message.candidates)
+  ) {
+    const lastCandidate = last(message.candidates);
+    if (
+      lastCandidate &&
+      isObject(lastCandidate) &&
+      "content" in lastCandidate &&
+      isObject(lastCandidate.content) &&
+      "parts" in lastCandidate.content &&
+      isArray(lastCandidate.content.parts)
+    ) {
+      const lastTextPart = findLast(
+        lastCandidate.content.parts,
+        (part) =>
+          isObject(part) &&
+          "text" in part &&
+          isString(part.text) &&
+          part.text !== "",
+      );
+
+      if (lastTextPart && "text" in lastTextPart) {
+        return lastTextPart.text;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 const prettifyGenericLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -380,12 +438,15 @@ const prettifyGenericLogic = (
       "question",
       "messages",
       "user_input",
+      "user_text",
       "query",
       "input_prompt",
       "prompt",
       "sys.query", // Dify
+      "contents",
+      "user_payload",
     ],
-    output: ["answer", "output", "response"],
+    output: ["answer", "output", "response", "reply"],
   };
 
   let unwrappedMessage = message;
@@ -409,6 +470,12 @@ const prettifyGenericLogic = (
       for (const key of PREDEFINED_KEYS_MAP[config.type]) {
         const value = get(unwrappedMessage, key);
         if (isString(value)) {
+          const json = safelyParseJSON(value);
+
+          if (!isEmpty(json)) {
+            return JSON.stringify(json, null, 2);
+          }
+
           return value;
         }
       }
@@ -449,6 +516,10 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyDemoProjectLogic(message, config);
+    }
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyCustomMessagingLogic(message, config);
     }
 
     if (!isString(processedMessage)) {
