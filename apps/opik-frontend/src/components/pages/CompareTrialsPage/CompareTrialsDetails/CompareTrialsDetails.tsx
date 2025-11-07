@@ -7,9 +7,9 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { Tag } from "@/components/ui/tag";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { formatNumericData } from "@/lib/utils";
 import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
 
@@ -113,12 +113,10 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
           </TooltipWrapper>
         )}
         {experiment?.dataset_name && (
-          <ResourceLink
+          <NavigationTag
             id={experiment.dataset_id}
             name={experiment.dataset_name}
             resource={RESOURCE_TYPE.dataset}
-            tooltipContent={`Navigate to dataset ${experiment.dataset_name}`}
-            asTag
           />
         )}
         {scores.map((score) => (

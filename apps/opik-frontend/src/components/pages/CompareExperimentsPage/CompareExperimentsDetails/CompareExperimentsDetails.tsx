@@ -9,9 +9,8 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Experiment } from "@/types/datasets";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
+import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
@@ -183,22 +182,18 @@ const CompareExperimentsDetails: React.FunctionComponent<
           </TooltipWrapper>
         )}
         {experiment?.dataset_name && (
-          <ResourceLink
+          <NavigationTag
             id={experiment.dataset_id}
             name={experiment.dataset_name}
             resource={RESOURCE_TYPE.dataset}
-            tooltipContent={`Navigate to dataset ${experiment.dataset_name}`}
-            asTag
           />
         )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
-            <ResourceLink
+            <NavigationTag
               id={experiment.prompt_versions[0].prompt_id}
               name={experiment.prompt_versions[0].commit}
               resource={RESOURCE_TYPE.prompt}
-              tooltipContent={`Navigate to prompt ${experiment.prompt_versions[0].commit}`}
-              asTag
             />
           )}
       </div>
