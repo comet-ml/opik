@@ -41,7 +41,6 @@ setup(
         "boto3-stubs[bedrock-runtime]>=1.34.110",
         "click",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
-        "matplotlib>=3.5.0",
         "rapidfuzz>=3.0.0,<4.0.0",
         # LiteLLM dependency comments:
         # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
@@ -54,7 +53,6 @@ setup(
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
-        "reportlab>=4.0.0",
         "rich",
         "sentry_sdk>=2.0.0",
         "tenacity",
