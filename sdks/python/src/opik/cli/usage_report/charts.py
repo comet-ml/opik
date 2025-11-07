@@ -513,7 +513,7 @@ def create_individual_chart(
         else:
             period_labels.append(period)
 
-    # Create figure - use same size as reference file for consistency
+    # Create figure with consistent size for all charts (same as reference implementation)
     fig, ax = plt.subplots(figsize=(14, 8))
     unit_label = unit.capitalize()
     x = range(n_periods)
@@ -681,19 +681,27 @@ def create_individual_chart(
     ax.set_xlabel(unit_label)
     ax.set_xticks(x)
     ax.set_xticklabels(period_labels, rotation=45, ha="right")
-    if chart_type in ["trace_count", "token_count", "cost", "span_count"]:
-        # Use compact legend with top projects only (max 19 items: 18 top + Others)
+    # Set x-axis limits to use full width, with small padding on edges
+    ax.set_xlim(-0.5, n_periods - 0.5)
+
+    # Configure legend for charts that need it - place below chart
+    has_legend = chart_type in ["trace_count", "token_count", "cost", "span_count"]
+    if has_legend:
+        # Matplotlib automatically wraps items into multiple rows based on ncol
+        # Use 3 columns to ensure items wrap into multiple rows and fit page width
+        # With 19 items and ncol=3, matplotlib creates ~7 rows automatically
         ax.legend(
-            bbox_to_anchor=(0.5, -0.25),
             loc="upper center",
-            ncol=4,
-            fontsize=9,
+            bbox_to_anchor=(0.5, -0.25),
+            ncol=3,  # 3 columns ensures wrapping into multiple rows
+            fontsize=8,
             framealpha=0.9,
         )
+
     ax.grid(axis="y", alpha=0.3)
 
-    # Use rect parameter to make room for legends below charts (more space for lower legends)
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    # Use tight_layout to make room for legend below (same as reference implementation)
+    plt.tight_layout(rect=[0, 0.1, 1, 1])
 
     # Save chart to temporary file (use absolute path)
     chart_filename = os.path.join(
@@ -707,6 +715,8 @@ def create_individual_chart(
         os.makedirs(chart_dir, exist_ok=True)
 
     try:
+        # Use bbox_inches="tight" to include legend below chart (same as reference)
+        # This ensures the legend is fully included in the saved image
         plt.savefig(chart_filename, dpi=300, bbox_inches="tight")
         plt.close()
 
