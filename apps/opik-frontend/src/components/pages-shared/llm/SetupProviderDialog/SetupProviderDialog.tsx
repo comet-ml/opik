@@ -22,6 +22,7 @@ import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
+import { convertCustomProviderModels } from "@/lib/provider";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -87,7 +88,11 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         providerKeyData.base_url = data.url;
         providerKeyData.provider_name = data.providerName;
         providerKeyData.configuration = {
-          models: data.models,
+          models: convertCustomProviderModels(
+            data.models ?? "",
+            data.providerName ?? "",
+            true,
+          ),
         };
       }
 
