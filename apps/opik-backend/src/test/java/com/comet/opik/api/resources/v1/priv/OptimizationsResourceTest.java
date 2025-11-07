@@ -9,6 +9,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
@@ -31,6 +32,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.eventbus.EventBus;
@@ -49,6 +51,12 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.redisson.Redisson;
+import org.redisson.api.RMapReactive;
+import org.redisson.api.RQueueReactive;
+import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.codec.StringCodec;
+import org.redisson.config.Config;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -74,6 +82,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -81,7 +90,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class OptimizationsResourceTest {
 
     public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "studioConfig"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -128,6 +137,7 @@ class OptimizationsResourceTest {
     private String baseURI;
     private ClientSupport client;
     private EventBus defaultEventBus;
+    private RedissonReactiveClient redisClient;
     private OptimizationResourceClient optimizationResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
@@ -141,6 +151,13 @@ class OptimizationsResourceTest {
 
         ClientSupportUtils.config(client);
         defaultEventBus = contextConfig.mockEventBus();
+
+        // Initialize Redis client for testing
+        Config redisConfig = new Config();
+        redisConfig.useSingleServer()
+                .setAddress(REDIS.getRedisURI())
+                .setDatabase(0);
+        this.redisClient = Redisson.create(redisConfig).reactive();
 
         this.optimizationResourceClient = new OptimizationResourceClient(this.client, baseURI, podamFactory);
         this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
@@ -702,6 +719,161 @@ class OptimizationsResourceTest {
                     .isAfterOrEqualTo(expected.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
         } else {
             assertThat(actual.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Optimization Studio Tests")
+    class OptimizationStudioTests {
+
+        private OptimizationStudioConfig createStudioConfig() {
+            return podamFactory.manufacturePojo(OptimizationStudioConfig.class);
+        }
+
+        @Test
+        @DisplayName("Create Studio optimization and verify in database")
+        void createStudioOptimization() {
+            Mockito.reset(defaultEventBus);
+
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.studioConfig()).isNull(); // Scrubbed by default
+            assertOptimization(optimization.toBuilder().studioConfig(null).build(), actualOptimization);
+
+            ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
+            Mockito.verify(defaultEventBus).post(captor.capture());
+        }
+
+        @Test
+        @DisplayName("Create Studio optimization and verify Redis job enqueued")
+        void createStudioOptimization__thenVerifyRedisJobEnqueued() {
+            Mockito.reset(defaultEventBus);
+
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            // Get initial queue size
+            String queueKey = "rq:queue:" + Queue.OPTIMIZER_CLOUD.toString();
+            RQueueReactive<String> queue = redisClient.getQueue(queueKey, StringCodec.INSTANCE);
+            Integer initialSize = queue.size().block();
+            assertThat(initialSize).isNotNull();
+
+            // Create Studio optimization
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Wait for async job enqueueing to complete (max 2 seconds)
+            await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .pollInterval(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(queue.size().block()).isGreaterThan(initialSize));
+
+            // Verify a job was enqueued for our optimization
+            // The optimization ID is inside the job's payload data
+            var allJobIds = queue.readAll().block();
+            assertThat(allJobIds).isNotEmpty();
+
+            // Find the job containing our optimization ID in its data
+            boolean foundJob = allJobIds.stream()
+                    .anyMatch(jobId -> {
+                        // RQ job key format: "rq:job:{jobId}" (from RqPublisher.RQ_JOB)
+                        String jobKey = "rq:job:" + jobId;
+                        RMapReactive<String, Object> jobMap = redisClient.getMap(jobKey, StringCodec.INSTANCE);
+                        String jobData = (String) jobMap.get("data").block();
+
+                        // Verify job data contains our optimization ID and workspace ID
+                        return jobData != null
+                                && jobData.contains(id.toString())
+                                && jobData.contains(WORKSPACE_ID);
+                    });
+
+            assertThat(foundJob)
+                    .as("Expected to find RQ job with optimization ID: %s and workspace ID: %s", id, WORKSPACE_ID)
+                    .isTrue();
+
+            // Verify event was posted
+            ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
+            Mockito.verify(defaultEventBus).post(captor.capture());
+        }
+
+        @Test
+        @DisplayName("Get Studio optimization with studioConfig")
+        void getStudioOptimization__withStudioConfigIncluded() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Get with include_studio_config=true
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200, true);
+            assertThat(actualOptimization.studioConfig()).isNotNull();
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
+        @DisplayName("Get Studio optimization without studioConfig")
+        void getStudioOptimization__withStudioConfigScrubbed() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Get without include_studio_config (default)
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(actualOptimization.studioConfig()).isNull(); // Scrubbed
+        }
+
+        @Test
+        @DisplayName("Find Optimization Studio runs")
+        void findOptimizations__withStudioOnlyFlag() {
+            // Create a regular optimization
+            var regularOptimization = optimizationResourceClient.createPartialOptimization().build();
+            optimizationResourceClient.create(regularOptimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Create a Studio optimization
+            var studioConfig = createStudioConfig();
+            var studioOptimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+            optimizationResourceClient.create(studioOptimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Find with studioOnly=true
+            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE_NAME, 1, 10, null, null, null, true,
+                    200);
+
+            // Should only return Studio optimizations
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).allMatch(opt -> opt.studioConfig() != null);
+        }
+
+        @Test
+        @DisplayName("Get Studio optimization logs")
+        void getStudioOptimizationLogs() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Get logs
+            var logs = optimizationResourceClient.getStudioLogs(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(logs.url()).isNotNull();
+            assertThat(logs.url()).contains(WORKSPACE_ID);
+            assertThat(logs.url()).contains(id.toString());
+            assertThat(logs.expiresAt()).isNotNull();
+            assertThat(logs.expiresAt()).isAfter(Instant.now());
         }
     }
 }
