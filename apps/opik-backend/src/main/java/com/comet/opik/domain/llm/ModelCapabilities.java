@@ -32,6 +32,10 @@ public class ModelCapabilities {
             // Made pattern more flexible to match anywhere in the name
             Pattern.compile(".*qwen.*vl.*", Pattern.CASE_INSENSITIVE));
 
+    private static final Set<Pattern> VIDEO_MODEL_PATTERNS = Set.of(
+            Pattern.compile(".*qwen.*vl.*", Pattern.CASE_INSENSITIVE),
+            Pattern.compile(".*video.*", Pattern.CASE_INSENSITIVE));
+
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
     /**
@@ -44,12 +48,27 @@ public class ModelCapabilities {
         return VISION_MODEL_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(modelName).matches());
     }
 
+    private boolean matchesVideoPattern(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
+            return false;
+        }
+        return VIDEO_MODEL_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(modelName).matches());
+    }
+
     public boolean supportsVision(String modelName) {
         if (matchesVisionPattern(modelName)) {
             return true;
         }
 
         return find(modelName).map(ModelCapability::supportsVision).orElse(false);
+    }
+
+    public boolean supportsVideo(String modelName) {
+        if (matchesVideoPattern(modelName)) {
+            return true;
+        }
+
+        return find(modelName).map(ModelCapability::supportsVideo).orElse(false);
     }
 
     private Optional<ModelCapability> find(String modelName) {
@@ -88,6 +107,7 @@ public class ModelCapabilities {
                         .name(canonicalName)
                         .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
                         .supportsVision(modelData.supportsVision())
+                        .supportsVideo(modelData.supportsVideoInput())
                         .build());
             });
 

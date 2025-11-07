@@ -8,5 +8,6 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Builder(toBuilder = true)
-public record ModelCapability(String name, String litellmProvider, boolean supportsVision) {
+public record ModelCapability(String name, String litellmProvider, boolean supportsVision,
+        boolean supportsVideo) {
 }
