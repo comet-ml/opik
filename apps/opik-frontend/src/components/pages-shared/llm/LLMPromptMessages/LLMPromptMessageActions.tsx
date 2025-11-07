@@ -10,7 +10,7 @@ import { RotateCcw, Save, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { OnChangeFn } from "@/types/shared";
-import { LLMMessage } from "@/types/llm";
+import { LLMMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
 import { PromptVersion } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
@@ -37,6 +37,8 @@ export interface ImprovePromptConfig {
 type LLMPromptLibraryActionsProps = {
   message: LLMMessage;
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
+  onReplaceWithChatPrompt?: (messages: LLMMessage[], promptId: string, promptVersionId: string) => void;
+  onClearOtherPromptLinks?: () => void;
   setIsLoading: OnChangeFn<boolean>;
   setIsHoldActionsVisible: OnChangeFn<boolean>;
   improvePromptConfig?: ImprovePromptConfig;
@@ -45,6 +47,8 @@ type LLMPromptLibraryActionsProps = {
 const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   message,
   onChangeMessage,
+  onReplaceWithChatPrompt,
+  onClearOtherPromptLinks,
   setIsLoading,
   setIsHoldActionsVisible,
   improvePromptConfig,
@@ -219,13 +223,46 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       selectedPromptIdRef.current === promptData?.id
     ) {
       selectedPromptIdRef.current = undefined;
+      
+      const template = promptData.latest_version?.template ?? "";
+      const versionId = promptData.latest_version?.id;
+      const isChatPrompt = promptData.template_structure === "chat";
+      
+      // If it's a chat prompt and we have the callback, replace all messages
+      if (isChatPrompt && onReplaceWithChatPrompt && template) {
+        try {
+          const parsed = JSON.parse(template);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const newMessages: LLMMessage[] = parsed.map((msg, index) => ({
+              id: `msg-${index}-${Date.now()}`,
+              role: msg.role as LLM_MESSAGE_ROLE,
+              content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
+              promptId: promptData.id,
+              promptVersionId: versionId,
+            }));
+            onReplaceWithChatPrompt(newMessages, promptData.id, versionId || "");
+            setIsLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to parse chat prompt:', error);
+          // Fall through to regular message update
+        }
+      }
+      
+      // For string prompts or if chat prompt parsing failed, update just this message
+      // and clear prompt links from other messages
+      if (onClearOtherPromptLinks) {
+        onClearOtherPromptLinks();
+      }
       onChangeMessage({
-        content: promptData.latest_version?.template ?? "",
-        promptVersionId: promptData.latest_version?.id,
+        content: template,
+        promptVersionId: versionId,
+        promptId: promptData.id,
       });
       setIsLoading(false);
     }
-  }, [onChangeMessage, promptData, promptId, setIsLoading]);
+  }, [onChangeMessage, promptData, promptId, setIsLoading, onReplaceWithChatPrompt, onClearOtherPromptLinks]);
 
   return (
     <>

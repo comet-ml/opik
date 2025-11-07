@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
+import { Code2, MessageSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +65,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
   ]);
+  const [showRawView, setShowRawView] = useState(false);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -238,18 +240,67 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           )}
           {!isEdit && isChatPrompt && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Chat Messages</Label>
-              <div className="h-[400px] rounded-md border bg-primary-foreground">
-                <LLMPromptMessages
-                  messages={messages}
-                  onChange={setMessages}
-                  onAddMessage={handleAddMessage}
-                  hidePromptActions
-                />
+              <div className="flex items-center justify-between">
+                <Label>Chat Messages</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRawView(!showRawView)}
+                >
+                  {showRawView ? (
+                    <>
+                      <MessageSquare className="mr-1.5 size-3.5" />
+                      Message View
+                    </>
+                  ) : (
+                    <>
+                      <Code2 className="mr-1.5 size-3.5" />
+                      Raw View
+                    </>
+                  )}
+                </Button>
               </div>
-              <Description>
-                Create your chat prompt with multiple messages. Each message has a role (system, user, assistant) and content.
-              </Description>
+              {showRawView ? (
+                <>
+                  <Textarea
+                    id="template"
+                    className="comet-code min-h-[400px]"
+                    placeholder="Chat messages JSON"
+                    value={JSON.stringify(messages.map(m => ({ role: m.role, content: m.content })), null, 2)}
+                    onChange={(event) => {
+                      try {
+                        const parsed = JSON.parse(event.target.value);
+                        if (Array.isArray(parsed)) {
+                          setMessages(parsed.map((msg, index) => ({
+                            id: `msg-${index}`,
+                            role: msg.role,
+                            content: msg.content,
+                          })));
+                        }
+                      } catch {
+                        // Invalid JSON, don't update
+                      }
+                    }}
+                  />
+                  <Description>
+                    Edit the raw JSON representation of chat messages. Must be a valid JSON array.
+                  </Description>
+                </>
+              ) : (
+                <>
+                  <div className="h-[400px] rounded-md border bg-primary-foreground">
+                    <LLMPromptMessages
+                      messages={messages}
+                      onChange={setMessages}
+                      onAddMessage={handleAddMessage}
+                      hidePromptActions
+                    />
+                  </div>
+                  <Description>
+                    Create your chat prompt with multiple messages. Each message has a role (system, user, assistant) and content.
+                  </Description>
+                </>
+              )}
             </div>
           )}
           <div className="flex flex-col gap-2 border-t border-border pb-4">

@@ -106,8 +106,14 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
-        <TryInPlaygroundButton prompt={prompt} />
-        <ImproveInPlaygroundButton prompt={prompt} />
+        <TryInPlaygroundButton 
+          prompt={prompt} 
+          activeVersion={activeVersion}
+        />
+        <ImproveInPlaygroundButton 
+          prompt={prompt}
+          activeVersion={activeVersion}
+        />
         <Button
           className="ml-auto"
           size="sm"
@@ -190,6 +196,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openUseThisPrompt}
         setOpen={setOpenUseThisPrompt}
         promptName={prompt.name}
+        templateStructure={prompt.template_structure}
       />
 
       <EditPromptVersionDialog
@@ -199,6 +206,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
+        templateStructure={prompt.template_structure}
         onSetActiveVersionId={setActiveVersionId}
       />
 

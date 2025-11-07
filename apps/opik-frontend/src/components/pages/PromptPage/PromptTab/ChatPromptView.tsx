@@ -1,6 +1,10 @@
-import React, { useMemo } from "react";
-import { MessageCircle, User, Bot } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { MessageCircle, User, Bot, Code2, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import CodeHighlighter, {
+  SUPPORTED_LANGUAGE,
+} from "@/components/shared/CodeHighlighter/CodeHighlighter";
 
 interface ChatMessage {
   role: string;
@@ -14,6 +18,8 @@ interface ChatPromptViewProps {
 const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
   template,
 }) => {
+  const [showRawView, setShowRawView] = useState(false);
+
   const messages = useMemo<ChatMessage[]>(() => {
     try {
       const parsed = JSON.parse(template);
@@ -64,7 +70,36 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
 
   return (
     <div className="flex flex-col gap-3">
-      {messages.map((message, index) => {
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          {showRawView ? "Raw JSON" : `${messages.length} message${messages.length !== 1 ? 's' : ''}`}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowRawView(!showRawView)}
+        >
+          {showRawView ? (
+            <>
+              <MessageSquare className="mr-1.5 size-3.5" />
+              Message View
+            </>
+          ) : (
+            <>
+              <Code2 className="mr-1.5 size-3.5" />
+              Raw View
+            </>
+          )}
+        </Button>
+      </div>
+      {showRawView ? (
+        <CodeHighlighter
+          data={JSON.stringify(messages, null, 2)}
+          language={SUPPORTED_LANGUAGE.json}
+        />
+      ) : (
+        <>
+          {messages.map((message, index) => {
         const role = message.role.toLowerCase();
         const isSystem = role === "system";
         const isUser = role === "user";
@@ -119,6 +154,8 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
           </div>
         );
       })}
+        </>
+      )}
     </div>
   );
 };
