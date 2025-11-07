@@ -37,6 +37,7 @@ class ChatPrompt:
         self._metadata = metadata
         self._type = type
         self._messages = messages
+        self._template_structure = "chat"  # ChatPrompt class always uses "chat" structure
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: Optional[str] = None
         self.__internal_api__version_id__: Optional[str] = None
@@ -88,6 +89,11 @@ class ChatPrompt:
     def type(self) -> PromptType:
         """The prompt type of the prompt."""
         return self._type
+
+    @property
+    def template_structure(self) -> str:
+        """The template structure of the prompt ('string' or 'chat'). Immutable after creation."""
+        return self._template_structure
 
     def format(
         self,

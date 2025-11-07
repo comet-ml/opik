@@ -592,3 +592,4 @@ def verify_chat_prompt_version(
         prompt_id == chat_prompt.__internal_api__prompt_id__
     ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
+    assert chat_prompt.__internal_api__template_structure__ == "chat", f"{chat_prompt.__internal_api__template_structure} != chat"

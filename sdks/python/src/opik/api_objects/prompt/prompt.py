@@ -32,6 +32,7 @@ class Prompt:
         self._name = name
         self._metadata = metadata
         self._type = type
+        self._template_structure = "string"  # Prompt class always uses "string" structure
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: Optional[str] = None
         self.__internal_api__version_id__: Optional[str] = None
@@ -78,6 +79,11 @@ class Prompt:
     def type(self) -> PromptType:
         """The prompt type of the prompt."""
         return self._type
+
+    @property
+    def template_structure(self) -> str:
+        """The template structure of the prompt ('string' or 'chat'). Immutable after creation."""
+        return self._template_structure
 
     def format(self, **kwargs: Any) -> str:
         """

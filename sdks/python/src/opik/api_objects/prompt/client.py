@@ -37,12 +37,9 @@ class PromptClient:
 
         # For chat prompts, compare parsed JSON to avoid formatting differences
         templates_equal = False
-        existing_template_structure = None
         
         if prompt_version is not None:
-            existing_template_structure = prompt_version.template_structure or "string"
-            
-            if existing_template_structure == "chat":
+            if template_structure == "chat":
                 try:
                     existing_messages = json.loads(prompt_version.template)
                     new_messages = json.loads(prompt)
@@ -52,12 +49,17 @@ class PromptClient:
             else:
                 templates_equal = prompt_version.template == prompt
 
+        # Create a new version if:
+        # - No version exists yet (new prompt)
+        # - Template content has changed
+        # - Metadata has changed
+        # - Type has changed
+        # Note: template_structure is immutable and enforced by the backend
         if (
             prompt_version is None
             or not templates_equal
             or prompt_version.metadata != metadata
             or prompt_version.type != type.value
-            or existing_template_structure != template_structure
         ):
             prompt_version = self._create_new_version(
                 name=name, prompt=prompt, type=type, metadata=metadata, template_structure=template_structure
