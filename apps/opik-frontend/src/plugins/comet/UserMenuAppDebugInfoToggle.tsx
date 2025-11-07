@@ -31,13 +31,13 @@ const UserMenuAppDebugInfoToggle = () => {
       <div className="flex items-center">
         <SquareMousePointerIcon className="mr-2 size-4" />
         <TooltipWrapper content="With this option enabled, you will see app debugging information">
-          <span className="comet-body-s-accented text-foreground truncate">
+          <span className="comet-body-s text-foreground truncate">
             Debugger
           </span>
         </TooltipWrapper>
       </div>
       <Switch
-        size="sm"
+        size="xs"
         checked={showAppDebugInfo}
         onCheckedChange={setShowAppDebugInfo}
       />
