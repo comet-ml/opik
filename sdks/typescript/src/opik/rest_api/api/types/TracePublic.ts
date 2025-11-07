@@ -30,4 +30,6 @@ export interface TracePublic {
     threadId?: string;
     visibilityMode?: OpikApi.TracePublicVisibilityMode;
     llmSpanCount?: number;
+    /** List of unique provider names from all spans in this trace, sorted alphabetically */
+    providers?: string[];
 }
