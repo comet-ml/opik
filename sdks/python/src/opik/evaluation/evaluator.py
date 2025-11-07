@@ -355,7 +355,10 @@ def _build_prompt_evaluation_task(
         {
             "vision": ModelCapabilities.supports_vision(
                 getattr(model, "model_name", None)
-            )
+            ),
+            "video": ModelCapabilities.supports_video(
+                getattr(model, "model_name", None)
+            ),
         },
     )
     chat_prompt_template = ChatPromptTemplate(messages=messages)
