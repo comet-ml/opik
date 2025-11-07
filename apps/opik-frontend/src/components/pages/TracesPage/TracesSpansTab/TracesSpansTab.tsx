@@ -439,6 +439,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
     {
       refetchInterval: REFETCH_INTERVAL,
+      refetchOnMount: "stale",
     },
   );
 
@@ -457,6 +458,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
     {
       enabled: false,
+      refetchOnMount: "stale",
     },
   );
 
