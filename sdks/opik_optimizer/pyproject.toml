@@ -12,7 +12,6 @@ dependencies = [
     "datasets",
     "deap>=1.4.3",
     "gepa>=0.0.7",
-    "ujson",
     "hf_xet",
     "litellm<=1.75.6",
     "mcp>=1.0.0",
