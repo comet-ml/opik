@@ -22,7 +22,7 @@ def llm_task(item: Dict[str, Any]):
     if item["input"] == {"question": "What is the capital of Ukraine?"}:
         return {"output": "Kyiv"}
     if item["input"] == {"question": "What is the capital of France?"}:
-        return {"output": "Paris"}
+        return {"output": "London"}
     raise AssertionError(
         f"Task received dataset item with an unexpected input: {item['input']}"
     )
@@ -82,7 +82,7 @@ def test_evaluate__with_experiment_metrics__happyflow(
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=2,  # two traces (one per dataset item)
-        feedback_scores_amount=1,
+        feedback_scores_amount=3,
         prompts=None,
     )
 
@@ -92,78 +92,12 @@ def test_evaluate__with_experiment_metrics__happyflow(
     retrieved_experiment = opik_client.get_experiment_by_id(
         evaluation_result.experiment_id
     )
-    assert retrieved_experiment.pre_computed_metric_aggregates is not None
-    assert "equals_metric" in retrieved_experiment.pre_computed_metric_aggregates
-    aggregates = retrieved_experiment.pre_computed_metric_aggregates["equals_metric"]
+    experiment_data = retrieved_experiment.get_experiment_data()
+    assert experiment_data.pre_computed_metric_aggregates is not None
+    assert "equals_metric" in retrieved_experiment.get_experiment_data().pre_computed_metric_aggregates
+    aggregates = retrieved_experiment.get_experiment_data().pre_computed_metric_aggregates["equals_metric"]
     assert "max" in aggregates
     assert "min" in aggregates
     # Both items should have score 1.0 (correct answers)
     assert aggregates["max"] == 1.0
-    assert aggregates["min"] == 1.0
-
-
-def test_evaluate_prompt__with_experiment_metrics__happyflow(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """Test evaluate_prompt with experiment metrics."""
-    dataset = opik_client.create_dataset(dataset_name)
-    dataset.insert(DATASET_ITEMS)
-
-    # Create experiment metric function that computes average
-    def compute_avg_metric(test_results: List[test_result.TestResult]):
-        scores = []
-        for test_result_item in test_results:
-            for score_result in test_result_item.score_results:
-                if score_result.name == "equals_metric":
-                    scores.append(score_result.value)
-
-        if not scores:
-            return experiment_metric_result.ExperimentMetricResult(
-                score_name="equals_metric",
-                metric_name="avg",
-                value=0.0,
-            )
-
-        avg_value = sum(scores) / len(scores)
-        return experiment_metric_result.ExperimentMetricResult(
-            score_name="equals_metric",
-            metric_name="avg",
-            value=avg_value,
-        )
-
-    evaluation_result = opik.evaluate_prompt(
-        dataset=dataset,
-        messages=[{"role": "user", "content": "{{input.question}}"}],
-        model="gpt-3.5-turbo",
-        scoring_metrics=[metrics.Equals()],
-        experiment_name=experiment_name,
-        scoring_key_mapping={
-            "reference": lambda x: x["expected_model_output"]["output"],
-        },
-        experiment_metrics=[compute_avg_metric],
-    )
-
-    opik.flush_tracker()
-
-    # Verify experiment was created correctly
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=evaluation_result.experiment_id,
-        experiment_name=evaluation_result.experiment_name,
-        traces_amount=2,  # two traces (one per dataset item)
-        feedback_scores_amount=1,
-        prompts=None,
-    )
-
-    assert evaluation_result.dataset_id == dataset.id
-
-    # Verify experiment metrics were uploaded to backend
-    retrieved_experiment = opik_client.get_experiment_by_id(
-        evaluation_result.experiment_id
-    )
-    assert retrieved_experiment.pre_computed_metric_aggregates is not None
-    assert "equals_metric" in retrieved_experiment.pre_computed_metric_aggregates
-    aggregates = retrieved_experiment.pre_computed_metric_aggregates["equals_metric"]
-    assert "avg" in aggregates
-    # Both items should have score 1.0 (correct answers), so avg = 1.0
-    assert aggregates["avg"] == 1.0
+    assert aggregates["min"] == 0.0

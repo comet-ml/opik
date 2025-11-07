@@ -46,6 +46,17 @@ def display_experiment_results(
     test_results: List[test_result.TestResult],
     experiment_metrics: Optional[Dict[str, Dict[str, float]]] = None,
 ) -> None:
+    """
+    Display experiment evaluation results in a formatted panel.
+
+    Args:
+        dataset_name: Name of the dataset being evaluated
+        total_time: Total time taken for the evaluation in seconds
+        test_results: List of test results from the evaluation
+        experiment_metrics: Optional dictionary of experiment-level metrics in format
+            {score_name: {metric_name: value}}. These are displayed alongside
+            the average scores for each metric.
+    """
     average_scores, failed_scores = _compute_average_scores(test_results)
     nb_items = len(test_results)
 

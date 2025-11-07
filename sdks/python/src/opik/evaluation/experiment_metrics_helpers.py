@@ -41,6 +41,9 @@ def compute_experiment_metrics(
                     type(result).__name__,
                 )
         except Exception as exception:
+            # Catch all exceptions since experiment_metrics are user-provided callables
+            # that could raise any exception type. We log the error and continue processing
+            # other metrics to ensure one failing metric doesn't stop the entire computation.
             LOGGER.error(
                 "Failed to compute experiment metric %s: %s",
                 getattr(metric_fn, "__name__", "unknown"),
