@@ -987,7 +987,7 @@ class MultiValueFeedbackScoresE2ETest {
                 .metricType(metricType)
                 .interval(TimeInterval.HOURLY)
                 .intervalStart(traceStartTime)
-                .intervalEnd(traceStartTime.plus(1, ChronoUnit.HOURS))
+                .intervalEnd(Instant.now())
                 .build(), BigDecimal.class, API_KEY1, TEST_WORKSPACE);
 
         var scoreMetric = projectMetrics.results().stream()

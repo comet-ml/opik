@@ -32,7 +32,6 @@ import com.comet.opik.api.resources.utils.spans.StatsTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -4299,8 +4298,7 @@ class FindSpansResourceTest {
         }
 
         private UUID generateUUIDForTimestamp(Instant timestamp) {
-            byte[] zeroBytes = new byte[8];
-            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes, timestamp.toEpochMilli());
+            return generator.construct(timestamp.toEpochMilli());
         }
     }
 

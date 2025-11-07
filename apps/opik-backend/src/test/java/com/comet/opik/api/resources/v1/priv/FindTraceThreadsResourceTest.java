@@ -32,7 +32,6 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -1473,9 +1472,7 @@ class FindTraceThreadsResourceTest {
         }
 
         private UUID generateUUIDForTimestamp(Instant timestamp) {
-            byte[] zeroBytes = new byte[8];
-            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes,
-                    timestamp.toEpochMilli());
+            return generator.construct(timestamp.toEpochMilli());
         }
     }
 

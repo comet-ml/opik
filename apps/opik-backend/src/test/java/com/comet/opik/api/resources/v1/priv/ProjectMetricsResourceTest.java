@@ -37,7 +37,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
-import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -1443,10 +1442,8 @@ class ProjectMetricsResourceTest {
             return traces;
         }
 
-        private java.util.UUID generateUUIDForTimestamp(Instant timestamp) {
-            byte[] randomBytes = new byte[8];
-            RANDOM.nextBytes(randomBytes);
-            return OpenTelemetryMapper.convertOtelIdToUUIDv7(randomBytes, timestamp.toEpochMilli());
+        private UUID generateUUIDForTimestamp(Instant timestamp) {
+            return generator.construct(timestamp.toEpochMilli());
         }
 
         private List<BigDecimal> calculateQuantiles(List<Trace> traces) {

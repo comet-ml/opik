@@ -45,7 +45,6 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
-import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -4875,8 +4874,7 @@ class GetTracesByProjectResourceTest {
         }
 
         private UUID generateUUIDForTimestamp(Instant timestamp) {
-            byte[] zeroBytes = new byte[8];
-            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes, timestamp.toEpochMilli());
+            return generator.construct(timestamp.toEpochMilli());
         }
 
     }
