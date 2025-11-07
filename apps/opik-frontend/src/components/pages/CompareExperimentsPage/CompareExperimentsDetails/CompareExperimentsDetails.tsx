@@ -109,17 +109,21 @@ const CompareExperimentsDetails: React.FunctionComponent<
         <div className="flex h-11 items-center gap-2">
           <PenLine className="size-4 shrink-0" />
           <div className="flex gap-1 overflow-x-auto">
-            {sortBy(experiment?.feedback_scores ?? [], "name").map(
-              (feedbackScore) => {
-                return (
-                  <FeedbackScoreTag
-                    key={feedbackScore.name + feedbackScore.value}
-                    label={feedbackScore.name}
-                    value={feedbackScore.value}
-                  />
-                );
-              },
-            )}
+            {sortBy(
+              [
+                ...(experiment?.feedback_scores ?? []),
+                ...(experiment?.experiment_scores ?? []),
+              ],
+              "name",
+            ).map((score) => {
+              return (
+                <FeedbackScoreTag
+                  key={score.name + score.value}
+                  label={score.name}
+                  value={score.value}
+                />
+              );
+            })}
           </div>
         </div>
       );

@@ -18,6 +18,7 @@ import {
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  AggregatedFeedbackScore,
 } from "@/types/shared";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
@@ -119,7 +120,7 @@ export const useExperimentsTableConfig = <
   const scoresColumnsData = useMemo(() => {
     return [
       ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
+        ({ label, id, columnType, type: scoreType }) =>
           ({
             id,
             label,
@@ -127,17 +128,33 @@ export const useExperimentsTableConfig = <
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) =>
-              (
-                row as T & { feedback_scores?: Array<{ name: string }> }
-              ).feedback_scores?.find((f) => f.name === label),
+            accessorFn: (row: T) => {
+              const actualType = scoreType || "feedback_scores";
+              if (actualType === "experiment_scores") {
+                return (
+                  row as T & { experiment_scores?: AggregatedFeedbackScore[] }
+                ).experiment_scores?.find((f) => f.name === label);
+              }
+              return (
+                row as T & { feedback_scores?: AggregatedFeedbackScore[] }
+              ).feedback_scores?.find((f) => f.name === label);
+            },
             customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                (
+              accessorFn: (aggregation: ExperimentsAggregations) => {
+                const actualType = scoreType || "feedback_scores";
+                if (actualType === "experiment_scores") {
+                  return (
+                    aggregation as ExperimentsAggregations & {
+                      experiment_scores?: AggregatedFeedbackScore[];
+                    }
+                  ).experiment_scores?.find((f) => f.name === label)?.value;
+                }
+                return (
                   aggregation as ExperimentsAggregations & {
-                    feedback_scores?: Array<{ name: string }>;
+                    feedback_scores?: AggregatedFeedbackScore[];
                   }
-                ).feedback_scores?.find((f) => f.name === label)?.value,
+                ).feedback_scores?.find((f) => f.name === label)?.value;
+              },
             },
           }) as ColumnData<T>,
       ),

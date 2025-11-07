@@ -5,6 +5,7 @@ import java.util.List;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DURATION_AGG;
+import static com.comet.opik.api.sorting.SortableFields.EXPERIMENT_METRICS;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
 import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
@@ -29,6 +30,7 @@ public class ExperimentSortingFactory extends SortingFactory {
                 TOTAL_ESTIMATED_COST,
                 TOTAL_ESTIMATED_COST_AVG,
                 FEEDBACK_SCORES,
+                EXPERIMENT_METRICS,
                 DURATION_AGG);
     }
 }

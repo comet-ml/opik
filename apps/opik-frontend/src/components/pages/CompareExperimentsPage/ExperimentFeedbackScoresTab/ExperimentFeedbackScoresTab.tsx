@@ -25,6 +25,7 @@ interface GetFeedbackScoreMapArguments {
   experiments: {
     id: string;
     feedback_scores?: AggregatedFeedbackScore[];
+    experiment_scores?: AggregatedFeedbackScore[];
   }[];
 }
 
@@ -40,13 +41,16 @@ export const getFeedbackScoreMap = ({
   experiments,
 }: GetFeedbackScoreMapArguments): FeedbackScoreMap => {
   return experiments.reduce<FeedbackScoreMap>((acc, e) => {
-    acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-      (a, f) => {
-        a[f.name] = f.value;
-        return a;
-      },
-      {},
-    );
+    // Combine feedback_scores and experiment_scores into a single map
+    const allScores = [
+      ...(e.feedback_scores || []),
+      ...(e.experiment_scores || []),
+    ];
+
+    acc[e.id] = allScores.reduce<Record<string, number>>((a, f) => {
+      a[f.name] = f.value;
+      return a;
+    }, {});
 
     return acc;
   }, {});

@@ -32,6 +32,7 @@ import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
 import {
+  AggregatedFeedbackScore,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
@@ -177,13 +178,24 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
+    accessorFn: (row) => {
+      const feedbackScores = (
+        get(row, "feedback_scores", []) as AggregatedFeedbackScore[]
+      ).map((score) => ({
+        ...score,
+        name: `${score.name} (avg)`,
+        value: formatNumericData(score.value),
+      }));
+      const experimentScores = (
+        get(row, "experiment_scores", []) as AggregatedFeedbackScore[]
+      ).map((score) => ({
         ...score,
         value: formatNumericData(score.value),
-      })),
+      }));
+      return [...feedbackScores, ...experimentScores];
+    },
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {

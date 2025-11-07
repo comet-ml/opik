@@ -23,6 +23,13 @@ export const mapComplexColumn = (column: ColumnSort): ColumnSort => {
     };
   }
 
+  if (column.id.startsWith("experiment_scores")) {
+    return {
+      ...column,
+      id: column.id.replace("experiment_scores_", "experiment_scores."),
+    };
+  }
+
   if (column.id.startsWith(COLUMN_USAGE_ID)) {
     return {
       ...column,

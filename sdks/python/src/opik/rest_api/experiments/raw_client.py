@@ -24,6 +24,8 @@ from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import 
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
+from ..types.experiment_score import ExperimentScore
+from ..types.experiment_score_write import ExperimentScoreWrite
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
@@ -141,6 +143,7 @@ class RawExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -163,6 +166,8 @@ class RawExperimentsClient:
         optimization_id : typing.Optional[str]
 
         status : typing.Optional[ExperimentWriteStatus]
+
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScoreWrite]]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -188,6 +193,9 @@ class RawExperimentsClient:
                 "type": type,
                 "optimization_id": optimization_id,
                 "status": status,
+                "experiment_scores": convert_and_respect_annotation_metadata(
+                    object_=experiment_scores, annotation=typing.Sequence[ExperimentScoreWrite], direction="write"
+                ),
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version, annotation=PromptVersionLinkWrite, direction="write"
                 ),
@@ -695,6 +703,7 @@ class RawExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -713,6 +722,8 @@ class RawExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScore]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -728,6 +739,9 @@ class RawExperimentsClient:
                 "metadata": metadata,
                 "type": type,
                 "status": status,
+                "experiment_scores": convert_and_respect_annotation_metadata(
+                    object_=experiment_scores, annotation=typing.Sequence[ExperimentScore], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1045,6 +1059,7 @@ class AsyncRawExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1067,6 +1082,8 @@ class AsyncRawExperimentsClient:
         optimization_id : typing.Optional[str]
 
         status : typing.Optional[ExperimentWriteStatus]
+
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScoreWrite]]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -1092,6 +1109,9 @@ class AsyncRawExperimentsClient:
                 "type": type,
                 "optimization_id": optimization_id,
                 "status": status,
+                "experiment_scores": convert_and_respect_annotation_metadata(
+                    object_=experiment_scores, annotation=typing.Sequence[ExperimentScoreWrite], direction="write"
+                ),
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version, annotation=PromptVersionLinkWrite, direction="write"
                 ),
@@ -1599,6 +1619,7 @@ class AsyncRawExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1617,6 +1638,8 @@ class AsyncRawExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScore]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1632,6 +1655,9 @@ class AsyncRawExperimentsClient:
                 "metadata": metadata,
                 "type": type,
                 "status": status,
+                "experiment_scores": convert_and_respect_annotation_metadata(
+                    object_=experiment_scores, annotation=typing.Sequence[ExperimentScore], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",

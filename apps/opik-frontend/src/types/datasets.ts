@@ -72,6 +72,7 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
   duration?: AggregatedDuration;
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
