@@ -37,7 +37,9 @@ class ChatPrompt:
         self._metadata = metadata
         self._type = type
         self._messages = messages
-        self._template_structure = "chat"  # ChatPrompt class always uses "chat" structure
+        self._template_structure = (
+            "chat"  # ChatPrompt class always uses "chat" structure
+        )
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: Optional[str] = None
         self.__internal_api__version_id__: Optional[str] = None
@@ -49,10 +51,10 @@ class ChatPrompt:
 
         opik_client_ = opik_client.get_client_cached()
         prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
-        
+
         # Convert messages array to JSON string for backend storage
         messages_str = json.dumps(self._messages)
-        
+
         prompt_version = prompt_client_.create_prompt(
             name=self._name,
             prompt=messages_str,
@@ -98,22 +100,17 @@ class ChatPrompt:
     def format(
         self,
         variables: Dict[str, Any],
-        supported_modalities: Optional[Dict[str, bool]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Renders the chat template with provided variables.
 
         Args:
             variables: Dictionary of variables to substitute in the template.
-            supported_modalities: Optional dictionary of supported modalities.
 
         Returns:
             A list of rendered message dictionaries.
         """
-        return self._chat_template.format(
-            variables=variables,
-            supported_modalities=supported_modalities,
-        )
+        return self._chat_template.format(variables=variables)
 
     @classmethod
     def from_fern_prompt_version(
@@ -128,7 +125,7 @@ class ChatPrompt:
         chat_prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
 
         chat_prompt._name = name
-        
+
         # Parse messages from JSON string
         messages = json.loads(prompt_version.template)
         chat_prompt._messages = messages
@@ -160,4 +157,3 @@ def to_info_dict(chat_prompt: ChatPrompt) -> Dict[str, Any]:
         info_dict["version"]["id"] = chat_prompt.__internal_api__version_id__
 
     return info_dict
-

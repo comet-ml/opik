@@ -3,7 +3,6 @@ import pytest
 from unittest import mock
 
 from opik.api_objects.prompt import ChatPrompt, PromptType
-from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
 from opik.rest_api import core as rest_api_core
 
 
@@ -13,21 +12,25 @@ class TestChatPrompt:
     @pytest.fixture
     def mock_opik_client(self):
         """Mock the Opik client to avoid actual API calls."""
-        with mock.patch("opik.api_objects.opik_client.get_client_cached") as mock_client:
+        with mock.patch(
+            "opik.api_objects.opik_client.get_client_cached"
+        ) as mock_client:
             mock_rest_client = mock.MagicMock()
             mock_client.return_value.rest_client = mock_rest_client
-            
+
             # Mock the create_prompt response
             mock_response = mock.MagicMock()
             mock_response.commit = "abc123"
             mock_response.prompt_id = "prompt-id-123"
             mock_response.id = "version-id-456"
-            
+
             mock_rest_client.prompts.create_prompt_version.return_value = mock_response
             # Raise 404 ApiError to simulate prompt not found
             not_found_error = rest_api_core.ApiError(status_code=404, body="Not found")
-            mock_rest_client.prompts.retrieve_prompt_version.side_effect = not_found_error
-            
+            mock_rest_client.prompts.retrieve_prompt_version.side_effect = (
+                not_found_error
+            )
+
             yield mock_rest_client
 
     def test_chat_prompt__init__happyflow(self, mock_opik_client):
@@ -69,7 +72,9 @@ class TestChatPrompt:
         assert formatted[1]["role"] == "user"
         assert formatted[1]["content"] == "Hello Alice!"
 
-    def test_chat_prompt__format__multiple_variables_in_one_message(self, mock_opik_client):
+    def test_chat_prompt__format__multiple_variables_in_one_message(
+        self, mock_opik_client
+    ):
         """Test formatting with multiple variables in a single message."""
         messages = [
             {
@@ -163,7 +168,9 @@ class TestChatPrompt:
         formatted = chat_prompt.format(variables={})
         assert formatted == []
 
-    def test_chat_prompt__multimodal_content__preserves_structure(self, mock_opik_client):
+    def test_chat_prompt__multimodal_content__preserves_structure(
+        self, mock_opik_client
+    ):
         """Test that multimodal content structure is preserved."""
         messages = [
             {
@@ -232,10 +239,10 @@ class TestChatPrompt:
         assert chat_prompt.__internal_api__version_id__ == "version-id"
         assert chat_prompt.__internal_api__prompt_id__ == "prompt-id"
 
-    def test_chat_prompt__format_with_supported_modalities__happyflow(
+    def test_chat_prompt__format_with_multimodal_content__happyflow(
         self, mock_opik_client
     ):
-        """Test formatting with supported modalities parameter."""
+        """Test formatting with multimodal content."""
         messages = [
             {
                 "role": "user",
@@ -251,11 +258,8 @@ class TestChatPrompt:
             messages=messages,
         )
 
-        # Format with vision supported
-        formatted = chat_prompt.format(
-            variables={"var": "value"},
-            supported_modalities={"vision": True},
-        )
+        # Format with variables
+        formatted = chat_prompt.format(variables={"var": "value"})
 
         assert len(formatted) == 1
         assert "content" in formatted[0]
@@ -265,9 +269,11 @@ def test_to_info_dict__chat_prompt__happyflow():
     """Test to_info_dict for ChatPrompt."""
     with mock.patch("opik.api_objects.opik_client.get_client_cached"):
         messages = [{"role": "user", "content": "Test"}]
-        
+
         # Create a minimal mock for the API response
-        with mock.patch("opik.api_objects.prompt.client.PromptClient.create_prompt") as mock_create:
+        with mock.patch(
+            "opik.api_objects.prompt.client.PromptClient.create_prompt"
+        ) as mock_create:
             mock_response = mock.MagicMock()
             mock_response.commit = "abc123"
             mock_response.prompt_id = "prompt-id"
@@ -289,4 +295,3 @@ def test_to_info_dict__chat_prompt__happyflow():
     assert info["id"] == "prompt-id"
     assert info["version"]["commit"] == "abc123"
     assert info["version"]["id"] == "version-id"
-

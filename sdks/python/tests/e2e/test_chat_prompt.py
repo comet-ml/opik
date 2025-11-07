@@ -1,5 +1,4 @@
 import uuid
-import json
 import opik
 from opik.api_objects.prompt import PromptType, ChatPrompt
 from . import verifiers
@@ -99,13 +98,13 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
         name=prompt_name,
         messages=messages_v1,
     )
-    
+
     verifiers.verify_chat_prompt_version(
         chat_prompt_v2,
         name=prompt_name,
         messages=messages_v2,
     )
-    
+
     # Verify they share the same prompt ID but have different version IDs
     assert (
         chat_prompt_v2.__internal_api__prompt_id__
@@ -150,7 +149,7 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
         commit=chat_prompt_v1.commit,
         prompt_id=chat_prompt_v1.__internal_api__prompt_id__,
     )
-    
+
     verifiers.verify_chat_prompt_version(
         chat_prompt_v2,
         name=prompt_name,
@@ -158,7 +157,6 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
         commit=chat_prompt_v1.commit,
         prompt_id=chat_prompt_v1.__internal_api__prompt_id__,
     )
-
 
 
 def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Opik):
@@ -217,7 +215,7 @@ def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
         name=prompt_name,
         messages=messages,
     )
-    
+
     assert len(chat_prompt.messages[1]["content"]) == 2
     assert chat_prompt.messages[1]["content"][0]["type"] == "text"
     assert chat_prompt.messages[1]["content"][1]["type"] == "image_url"
@@ -323,10 +321,10 @@ def test_chat_prompt__multiple_roles__happyflow(opik_client: opik.Opik):
     assert formatted[3]["role"] == "user"
 
 
-def test_chat_prompt__format_with_supported_modalities__happyflow(
+def test_chat_prompt__format_with_multimodal_content__happyflow(
     opik_client: opik.Opik,
 ):
-    """Test formatting chat prompt with supported modalities parameter."""
+    """Test formatting chat prompt with multimodal content."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
     prompt_name = f"chat-prompt-modalities-{unique_identifier}"
@@ -351,23 +349,10 @@ def test_chat_prompt__format_with_supported_modalities__happyflow(
         messages=messages,
     )
 
-    # Format with vision supported
-    formatted_with_vision = chat_prompt.format(
-        variables={"item": "image"},
-        supported_modalities={"vision": True},
-    )
+    # Format with variables
+    formatted = chat_prompt.format(variables={"item": "image"})
 
-    # The image content should be preserved when vision is supported
-    assert len(formatted_with_vision[0]["content"]) == 2
-
-    # Format without vision support
-    formatted_no_vision = chat_prompt.format(
-        variables={"item": "text"},
-        supported_modalities={"vision": False},
-    )
-
-    # Without vision support, multimodal content handling depends on renderer
-    # Just verify it doesn't crash and returns a valid structure
-    assert len(formatted_no_vision) == 1
-    assert "content" in formatted_no_vision[0]
-
+    # Verify the multimodal content is preserved
+    assert len(formatted) == 1
+    assert len(formatted[0]["content"]) == 2
+    assert "content" in formatted[0]
