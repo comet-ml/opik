@@ -24,31 +24,57 @@ import static com.comet.opik.api.PromptType.MUSTACHE;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersion(
-        @JsonView( {
+        @JsonView({
+                Prompt.View.Public.class,
                 Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version unique identifier, generated if absent") UUID id,
-        @JsonView({PromptVersion.View.Public.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId,
-        @JsonView({Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "version short unique identifier, generated if absent. it must be 8 characters long", requiredMode = Schema.RequiredMode.NOT_REQUIRED, pattern = ValidationUtils.COMMIT_PATTERN) @CommitValidation String commit,
-        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                PromptVersion.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @NotBlank String template,
-        @Json @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+        @Json @JsonView({
+                Prompt.View.Public.class,
+                PromptVersion.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) JsonNode metadata,
-        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                PromptVersion.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) PromptType type,
-        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                PromptVersion.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(description = "template structure: 'string' (default) or 'chat'") @Nullable String templateStructure,
-        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                PromptVersion.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
-        @JsonView({Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Set<String> variables,
-        @JsonView({Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @JsonView({Prompt.View.Detail.class,
+        @JsonView({
+                Prompt.View.Public.class,
+                Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy){
 

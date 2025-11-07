@@ -51,7 +51,7 @@ public record Prompt(
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long versionCount,
-        @JsonView({
+        @JsonView({Prompt.View.Public.class,
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion latestVersion){
 
     public static class View {
