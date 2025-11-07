@@ -1393,7 +1393,9 @@ class Opik:
         Raises:
             ApiError: If there is an error during the creation of the prompt.
         """
-        return prompt_module.ChatPrompt(name=name, messages=messages, metadata=metadata, type=type)
+        return prompt_module.ChatPrompt(
+            name=name, messages=messages, metadata=metadata, type=type
+        )
 
     def get_prompt(
         self,
@@ -1451,7 +1453,9 @@ class Opik:
         )
         return self.get_prompt_history(name)
 
-    def search_prompts(self, filter_string: Optional[str] = None) -> List[prompt_module.Prompt]:
+    def search_prompts(
+        self, filter_string: Optional[str] = None
+    ) -> List[prompt_module.Prompt]:
         """
         Retrieve the latest prompt versions for the given search parameters.
 

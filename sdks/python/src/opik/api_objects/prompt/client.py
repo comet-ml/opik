@@ -37,7 +37,7 @@ class PromptClient:
 
         # For chat prompts, compare parsed JSON to avoid formatting differences
         templates_equal = False
-        
+
         if prompt_version is not None:
             if template_structure == "chat":
                 try:
@@ -62,7 +62,11 @@ class PromptClient:
             or prompt_version.type != type.value
         ):
             prompt_version = self._create_new_version(
-                name=name, prompt=prompt, type=type, metadata=metadata, template_structure=template_structure
+                name=name,
+                prompt=prompt,
+                type=type,
+                metadata=metadata,
+                template_structure=template_structure,
             )
 
         return prompt_version

@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from opik.rest_api.types import PromptVersionDetail
 from .chat_prompt_template import ChatPromptTemplate
-from .types import PromptType
 from opik.api_objects.prompt import client as prompt_client
+from . import types as prompt_types
 
 
 class ChatPrompt:
@@ -17,9 +17,9 @@ class ChatPrompt:
     def __init__(
         self,
         name: str,
-        messages: List[Dict[str, Any]],
+        messages: List[Dict[str, prompt_types.MessageContent]],
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptType = PromptType.MUSTACHE,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -73,7 +73,7 @@ class ChatPrompt:
         return self._name
 
     @property
-    def messages(self) -> List[Dict[str, Any]]:
+    def messages(self) -> List[Dict[str, prompt_types.MessageContent]]:
         """The chat messages template."""
         return copy.deepcopy(self._messages)
 
@@ -88,7 +88,7 @@ class ChatPrompt:
         return copy.deepcopy(self._metadata)
 
     @property
-    def type(self) -> PromptType:
+    def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
 
@@ -100,7 +100,7 @@ class ChatPrompt:
     def format(
         self,
         variables: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, prompt_types.MessageContent]]:
         """
         Renders the chat template with provided variables.
 
@@ -131,7 +131,8 @@ class ChatPrompt:
         chat_prompt._messages = messages
         chat_prompt._chat_template = ChatPromptTemplate(
             messages=messages,
-            template_type=PromptType(prompt_version.type) or PromptType.MUSTACHE,
+            template_type=prompt_types.PromptType(prompt_version.type)
+            or prompt_types.PromptType.MUSTACHE,
         )
         chat_prompt._commit = prompt_version.commit
         chat_prompt._metadata = prompt_version.metadata

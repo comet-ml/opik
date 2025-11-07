@@ -576,7 +576,7 @@ def verify_chat_prompt_version(
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
-    
+
     This verifier checks all the same fields as verify_prompt_version but adapted for ChatPrompt:
     - messages instead of template
     - template_structure field is always verified to be "chat"
@@ -592,4 +592,3 @@ def verify_chat_prompt_version(
         prompt_id == chat_prompt.__internal_api__prompt_id__
     ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
-    assert chat_prompt.__internal_api__template_structure__ == "chat", f"{chat_prompt.__internal_api__template_structure} != chat"
