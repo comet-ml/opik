@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import threading
 from typing import Any, Literal, cast
 
 import litellm
