@@ -107,9 +107,13 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     """
     Create stacked bar charts for trace count, token count, cost, experiment count, and dataset count.
 
+    Note: This function creates charts in memory but does not save them to disk.
+    Charts are generated and immediately closed. For saving charts, use create_individual_chart()
+    which is used by the PDF report generation.
+
     Args:
         data: The extracted data dictionary
-        output_dir: Directory to save charts (default: current directory)
+        output_dir: Directory parameter (kept for backward compatibility, not used)
     """
     # Get unit from data (default to month for backward compatibility)
     unit = data.get("unit", "month")
@@ -413,13 +417,6 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
 
     # Use rect parameter to make room for legends below charts (more space for lower legends)
     plt.tight_layout(rect=[0, 0.0, 1, 0.98])
-
-    # Save chart
-    chart_filename = os.path.join(
-        output_dir, f"opik_usage_charts_{data['workspace']}.png"
-    )
-    plt.savefig(chart_filename, dpi=300, bbox_inches="tight")
-    console.print(f"[green]Charts saved to {chart_filename}[/green]")
 
     plt.close()
 

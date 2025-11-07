@@ -12,7 +12,6 @@ from typing import Optional
 import click
 from rich.console import Console
 
-from .charts import create_charts
 from .extraction import extract_project_data
 from .pdf import create_pdf_report
 from .statistics import calculate_statistics
@@ -46,11 +45,6 @@ console = Console()
     help="Output JSON file path. Defaults to opik_usage_report.json.",
 )
 @click.option(
-    "--no-charts",
-    is_flag=True,
-    help="Skip generating charts.",
-)
-@click.option(
     "--open",
     "open_pdf",
     is_flag=True,
@@ -64,7 +58,6 @@ def usage_report(
     end_date: Optional[str],
     unit: str,
     output: str,
-    no_charts: bool,
     open_pdf: bool,
 ) -> None:
     """
@@ -75,9 +68,8 @@ def usage_report(
     - Gets trace count, cost, and token count
     - Gets experiment and dataset counts (workspace-level)
     - Aggregates data by the specified time unit (month, week, day, or hour)
-
-    Note: The API supports HOURLY, DAILY, and WEEKLY intervals, but not MONTHLY.
-    We use DAILY interval and aggregate by the specified unit.
+    - Saves data to a JSON file
+    - Generates a PDF report with charts and statistics
 
     WORKSPACE: Workspace name to extract data from.
 
@@ -94,6 +86,10 @@ def usage_report(
       Extract data for specific date range, aggregated by day:
 
         opik usage-report my-workspace --start-date 2024-01-01 --end-date 2024-12-31 --unit day
+
+      Extract data and automatically open the PDF report:
+
+        opik usage-report my-workspace --open
     """
     try:
         # Get API key from context (set by main CLI)
@@ -129,47 +125,30 @@ def usage_report(
             f"[green]Data extraction complete! Results saved to {output}[/green]"
         )
 
-        # Generate charts and PDF
-        if not no_charts:
-            console.print(f"\n[cyan]{'='*60}[/cyan]")
-            console.print("[blue]Generating charts...[/blue]")
-            try:
-                output_path = Path(output)
-                output_dir = (
-                    output_path.parent if output_path.parent != Path(".") else "."
-                )
-                create_charts(data, output_dir=str(output_dir))
-            except Exception as e:
-                console.print(
-                    f"[yellow]Warning: Could not generate charts: {e}[/yellow]"
-                )
+        # Generate PDF report
+        console.print(f"\n[cyan]{'='*60}[/cyan]")
+        console.print("[blue]Generating PDF report...[/blue]")
+        try:
+            output_path = Path(output)
+            output_dir = output_path.parent if output_path.parent != Path(".") else "."
+            pdf_filename = create_pdf_report(data, output_dir=str(output_dir))
+            console.print(f"[green]PDF report saved to {pdf_filename}[/green]")
 
-            # Generate PDF report
-            console.print(f"\n[cyan]{'='*60}[/cyan]")
-            console.print("[blue]Generating PDF report...[/blue]")
-            try:
-                output_path = Path(output)
-                output_dir = (
-                    output_path.parent if output_path.parent != Path(".") else "."
-                )
-                pdf_filename = create_pdf_report(data, output_dir=str(output_dir))
-                console.print(f"[green]PDF report saved to {pdf_filename}[/green]")
-
-                # Open PDF if --open flag is set
-                if open_pdf:
-                    pdf_path = os.path.abspath(pdf_filename)
-                    if os.path.exists(pdf_path):
-                        webbrowser.open(f"file://{pdf_path}")
-                        console.print("[green]Opened PDF in default viewer[/green]")
-                    else:
-                        console.print(
-                            f"[yellow]Warning: PDF file not found: {pdf_path}[/yellow]"
-                        )
-            except Exception as e:
-                console.print(
-                    f"[yellow]Warning: Could not generate PDF report: {e}[/yellow]"
-                )
-                traceback.print_exc()
+            # Open PDF if --open flag is set
+            if open_pdf:
+                pdf_path = os.path.abspath(pdf_filename)
+                if os.path.exists(pdf_path):
+                    webbrowser.open(f"file://{pdf_path}")
+                    console.print("[green]Opened PDF in default viewer[/green]")
+                else:
+                    console.print(
+                        f"[yellow]Warning: PDF file not found: {pdf_path}[/yellow]"
+                    )
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Could not generate PDF report: {e}[/yellow]"
+            )
+            traceback.print_exc()
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
