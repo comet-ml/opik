@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 
 from opik.evaluation.metrics import IsJson, Hallucination, ExperimentMetricResult
-from opik.evaluation import evaluate, EvaluationResult
+from opik.evaluation import evaluate, TestResult
 from opik import Opik, track
 from opik.integrations.openai import track_openai
 import openai
@@ -60,7 +60,7 @@ def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def compute_hallucination_stats(
-    evaluation_result: EvaluationResult,
+    test_results: List[TestResult],
 ) -> List[ExperimentMetricResult]:
     """
     Compute experiment-level statistics for the Hallucination metric.
@@ -69,8 +69,8 @@ def compute_hallucination_stats(
     """
     hallucination_scores = []
 
-    for test_result in evaluation_result.test_results:
-        for score_result in test_result.score_results:
+    for test_result_item in test_results:
+        for score_result in test_result_item.score_results:
             if score_result.name == "hallucination_metric":
                 hallucination_scores.append(score_result.value)
 

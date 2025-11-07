@@ -1,7 +1,7 @@
 import logging
 from typing import Callable, Dict, List
 
-from . import evaluation_result
+from . import test_result
 from .metrics import experiment_metric_result
 
 LOGGER = logging.getLogger(__name__)
@@ -9,14 +9,14 @@ LOGGER = logging.getLogger(__name__)
 
 def compute_experiment_metrics(
     experiment_metrics: List[Callable],
-    evaluation_result_: evaluation_result.EvaluationResult,
+    test_results: List[test_result.TestResult],
 ) -> Dict[str, Dict[str, float]]:
     """
     Compute experiment-level metrics and convert them to the backend format.
 
     Args:
         experiment_metrics: List of callable functions that compute experiment metrics
-        evaluation_result_: The evaluation result containing all test results
+        test_results: List of test results from the evaluation
 
     Returns:
         Dictionary in format {score_name: {metric_name: value}}
@@ -26,7 +26,7 @@ def compute_experiment_metrics(
 
     for metric_fn in experiment_metrics:
         try:
-            result = metric_fn(evaluation_result_)
+            result = metric_fn(test_results)
 
             # Handle both single result and list of results
             if isinstance(result, experiment_metric_result.ExperimentMetricResult):

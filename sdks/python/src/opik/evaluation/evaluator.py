@@ -229,7 +229,7 @@ def _evaluate_task(
 
         pre_computed_aggregates = experiment_metrics_helpers.compute_experiment_metrics(
             experiment_metrics=experiment_metrics,
-            evaluation_result_=evaluation_result_,
+            test_results=test_results,
         )
 
         if pre_computed_aggregates:
@@ -576,7 +576,7 @@ def evaluate_prompt(
 
         pre_computed_aggregates = experiment_metrics_helpers.compute_experiment_metrics(
             experiment_metrics=experiment_metrics,
-            evaluation_result_=evaluation_result_,
+            test_results=test_results,
         )
 
         if pre_computed_aggregates:

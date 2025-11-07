@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 
 import opik
-from opik.evaluation import metrics
+from opik.evaluation import metrics, test_result
 from opik.evaluation.metrics import experiment_metric_result
 
 from .. import verifiers
@@ -37,10 +37,10 @@ def test_evaluate__with_experiment_metrics__happyflow(
     dataset.insert(DATASET_ITEMS)
 
     # Create experiment metric function that computes max and min
-    def compute_stats(evaluation_result_):
+    def compute_stats(test_results: List[test_result.TestResult]):
         scores = []
-        for test_result in evaluation_result_.test_results:
-            for score_result in test_result.score_results:
+        for test_result_item in test_results:
+            for score_result in test_result_item.score_results:
                 if score_result.name == "equals_metric":
                     scores.append(score_result.value)
 
@@ -111,10 +111,10 @@ def test_evaluate_prompt__with_experiment_metrics__happyflow(
     dataset.insert(DATASET_ITEMS)
 
     # Create experiment metric function that computes average
-    def compute_avg_metric(evaluation_result_):
+    def compute_avg_metric(test_results: List[test_result.TestResult]):
         scores = []
-        for test_result in evaluation_result_.test_results:
-            for score_result in test_result.score_results:
+        for test_result_item in test_results:
+            for score_result in test_result_item.score_results:
                 if score_result.name == "equals_metric":
                     scores.append(score_result.value)
 

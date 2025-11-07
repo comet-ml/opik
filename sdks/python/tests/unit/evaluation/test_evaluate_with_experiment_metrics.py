@@ -6,7 +6,7 @@ import opik
 from opik import evaluation, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
-from opik.evaluation import metrics
+from opik.evaluation import metrics, test_result
 from opik.evaluation.metrics import experiment_metric_result
 from ...testlib import ANY_BUT_NONE, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
@@ -39,11 +39,11 @@ def test_evaluate__with_experiment_metrics__happyflow(fake_backend):
         raise Exception
 
     # Create experiment metric function
-    def compute_max_metric(evaluation_result_):
+    def compute_max_metric(test_results: List[test_result.TestResult]):
         # Find max value for equals_metric
         max_value = 0.0
-        for test_result in evaluation_result_.test_results:
-            for score_result in test_result.score_results:
+        for test_result_item in test_results:
+            for score_result in test_result_item.score_results:
                 if score_result.name == "equals_metric":
                     max_value = max(max_value, score_result.value)
         return experiment_metric_result.ExperimentMetricResult(
@@ -131,10 +131,10 @@ def test_evaluate__with_experiment_metrics__list_of_results__happyflow(fake_back
         raise Exception
 
     # Create experiment metric function that returns a list
-    def compute_stats(evaluation_result_):
+    def compute_stats(test_results: List[test_result.TestResult]):
         scores = []
-        for test_result in evaluation_result_.test_results:
-            for score_result in test_result.score_results:
+        for test_result_item in test_results:
+            for score_result in test_result_item.score_results:
                 if score_result.name == "equals_metric":
                     scores.append(score_result.value)
 
@@ -232,10 +232,10 @@ def test_evaluate__with_experiment_metrics_and_scoring_metrics__happyflow(
         raise Exception
 
     # Create experiment metric function
-    def compute_avg_metric(evaluation_result_):
+    def compute_avg_metric(test_results: List[test_result.TestResult]):
         scores = []
-        for test_result in evaluation_result_.test_results:
-            for score_result in test_result.score_results:
+        for test_result_item in test_results:
+            for score_result in test_result_item.score_results:
                 if score_result.name == "equals_metric":
                     scores.append(score_result.value)
 

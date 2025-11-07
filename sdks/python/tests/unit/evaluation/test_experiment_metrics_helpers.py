@@ -1,4 +1,5 @@
 from unittest import mock
+from typing import List
 import pytest
 
 from opik.evaluation import evaluation_result, test_result, test_case
@@ -21,7 +22,7 @@ def test_compute_experiment_metrics__single_result__happyflow():
     )
 
     # Create a metric function that returns a single result
-    def compute_max_metric(evaluation_result_: evaluation_result.EvaluationResult):
+    def compute_max_metric(test_results: List[test_result.TestResult]):
         return experiment_metric_result.ExperimentMetricResult(
             score_name="equals_metric",
             metric_name="max",
@@ -31,7 +32,7 @@ def test_compute_experiment_metrics__single_result__happyflow():
     # Compute metrics
     result = experiment_metrics_helpers.compute_experiment_metrics(
         experiment_metrics=[compute_max_metric],
-        evaluation_result_=eval_result,
+        test_results=eval_result.test_results,
     )
 
     # Verify result format
@@ -54,7 +55,7 @@ def test_compute_experiment_metrics__list_of_results__happyflow():
     )
 
     # Create a metric function that returns a list of results
-    def compute_stats(evaluation_result_: evaluation_result.EvaluationResult):
+    def compute_stats(test_results: List[test_result.TestResult]):
         return [
             experiment_metric_result.ExperimentMetricResult(
                 score_name="equals_metric",
@@ -76,7 +77,7 @@ def test_compute_experiment_metrics__list_of_results__happyflow():
     # Compute metrics
     result = experiment_metrics_helpers.compute_experiment_metrics(
         experiment_metrics=[compute_stats],
-        evaluation_result_=eval_result,
+        test_results=eval_result.test_results,
     )
 
     # Verify result format
@@ -100,11 +101,11 @@ def test_compute_experiment_metrics__function_raises_exception__error_logged_but
     )
 
     # Create a metric function that raises an exception
-    def failing_metric(evaluation_result_: evaluation_result.EvaluationResult):
+    def failing_metric(test_results: List[test_result.TestResult]):
         raise ValueError("Test error")
 
     # Create a working metric function
-    def working_metric(evaluation_result_: evaluation_result.EvaluationResult):
+    def working_metric(test_results: List[test_result.TestResult]):
         return experiment_metric_result.ExperimentMetricResult(
             score_name="equals_metric",
             metric_name="max",
@@ -118,7 +119,7 @@ def test_compute_experiment_metrics__function_raises_exception__error_logged_but
         # Compute metrics - should not raise exception
         result = experiment_metrics_helpers.compute_experiment_metrics(
             experiment_metrics=[failing_metric, working_metric],
-            evaluation_result_=eval_result,
+            test_results=eval_result.test_results,
         )
 
         # Verify error was logged

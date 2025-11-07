@@ -9,12 +9,12 @@ things like max, min, avg, median, or custom aggregations.
 from typing import Dict, Any, List
 
 from opik.evaluation.metrics import Equals, ExperimentMetricResult
-from opik.evaluation import evaluate, EvaluationResult
+from opik.evaluation import evaluate, TestResult
 from opik import Opik, track
 
 
 def compute_accuracy_stats(
-    evaluation_result: EvaluationResult,
+    test_results: List[TestResult],
 ) -> List[ExperimentMetricResult]:
     """
     Compute experiment-level statistics for the Equals metric (accuracy).
@@ -23,8 +23,8 @@ def compute_accuracy_stats(
     """
     accuracy_scores = []
 
-    for test_result in evaluation_result.test_results:
-        for score_result in test_result.score_results:
+    for test_result_item in test_results:
+        for score_result in test_result_item.score_results:
             if score_result.name == "equals_metric":
                 accuracy_scores.append(score_result.value)
 
@@ -51,7 +51,7 @@ def compute_accuracy_stats(
 
 
 def compute_pass_rate(
-    evaluation_result: EvaluationResult,
+    test_results: List[TestResult],
 ) -> ExperimentMetricResult:
     """
     Compute the pass rate (percentage of test cases with accuracy = 1.0).
@@ -61,8 +61,8 @@ def compute_pass_rate(
     total_count = 0
     pass_count = 0
 
-    for test_result in evaluation_result.test_results:
-        for score_result in test_result.score_results:
+    for test_result_item in test_results:
+        for score_result in test_result_item.score_results:
             if score_result.name == "equals_metric":
                 total_count += 1
                 if score_result.value == 1.0:
