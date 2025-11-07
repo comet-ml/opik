@@ -109,7 +109,9 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
         OPTIMIZATION_PROMPT_KEY,
         "-",
       );
-      const prompt = promptData;
+      const prompt = isObject(promptData)
+        ? JSON.stringify(promptData, null, 2)
+        : toString(promptData);
 
       const examplesData = get(
         experiment.metadata ?? {},
