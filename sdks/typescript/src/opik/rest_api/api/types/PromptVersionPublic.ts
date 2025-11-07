@@ -13,6 +13,8 @@ export interface PromptVersionPublic {
     template: string;
     metadata?: OpikApi.JsonNodePublic;
     type?: OpikApi.PromptVersionPublicType;
+    /** template structure: 'string' (default) or 'chat' */
+    templateStructure?: string;
     changeDescription?: string;
     createdAt?: Date;
     createdBy?: string;

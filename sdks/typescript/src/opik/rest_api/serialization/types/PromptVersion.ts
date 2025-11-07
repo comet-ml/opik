@@ -16,6 +16,7 @@ export const PromptVersion: core.serialization.ObjectSchema<serializers.PromptVe
         template: core.serialization.string(),
         metadata: JsonNode.optional(),
         type: PromptVersionType.optional(),
+        templateStructure: core.serialization.property("template_structure", core.serialization.string().optional()),
         changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
         variables: core.serialization.list(core.serialization.string()).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -30,6 +31,7 @@ export declare namespace PromptVersion {
         template: string;
         metadata?: JsonNode.Raw | null;
         type?: PromptVersionType.Raw | null;
+        template_structure?: string | null;
         change_description?: string | null;
         variables?: string[] | null;
         created_at?: string | null;

@@ -4998,6 +4998,8 @@ components:
           - trace:guardrails_triggered
           - prompt:deleted
           - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5115,6 +5117,8 @@ components:
           - trace:guardrails_triggered
           - prompt:deleted
           - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5261,6 +5265,8 @@ components:
           - trace:guardrails_triggered
           - prompt:deleted
           - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5872,6 +5878,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -5879,10 +5889,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6155,6 +6161,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceFilter_Write"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6162,10 +6172,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6361,6 +6367,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6368,10 +6378,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6615,6 +6621,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6622,10 +6632,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6700,6 +6706,10 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6707,10 +6717,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -10650,6 +10656,9 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "template structure: 'string' (default) or 'chat'"
         change_description:
           type: string
         variables:
@@ -10730,6 +10739,9 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "template structure: 'string' (default) or 'chat'"
         change_description:
           type: string
         variables:
@@ -10854,6 +10866,9 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "template structure: 'string' (default) or 'chat'"
         change_description:
           type: string
         created_at:

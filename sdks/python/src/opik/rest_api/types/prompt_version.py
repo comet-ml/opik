@@ -24,6 +24,11 @@ class PromptVersion(UniversalBaseModel):
     template: str
     metadata: typing.Optional[JsonNode] = None
     type: typing.Optional[PromptVersionType] = None
+    template_structure: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    template structure: 'string' (default) or 'chat'
+    """
+
     change_description: typing.Optional[str] = None
     variables: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
