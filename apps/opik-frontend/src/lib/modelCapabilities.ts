@@ -3,6 +3,7 @@ import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 
 type ModelPricingEntry = {
   supports_vision?: boolean;
+  supports_video_input?: boolean;
   [key: string]: unknown;
 };
 
@@ -12,6 +13,8 @@ const modelEntries = modelPricing as Record<string, ModelPricingEntry>;
 
 const VISION_CAPABILITIES = new Map<string, boolean>();
 const NORMALIZED_VISION_CAPABILITIES = new Map<string, boolean>();
+const VIDEO_CAPABILITIES = new Map<string, boolean>();
+const NORMALIZED_VIDEO_CAPABILITIES = new Map<string, boolean>();
 
 // Hardcoded vision-capable models or patterns that should support vision
 // This list overrides the JSON configuration to handle cases where:
@@ -22,12 +25,22 @@ const VISION_MODEL_PATTERNS = [
   /qwen.*vl/i, // Qwen VL models (e.g., qwen/qwen-vl-plus, qwen2.5-vl-32b-instruct)
 ];
 
+const VIDEO_MODEL_PATTERNS = [
+  /qwen.*vl/i,
+  /video/i,
+];
+
 /**
  * Checks if a model name matches any of the hardcoded vision patterns.
  */
 const matchesVisionPattern = (modelName: string): boolean => {
   const normalized = normalizeModelName(modelName);
   return VISION_MODEL_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
+const matchesVideoPattern = (modelName: string): boolean => {
+  const normalized = normalizeModelName(modelName);
+  return VIDEO_MODEL_PATTERNS.some((pattern) => pattern.test(normalized));
 };
 
 // Initialize vision capabilities from model pricing data
@@ -41,6 +54,13 @@ Object.entries(modelEntries).forEach(([modelName, entry]) => {
   NORMALIZED_VISION_CAPABILITIES.set(
     normalizeModelName(modelName),
     supportsVision,
+  );
+
+  const supportsVideo = Boolean(entry?.supports_video_input);
+  VIDEO_CAPABILITIES.set(modelName, supportsVideo);
+  NORMALIZED_VIDEO_CAPABILITIES.set(
+    normalizeModelName(modelName),
+    supportsVideo,
   );
 });
 
@@ -125,5 +145,36 @@ export const supportsImageInput = (model?: string | null): boolean => {
   }
 
   // Default to false if no match found
+  return false;
+};
+
+/**
+ * Checks if a model supports video input.
+ */
+export const supportsVideoInput = (model?: string | null): boolean => {
+  if (!model) {
+    return false;
+  }
+
+  if (isCustomProviderModel(model)) {
+    return true;
+  }
+
+  if (matchesVideoPattern(model)) {
+    return true;
+  }
+
+  const exact = VIDEO_CAPABILITIES.get(model);
+  if (exact !== undefined) {
+    return exact;
+  }
+
+  for (const key of candidateKeys(model)) {
+    const capability = NORMALIZED_VIDEO_CAPABILITIES.get(key);
+    if (capability !== undefined) {
+      return capability;
+    }
+  }
+
   return false;
 };
