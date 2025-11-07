@@ -22,13 +22,14 @@ def test_chat_prompt__create__happyflow(opik_client: opik.Opik):
     )
 
     # Verify the prompt was created correctly
-    assert chat_prompt.name == prompt_name
-    assert chat_prompt.messages == messages
-    assert chat_prompt.metadata == {"version": "1.0", "type": "customer_support"}
-    assert chat_prompt.type == PromptType.MUSTACHE
-    assert chat_prompt.commit is not None
-    assert chat_prompt.__internal_api__prompt_id__ is not None
-    assert chat_prompt.__internal_api__version_id__ is not None
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=messages,
+        metadata={"version": "1.0", "type": "customer_support"},
+        type=PromptType.MUSTACHE,
+        template_structure="chat",
+    )
 
 
 def test_chat_prompt__format__happyflow(opik_client: opik.Opik):
@@ -87,9 +88,21 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
     )
 
     # Verify both versions
-    assert chat_prompt_v2.name == chat_prompt_v1.name
-    assert chat_prompt_v2.messages == messages_v2
-    assert chat_prompt_v2.messages != chat_prompt_v1.messages
+    verifiers.verify_chat_prompt_version(
+        chat_prompt_v1,
+        name=prompt_name,
+        messages=messages_v1,
+        template_structure="chat",
+    )
+    
+    verifiers.verify_chat_prompt_version(
+        chat_prompt_v2,
+        name=prompt_name,
+        messages=messages_v2,
+        template_structure="chat",
+    )
+    
+    # Verify they share the same prompt ID but have different version IDs
     assert (
         chat_prompt_v2.__internal_api__prompt_id__
         == chat_prompt_v1.__internal_api__prompt_id__

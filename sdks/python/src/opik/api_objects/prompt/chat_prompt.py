@@ -37,6 +37,9 @@ class ChatPrompt:
         self._metadata = metadata
         self._type = type
         self._messages = messages
+        self._commit: Optional[str] = None
+        self.__internal_api__prompt_id__: Optional[str] = None
+        self.__internal_api__version_id__: Optional[str] = None
 
         self._sync_with_backend()
 
