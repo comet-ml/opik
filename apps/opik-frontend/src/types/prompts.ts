@@ -16,6 +16,7 @@ export type PromptWithLatestVersion = Prompt & {
 export interface PromptVersion {
   id: string;
   template: string;
+  template_structure?: string;
   metadata: object;
   commit: string;
   change_description?: string;

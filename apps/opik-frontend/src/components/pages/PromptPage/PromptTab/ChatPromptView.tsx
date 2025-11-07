@@ -54,19 +54,6 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
-  const getRoleColor = (role: string) => {
-    switch (role.toLowerCase()) {
-      case "system":
-        return "bg-orange-100 text-orange-800 border-orange-200";
-      case "user":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "assistant":
-        return "bg-green-100 text-green-800 border-green-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
-
   if (messages.length === 0) {
     return (
       <div className="flex items-center justify-center p-8 text-muted-foreground">
@@ -76,28 +63,62 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {messages.map((message, index) => (
-        <div
-          key={index}
-          className="flex flex-col gap-2 rounded-md border bg-background p-4"
-        >
-          <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-3">
+      {messages.map((message, index) => {
+        const role = message.role.toLowerCase();
+        const isSystem = role === "system";
+        const isUser = role === "user";
+        const isAssistant = role === "assistant";
+        
+        return (
+          <div
+            key={index}
+            className={cn(
+              "group relative flex flex-col gap-2.5 rounded-lg border p-4 shadow-sm transition-all hover:shadow-md",
+              isSystem && "border-orange-200 bg-orange-50/50",
+              isUser && "border-blue-200 bg-blue-50/50",
+              isAssistant && "border-green-200 bg-green-50/50",
+              !isSystem && !isUser && !isAssistant && "border-gray-200 bg-gray-50/50"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-full shadow-sm",
+                  isSystem && "bg-orange-100 text-orange-700",
+                  isUser && "bg-blue-100 text-blue-700",
+                  isAssistant && "bg-green-100 text-green-700",
+                  !isSystem && !isUser && !isAssistant && "bg-gray-100 text-gray-700"
+                )}
+              >
+                {getRoleIcon(message.role)}
+              </div>
+              <span
+                className={cn(
+                  "text-sm font-semibold",
+                  isSystem && "text-orange-900",
+                  isUser && "text-blue-900",
+                  isAssistant && "text-green-900",
+                  !isSystem && !isUser && !isAssistant && "text-gray-900"
+                )}
+              >
+                {getRoleLabel(message.role)}
+              </span>
+            </div>
             <div
               className={cn(
-                "flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium border",
-                getRoleColor(message.role)
+                "comet-code whitespace-pre-wrap break-words rounded-md border px-4 py-3 text-sm leading-relaxed",
+                isSystem && "border-orange-200 bg-white/80 text-orange-950",
+                isUser && "border-blue-200 bg-white/80 text-blue-950",
+                isAssistant && "border-green-200 bg-white/80 text-green-950",
+                !isSystem && !isUser && !isAssistant && "border-gray-200 bg-white/80 text-gray-950"
               )}
             >
-              {getRoleIcon(message.role)}
-              <span>{getRoleLabel(message.role)}</span>
+              {getMessageContent(message.content)}
             </div>
           </div>
-          <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-            {getMessageContent(message.content)}
-          </code>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
