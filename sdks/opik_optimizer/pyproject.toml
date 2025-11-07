@@ -11,7 +11,6 @@ requires-python = ">=3.10,<3.14"
 dependencies = [
     "datasets",
     "deap>=1.4.3",
-    "diskcache",
     "gepa>=0.0.7",
     "ujson",
     "hf_xet",

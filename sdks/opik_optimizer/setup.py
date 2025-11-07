@@ -18,7 +18,6 @@ setup(
     install_requires=[
         "datasets",
         "deap>=1.4.3",
-        "diskcache",
         "ujson",
         "hf_xet",
         "litellm",
