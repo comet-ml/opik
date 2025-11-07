@@ -1,9 +1,16 @@
 import React, { useMemo } from "react";
 import { Path, useFieldArray, UseFormReturn } from "react-hook-form";
 import { CircleHelp, ExternalLink, Plus, WebhookIcon, X } from "lucide-react";
+import get from "lodash/get";
 
 import { Label } from "@/components/ui/label";
-import { FormErrorSkeleton, FormField, FormItem } from "@/components/ui/form";
+import {
+  FormControl,
+  FormErrorSkeleton,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Description } from "@/components/ui/description";
@@ -14,17 +21,36 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { cn } from "@/lib/utils";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
   projectsIds: string[];
 };
+
+const WINDOW_OPTIONS = [
+  { label: "5 minutes", value: "300" },
+  { label: "15 minutes", value: "900" },
+  { label: "30 minutes", value: "1800" },
+  { label: "1 hour", value: "3600" },
+  { label: "6 hours", value: "21600" },
+  { label: "12 hours", value: "43200" },
+  { label: "24 hours", value: "86400" },
+];
 
 const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   form,
@@ -171,48 +197,154 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
               {fields.map((field, index) => {
                 const config = TRIGGER_CONFIG[field.eventType];
                 const isLastItem = index === fields.length - 1;
+                const isCostOrLatencyTrigger =
+                  field.eventType === ALERT_EVENT_TYPE.trace_cost ||
+                  field.eventType === ALERT_EVENT_TYPE.trace_latency;
 
                 return (
                   <div key={field.id}>
-                    <div className="flex items-stretch gap-4">
-                      <div className="flex flex-1 flex-col gap-1">
-                        <Label className="comet-body-s-accented">
-                          {config.title}
-                        </Label>
-                        <Description>{config.description}</Description>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-stretch gap-4">
+                        <div className="flex flex-1 flex-col gap-1">
+                          <Label className="comet-body-s-accented">
+                            {config.title}
+                          </Label>
+                          <Description>{config.description}</Description>
+                        </div>
+
+                        {config.hasScope && (
+                          <FormField
+                            control={form.control}
+                            name={
+                              `triggers.${index}.projectIds` as Path<AlertFormType>
+                            }
+                            render={({ field }) => (
+                              <FormItem className="justify-center">
+                                <ProjectsSelectBox
+                                  value={field.value as string[]}
+                                  onValueChange={field.onChange}
+                                  multiselect={true}
+                                  className="h-8 w-40"
+                                  showSelectAll={true}
+                                  minWidth={204}
+                                />
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
+                        <div className="flex items-center">
+                          <Button
+                            type="button"
+                            variant="minimal"
+                            size="icon-xs"
+                            onClick={() => removeTrigger(index)}
+                          >
+                            <X />
+                          </Button>
+                        </div>
                       </div>
 
-                      {config.hasScope && (
-                        <FormField
-                          control={form.control}
-                          name={
-                            `triggers.${index}.projectIds` as Path<AlertFormType>
-                          }
-                          render={({ field }) => (
-                            <FormItem className="justify-center">
-                              <ProjectsSelectBox
-                                value={field.value as string[]}
-                                onValueChange={field.onChange}
-                                multiselect={true}
-                                className="h-8 w-40"
-                                showSelectAll={true}
-                                minWidth={204}
+                      {isCostOrLatencyTrigger && (
+                        <div className="flex flex-col gap-2 rounded border border-border bg-muted/30 p-3">
+                          <div className="flex items-start gap-4">
+                            <div className="flex flex-1 flex-col gap-1.5">
+                              <Label className="comet-body-s">
+                                {field.eventType === ALERT_EVENT_TYPE.trace_cost
+                                  ? "Total cost more than (USD)"
+                                  : "Average latency more than (seconds)"}
+                              </Label>
+                              <FormField
+                                control={form.control}
+                                name={
+                                  `triggers.${index}.threshold` as Path<AlertFormType>
+                                }
+                                render={({ field, formState }) => {
+                                  const validationErrors = get(
+                                    formState.errors,
+                                    ["triggers", index, "threshold"],
+                                  );
+                                  return (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Input
+                                          className={cn("h-8", {
+                                            "border-destructive": Boolean(
+                                              validationErrors?.message,
+                                            ),
+                                          })}
+                                          type="number"
+                                          step="any"
+                                          placeholder={
+                                            fields[index].eventType ===
+                                            ALERT_EVENT_TYPE.trace_cost
+                                              ? "0.0000001"
+                                              : "0.0"
+                                          }
+                                          value={field.value as string}
+                                          onChange={field.onChange}
+                                          onBlur={field.onBlur}
+                                          name={field.name}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  );
+                                }}
                               />
-                            </FormItem>
-                          )}
-                        />
-                      )}
+                            </div>
 
-                      <div className="flex items-center">
-                        <Button
-                          type="button"
-                          variant="minimal"
-                          size="icon-xs"
-                          onClick={() => removeTrigger(index)}
-                        >
-                          <X />
-                        </Button>
-                      </div>
+                            <div className="flex flex-1 flex-col gap-1.5">
+                              <Label className="comet-body-s">
+                                In the last
+                              </Label>
+                              <FormField
+                                control={form.control}
+                                name={
+                                  `triggers.${index}.window` as Path<AlertFormType>
+                                }
+                                render={({ field, formState }) => {
+                                  const validationErrors = get(
+                                    formState.errors,
+                                    ["triggers", index, "window"],
+                                  );
+                                  return (
+                                    <FormItem>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value as string}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger
+                                            className={cn("h-8", {
+                                              "border-destructive": Boolean(
+                                                validationErrors?.message,
+                                              ),
+                                            })}
+                                          >
+                                            <SelectValue placeholder="Select window" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {WINDOW_OPTIONS.map((option) => (
+                                            <SelectItem
+                                              key={option.value}
+                                              value={option.value}
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  );
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {!isLastItem && <Separator className="my-2" />}
                   </div>
