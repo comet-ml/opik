@@ -88,7 +88,7 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 @DisplayName("Multi-value Feedback Scores Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-public class MultiValueFeedbackScoresE2ETest {
+class MultiValueFeedbackScoresE2ETest {
     private static final String API_KEY1 = randomUUID().toString();
     private static final String USER1 = randomUUID().toString();
     private static final String API_KEY2 = randomUUID().toString();
@@ -478,13 +478,14 @@ public class MultiValueFeedbackScoresE2ETest {
         traceResourceClient.openTraceThread(threadId2, null, projectName, API_KEY1, TEST_WORKSPACE);
 
         // create traces within threads
+        Instant startTime = Instant.now().truncatedTo(ChronoUnit.HOURS);
         var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .threadId(threadId1)
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
-                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .startTime(startTime)
                 .build();
         var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -492,7 +493,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
-                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .startTime(startTime)
                 .build();
         var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -500,7 +501,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .projectName(projectName)
                 .usage(null)
                 .feedbackScores(null)
-                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .startTime(startTime)
                 .build();
 
         traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY1, TEST_WORKSPACE);
@@ -576,7 +577,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // assert thread feedback project metric
         assertProjectMetric(projectId, MetricType.THREAD_FEEDBACK_SCORES, user1Score.name(),
-                List.of(user1Score.value(), user2Score.value()), anotherThreadScore.value());
+                List.of(user1Score.value(), user2Score.value()), anotherThreadScore.value(), startTime);
     }
 
     @Test
