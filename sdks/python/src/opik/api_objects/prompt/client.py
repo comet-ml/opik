@@ -38,17 +38,9 @@ class PromptClient:
         # For chat prompts, compare parsed JSON to avoid formatting differences
         templates_equal = False
         existing_template_structure = None
+        
         if prompt_version is not None:
-            existing_template_structure = getattr(prompt_version, 'template_structure', None)
-            
-            # If template_structure is None (field not in API response yet), infer from template content
-            if existing_template_structure is None:
-                # Temporarily infer until OpenAPI types are regenerated
-                try:
-                    json.loads(prompt_version.template)
-                    existing_template_structure = 'chat'
-                except (json.JSONDecodeError, TypeError):
-                    existing_template_structure = 'string'
+            existing_template_structure = prompt_version.template_structure or "string"
             
             if existing_template_structure == "chat":
                 try:
