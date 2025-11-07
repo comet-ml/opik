@@ -15,6 +15,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
@@ -39,6 +40,7 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
@@ -101,6 +103,8 @@ import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -112,9 +116,11 @@ import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -178,6 +184,7 @@ class AlertResourceTest {
     private PromptResourceClient promptResourceClient;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
@@ -189,6 +196,7 @@ class AlertResourceTest {
         promptResourceClient = new PromptResourceClient(client, baseUrl, factory);
         projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
         traceResourceClient = new TraceResourceClient(client, baseUrl);
+        spanResourceClient = new SpanResourceClient(client, baseUrl);
         guardrailsResourceClient = new GuardrailsResourceClient(client, baseUrl);
         datasetResourceClient = new DatasetResourceClient(client, baseUrl);
         experimentResourceClient = new ExperimentResourceClient(client, baseUrl, factory);
@@ -1651,6 +1659,99 @@ class AlertResourceTest {
                             .build()));
         }
 
+        @Test
+        @DisplayName("when spans with total cost exceed threshold, then cost alert webhook is called")
+        void whenSpansWithCostExceedThreshold_thenCostAlertWebhookIsCalled() {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with cost threshold configuration
+            // Threshold: $50.00, Window: 60 seconds
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST, projectId, "50.00", "60");
+
+            var alert = createAlertForEvent(alertTrigger);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace first
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create multiple spans with costs that exceed the threshold
+            // Total cost: $30 + $30 = $60 (exceeds $50 threshold)
+            IntStream.range(0, 2)
+                    .forEach(i -> {
+                        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .totalEstimatedCost(new BigDecimal("30.00"))
+                                .build();
+                        spanResourceClient.createSpan(span, mock.getLeft(), mock.getRight());
+                    });
+
+            // Wait for MetricsAlertJob to run and verify webhook was called
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+
+            // Verify payload contains cost metrics information
+            @SuppressWarnings("unchecked")
+            Map<String, String> costPayload = JsonUtils.readValue(payload, Map.class);
+
+            verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId);
+        }
+
+        @Test
+        @DisplayName("when trace duration exceeds threshold, then latency alert webhook is called")
+        void whenTraceDurationExceedsThreshold_thenLatencyAlertWebhookIsCalled() {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with latency threshold configuration
+            // Threshold: 2000ms (2 seconds), Window: 60 seconds
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_LATENCY, AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "2000.0000", "60");
+
+            var alert = createAlertForEvent(alertTrigger);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace with duration exceeding threshold (3 seconds)
+            Instant endTime = Instant.now();
+            Instant startTime = endTime.minus(3, ChronoUnit.SECONDS);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .startTime(startTime)
+                    .endTime(endTime)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Wait for MetricsAlertJob to run and verify webhook was called
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+
+            // Verify payload contains latency metrics information
+            @SuppressWarnings("unchecked")
+            Map<String, String> latencyPayload = JsonUtils.readValue(payload, Map.class);
+
+            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3000.0000", "2000.0000", "60", projectId);
+        }
+
+        private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue, String threshold, String windowSeconds, UUID projectId) {
+            assertThat(payload).containsEntry("event_type", eventType);
+            assertThat(new BigDecimal(payload.get("metric_value")).compareTo(new BigDecimal(metricValue))).isEqualTo(0);
+            assertThat(payload).containsEntry("threshold", threshold);
+            assertThat(payload).containsEntry("window_seconds", windowSeconds);
+            assertThat(payload.get("project_ids")).contains(projectId.toString());
+        }
+
         private String verifyWebhookCalledAndGetPayload(Alert alert) {
             // Wait for the webhook event to be sent
             Awaitility.await().untilAsserted(() -> {
@@ -2456,6 +2557,79 @@ class AlertResourceTest {
                     scoresCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
+
+        @ParameterizedTest
+        @MethodSource("alertTypeProvider")
+        @DisplayName("Success: should send cost alert webhook when spans exceed cost threshold")
+        void testCostAlertEvent__whenSpansExceedThreshold__thenWebhookCalled(AlertType alertType) {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with cost threshold configuration
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST, projectId, "40.00", "60");
+
+            var alert = createAlertForEvent(alertTrigger, alertType);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace first
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create spans with total cost exceeding threshold ($45 > $40)
+            Span span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .totalEstimatedCost(new BigDecimal("45.00"))
+                    .build();
+            spanResourceClient.createSpan(span, mock.getLeft(), mock.getRight());
+
+            // Verify webhook was called and payload is properly formatted
+            verifyPayload(alertType, 1, "Cost Alert",
+                    List.of("Cost Alert Triggered", "Current Cost", "Threshold", "Time Window"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("alertTypeProvider")
+        @DisplayName("Success: should send latency alert webhook when trace exceeds duration threshold")
+        void testLatencyAlertEvent__whenTraceExceedsThreshold__thenWebhookCalled(AlertType alertType) {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with latency threshold configuration
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_LATENCY, AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "1500.0000", "60");
+
+            var alert = createAlertForEvent(alertTrigger, alertType);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace with duration exceeding threshold (2.5 seconds > 1.5 seconds)
+            Instant startTime = Instant.now().minus(2500, ChronoUnit.MILLIS);
+            Instant endTime = Instant.now();
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .startTime(startTime)
+                    .endTime(endTime)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Verify webhook was called and payload is properly formatted
+            verifyPayload(alertType, 1, "Latency Alert",
+                    List.of("Latency Alert Triggered", "Current Latency", "Threshold", "Time Window"));
+        }
     }
 
     @Nested
@@ -2513,6 +2687,14 @@ class AlertResourceTest {
         String workspaceId = UUID.randomUUID().toString();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        
+        // Mock the workspace name endpoint for AlertWebhookSender
+        wireMock.server().stubFor(
+                get(urlPathEqualTo("/workspaces/workspace-name"))
+                        .withQueryParam("id", equalTo(workspaceId))
+                        .willReturn(aResponse()
+                                .withStatus(200)
+                                .withBody(workspaceName)));
 
         return Pair.of(apiKey, workspaceName);
     }
@@ -2673,5 +2855,24 @@ class AlertResourceTest {
                 SortableFields.CREATED_BY,
                 SortableFields.LAST_UPDATED_BY,
                 SortableFields.WEBHOOK_URL);
+    }
+
+    private static AlertTrigger triggerWithThreshold(AlertEventType eventType, AlertTriggerConfigType configType, UUID projectId, String threshold, String window) {
+        return AlertTrigger.builder()
+                .eventType(eventType)
+                .triggerConfigs(List.of(
+                        AlertTriggerConfig.builder()
+                                .type(configType)
+                                .configValue(Map.of(
+                                        THRESHOLD_CONFIG_KEY, threshold,
+                                        WINDOW_CONFIG_KEY, window))
+                                .build(),
+                        AlertTriggerConfig.builder()
+                                .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                .configValue(Map.of(
+                                        PROJECT_IDS_CONFIG_KEY,
+                                        JsonUtils.writeValueAsString(Set.of(projectId))))
+                                .build()))
+                .build();
     }
 }

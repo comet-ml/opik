@@ -10,6 +10,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.lifecycle.Managed;
 import jakarta.inject.Inject;
@@ -116,7 +117,7 @@ public class MetricsAlertJob implements Managed {
                         Set.of(AlertEventType.TRACE_COST, AlertEventType.TRACE_LATENCY)))
                         .subscribeOn(Schedulers.boundedElastic())
                         .flatMapMany(Flux::fromIterable)
-                        .map(this::processAlert)
+                        .flatMap(this::processAlert)
                         .onErrorContinue((throwable, alert) -> log.error("Failed to process metrics alert '{}': {}",
                                 alert, throwable.getMessage(), throwable))
                         .doOnComplete(() -> log.debug("MetricsAlertJob finished processing all alerts"))
@@ -164,65 +165,66 @@ public class MetricsAlertJob implements Managed {
     }
 
     private Mono<Void> evaluateTrigger(Alert alert, AlertTrigger trigger) {
-        return Mono.fromCallable(() -> {
-            // Extract configuration from trigger
-            TriggerConfig config = extractTriggerConfig(trigger);
+        // Extract configuration from trigger
+        TriggerConfig config = extractTriggerConfig(trigger);
 
-            // Calculate time window for query
-            Instant endTime = Instant.now();
-            Instant startTime = endTime.minusSeconds(config.windowSeconds());
+        // Calculate time window for query
+        Instant endTime = Instant.now();
+        Instant startTime = endTime.minusSeconds(config.windowSeconds());
 
-            // Query metrics based on trigger type
-            Mono<BigDecimal> metricValueMono = switch (trigger.eventType()) {
-                case TRACE_COST -> projectMetricsDAO.getTotalCost(
-                        alert.workspaceId(),
-                        config.projectIds(),
-                        startTime,
-                        endTime);
-                case TRACE_LATENCY -> projectMetricsDAO.getAverageDuration(
-                        alert.workspaceId(),
-                        config.projectIds(),
-                        startTime,
-                        endTime);
-                default -> Mono.just(BigDecimal.ZERO);
-            };
+        // Query metrics based on trigger type - this needs to happen with context already set
+        Mono<BigDecimal> metricValueMono = switch (trigger.eventType()) {
+            case TRACE_COST -> projectMetricsDAO.getTotalCost(
+                    alert.workspaceId(),
+                    config.projectIds(),
+                    startTime,
+                    endTime);
+            case TRACE_LATENCY -> projectMetricsDAO.getAverageDuration(
+                    alert.workspaceId(),
+                    config.projectIds(),
+                    startTime,
+                    endTime);
+            default -> Mono.just(BigDecimal.ZERO);
+        };
 
-            return metricValueMono.flatMap(metricValue -> {
-                // Compare with threshold
-                if (metricValue.compareTo(config.threshold()) > 0) {
-                    log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}'",
+        return metricValueMono
+                .doOnNext(value -> log.info("Metric value retrieved: '{}'", value))
+                .doOnError(error -> log.error("Error retrieving metric value: '{}'", error.getMessage(), error))
+                .flatMap(metricValue -> {
+                    // Compare with threshold
+                    if (metricValue.compareTo(config.threshold()) > 0) {
+                        log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}'",
+                                alert.name(), alert.id(), trigger.eventType(), metricValue, config.threshold());
+
+                        // Create payload with metric details
+                        String eventId = idGenerator.generateId().toString();
+                        String payloadJson = JsonUtils.writeValueAsString(Map.of(
+                                "event_type", trigger.eventType().name(),
+                                "metric_value", metricValue.toString(),
+                                "threshold", config.threshold().toString(),
+                                "window_seconds", config.windowSeconds(),
+                                "project_ids",
+                                config.projectIds() != null
+                                        ? config.projectIds().stream().map(UUID::toString)
+                                                .collect(Collectors.joining(","))
+                                        : ""));
+
+                        // Send webhook directly instead of adding to bucket
+                        return alertWebhookSender.createAndSendWebhook(
+                                alert,
+                                alert.workspaceId(),
+                                "",
+                                trigger.eventType(),
+                                List.of(eventId),
+                                List.of(payloadJson),
+                                List.of("system")); // System user for automated alerts
+                    }
+
+                    log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}'",
                             alert.name(), alert.id(), trigger.eventType(), metricValue, config.threshold());
-
-                    // Create payload with metric details
-                    String eventId = idGenerator.generateId().toString();
-                    String payloadJson = JsonUtils.writeValueAsString(Map.of(
-                            "event_type", trigger.eventType().name(),
-                            "metric_value", metricValue.toString(),
-                            "threshold", config.threshold().toString(),
-                            "window_seconds", config.windowSeconds(),
-                            "project_ids",
-                            config.projectIds() != null
-                                    ? config.projectIds().stream().map(UUID::toString).collect(Collectors.joining(","))
-                                    : ""));
-
-                    // Send webhook directly instead of adding to bucket
-                    return alertWebhookSender.createAndSendWebhook(
-                            alert,
-                            alert.workspaceId(),
-                            "",
-                            trigger.eventType(),
-                            List.of(eventId),
-                            List.of(payloadJson),
-                            List.of("system")); // System user for automated alerts
-                }
-
-                log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}'",
-                        alert.name(), alert.id(), trigger.eventType(), metricValue, config.threshold());
-                return Mono.<Void>empty();
-            });
-        })
-                .flatMap(mono -> mono)
-                .contextWrite(context -> context.put("workspaceId", alert.workspaceId()))
+                    return Mono.<Void>empty();
+                })
+                .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
