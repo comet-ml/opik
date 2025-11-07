@@ -8,6 +8,7 @@ import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
@@ -217,6 +218,9 @@ public class ExperimentsTestUtils {
                 .toList();
         List<FeedbackScoreAverage> feedbackScores = calculateFeedbackScoreAverages(allItems);
 
+        // Calculate experiment score averages across all experiments
+        List<FeedbackScoreAverage> experimentScores = calculateExperimentScoreAverages(experiments);
+
         return AggregationData.builder()
                 .experimentCount(experimentCount)
                 .traceCount(totalTraceCount)
@@ -224,6 +228,7 @@ public class ExperimentsTestUtils {
                 .totalEstimatedCostAvg(avgCost)
                 .duration(avgDurationPercentiles)
                 .feedbackScores(feedbackScores)
+                .experimentScores(experimentScores.isEmpty() ? List.of() : experimentScores)
                 .build();
     }
 
@@ -330,6 +335,40 @@ public class ExperimentsTestUtils {
                             .value(average)
                             .build();
                 })
+                .sorted((a, b) -> a.name().compareTo(b.name()))
+                .toList();
+    }
+
+    /**
+     * Calculate experiment score averages across all experiments.
+     * Extracts experiment scores from each experiment and calculates the average value for each score name.
+     */
+    private List<FeedbackScoreAverage> calculateExperimentScoreAverages(List<Experiment> experiments) {
+        Map<String, List<BigDecimal>> scoresByName = new HashMap<>();
+
+        for (Experiment experiment : experiments) {
+            if (experiment.experimentScores() != null) {
+                for (ExperimentScore score : experiment.experimentScores()) {
+                    if (score.name() != null && score.value() != null) {
+                        scoresByName.computeIfAbsent(score.name(), k -> new ArrayList<>())
+                                .add(score.value());
+                    }
+                }
+            }
+        }
+
+        return scoresByName.entrySet().stream()
+                .map(entry -> {
+                    BigDecimal average = entry.getValue().stream()
+                            .reduce(BigDecimal.ZERO, BigDecimal::add)
+                            .divide(BigDecimal.valueOf(entry.getValue().size()),
+                                    ValidationUtils.SCALE, RoundingMode.HALF_UP);
+                    return FeedbackScoreAverage.builder()
+                            .name(entry.getKey())
+                            .value(average)
+                            .build();
+                })
+                .sorted((a, b) -> a.name().compareTo(b.name()))
                 .toList();
     }
 

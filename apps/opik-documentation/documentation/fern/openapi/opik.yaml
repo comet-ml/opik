@@ -9145,6 +9145,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
     ExperimentGroupAggregationsResponse:
       type: object
       properties:
@@ -10367,6 +10371,8 @@ components:
       type: object
       properties:
         name:
+          type: string
+        type:
           type: string
     DataPointNumber_Public:
       required:

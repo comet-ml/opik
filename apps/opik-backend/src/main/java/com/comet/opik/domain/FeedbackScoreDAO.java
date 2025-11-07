@@ -608,13 +608,15 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             }
 
             // Execute both queries
-            Mono<List<ScoreNameWithType>> feedbackScoresNames = makeMonoContextAware(bindWorkspaceIdToMono(feedbackScoresStatement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> 
-                        new ScoreNameWithType(row.get("name", String.class), "feedback_scores")))
+            Mono<List<ScoreNameWithType>> feedbackScoresNames = makeMonoContextAware(
+                    bindWorkspaceIdToMono(feedbackScoresStatement))
+                    .flatMapMany(result -> result.map((row,
+                            rowMetadata) -> new ScoreNameWithType(row.get("name", String.class), "feedback_scores")))
                     .distinct()
                     .collect(Collectors.toList());
 
-            Mono<List<ScoreNameWithType>> experimentScoresNames = makeMonoContextAware(bindWorkspaceIdToMono(experimentScoresStatement))
+            Mono<List<ScoreNameWithType>> experimentScoresNames = makeMonoContextAware(
+                    bindWorkspaceIdToMono(experimentScoresStatement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> {
                         String experimentScoresJson = row.get("experiment_scores", String.class);
                         if (experimentScoresJson == null || experimentScoresJson.isBlank()) {
@@ -622,7 +624,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                         }
                         try {
                             List<ExperimentScore> scores = JsonUtils.readValue(experimentScoresJson,
-                                    new TypeReference<List<ExperimentScore>>() {});
+                                    new TypeReference<List<ExperimentScore>>() {
+                                    });
                             if (scores == null || scores.isEmpty()) {
                                 return List.<ScoreNameWithType>of();
                             }

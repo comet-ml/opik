@@ -4,4 +4,5 @@
 
 export interface ScoreName {
     name?: string;
+    type?: string;
 }

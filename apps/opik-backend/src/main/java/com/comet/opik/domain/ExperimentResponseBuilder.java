@@ -140,7 +140,7 @@ public class ExperimentResponseBuilder {
         // For feedback scores - group by name and calculate weighted averages
         Map<String, BigDecimal> feedbackScoreSums = new HashMap<>();
         Map<String, Long> feedbackScoreCounts = new HashMap<>();
-        
+
         // For experiment scores - group by name and calculate weighted averages
         Map<String, BigDecimal> experimentScoreSums = new HashMap<>();
         Map<String, Long> experimentScoreCounts = new HashMap<>();
@@ -186,7 +186,7 @@ public class ExperimentResponseBuilder {
                     }
                 }
             }
-            
+
             // For experiment scores (weighted average per name)
             if (childAgg.experimentScores() != null) {
                 for (FeedbackScoreAverage score : childAgg.experimentScores()) {
@@ -214,7 +214,8 @@ public class ExperimentResponseBuilder {
                 : null;
 
         List<FeedbackScoreAverage> avgFeedbackScores = buildAvgFeedbackScores(feedbackScoreSums, feedbackScoreCounts);
-        List<FeedbackScoreAverage> avgExperimentScores = buildAvgFeedbackScores(experimentScoreSums, experimentScoreCounts);
+        List<FeedbackScoreAverage> avgExperimentScores = buildAvgFeedbackScores(experimentScoreSums,
+                experimentScoreCounts);
 
         // Build updated aggregation data
         return AggregationData.builder()
