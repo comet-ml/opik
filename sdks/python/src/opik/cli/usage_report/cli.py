@@ -141,10 +141,10 @@ def usage_report(
             # Use API key from context if available, otherwise from config
             api_key_to_use = api_key or cfg.api_key
             with httpx_client.get(
-                None,
-                api_key_to_use,
-                cfg.check_tls_certificate,
-                cfg.enable_json_request_compression,
+                workspace=None,  # No workspace needed when fetching workspace list
+                api_key=api_key_to_use,
+                check_tls_certificate=cfg.check_tls_certificate,
+                compress_json_requests=cfg.enable_json_request_compression,
             ) as client:
                 base_url = url_helpers.get_base_url(cfg.url_override)
                 workspace_list_url = url_helpers.get_workspace_list_url(base_url)
