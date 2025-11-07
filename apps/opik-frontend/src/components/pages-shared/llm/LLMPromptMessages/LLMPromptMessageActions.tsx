@@ -21,14 +21,17 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import PromptImprovementDialog from "@/components/shared/PromptImprovementDialog/PromptImprovementDialog";
-import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
+import {
+  LLMPromptConfigsType,
+  COMPOSED_PROVIDER_TYPE,
+} from "@/types/providers";
 import { useToast } from "@/components/ui/use-toast";
 
 type ConfirmType = "load" | "reset" | "save";
 
 export interface ImprovePromptConfig {
   model: string;
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedContent: string) => void;

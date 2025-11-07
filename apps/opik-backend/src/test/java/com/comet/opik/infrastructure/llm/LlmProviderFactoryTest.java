@@ -255,27 +255,27 @@ class LlmProviderFactoryTest {
                         "  custom-llm/llama-3.2  ,  custom-llm/gpt-4  "),
 
                 // New format tests (provider_name set)
-                // Configured models include "custom-llm/" prefix (as stored in DB)
+                // Configured models must match the full model string including provider name
                 arguments(
                         "New: simple model name",
                         "custom-llm/ollama/llama-3.2",
                         "ollama",
-                        "custom-llm/llama-3.2"),
+                        "custom-llm/ollama/llama-3.2"),
                 arguments(
                         "New: model with slash",
                         "custom-llm/vllm/mistralai/Mistral-7B-Instruct-v0.3",
                         "vllm",
-                        "custom-llm/mistralai/Mistral-7B-Instruct-v0.3"),
+                        "custom-llm/vllm/mistralai/Mistral-7B-Instruct-v0.3"),
                 arguments(
                         "New: model with multiple slashes",
                         "custom-llm/vllm/org/repo/model-v1",
                         "vllm",
-                        "custom-llm/org/repo/model-v1"),
+                        "custom-llm/vllm/org/repo/model-v1"),
                 arguments(
                         "New: multiple configured models",
                         "custom-llm/ollama/llama-3.2",
                         "ollama",
-                        "custom-llm/llama-3.2, custom-llm/mistralai/Mistral-7B-Instruct-v0.3, custom-llm/gpt-4"));
+                        "custom-llm/ollama/llama-3.2, custom-llm/ollama/mistralai/Mistral-7B-Instruct-v0.3, custom-llm/ollama/gpt-4"));
     }
 
     private static Stream<Arguments> testCustomLlmProviderMatching_shouldNotMatch() {

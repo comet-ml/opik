@@ -1,7 +1,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
-import { PROVIDERS } from "@/constants/providers";
+import { PROVIDERS_OPTIONS } from "@/constants/providers";
 import { cn } from "@/lib/utils";
 
 interface ProviderGridProps {
@@ -17,7 +17,7 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
     <div className="flex flex-col gap-2">
       <Label>Provider</Label>
       <div className="grid grid-cols-3 gap-3">
-        {Object.values(PROVIDERS).map((provider) => {
+        {PROVIDERS_OPTIONS.map((provider) => {
           const Icon = provider.icon;
           const isSelected = selectedProvider === provider.value;
 

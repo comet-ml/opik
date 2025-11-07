@@ -29,7 +29,7 @@ import {
   LLMPromptTemplate,
 } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { EvaluationRuleFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -80,7 +80,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const templates = LLM_PROMPT_TEMPLATES[scope];
 
   const handleAddProvider = useCallback(
-    (provider: PROVIDER_TYPE) => {
+    (provider: COMPOSED_PROVIDER_TYPE) => {
       const model =
         (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
 
@@ -95,7 +95,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   );
 
   const handleDeleteProvider = useCallback(
-    (provider: PROVIDER_TYPE) => {
+    (provider: COMPOSED_PROVIDER_TYPE) => {
       const model =
         (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
       const currentProvider = calculateModelProvider(model);
