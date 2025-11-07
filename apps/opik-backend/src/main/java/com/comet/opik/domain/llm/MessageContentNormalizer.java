@@ -123,6 +123,8 @@ public class MessageContentNormalizer {
             var rawValue = matcher.group(2).trim();
             if (!rawValue.isEmpty()) {
                 var unescaped = StringEscapeUtils.unescapeHtml4(rawValue);
+                // Frontend mustache templates sometimes escape URLs; unescape first so downstream models
+                // receive the exact media URL/base64 payload that the author supplied.
                 var mediaContent = createMediaContent(mediaType, unescaped);
                 if (mediaContent != null) {
                     contentList.add(mediaContent);
