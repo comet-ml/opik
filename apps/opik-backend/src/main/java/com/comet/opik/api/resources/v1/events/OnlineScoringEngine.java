@@ -245,6 +245,8 @@ public class OnlineScoringEngine {
             var placeholderText = matcher.group(0);
 
             if (!rawValue.isEmpty()) {
+                // Mustache templates can HTML-escape URLs; unescape before building structured content
+                // so providers receive the exact user-specified payload.
                 var unescapedValue = StringEscapeUtils.unescapeHtml4(rawValue);
                 var mediaContent = createMediaContent(mediaType, unescapedValue);
                 if (mediaContent != null) {
