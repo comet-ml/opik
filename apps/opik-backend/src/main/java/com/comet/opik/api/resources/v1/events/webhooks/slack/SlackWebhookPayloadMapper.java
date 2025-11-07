@@ -338,7 +338,7 @@ public class SlackWebhookPayloadMapper {
 
             // Format based on metric type
             String valuePrefix = type.equals("Cost") ? "$" : "";
-            String valueSuffix = type.equals("Cost") ? "" : " ms";
+            String valueSuffix = type.equals("Cost") ? "" : " s";
 
             return String.format("• *Current %s:* %s%s%s\n" +
                     "  *Threshold:* %s%s%s\n" +

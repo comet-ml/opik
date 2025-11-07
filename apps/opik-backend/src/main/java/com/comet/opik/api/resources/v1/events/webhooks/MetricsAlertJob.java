@@ -31,7 +31,6 @@ import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -115,7 +114,7 @@ public class MetricsAlertJob implements Managed {
         lockService.bestEffortLock(
                 METRICS_ALERT_LOCK_KEY,
                 Mono.fromCallable(() -> alertService.findAllByWorkspaceAndEventTypes(null,
-                        Set.of(AlertEventType.TRACE_COST, AlertEventType.TRACE_LATENCY)))
+                        SUPPORTED_EVENT_TYPES))
                         .subscribeOn(Schedulers.boundedElastic())
                         .flatMapMany(Flux::fromIterable)
                         .flatMap(this::processAlert)
