@@ -27,6 +27,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -136,9 +137,13 @@ public class MetricsAlertJob implements Managed {
         // Create a unique lock key for this alert to prevent duplicate firing across instances
         LockService.Lock alertLock = new LockService.Lock("metrics_alert:fired:" + alert.id());
 
+        // Calculate lock duration: fixedDelay - 1 minute to ensure it expires before the next job run
+        // This allows alerts to fire on every job run instead of every other run
+        Duration lockDuration = webhookConfig.getMetrics().getFixedDelay().toJavaDuration().minusMinutes(1);
+
         // Try to acquire the lock - if successful, this instance will process the alert
         // If lock already exists, another instance recently fired this alert, so skip it
-        return lockService.lockUsingToken(alertLock, webhookConfig.getMetrics().getFixedDelay().toJavaDuration())
+        return lockService.lockUsingToken(alertLock, lockDuration)
                 .flatMap(lockAcquired -> {
                     if (Boolean.FALSE.equals(lockAcquired)) {
                         // Lock already exists - alert was recently fired by another instance
