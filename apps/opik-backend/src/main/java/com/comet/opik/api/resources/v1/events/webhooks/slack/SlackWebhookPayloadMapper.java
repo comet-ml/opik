@@ -92,6 +92,8 @@ public class SlackWebhookPayloadMapper {
             case TRACE_THREAD_FEEDBACK_SCORE -> buildTraceThreadFeedbackScoreDetails(metadata, baseUrl);
             case TRACE_GUARDRAILS_TRIGGERED -> buildGuardrailsTriggeredDetails(metadata, baseUrl);
             case EXPERIMENT_FINISHED -> buildExperimentFinishedDetails(metadata, baseUrl);
+            case TRACE_COST -> buildCostDetails(metadata, baseUrl);
+            case TRACE_LATENCY -> buildLatencyDetails(metadata, baseUrl);
         };
 
         var blocks = new ArrayList<SlackBlock>();
@@ -114,8 +116,8 @@ public class SlackWebhookPayloadMapper {
         }
     }
 
-    private static DetailsBuildResult buildPromptCreatedDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildPromptCreatedDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No prompts created");
         }
@@ -133,7 +135,7 @@ public class SlackWebhookPayloadMapper {
                 fallbackText);
     }
 
-    private static DetailsBuildResult buildPromptDeletedDetails(@NonNull List<?> metadata) {
+    private static DetailsBuildResult buildPromptDeletedDetails(List<?> metadata) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No prompts deleted");
         }
@@ -147,8 +149,8 @@ public class SlackWebhookPayloadMapper {
         return new DetailsBuildResult("*Deleted Prompt IDs:*\n" + String.join(", ", promptIds));
     }
 
-    private static DetailsBuildResult buildPromptCommittedDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildPromptCommittedDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No prompts committed");
         }
@@ -166,8 +168,8 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Prompts Committed:*\n", commits, fallbackText);
     }
 
-    private static DetailsBuildResult buildTraceErrorsDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildTraceErrorsDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No trace errors");
         }
@@ -191,8 +193,8 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Traces with Errors:*\n", traceLinks, fallbackText);
     }
 
-    private static DetailsBuildResult buildTraceFeedbackScoreDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildTraceFeedbackScoreDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No feedback scores");
         }
@@ -211,8 +213,8 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Traces Feedback Scores:*\n", scoreLinks, fallbackText);
     }
 
-    private static DetailsBuildResult buildTraceThreadFeedbackScoreDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildTraceThreadFeedbackScoreDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No thread feedback scores");
         }
@@ -231,8 +233,8 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Threads Feedback Scores:*\n", scoreLinks, fallbackText);
     }
 
-    private static DetailsBuildResult buildGuardrailsTriggeredDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildGuardrailsTriggeredDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No guardrails triggered");
         }
@@ -256,8 +258,8 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Traces with Guardrails Triggered:*\n", guardrailLinks, fallbackText);
     }
 
-    private static DetailsBuildResult buildExperimentFinishedDetails(@NonNull List<?> metadata,
-            @NonNull String baseUrl) {
+    private static DetailsBuildResult buildExperimentFinishedDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult("No experiments finished");
         }
@@ -274,6 +276,18 @@ public class SlackWebhookPayloadMapper {
                 experimentLinks.size(), baseUrl + "/experiments");
 
         return checkSlackTextLimit(mainText, "*Experiments Finished:*\n", experimentLinks, fallbackText);
+    }
+
+    private static DetailsBuildResult buildCostDetails(List<?> metadata,
+            String baseUrl) {
+        // TODO: implement cost details mapping
+        return new DetailsBuildResult("implement later");
+    }
+
+    private static DetailsBuildResult buildLatencyDetails(List<?> metadata,
+            String baseUrl) {
+        // TODO: implement latency details mapping
+        return new DetailsBuildResult("implement later");
     }
 
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,
@@ -312,6 +326,8 @@ public class SlackWebhookPayloadMapper {
             case TRACE_THREAD_FEEDBACK_SCORE -> "Thread Feedback Score";
             case TRACE_GUARDRAILS_TRIGGERED -> "Guardrail Triggered";
             case EXPERIMENT_FINISHED -> "Experiment Finished";
+            case TRACE_COST -> "Cost Alert";
+            case TRACE_LATENCY -> "Latency Alert";
         };
     }
 

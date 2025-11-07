@@ -23,13 +23,13 @@ export class ThreadsPage {
       .filter({ hasText: /^Add to/ })
       .getByRole('button')
       .nth(2);
-    this.threadDeletePopupDeleteButton = page.getByRole('button').filter({ hasText: 'Delete thread' });
+    this.threadDeletePopupDeleteButton = page.getByRole('button', { name: 'Delete' });
     this.threadCheckbox = page.getByLabel('Select row');
     this.threadTableDeleteButton = page
       .locator('div')
       .filter({ hasText: /^Add to/ })
       .getByRole('button')
-      .nth(2);
+      .nth(3);
     this.outputContainer = page.getByTestId('thread').locator('.comet-markdown');
   }
 

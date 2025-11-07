@@ -69,8 +69,8 @@ This workflow will:
 - **Execute relevant tests** based on project type and changes:
   ```bash
   # Backend - Run specific test classes or packages
-  mvn test -Dtest=UserServiceTest
-  mvn test -Dtest=UserServiceTest#shouldCreateUser_whenValidRequest
+  mvn test -Dtest="UserServiceTest"
+  mvn test -Dtest="UserServiceTest#shouldCreateUser_whenValidRequest"
   
   # Frontend - Run tests for changed components
   npm test -- UserProfile.test.tsx

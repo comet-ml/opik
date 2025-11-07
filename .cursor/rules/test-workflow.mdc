@@ -82,10 +82,10 @@ Before implementing the Test workflow, ensure your project has a proper testing 
 mvn test
 
 # Run specific test class
-mvn test -Dtest=UserServiceTest
+mvn test -Dtest="UserServiceTest"
 
 # Run specific test method
-mvn test -Dtest=UserServiceTest#shouldCreateUser_whenValidRequest
+mvn test -Dtest="UserServiceTest#shouldCreateUser_whenValidRequest"
 
 # Skip tests (for compilation check)
 mvn compile -DskipTests
