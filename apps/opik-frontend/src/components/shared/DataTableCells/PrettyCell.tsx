@@ -5,46 +5,23 @@ import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
-import { containsHTML } from "@/lib/utils";
-import { stripImageTags } from "@/lib/llm";
 import useLocalStorageState from "use-local-storage-state";
-import sanitizeHtml from "sanitize-html";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+
+type CustomMeta = {
+  fieldType: "input" | "output";
+};
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
-
-/**
- * Strips HTML/Markdown tags from text to show clean plain text
- * Removes image tag markup, keeping only the URL
- */
-const stripHtmlTags = (text: string): string => {
-  // Strip image tags first, keeping only URLs
-  let sanitized = stripImageTags(text);
-
-  // Sanitize all HTML tags and entities
-  sanitized = sanitizeHtml(sanitized, {
-    allowedTags: [],
-    allowedAttributes: {},
-  });
-
-  // Then, convert HTML-specific newlines/entities (from previous UI) if desired
-  sanitized = sanitized
-    .replace(/<br\s*\/?>/gi, "\n") // Convert <br> tags (just in case any survived)
-    .replace(/<\/p>/gi, "\n\n") // Convert </p> tags to double newlines
-    .replace(/<\/div>/gi, "\n") // Convert </div> tags to newlines
-    .replace(/&nbsp;/g, " ") // Replace &nbsp; with regular spaces
-    .replace(/\n\s*\n\s*\n/g, "\n\n") // Replace multiple newlines with double newlines
-    .trim();
-
-  return sanitized;
-};
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
   });
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
   const value = context.getValue() as string | object | undefined | null;
 
   const rawValue = useMemo(() => {
@@ -70,19 +47,16 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
         : "-";
     }
 
-    const pretty = prettifyMessage(value);
+    const pretty = prettifyMessage(value, {
+      type: fieldType,
+    });
+
     const message = isObject(pretty.message)
       ? JSON.stringify(value, null, 2)
       : pretty.message || "";
 
-    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
-    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
-    if (pretty.prettified && containsHTML(message)) {
-      return stripHtmlTags(message);
-    }
-
     return message;
-  }, [value, hasExceededLimit, rawValue, maxDataLength]);
+  }, [value, hasExceededLimit, fieldType, rawValue, maxDataLength]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??

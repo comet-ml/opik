@@ -11,14 +11,13 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
-import { ExpandedState } from "@tanstack/react-table";
 import useTraceById from "@/api/traces/useTraceById";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 const TraceDataViewer: React.FC = () => {
   const { currentItem, nextItem } = useSMEFlow();
-  const { state, updateExpanded, updateScrollTop } = useAnnotationTreeState();
+  const { state, updateScrollTop } = useAnnotationTreeState();
 
   const trace = currentItem as Trace;
   const nextTrace = nextItem as Trace | undefined;
@@ -48,25 +47,6 @@ const TraceDataViewer: React.FC = () => {
   );
 
   const displayTrace = fullTrace || trace;
-
-  // Handlers for expanded state changes
-  const handleInputExpandedChange = useCallback(
-    (
-      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-    ) => {
-      updateExpanded("input", updaterOrValue);
-    },
-    [updateExpanded],
-  );
-
-  const handleOutputExpandedChange = useCallback(
-    (
-      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-    ) => {
-      updateExpanded("output", updaterOrValue);
-    },
-    [updateExpanded],
-  );
 
   // Handlers for scroll position changes
   const handleInputScrollChange = useCallback(
@@ -116,8 +96,6 @@ const TraceDataViewer: React.FC = () => {
               prettifyConfig={{ fieldType: "input" }}
               preserveKey="syntax-highlighter-annotation-input"
               withSearch
-              controlledExpanded={state.input.expanded}
-              onExpandedChange={handleInputExpandedChange}
               scrollPosition={state.input.scrollTop}
               onScrollPositionChange={handleInputScrollChange}
               maxHeight="400px"
@@ -138,8 +116,6 @@ const TraceDataViewer: React.FC = () => {
               prettifyConfig={{ fieldType: "output" }}
               preserveKey="syntax-highlighter-annotation-output"
               withSearch
-              controlledExpanded={state.output.expanded}
-              onExpandedChange={handleOutputExpandedChange}
               scrollPosition={state.output.scrollTop}
               onScrollPositionChange={handleOutputScrollChange}
               maxHeight="400px"
