@@ -5,6 +5,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
@@ -149,6 +150,7 @@ class PromptServiceImpl implements PromptService {
                     .metadata(promptRequest.metadata())
                     .changeDescription(promptRequest.changeDescription())
                     .type(promptRequest.type())
+                    .templateStructure(createdPrompt.templateStructure().getValue())
                     .createdBy(createdPrompt.createdBy())
                     .build();
 
@@ -214,7 +216,8 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
-    private Prompt getOrCreatePrompt(String workspaceId, String name, String userName) {
+    private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
+            TemplateStructure templateStructure) {
 
         Prompt prompt = findByName(workspaceId, name);
 
@@ -225,6 +228,7 @@ class PromptServiceImpl implements PromptService {
         var newPrompt = Prompt.builder()
                 .id(idGenerator.generateId())
                 .name(name)
+                .templateStructure(templateStructure)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
@@ -258,7 +262,12 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(id, "prompt version");
 
-        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName);
+        // Get template_structure from version, defaulting to STRING if not provided
+        TemplateStructure templateStructure = createPromptVersion.version().templateStructure() != null
+                ? TemplateStructure.fromString(createPromptVersion.version().templateStructure())
+                : TemplateStructure.STRING;
+
+        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure);
 
         EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
             PromptVersion promptVersion = createPromptVersion.version().toBuilder()
@@ -389,17 +398,34 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(promptVersion.id(), "prompt version");
 
+        // Validate that template_structure matches the prompt's template_structure
+        Prompt prompt = getById(promptVersion.promptId());
+        String expectedStructure = prompt.templateStructure().getValue();
+        String actualStructure = promptVersion.templateStructure();
+
+        if (actualStructure != null && !expectedStructure.equals(actualStructure)) {
+            throw new IllegalArgumentException(
+                    String.format("Template structure mismatch: prompt has '%s' but version has '%s'. " +
+                            "Template structure is immutable and cannot be changed after prompt creation.",
+                            expectedStructure, actualStructure));
+        }
+
+        // Ensure template_structure is set to match prompt if not provided
+        PromptVersion versionToSave = actualStructure == null
+                ? promptVersion.toBuilder().templateStructure(expectedStructure).build()
+                : promptVersion;
+
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            promptVersionDAO.save(workspaceId, promptVersion);
+            promptVersionDAO.save(workspaceId, versionToSave);
 
             return null;
         });
 
-        log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
+        log.info("Created Prompt version for prompt id '{}'", versionToSave.promptId());
 
-        return getById(workspaceId, promptVersion.id());
+        return getById(workspaceId, versionToSave.id());
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {
@@ -555,7 +581,12 @@ class PromptServiceImpl implements PromptService {
             }
 
             if (commit == null) {
-                return getById(prompt.id()).latestVersion();
+                // Fetch latest version directly from prompt_versions table
+                List<PromptVersion> versions = promptVersionDAO.findByPromptId(prompt.id(), workspaceId, 1, 0);
+                if (versions.isEmpty()) {
+                    throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+                }
+                return versions.getFirst();
             }
 
             PromptVersion promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);

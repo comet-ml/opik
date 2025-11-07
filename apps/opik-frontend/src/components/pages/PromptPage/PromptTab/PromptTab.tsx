@@ -72,10 +72,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   };
 
   useEffect(() => {
-    if (prompt?.latest_version?.id && !activeVersionId) {
-      setActiveVersionId(prompt.latest_version.id, "replaceIn");
+    if (versions && versions.length > 0 && !activeVersionId) {
+      setActiveVersionId(versions[0].id, "replaceIn");
     }
-  }, [prompt?.latest_version?.id, activeVersionId, setActiveVersionId]);
+  }, [versions, activeVersionId, setActiveVersionId]);
 
   useEffect(() => {
     return () => {
@@ -88,8 +88,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   }, [activeVersion?.template]);
 
   const isChatPrompt = useMemo(() => {
-    return activeVersion?.template_structure === "chat";
-  }, [activeVersion?.template_structure]);
+    return prompt?.template_structure === "chat";
+  }, [prompt?.template_structure]);
 
   if (!prompt) {
     return <Loader />;

@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
+import com.comet.opik.infrastructure.db.TemplateStructureArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
@@ -26,11 +27,13 @@ import java.util.UUID;
 @RegisterConstructorMapper(Prompt.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
+@RegisterArgumentFactory(TemplateStructureArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 interface PromptDAO {
 
-    @SqlUpdate("INSERT INTO prompts (id, name, description, created_by, last_updated_by, workspace_id, tags) " +
-            "VALUES (:bean.id, :bean.name, :bean.description, :bean.createdBy, :bean.lastUpdatedBy, :workspace_id, :bean.tags)")
+    @SqlUpdate("INSERT INTO prompts (id, name, description, created_by, last_updated_by, workspace_id, tags, template_structure) "
+            +
+            "VALUES (:bean.id, :bean.name, :bean.description, :bean.createdBy, :bean.lastUpdatedBy, :workspace_id, :bean.tags, :bean.templateStructure)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") Prompt prompt);
 
     @SqlQuery("""
@@ -41,28 +44,7 @@ interface PromptDAO {
                     FROM prompt_versions pv
                     WHERE pv.prompt_id = p.id
                     AND pv.workspace_id = p.workspace_id
-                ) AS version_count,
-                (
-                    SELECT JSON_OBJECT(
-                        'id', pv.id,
-                        'prompt_id', pv.prompt_id,
-                        'commit', pv.commit,
-                        'template', pv.template,
-                        'metadata', pv.metadata,
-                        'change_description', pv.change_description,
-                        'type', pv.type,
-                        'template_structure', pv.template_structure,
-                        'created_at', pv.created_at,
-                        'created_by', pv.created_by,
-                        'last_updated_at', pv.last_updated_at,
-                        'last_updated_by', pv.last_updated_by
-                    )
-                    FROM prompt_versions pv
-                    WHERE pv.prompt_id = p.id
-                    AND pv.workspace_id = p.workspace_id
-                    ORDER BY pv.id DESC
-                    LIMIT 1
-                ) AS latest_version
+                ) AS version_count
             FROM prompts p
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -80,28 +62,7 @@ interface PromptDAO {
                       FROM prompt_versions pv
                      WHERE pv.workspace_id = p.workspace_id
                      AND pv.prompt_id = p.id
-                  ) AS version_count,
-                  (
-                    SELECT JSON_OBJECT(
-                        'id', pv.id,
-                        'prompt_id', pv.prompt_id,
-                        'commit', pv.commit,
-                        'template', pv.template,
-                        'metadata', pv.metadata,
-                        'change_description', pv.change_description,
-                        'type', pv.type,
-                        'template_structure', pv.template_structure,
-                        'created_at', pv.created_at,
-                        'created_by', pv.created_by,
-                        'last_updated_at', pv.last_updated_at,
-                        'last_updated_by', pv.last_updated_by
-                    )
-                    FROM prompt_versions pv
-                    WHERE pv.prompt_id = p.id
-                    AND pv.workspace_id = p.workspace_id
-                    ORDER BY pv.id DESC
-                    LIMIT 1
-                  ) AS latest_version
+                  ) AS version_count
                 FROM prompts AS p
                 WHERE workspace_id = :workspace_id
                 <if(name)> AND name like concat('%', :name, '%') <endif>
