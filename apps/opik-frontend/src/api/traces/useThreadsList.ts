@@ -14,6 +14,8 @@ type UseThreadListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  fromTime?: string;
+  toTime?: string;
 };
 
 export type UseThreadListResponse = {
@@ -32,6 +34,8 @@ const getThreadList = async (
     size,
     page,
     truncate,
+    fromTime,
+    toTime,
   }: UseThreadListParams,
 ) => {
   const { data } = await api.get<UseThreadListResponse>(
@@ -45,6 +49,8 @@ const getThreadList = async (
         size,
         page,
         truncate,
+        ...(fromTime && { from_time: fromTime }),
+        ...(toTime && { to_time: toTime }),
       },
     },
   );

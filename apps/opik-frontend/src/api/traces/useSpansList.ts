@@ -18,6 +18,8 @@ export type UseSpansListParams = {
   truncate?: boolean;
   stripAttachments?: boolean;
   exclude?: string[];
+  fromTime?: string;
+  toTime?: string;
 };
 
 export type UseSpansListResponse = {
@@ -40,6 +42,8 @@ const getSpansList = async (
     truncate,
     stripAttachments,
     exclude,
+    fromTime,
+    toTime,
   }: UseSpansListParams,
 ) => {
   const { data } = await api.get(SPANS_REST_ENDPOINT, {
@@ -57,6 +61,8 @@ const getSpansList = async (
       }),
       size,
       page,
+      ...(fromTime && { from_time: fromTime }),
+      ...(toTime && { to_time: toTime }),
     },
   });
 
