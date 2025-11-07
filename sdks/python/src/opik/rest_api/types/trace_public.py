@@ -42,6 +42,10 @@ class TracePublic(UniversalBaseModel):
     thread_id: typing.Optional[str] = None
     visibility_mode: typing.Optional[TracePublicVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None
+    providers: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    List of unique provider names from all spans in this trace, sorted alphabetically
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -15,4 +15,6 @@ export interface GetTraceThreadsRequest {
     stripAttachments?: boolean;
     filters?: string;
     sorting?: string;
+    fromTime?: Date;
+    toTime?: Date;
 }
