@@ -10,11 +10,7 @@ type NavigationTagProps = {
   resource: RESOURCE_TYPE;
 };
 
-const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
-  id,
-  name,
-  resource,
-}) => {
+const NavigationTag = ({ id, name, resource }: NavigationTagProps) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
   const tooltipContent = `Navigate to ${resourceLabel}: ${name}`;
 

@@ -189,10 +189,11 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
         {experiment?.prompt_versions &&
-          experiment.prompt_versions.length > 0 && (
+          experiment.prompt_versions.length > 0 &&
+          experiment.prompt_versions[0].prompt_name && (
             <NavigationTag
               id={experiment.prompt_versions[0].prompt_id}
-              name={experiment.prompt_versions[0].commit}
+              name={experiment.prompt_versions[0].prompt_name}
               resource={RESOURCE_TYPE.prompt}
             />
           )}
