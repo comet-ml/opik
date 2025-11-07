@@ -3332,6 +3332,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Spans resource
@@ -3592,6 +3606,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Span stats resource
@@ -4277,6 +4305,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+            Must be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created up to this time (ISO-8601 format).
+            Must be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace threads resource
@@ -4970,6 +5012,8 @@ components:
           - trace:guardrails_triggered
           - prompt:deleted
           - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5087,6 +5131,8 @@ components:
           - trace:guardrails_triggered
           - prompt:deleted
           - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5233,6 +5279,8 @@ components:
           - trace:guardrails_triggered
           - prompt:deleted
           - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -8609,6 +8657,16 @@ components:
           type: integer
           format: int32
           readOnly: true
+        providers:
+          type: array
+          description: "List of unique provider names from all spans in this trace,\
+            \ sorted alphabetically"
+          readOnly: true
+          items:
+            type: string
+            description: "List of unique provider names from all spans in this trace,\
+              \ sorted alphabetically"
+            readOnly: true
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -9714,6 +9772,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9763,6 +9829,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9808,6 +9882,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9828,6 +9910,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - can be set to migrate legacy custom LLM providers\
+            \ to the new multi-provider format. Once set, it cannot be changed. Should\
+            \ only be set for custom LLM providers."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -11325,6 +11415,16 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+        from_time:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     SpanUpdate:
       required:
       - trace_id
@@ -11637,6 +11737,16 @@ components:
           type: integer
           format: int32
           readOnly: true
+        providers:
+          type: array
+          description: "List of unique provider names from all spans in this trace,\
+            \ sorted alphabetically"
+          readOnly: true
+          items:
+            type: string
+            description: "List of unique provider names from all spans in this trace,\
+              \ sorted alphabetically"
+            readOnly: true
     TraceThread:
       type: object
       properties:
@@ -11859,6 +11969,16 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        from_time:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+            Must be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter trace threads created up to this time (ISO-8601 format).
+            Must be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -11890,6 +12010,16 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        from_time:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     TraceUpdate:
       type: object
       properties:

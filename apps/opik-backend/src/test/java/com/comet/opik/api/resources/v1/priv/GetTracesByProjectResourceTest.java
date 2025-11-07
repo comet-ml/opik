@@ -58,9 +58,6 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.client.WebTarget;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -97,6 +94,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -114,7 +112,6 @@ import static com.comet.opik.api.filter.TraceField.CUSTOM;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toMap;
@@ -3445,26 +3442,20 @@ class GetTracesByProjectResourceTest {
 
             Response actualResponse;
             if (path.equals("/search")) {
-                actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(path)
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .post(Entity.json(TraceSearchStreamRequest.builder()
+                actualResponse = traceResourceClient.callSearchTracesStream(
+                        TraceSearchStreamRequest.builder()
                                 .projectName(projectName)
                                 .filters(filters)
-                                .build()));
+                                .build(),
+                        API_KEY,
+                        TEST_WORKSPACE);
 
             } else {
 
-                actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(path)
-                        .queryParam("project_name", projectName)
-                        .queryParam("filters", toURLEncodedQueryParam(filters))
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .get();
+                Map<String, String> queryParams = new HashMap<>();
+                queryParams.put("project_name", projectName);
+                queryParams.put("filters", toURLEncodedQueryParam(filters));
+                actualResponse = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE, queryParams);
             }
 
             try (actualResponse) {
@@ -3499,25 +3490,19 @@ class GetTracesByProjectResourceTest {
 
             if (path.equals("/search")) {
 
-                actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(path)
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, apiKey)
-                        .header(WORKSPACE_HEADER, workspaceName)
-                        .post(Entity.json(TraceSearchStreamRequest.builder()
+                actualResponse = traceResourceClient.callSearchTracesStream(
+                        TraceSearchStreamRequest.builder()
                                 .projectName(projectName)
                                 .filters(filters)
-                                .build()));
+                                .build(),
+                        apiKey,
+                        workspaceName);
 
             } else {
-                actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(path)
-                        .queryParam("project_name", projectName)
-                        .queryParam("filters", toURLEncodedQueryParam(filters))
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, apiKey)
-                        .header(WORKSPACE_HEADER, workspaceName)
-                        .get();
+                Map<String, String> queryParams = new HashMap<>();
+                queryParams.put("project_name", projectName);
+                queryParams.put("filters", toURLEncodedQueryParam(filters));
+                actualResponse = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName, queryParams);
             }
 
             try (actualResponse) {
@@ -3763,15 +3748,13 @@ class GetTracesByProjectResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("page", 1)
-                    .queryParam("size", 5)
-                    .queryParam("project_name", projectName)
-                    .queryParam("truncate", truncate)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("page", "1");
+            queryParams.put("size", "5");
+            queryParams.put("project_name", projectName);
+            queryParams.put("truncate", String.valueOf(truncate));
+
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE, queryParams);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
@@ -4260,14 +4243,13 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
-                    .queryParam("sorting",
-                            URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("project_name", projectName);
+            queryParams.put("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE, queryParams);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
@@ -4544,39 +4526,36 @@ class GetTracesByProjectResourceTest {
             List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey,
             List<SortingField> sortingFields, int total, Set<Trace.TraceField> exclude) {
 
-        WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI));
+        Map<String, String> queryParams = new HashMap<>();
 
         if (CollectionUtils.isNotEmpty(sortingFields)) {
-            target = target.queryParam("sorting",
+            queryParams.put("sorting",
                     URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
         }
 
         if (page > 0) {
-            target = target.queryParam("page", page);
+            queryParams.put("page", String.valueOf(page));
         }
 
         if (size > 0) {
-            target = target.queryParam("size", size);
+            queryParams.put("size", String.valueOf(size));
         }
 
         if (projectName != null) {
-            target = target.queryParam("project_name", projectName);
+            queryParams.put("project_name", projectName);
         }
 
         if (projectId != null) {
-            target = target.queryParam("project_id", projectId);
+            queryParams.put("project_id", projectId.toString());
         }
 
         if (CollectionUtils.isNotEmpty(exclude)) {
-            target = target.queryParam("exclude", toURLEncodedQueryParam(List.copyOf(exclude)));
+            queryParams.put("exclude", toURLEncodedQueryParam(List.copyOf(exclude)));
         }
 
-        var actualResponse = target
-                .queryParam("filters", toURLEncodedQueryParam(filters))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
+        queryParams.put("filters", toURLEncodedQueryParam(filters));
+
+        var actualResponse = traceResourceClient.callGetTracesWithQueryParams(apiKey, workspaceName, queryParams);
 
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
@@ -4675,12 +4654,15 @@ class GetTracesByProjectResourceTest {
 
         private final TraceStatsAssertion traceStatsAssertion = new TraceStatsAssertion(traceResourceClient);
         private final TraceTestAssertion traceTestAssertion = new TraceTestAssertion(traceResourceClient, USER);
+        private final TraceStreamTestAssertion traceStreamTestAssertion = new TraceStreamTestAssertion(
+                traceResourceClient, USER);
 
         // Scenario 1: Boundary condition testing - traces at exact lower bound, upper bound, and in between
         private Stream<Arguments> provideBoundaryScenarios() {
             return Stream.of(
                     Arguments.of("/traces/stats", traceStatsAssertion),
-                    Arguments.of("/traces", traceTestAssertion));
+                    Arguments.of("/traces", traceTestAssertion),
+                    Arguments.of("/traces/stream", traceStreamTestAssertion));
         }
 
         @ParameterizedTest
@@ -4766,7 +4748,8 @@ class GetTracesByProjectResourceTest {
         private Stream<Arguments> provideFormatParsingScenarios() {
             return Stream.of(
                     Arguments.of("/traces/stats", traceStatsAssertion),
-                    Arguments.of("/traces", traceTestAssertion));
+                    Arguments.of("/traces", traceTestAssertion),
+                    Arguments.of("/traces/stream", traceStreamTestAssertion));
         }
 
         @ParameterizedTest
@@ -4796,9 +4779,11 @@ class GetTracesByProjectResourceTest {
             List<Trace> expectedTraces = allTraces.subList(0, 3);
             List<Trace> unexpectedTraces = allTraces.subList(3, 4);
 
-            var queryParams = Map.of(
-                    "from_time", startTime.toString(),
-                    "to_time", referenceTime.toString());
+            // Use mutable HashMap instead of immutable Map.of() because
+            // TraceResourceClient.getTraces() needs to process query parameters
+            var queryParams = new HashMap<String, String>();
+            queryParams.put("from_time", startTime.toString());
+            queryParams.put("to_time", referenceTime.toString());
 
             allTraces = normalizeTraces(allTraces);
             expectedTraces = normalizeTraces(expectedTraces);
@@ -4826,15 +4811,12 @@ class GetTracesByProjectResourceTest {
             var workspace = setupTestWorkspace();
             Instant now = Instant.now();
 
-            WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", workspace.projectName())
-                    .queryParam("from_time", now.toString());
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("project_name", workspace.projectName());
+            queryParams.put("from_time", now.toString());
 
-            var actualResponse = target
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
-                    .header(WORKSPACE_HEADER, workspace.workspaceName())
-                    .get();
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
+                    workspace.apiKey(), workspace.workspaceName(), queryParams);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
@@ -4849,16 +4831,13 @@ class GetTracesByProjectResourceTest {
             Instant earlier = now.minus(Duration.ofMinutes(10));
 
             // from_time (now) is after to_time (earlier) - should fail
-            WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", workspace.projectName())
-                    .queryParam("from_time", now.toString())
-                    .queryParam("to_time", earlier.toString());
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("project_name", workspace.projectName());
+            queryParams.put("from_time", now.toString());
+            queryParams.put("to_time", earlier.toString());
 
-            var actualResponse = target
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
-                    .header(WORKSPACE_HEADER, workspace.workspaceName())
-                    .get();
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
+                    workspace.apiKey(), workspace.workspaceName(), queryParams);
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
