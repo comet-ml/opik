@@ -6,6 +6,7 @@ export interface Prompt {
   created_at: string;
   version_count: number;
   tags: string[];
+  template_structure?: string;
   latest_version?: PromptVersion;
 }
 
@@ -16,7 +17,6 @@ export type PromptWithLatestVersion = Prompt & {
 export interface PromptVersion {
   id: string;
   template: string;
-  template_structure?: string;
   metadata: object;
   commit: string;
   change_description?: string;

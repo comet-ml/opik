@@ -73,7 +73,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     label: "Type",
     type: COLUMN_TYPE.string,
     accessorFn: (row) => {
-      const structure = row.latest_version?.template_structure || "string";
+      const structure = row.template_structure || "string";
       return structure === "chat" ? "Chat" : "String";
     },
   },
