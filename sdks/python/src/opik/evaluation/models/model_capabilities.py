@@ -80,15 +80,10 @@ def vision_capability_detector(model_name: str) -> bool:
 
 
 def video_capability_detector(model_name: str) -> bool:
-    stripped = _strip_provider_prefix(model_name)
-    candidates = {model_name, stripped}
-    for candidate in candidates:
-        normalized = candidate.lower()
-        if "video" in normalized:
-            return True
-        if "qwen" in normalized and "vl" in normalized:
-            return True
-    return False
+    # TODO: litellm/model metadata does not currently expose a unique video flag.
+    # Reuse the vision heuristic for now so callers can keep invoking
+    # `supports_video()` and gain richer checks once providers differentiate inputs.
+    return vision_capability_detector(model_name)
 
 
 class ModelCapabilitiesRegistry:

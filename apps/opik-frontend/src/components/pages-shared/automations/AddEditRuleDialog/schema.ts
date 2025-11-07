@@ -200,7 +200,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "Only OpenAI models are currently supported for Online evaluation with multimedia input. Please select an OpenAI model or remove images/videos from messages.",
+          "Not every provider supports multimedia input yet. Please pick a compatible model or remove images/videos from messages.",
         path: ["model"],
       });
     } else {
