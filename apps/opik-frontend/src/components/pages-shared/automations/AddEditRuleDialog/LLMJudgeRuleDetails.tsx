@@ -249,7 +249,8 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   messages={messages}
                   validationErrors={validationErrors}
                   possibleTypes={MESSAGE_TYPE_OPTIONS}
-                  disableImages={isThreadScope}
+                disableImages={isThreadScope}
+                disableVideos={isThreadScope}
                   onChange={(messages: LLMMessage[]) => {
                     field.onChange(messages);
 
