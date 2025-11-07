@@ -47,9 +47,13 @@ language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
 SpanType = Literal["llm", "tool", "general"]
 
+# A callable that receives an error string and returns True if the error should be skipped,
+# or False otherwise.
 SkipErrorCallback = Callable[[str], bool]
 
-
+# Placeholder output dictionary used when errors are intentionally skipped
+# via the skip_error_callback. This signals that the output was not produced
+# due to a handled/ignored error during execution.
 ERROR_SKIPPED_OUTPUTS = {"warning": "Error output skipped by skip_error_callback."}
 
 
@@ -155,11 +159,10 @@ class OpikTracer(BaseTracer):
         trace_additional_metadata: Dict[str, Any] = {}
 
         error_str = run_dict.get("error")
-        outputs = run_dict.get("outputs")
+        outputs = None
         error_info = None
 
         if error_str is not None:
-            outputs = None
             if not self._should_skip_error(error_str):
                 error_info = ErrorInfoDict(
                     exception_type="Exception",
@@ -167,7 +170,7 @@ class OpikTracer(BaseTracer):
                 )
             else:
                 outputs = ERROR_SKIPPED_OUTPUTS
-        elif outputs is not None:
+        elif (outputs := run_dict.get("outputs")) is not None:
             outputs, trace_additional_metadata = (
                 langchain_helpers.split_big_langgraph_outputs(outputs)
             )

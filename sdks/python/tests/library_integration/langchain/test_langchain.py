@@ -677,7 +677,7 @@ def test_langchain_callback__skip_error_callback__error_output_skipped(
         responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"],
     )
 
-    template = "Given the title of play, write a synopsys for that. Title: {title}."
+    template = "Given the title of play, write a synopsis for that. Title: {title}."
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
     synopsis_chain = prompt_template | llm
