@@ -28,6 +28,8 @@ public record Optimization(
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotNull OptimizationStatus status,
         @Schema(implementation = JsonListString.class) @JsonView({Optimization.View.Public.class,
                 Optimization.View.Write.class}) JsonNode metadata,
+        @JsonView({Optimization.View.Public.class,
+                Optimization.View.Write.class}) OptimizationStudioConfig studioConfig,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long numTrials,
         @JsonView({
