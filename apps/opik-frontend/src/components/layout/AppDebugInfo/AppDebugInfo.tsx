@@ -2,6 +2,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { toast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import AppNetworkStatus from "@/plugins/comet/AppNetworkStatus";
+import OpikIcon from "@/icons/opik.svg?react";
 import { COMET_DEBUGGER_MODE_KEY } from "@/plugins/comet/UserMenuAppDebugInfoToggle";
 import { useDebugStore } from "@/store/DebugStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -39,8 +40,9 @@ const AppDebugInfo = () => {
             toast({ description: "Successfully copied version" });
           }}
         >
-          <span className="comet-body-s-accented truncate ">
-            🦉 OPIK VERSION {APP_VERSION}
+          <span className="comet-body-s-accented truncate flex items-center gap-2">
+            <OpikIcon className="size-5" />
+            OPIK VERSION {APP_VERSION}
           </span>
           <Copy className="size-4 shrink-0" />
         </div>
