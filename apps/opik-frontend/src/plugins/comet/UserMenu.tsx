@@ -48,6 +48,9 @@ import { buildUrl, isOnPremise, isProduction } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
+import UserMenuAppDebugInfoToggle from "./UserMenuAppDebugInfoToggle";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -59,6 +62,10 @@ const UserMenu = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const hideUpgradeButton = matches.some(
     (match) => match.staticData?.hideUpgradeButton,
+  );
+
+  const isCometDebuggerModeEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.COMET_DEBUGGER_MODE_ENABLED,
   );
 
   const { data: user } = useUser();
@@ -376,6 +383,7 @@ const UserMenu = () => {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
+            {isCometDebuggerModeEnabled && <UserMenuAppDebugInfoToggle />}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
                 <CurrentIcon className="mr-2 size-4" />
@@ -417,7 +425,7 @@ const UserMenu = () => {
             <LogOut className="mr-2 size-4" />
             <span>Logout</span>
           </DropdownMenuItem>
-          {APP_VERSION ? (
+          {APP_VERSION && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -433,7 +441,7 @@ const UserMenu = () => {
                 <Copy className="ml-2 size-3 shrink-0" />
               </DropdownMenuItem>
             </>
-          ) : null}
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );

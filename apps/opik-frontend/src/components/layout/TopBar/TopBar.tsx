@@ -1,7 +1,7 @@
-import React from "react";
 import Breadcrumbs from "@/components/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
-import ThemeToggle from "../ThemeToggle/ThemeToggle";
+import AppDebugInfo from "../AppDebugInfo/AppDebugInfo";
+import NoUserMenu from "../NoUserMenu";
 
 const TopBar = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
@@ -12,7 +12,8 @@ const TopBar = () => {
         <Breadcrumbs />
       </div>
 
-      {UserMenu ? <UserMenu /> : <ThemeToggle />}
+      <AppDebugInfo />
+      {UserMenu ? <UserMenu /> : <NoUserMenu />}
     </nav>
   );
 };
