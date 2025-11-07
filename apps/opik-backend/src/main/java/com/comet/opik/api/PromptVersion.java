@@ -24,7 +24,7 @@ import static com.comet.opik.api.PromptType.MUSTACHE;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersion(
-        @JsonView({
+        @JsonView( {
                 Prompt.View.Public.class,
                 Prompt.View.Detail.class,
                 PromptVersion.View.Public.class,
@@ -54,10 +54,8 @@ public record PromptVersion(
                 Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) PromptType type,
         @JsonView({
-                Prompt.View.Public.class,
-                PromptVersion.View.Public.class,
                 Prompt.View.Detail.class,
-                PromptVersion.View.Detail.class}) @Schema(description = "template structure: 'string' (default) or 'chat'") @Nullable String templateStructure,
+                PromptVersion.View.Detail.class}) @Schema(description = "template structure: 'string' (default) or 'chat'. This field is internal and maintained for backward compatibility. Use Prompt.templateStructure instead.") @Nullable String templateStructure,
         @JsonView({
                 Prompt.View.Public.class,
                 PromptVersion.View.Public.class,
