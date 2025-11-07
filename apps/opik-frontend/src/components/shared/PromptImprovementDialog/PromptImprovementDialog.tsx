@@ -24,7 +24,10 @@ import { Separator } from "@/components/ui/separator";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import usePromptImprovement from "@/hooks/usePromptImprovement";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
-import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  LLMPromptConfigsType,
+} from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { parseContentWithImages, combineContentWithImages } from "@/lib/llm";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -34,6 +37,7 @@ import {
   mustachePlugin,
 } from "@/constants/codeMirrorPlugins";
 import { cn } from "@/lib/utils";
+import { parseComposedProviderType } from "@/lib/provider";
 
 const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
   "Analyzing your instructions...",
@@ -50,7 +54,7 @@ interface PromptImprovementDialogProps {
   id: string;
   originalPrompt?: string;
   model: string;
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE;
   configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedPrompt: string) => void;
@@ -220,7 +224,9 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
   const modelDisplayName = useMemo(() => {
     if (!model) return "not configured";
-    const providerLabel = provider ? PROVIDERS[provider]?.label : "";
+    const providerLabel = provider
+      ? PROVIDERS[parseComposedProviderType(provider)]?.label
+      : "";
     return providerLabel ? `${providerLabel} ${model}` : model;
   }, [model, provider]);
 
