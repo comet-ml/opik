@@ -160,13 +160,15 @@ public class MultiValueFeedbackScoresE2ETest {
     @Test
     @DisplayName("test score trace by multiple authors")
     void testScoreTraceByMultipleAuthors() {
+        Instant traceStartTime = Instant.now().truncatedTo(ChronoUnit.HOURS);
+
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                 .map(trace -> trace.toBuilder()
                         .id(null)
                         .projectName(DEFAULT_PROJECT)
                         .usage(null)
                         .feedbackScores(null)
-                        .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                        .startTime(traceStartTime)
                         .build())
                 .toList();
         var trace1Id = traceResourceClient.createTrace(traces.getFirst(), API_KEY1, TEST_WORKSPACE);
@@ -233,7 +235,7 @@ public class MultiValueFeedbackScoresE2ETest {
 
         // assert feedback project metric
         assertProjectMetric(actualTrace1.projectId(), MetricType.FEEDBACK_SCORES, user1Score.name(),
-                List.of(user1Score.value(), user2Score.value()), anotherTraceScore.value());
+                List.of(user1Score.value(), user2Score.value()), anotherTraceScore.value(), traceStartTime);
     }
 
     @Test
@@ -979,13 +981,14 @@ public class MultiValueFeedbackScoresE2ETest {
 
     private void assertProjectMetric(
             UUID projectId, MetricType metricType, String scoreName, List<BigDecimal> authoredValues,
-            BigDecimal otherValue) {
+            BigDecimal otherValue, Instant traceStartTime) {
         var projectMetrics = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
                 .metricType(metricType)
                 .interval(TimeInterval.HOURLY)
-                .intervalStart(Instant.now().truncatedTo(ChronoUnit.HOURS))
-                .intervalEnd(Instant.now())
+                .intervalStart(traceStartTime)
+                .intervalEnd(traceStartTime.plus(1, ChronoUnit.HOURS))
                 .build(), BigDecimal.class, API_KEY1, TEST_WORKSPACE);
+
         var scoreMetric = projectMetrics.results().stream()
                 .filter(predicate -> predicate.name().equals(scoreName)).findFirst()
                 .orElseThrow(() -> new AssertionError("Metric for score " + scoreName + " not found"));

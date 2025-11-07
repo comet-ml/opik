@@ -5,6 +5,7 @@ import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -52,23 +53,27 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        return validateProject(projectId)
+                .then(Mono.defer(() -> Mono.just(request.toBuilder() // Enrich request with UUID bounds derived from time parameters for efficient ID-based filtering
+                        .uuidFromTime(instantToUUIDMapper.toLowerBound(request.intervalStart()))
+                        .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
+                        .build())))
+                .flatMap(enrichedRequest -> getMetricHandler(enrichedRequest.metricType())
+                        .apply(projectId, enrichedRequest)
+                        .map(dataPoints -> ProjectMetricResponse.builder()
+                                .projectId(projectId)
+                                .metricType(enrichedRequest.metricType())
+                                .interval(enrichedRequest.interval())
+                                .results(entriesToResults(dataPoints))
+                                .build()));
+    }
+
+    private Mono<Void> validateProject(UUID projectId) {
         // Will throw an error in case we try to get a private project with public visibility
-        projectService.get(projectId);
-
-        // Enrich request with UUID bounds derived from time parameters for efficient ID-based filtering
-        var enrichedRequest = request.toBuilder()
-                .uuidFromTime(instantToUUIDMapper.toLowerBound(request.intervalStart()))
-                .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
-                .build();
-
-        return getMetricHandler(enrichedRequest.metricType())
-                .apply(projectId, enrichedRequest)
-                .map(dataPoints -> ProjectMetricResponse.builder()
-                        .projectId(projectId)
-                        .metricType(enrichedRequest.metricType())
-                        .interval(enrichedRequest.interval())
-                        .results(entriesToResults(dataPoints))
-                        .build());
+        return Mono.deferContextual(contextView -> {
+            String workspaceId = contextView.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> projectService.get(projectId, workspaceId));
+        }).then();
     }
 
     private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
