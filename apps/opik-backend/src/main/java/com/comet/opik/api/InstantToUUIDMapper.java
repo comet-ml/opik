@@ -89,6 +89,7 @@ public class InstantToUUIDMapper {
         // Least significant bits: [variant: 2 bits][random: 62 bits]
         // For upper bound, set all 62 random bits to 1
         // Start with variant 10 (0x8000000000000000L), then OR with max random bits (0x3FFFFFFFFFFFFFFFL)
+        // 0x3FFFFFFFFFFFFFFFL has exactly 62 bits set to 1 (binary: 0011111111...1111)
         long lsb = 0x8000000000000000L | 0x3FFFFFFFFFFFFFFFL; // Variant 10 + all 62 random bits set to 1
 
         return new UUID(msb, lsb);

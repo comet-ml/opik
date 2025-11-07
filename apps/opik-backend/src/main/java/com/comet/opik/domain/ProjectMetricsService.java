@@ -5,7 +5,6 @@ import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -69,11 +68,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     }
 
     private Mono<Void> validateProject(UUID projectId) {
-        // Will throw an error in case we try to get a private project with public visibility
-        return Mono.deferContextual(contextView -> {
-            String workspaceId = contextView.get(RequestContext.WORKSPACE_ID);
-            return Mono.fromCallable(() -> projectService.get(projectId, workspaceId));
-        }).then();
+        // Validates that the project exists and is accessible within the current workspace context
+        return projectService.getOrFail(projectId).then();
     }
 
     private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
