@@ -13,7 +13,7 @@ export interface PromptVersionDetail {
     template: string;
     metadata?: OpikApi.JsonNodeDetail;
     type?: OpikApi.PromptVersionDetailType;
-    /** template structure: 'string' (default) or 'chat' */
+    /** template structure: 'string' (default) or 'chat'. This field is internal and maintained for backward compatibility. Use Prompt.templateStructure instead. */
     templateStructure?: string;
     changeDescription?: string;
     variables?: string[];

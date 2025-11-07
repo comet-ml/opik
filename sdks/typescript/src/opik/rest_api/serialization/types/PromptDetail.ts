@@ -5,6 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { PromptDetailTemplateStructure } from "./PromptDetailTemplateStructure";
 import { PromptVersionDetail } from "./PromptVersionDetail";
 
 export const PromptDetail: core.serialization.ObjectSchema<serializers.PromptDetail.Raw, OpikApi.PromptDetail> =
@@ -12,6 +13,7 @@ export const PromptDetail: core.serialization.ObjectSchema<serializers.PromptDet
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
         description: core.serialization.string().optional(),
+        templateStructure: core.serialization.property("template_structure", PromptDetailTemplateStructure.optional()),
         tags: core.serialization.list(core.serialization.string()).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -26,6 +28,7 @@ export declare namespace PromptDetail {
         id?: string | null;
         name: string;
         description?: string | null;
+        template_structure?: PromptDetailTemplateStructure.Raw | null;
         tags?: string[] | null;
         created_at?: string | null;
         created_by?: string | null;

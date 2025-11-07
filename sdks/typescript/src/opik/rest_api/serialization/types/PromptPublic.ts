@@ -5,18 +5,22 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { PromptPublicTemplateStructure } from "./PromptPublicTemplateStructure";
+import { PromptVersionPublic } from "./PromptVersionPublic";
 
 export const PromptPublic: core.serialization.ObjectSchema<serializers.PromptPublic.Raw, OpikApi.PromptPublic> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
         description: core.serialization.string().optional(),
+        templateStructure: core.serialization.property("template_structure", PromptPublicTemplateStructure.optional()),
         tags: core.serialization.list(core.serialization.string()).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         versionCount: core.serialization.property("version_count", core.serialization.number().optional()),
+        latestVersion: core.serialization.property("latest_version", PromptVersionPublic.optional()),
     });
 
 export declare namespace PromptPublic {
@@ -24,11 +28,13 @@ export declare namespace PromptPublic {
         id?: string | null;
         name: string;
         description?: string | null;
+        template_structure?: PromptPublicTemplateStructure.Raw | null;
         tags?: string[] | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
         version_count?: number | null;
+        latest_version?: PromptVersionPublic.Raw | null;
     }
 }

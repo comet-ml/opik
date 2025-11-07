@@ -5,18 +5,26 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .prompt_public_template_structure import PromptPublicTemplateStructure
+from .prompt_version_public import PromptVersionPublic
 
 
 class PromptPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
     description: typing.Optional[str] = None
+    template_structure: typing.Optional[PromptPublicTemplateStructure] = pydantic.Field(default=None)
+    """
+    Template structure type: 'string' or 'chat'. Immutable after creation.
+    """
+
     tags: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     version_count: typing.Optional[int] = None
+    latest_version: typing.Optional[PromptVersionPublic] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -10603,6 +10603,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'string' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - string
+          - chat
+          default: string
         tags:
           uniqueItems: true
           type: array
@@ -10658,7 +10666,9 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "template structure: 'string' (default) or 'chat'"
+          description: "template structure: 'string' (default) or 'chat'. This field\
+            \ is internal and maintained for backward compatibility. Use Prompt.templateStructure\
+            \ instead."
         change_description:
           type: string
         variables:
@@ -10704,6 +10714,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'string' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - string
+          - chat
+          default: string
         tags:
           uniqueItems: true
           type: array
@@ -10741,7 +10759,9 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "template structure: 'string' (default) or 'chat'"
+          description: "template structure: 'string' (default) or 'chat'. This field\
+            \ is internal and maintained for backward compatibility. Use Prompt.templateStructure\
+            \ instead."
         change_description:
           type: string
         variables:
@@ -10795,6 +10815,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'string' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - string
+          - chat
+          default: string
         tags:
           uniqueItems: true
           type: array
@@ -10866,11 +10894,15 @@ components:
           enum:
           - mustache
           - jinja2
-        template_structure:
-          type: string
-          description: "template structure: 'string' (default) or 'chat'"
         change_description:
           type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10878,6 +10910,7 @@ components:
         created_by:
           type: string
           readOnly: true
+      readOnly: true
     PromptPage_Public:
       type: object
       properties:
@@ -10914,6 +10947,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'string' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - string
+          - chat
+          default: string
         tags:
           uniqueItems: true
           type: array
@@ -10937,6 +10978,8 @@ components:
           type: integer
           format: int64
           readOnly: true
+        latest_version:
+          $ref: "#/components/schemas/PromptVersion_Public"
     PromptVersionRetrieve_Detail:
       required:
       - name

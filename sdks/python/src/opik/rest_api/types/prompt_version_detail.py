@@ -26,7 +26,7 @@ class PromptVersionDetail(UniversalBaseModel):
     type: typing.Optional[PromptVersionDetailType] = None
     template_structure: typing.Optional[str] = pydantic.Field(default=None)
     """
-    template structure: 'string' (default) or 'chat'
+    template structure: 'string' (default) or 'chat'. This field is internal and maintained for backward compatibility. Use Prompt.templateStructure instead.
     """
 
     change_description: typing.Optional[str] = None

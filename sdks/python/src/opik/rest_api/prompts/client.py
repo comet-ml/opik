@@ -10,6 +10,7 @@ from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from .raw_client import AsyncRawPromptsClient, RawPromptsClient
+from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
 
 # this is used as the default value for optional parameters
@@ -85,6 +86,7 @@ class PromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        template_structure: typing.Optional[PromptWriteTemplateStructure] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -106,6 +108,9 @@ class PromptsClient:
         change_description : typing.Optional[str]
 
         type : typing.Optional[PromptWriteType]
+
+        template_structure : typing.Optional[PromptWriteTemplateStructure]
+            Template structure type: 'string' or 'chat'. Immutable after creation.
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -130,6 +135,7 @@ class PromptsClient:
             metadata=metadata,
             change_description=change_description,
             type=type,
+            template_structure=template_structure,
             tags=tags,
             request_options=request_options,
         )
@@ -474,6 +480,7 @@ class AsyncPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        template_structure: typing.Optional[PromptWriteTemplateStructure] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -495,6 +502,9 @@ class AsyncPromptsClient:
         change_description : typing.Optional[str]
 
         type : typing.Optional[PromptWriteType]
+
+        template_structure : typing.Optional[PromptWriteTemplateStructure]
+            Template structure type: 'string' or 'chat'. Immutable after creation.
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -522,6 +532,7 @@ class AsyncPromptsClient:
             metadata=metadata,
             change_description=change_description,
             type=type,
+            template_structure=template_structure,
             tags=tags,
             request_options=request_options,
         )

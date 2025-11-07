@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_version_detail import PromptVersionDetail
 
 
@@ -12,6 +13,11 @@ class PromptDetail(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
     description: typing.Optional[str] = None
+    template_structure: typing.Optional[PromptDetailTemplateStructure] = pydantic.Field(default=None)
+    """
+    Template structure type: 'string' or 'chat'. Immutable after creation.
+    """
+
     tags: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

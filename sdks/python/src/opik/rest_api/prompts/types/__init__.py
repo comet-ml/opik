@@ -2,6 +2,7 @@
 
 # isort: skip_file
 
+from .prompt_write_template_structure import PromptWriteTemplateStructure
 from .prompt_write_type import PromptWriteType
 
-__all__ = ["PromptWriteType"]
+__all__ = ["PromptWriteTemplateStructure", "PromptWriteType"]

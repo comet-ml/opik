@@ -297,8 +297,11 @@ from .types import (
     ProjectVisibility,
     Prompt,
     PromptDetail,
+    PromptDetailTemplateStructure,
     PromptPagePublic,
     PromptPublic,
+    PromptPublicTemplateStructure,
+    PromptTemplateStructure,
     PromptTokensDetails,
     PromptType,
     PromptVersion,
@@ -451,7 +454,7 @@ from .projects import (
     ProjectUpdateVisibility,
     ProjectWriteVisibility,
 )
-from .prompts import PromptWriteType
+from .prompts import PromptWriteTemplateStructure, PromptWriteType
 from .spans import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
@@ -781,8 +784,11 @@ __all__ = [
     "ProjectWriteVisibility",
     "Prompt",
     "PromptDetail",
+    "PromptDetailTemplateStructure",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptPublicTemplateStructure",
+    "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
     "PromptVersion",
@@ -795,6 +801,7 @@ __all__ = [
     "PromptVersionPublic",
     "PromptVersionPublicType",
     "PromptVersionType",
+    "PromptWriteTemplateStructure",
     "PromptWriteType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
