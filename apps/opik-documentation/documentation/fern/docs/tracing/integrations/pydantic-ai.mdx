@@ -59,6 +59,7 @@ sure the data is logged to Opik:
         ```bash
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        export OTEL_METRICS_EXPORTER=none
         ```
 
         <Tip>
@@ -79,6 +80,7 @@ sure the data is logged to Opik:
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        export OTEL_METRICS_EXPORTER=none
         ```
 
         <Tip>
@@ -100,6 +102,7 @@ sure the data is logged to Opik:
 
     ```bash
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    export OTEL_METRICS_EXPORTER=none
     ```
 
     <Tip>

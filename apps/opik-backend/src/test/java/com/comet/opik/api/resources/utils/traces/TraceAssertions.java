@@ -5,6 +5,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.core.Response;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
@@ -24,7 +26,8 @@ public class TraceAssertions {
 
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
-            "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations"};
+            "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations",
+            "providers"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor"};
@@ -32,6 +35,38 @@ public class TraceAssertions {
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
             "feedbackScores.valueByAuthor"};
+
+    /**
+     * Prepares a trace for assertion by injecting providers into metadata if providers are set.
+     * This mirrors the backend behavior where providers are automatically injected into metadata.
+     *
+     * @param trace the trace to prepare
+     * @return a new trace with providers injected into metadata if providers are present
+     */
+    private static Trace prepareTraceForAssertion(Trace trace) {
+        if (trace.providers() == null || trace.providers().isEmpty()) {
+            return trace;
+        }
+
+        JsonNode metadataWithProviders = JsonUtils.prependField(
+                trace.metadata(), Trace.TraceField.PROVIDERS.getValue(), trace.providers());
+
+        return trace.toBuilder()
+                .metadata(metadataWithProviders)
+                .build();
+    }
+
+    /**
+     * Prepares a list of traces for assertion by injecting providers into metadata.
+     *
+     * @param traces the traces to prepare
+     * @return a new list of traces with providers injected into metadata where applicable
+     */
+    private static List<Trace> prepareTracesForAssertion(List<Trace> traces) {
+        return traces.stream()
+                .map(TraceAssertions::prepareTraceForAssertion)
+                .toList();
+    }
 
     public static final Map<Trace.TraceField, Function<Trace, Trace>> EXCLUDE_FUNCTIONS = new EnumMap<>(
             Trace.TraceField.class);
@@ -60,6 +95,7 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.PROVIDERS, it -> it.toBuilder().providers(null).build());
     }
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
@@ -76,16 +112,36 @@ public class TraceAssertions {
     public static void assertTraces(List<Trace> actualTraces, List<Trace> expectedTraces, List<Trace> unexpectedTraces,
             String user) {
 
+        // Automatically prepare expected traces with actual providers injected into metadata
+        // We need to use actual providers because they're calculated from spans in the database
+        var preparedExpectedTraces = expectedTraces.stream()
+                .map(expected -> {
+                    var actual = actualTraces.stream()
+                            .filter(a -> a.id().equals(expected.id()))
+                            .findFirst()
+                            .orElse(null);
+                    if (actual == null) {
+                        return prepareTraceForAssertion(expected);
+                    }
+                    // Use actual providers for metadata injection
+                    var expectedWithActualProviders = expected.toBuilder()
+                            .providers(actual.providers())
+                            .build();
+                    return prepareTraceForAssertion(expectedWithActualProviders);
+                })
+                .toList();
+
         assertThat(actualTraces)
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                .containsExactlyElementsOf(expectedTraces);
+                .containsExactlyElementsOf(preparedExpectedTraces);
 
-        assertIgnoredFields(actualTraces, expectedTraces, user);
+        assertIgnoredFields(actualTraces, preparedExpectedTraces, user);
 
         if (!unexpectedTraces.isEmpty()) {
+            var preparedUnexpectedTraces = prepareTracesForAssertion(unexpectedTraces);
             assertThat(actualTraces)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                    .doesNotContainAnyElementsOf(unexpectedTraces);
+                    .doesNotContainAnyElementsOf(preparedUnexpectedTraces);
         }
     }
 

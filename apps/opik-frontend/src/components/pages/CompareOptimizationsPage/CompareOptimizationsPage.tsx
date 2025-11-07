@@ -49,7 +49,6 @@ import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtual
 import DataTable from "@/components/shared/DataTable/DataTable";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import BestPrompt from "@/components/pages/CompareOptimizationsPage/BestPrompt";
@@ -274,9 +273,9 @@ const CompareOptimizationsPage: React.FC = () => {
         size: 400,
         accessorFn: (row) => {
           const val = get(row.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
-          return val;
+
+          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
         },
-        cell: PrettyCell as never,
       },
       {
         id: "examples",
