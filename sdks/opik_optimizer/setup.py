@@ -18,7 +18,6 @@ setup(
     install_requires=[
         "datasets",
         "deap>=1.4.3",
-        "ujson",
         "hf_xet",
         "litellm",
         "opik>=1.7.17",
