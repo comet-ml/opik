@@ -93,7 +93,8 @@ const transformMessageIntoProviderMessage = (
  */
 const wrapMediaWithTags = (content: string): string => {
   if (typeof content !== "string") {
-    return content;
+    // Non-string values cannot be processed for regex replacement; fall back to empty string
+    return "";
   }
 
   /**

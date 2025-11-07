@@ -203,7 +203,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "Not every provider supports multimedia input yet. Please pick a compatible model or remove images/videos from messages.",
+          "The selected provider does not support multimedia input. Please choose a compatible model or remove images/videos from messages.",
         path: ["model"],
       });
     } else {
