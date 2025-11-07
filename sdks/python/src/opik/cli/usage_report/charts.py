@@ -6,16 +6,6 @@ import time
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-try:
-    import matplotlib.colors as mcolors
-    import matplotlib.pyplot as plt
-    from matplotlib.ticker import FuncFormatter
-except ImportError:
-    raise ImportError(
-        "matplotlib is required for chart generation. "
-        "Please install it with: pip install matplotlib"
-    )
-
 from rich.console import Console
 
 from .utils import extract_metric_data
@@ -45,6 +35,15 @@ def _get_top_projects_and_others(
         - labels: List of labels (top project names + "Others")
         - colors: List of colors for top projects + "Others"
     """
+    try:
+        import matplotlib.colors as mcolors
+        import matplotlib.pyplot as plt
+    except ImportError:
+        raise ImportError(
+            "matplotlib is required for chart generation. "
+            "Please install it with: pip install matplotlib"
+        )
+
     # Calculate total usage per project across all periods
     project_totals = []
     for i in range(len(project_names)):
@@ -122,6 +121,15 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
         data: The extracted data dictionary
         output_dir: Directory parameter (kept for backward compatibility, not used)
     """
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import FuncFormatter
+    except ImportError:
+        raise ImportError(
+            "matplotlib is required for chart generation. "
+            "Please install it with: pip install matplotlib"
+        )
+
     # Get unit from data (default to month for backward compatibility)
     unit = data.get("unit", "month")
 
@@ -444,6 +452,15 @@ def create_individual_chart(
     Returns:
         Path to saved chart image file, or None if creation failed
     """
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import FuncFormatter
+    except ImportError:
+        raise ImportError(
+            "matplotlib is required for chart generation. "
+            "Please install it with: pip install matplotlib"
+        )
+
     # Get unit from data (default to month for backward compatibility)
     unit = data.get("unit", "month")
 

@@ -4,26 +4,6 @@ import os
 import traceback
 from typing import Any, Dict
 
-try:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import (
-        Image,
-        PageBreak,
-        Paragraph,
-        SimpleDocTemplate,
-        Spacer,
-        Table,
-        TableStyle,
-    )
-except ImportError:
-    raise ImportError(
-        "reportlab is required for PDF report generation. "
-        "Please install it with: pip install reportlab"
-    )
-
 from rich.console import Console
 
 from .charts import create_individual_chart
@@ -43,6 +23,26 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
     Returns:
         Path to saved PDF file
     """
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import (
+            Image,
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+    except ImportError:
+        raise ImportError(
+            "reportlab is required for PDF report generation. "
+            "Please install it with: pip install reportlab"
+        )
+
     # Calculate statistics
     stats = calculate_statistics(data)
 
