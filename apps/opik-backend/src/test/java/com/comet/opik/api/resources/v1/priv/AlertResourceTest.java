@@ -1674,7 +1674,8 @@ class AlertResourceTest {
                     projectId, "50.00", "60");
 
             var alert = createAlertForEvent(alertTrigger);
-            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
 
             // Create a trace first
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -1709,7 +1710,8 @@ class AlertResourceTest {
                     .ids(Set.of(alertId))
                     .build();
 
-            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @Test
@@ -1727,7 +1729,8 @@ class AlertResourceTest {
                     AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "2", "60");
 
             var alert = createAlertForEvent(alertTrigger);
-            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
 
             // Create a trace with duration exceeding threshold (3 seconds > 2 seconds)
             Instant endTime = Instant.now();
@@ -1755,7 +1758,8 @@ class AlertResourceTest {
                     .ids(Set.of(alertId))
                     .build();
 
-            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue,
@@ -2589,7 +2593,8 @@ class AlertResourceTest {
                     projectId, "40.00", "60");
 
             var alert = createAlertForEvent(alertTrigger, alertType);
-            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
 
             // Create a trace first
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -2615,7 +2620,8 @@ class AlertResourceTest {
                     .ids(Set.of(alertId))
                     .build();
 
-            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
@@ -2635,7 +2641,8 @@ class AlertResourceTest {
                     AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "1.5", "60");
 
             var alert = createAlertForEvent(alertTrigger, alertType);
-            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
 
             // Create a trace with duration exceeding threshold (2.5 seconds > 1.5 seconds)
             Instant startTime = Instant.now().minus(2500, ChronoUnit.MILLIS);
@@ -2658,7 +2665,8 @@ class AlertResourceTest {
                     .ids(Set.of(alertId))
                     .build();
 
-            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
     }
 
@@ -2804,9 +2812,10 @@ class AlertResourceTest {
                             .toList();
                     return trigger.toBuilder()
                             .triggerConfigs(configs)
-                            .eventType(trigger.eventType() == AlertEventType.TRACE_COST || trigger.eventType() == AlertEventType.TRACE_LATENCY
-                                    ? AlertEventType.TRACE_ERRORS
-                                    : trigger.eventType())
+                            .eventType(trigger.eventType() == AlertEventType.TRACE_COST
+                                    || trigger.eventType() == AlertEventType.TRACE_LATENCY
+                                            ? AlertEventType.TRACE_ERRORS
+                                            : trigger.eventType())
                             .createdBy(null)
                             .createdAt(null)
                             .build();

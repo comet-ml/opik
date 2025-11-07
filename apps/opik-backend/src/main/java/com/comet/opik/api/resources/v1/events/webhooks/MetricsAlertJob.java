@@ -26,6 +26,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -203,7 +204,7 @@ public class MetricsAlertJob implements Managed {
                                 alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
 
                         var metricValueFinal = trigger.eventType() == AlertEventType.TRACE_LATENCY
-                                ? metricValue.divide(BigDecimal.valueOf(1000)) // Convert back to seconds for payload
+                                ? metricValue.divide(BigDecimal.valueOf(1000), 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
                                 : metricValue;
 
                         // Create payload with metric details
