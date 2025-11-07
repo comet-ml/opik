@@ -1,9 +1,8 @@
 from unittest import mock
 from typing import List
-import pytest
 
-from opik.evaluation import evaluation_result, test_result, test_case
-from opik.evaluation.metrics import experiment_metric_result, score_result
+from opik.evaluation import evaluation_result, test_result
+from opik.evaluation.metrics import experiment_metric_result
 
 # Import experiment_metrics_helpers using the same pattern as evaluator.py
 import opik.evaluation.experiment_metrics_helpers as experiment_metrics_helpers
@@ -113,9 +112,7 @@ def test_compute_experiment_metrics__function_raises_exception__error_logged_but
         )
 
     # Mock the logger to verify error is logged
-    with mock.patch.object(
-        experiment_metrics_helpers.LOGGER, "error"
-    ) as mock_error:
+    with mock.patch.object(experiment_metrics_helpers.LOGGER, "error") as mock_error:
         # Compute metrics - should not raise exception
         result = experiment_metrics_helpers.compute_experiment_metrics(
             experiment_metrics=[failing_metric, working_metric],
@@ -130,4 +127,3 @@ def test_compute_experiment_metrics__function_raises_exception__error_logged_but
         assert isinstance(result, dict)
         assert "equals_metric" in result
         assert result["equals_metric"]["max"] == 1.0
-

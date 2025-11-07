@@ -5,7 +5,6 @@ from opik.evaluation import metrics, test_result
 from opik.evaluation.metrics import experiment_metric_result
 
 from .. import verifiers
-from ...testlib import assert_equal, ANY_BUT_NONE
 
 DATASET_ITEMS = [
     {
@@ -168,4 +167,3 @@ def test_evaluate_prompt__with_experiment_metrics__happyflow(
     assert "avg" in aggregates
     # Both items should have score 1.0 (correct answers), so avg = 1.0
     assert aggregates["avg"] == 1.0
-

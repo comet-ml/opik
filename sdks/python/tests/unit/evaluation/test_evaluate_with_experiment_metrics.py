@@ -1,15 +1,11 @@
 from typing import Any, Dict, List
 from unittest import mock
-import pytest
 
-import opik
 from opik import evaluation, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics, test_result
 from opik.evaluation.metrics import experiment_metric_result
-from ...testlib import ANY_BUT_NONE, SpanModel, assert_equal
-from ...testlib.models import FeedbackScoreModel, TraceModel
 
 
 def test_evaluate__with_experiment_metrics__happyflow(fake_backend):
@@ -306,4 +302,3 @@ def test_evaluate__with_experiment_metrics_and_scoring_metrics__happyflow(
     aggregates = call_args.kwargs["pre_computed_metric_aggregates"]
     assert "equals_metric" in aggregates
     assert aggregates["equals_metric"]["avg"] == 0.5  # Average of [1.0, 0.0]
-
