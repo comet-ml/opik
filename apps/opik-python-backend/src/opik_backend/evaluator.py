@@ -57,7 +57,7 @@ def execute_evaluator_python():
     # Extract type information for conversation thread metrics
     payload_type = payload.get("type")
 
-    # Get the executor from app context and run the code 
+    # Get the executor from app context and run the code
     response = get_executor().run_scoring(code, data, payload_type)
 
     if "error" in response:

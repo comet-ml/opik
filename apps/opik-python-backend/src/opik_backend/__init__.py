@@ -2,11 +2,8 @@ import logging
 import os
 import sys
 
-from flask import Flask
+from flask import Flask, jsonify
 from opentelemetry import metrics, trace
-
-from flask import jsonify
-from werkzeug.exceptions import HTTPException
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -22,6 +19,11 @@ from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry._logs import set_logger_provider
+
+from werkzeug.exceptions import HTTPException
+
+from opik_backend.http_utils import build_error_response
+
 
 # Note: All auto-instrumentation is handled by 'opentelemetry-instrument' command in entrypoint.sh
 
@@ -107,16 +109,14 @@ def create_app(test_config=None, should_init_executor=True):
 
     atexit.register(_close_redis_on_exit)
 
-    @app.errorhandler(Exception)
-    def handle_exception(e):
-        if isinstance(e, HTTPException):
-            return jsonify({
-                "error": e.name,
-                "message": e.description
-            }), e.code
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(http_exception):
+        return build_error_response(http_exception, http_exception.code)
 
+    @app.errorhandler(Exception)
+    def handle_exception(exception):
         app.logger.exception("Unhandled exception occurred")
-        message = str(e) if app.debug else "Something went wrong. Please try again later."
+        message = str(exception) if app.debug else "Something went wrong. Please try again later."
         response = jsonify({
             "error": "Internal Server Error",
             "message": message
@@ -124,7 +124,6 @@ def create_app(test_config=None, should_init_executor=True):
         response.status_code = 500
         return response
 
-    
     return app
 
 def setup_otel_metrics(app, resource):
