@@ -185,13 +185,12 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
                             continue
 
                         # All charts are exactly 14x8 inches (4200x2400 pixels at 300 DPI)
-                        # Scale to fit page with margins (same approach as reference implementation)
-                        # Aspect ratio: 14/8 = 1.75
+                        # Scale to fit page with margins
+                        # Aspect ratio: 14/8 = 1.75 (always wider than tall)
                         max_width = 7.5 * inch  # Leave margin
-                        max_height = 9.0 * inch  # Leave margin
                         chart_aspect_ratio = 14.0 / 8.0  # 1.75
 
-                        # Chart is always wider than tall for these fixed dimensions; scale by width
+                        # Charts are always wider than tall, so always scale by width
                         display_width = max_width
                         display_height = max_width / chart_aspect_ratio
 
