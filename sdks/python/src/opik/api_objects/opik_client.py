@@ -21,6 +21,7 @@ from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
 from .dataset import rest_operations as dataset_rest_operations
+from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
@@ -1499,6 +1500,15 @@ class Opik:
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
         _ = self._rest_client.optimizations.get_optimization_by_id(id)
         return optimization.Optimization(id=id, rest_client=self._rest_client)
+
+    def get_experiments_client(self) -> experiments_client.ExperimentsClient:
+        """
+        Retrieves an instance of `ExperimentsClient`.
+
+        Returns:
+            An instance of the ExperimentsClient initialized with a cached REST client.
+        """
+        return experiments_client.ExperimentsClient(self._rest_client)
 
 
 @functools.lru_cache()
