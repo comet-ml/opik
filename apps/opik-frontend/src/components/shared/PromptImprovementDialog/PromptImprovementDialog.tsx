@@ -26,7 +26,7 @@ import usePromptImprovement from "@/hooks/usePromptImprovement";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
-import { parseContentWithImages, combineContentWithImages } from "@/lib/llm";
+import { parseContentWithMedia, combineContentWithMedia } from "@/lib/llm";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import {
@@ -84,8 +84,12 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     intervalMs: 2000,
   });
 
-  const { text: originalPromptText, images: originalImages } = useMemo(
-    () => parseContentWithImages(originalPrompt),
+  const {
+    text: originalPromptText,
+    images: originalImages,
+    videos: originalVideos,
+  } = useMemo(
+    () => parseContentWithMedia(originalPrompt),
     [originalPrompt],
   );
 
@@ -101,7 +105,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       setIsLoading(false);
       setIsEditorFocused(false);
     }
-  }, [open, originalImages]);
+  }, [open, originalImages, originalVideos]);
 
   // Smart auto-scroll: only auto-scroll when user is near the bottom
   // This allows users to scroll up to review content without being forced down
@@ -205,14 +209,23 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
   const handleSuccessClick = useCallback(() => {
     if (hasPrompt) {
-      const finalPrompt = combineContentWithImages(
+      const finalPrompt = combineContentWithMedia(
         generatedPrompt,
         originalImages,
+        originalVideos,
       );
       onAccept(id, finalPrompt);
       setOpen(false);
     }
-  }, [hasPrompt, generatedPrompt, originalImages, onAccept, id, setOpen]);
+  }, [
+    hasPrompt,
+    generatedPrompt,
+    originalImages,
+    originalVideos,
+    onAccept,
+    id,
+    setOpen,
+  ]);
 
   const instructionsPlaceholder = isGenerateMode
     ? "What do you want your AI to do?"
