@@ -191,14 +191,9 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
                         max_height = 9.0 * inch  # Leave margin
                         chart_aspect_ratio = 14.0 / 8.0  # 1.75
 
-                        if chart_aspect_ratio > max_width / max_height:
-                            # Chart is wider - scale by width
-                            display_width = max_width
-                            display_height = max_width / chart_aspect_ratio
-                        else:
-                            # Chart is taller - scale by height
-                            display_height = max_height
-                            display_width = max_height * chart_aspect_ratio
+                        # Chart is always wider than tall for these fixed dimensions; scale by width
+                        display_width = max_width
+                        display_height = max_width / chart_aspect_ratio
 
                         # All charts use the same dimensions, so use fixed scaling
                         img = Image(
