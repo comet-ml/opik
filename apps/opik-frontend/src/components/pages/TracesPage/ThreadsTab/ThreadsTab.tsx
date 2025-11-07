@@ -337,7 +337,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     {
       placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: "stale",
+      refetchOnMount: "always",
     },
   );
 
@@ -355,7 +355,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
     {
       enabled: false,
-      refetchOnMount: "stale",
+      refetchOnMount: "always",
     },
   );
 
