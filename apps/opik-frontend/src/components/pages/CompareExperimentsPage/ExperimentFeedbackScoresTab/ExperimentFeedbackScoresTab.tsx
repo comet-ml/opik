@@ -59,11 +59,17 @@ export const getFeedbackScoreMap = ({
 interface GetFeedbackScoresForExperimentsAsRowsArguments {
   feedbackScoresMap: FeedbackScoreMap;
   experimentsIds: string[];
+  experiments: {
+    id: string;
+    feedback_scores?: AggregatedFeedbackScore[];
+    experiment_scores?: AggregatedFeedbackScore[];
+  }[];
 }
 
 export const getFeedbackScoresForExperimentsAsRows = ({
   feedbackScoresMap,
   experimentsIds,
+  experiments,
 }: GetFeedbackScoresForExperimentsAsRowsArguments) => {
   const keys = uniq(
     Object.values(feedbackScoresMap).reduce<string[]>(
@@ -71,6 +77,24 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       [],
     ),
   ).sort();
+
+  // Determine which scores are feedback_scores vs experiment_scores
+  const scoreTypeMap = new Map<
+    string,
+    "feedback_scores" | "experiment_scores"
+  >();
+  experiments.forEach((experiment) => {
+    experiment.feedback_scores?.forEach((score) => {
+      if (!scoreTypeMap.has(score.name)) {
+        scoreTypeMap.set(score.name, "feedback_scores");
+      }
+    });
+    experiment.experiment_scores?.forEach((score) => {
+      if (!scoreTypeMap.has(score.name)) {
+        scoreTypeMap.set(score.name, "experiment_scores");
+      }
+    });
+  });
 
   return keys.map((key) => {
     const data = experimentsIds.reduce<Record<string, FiledValue>>(
@@ -81,8 +105,9 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       {},
     );
 
+    const isFeedbackScore = scoreTypeMap.get(key) === "feedback_scores";
     return {
-      name: key,
+      name: isFeedbackScore ? `${key} (avg)` : key,
       ...data,
     } as FeedbackScoreData;
   });
@@ -156,8 +181,9 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
     return getFeedbackScoresForExperimentsAsRows({
       feedbackScoresMap,
       experimentsIds,
+      experiments,
     });
-  }, [feedbackScoresMap, experimentsIds]);
+  }, [feedbackScoresMap, experimentsIds, experiments]);
 
   const noDataText = isCompare
     ? "These experiments have no feedback scores"

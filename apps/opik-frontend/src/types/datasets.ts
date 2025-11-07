@@ -111,6 +111,7 @@ export interface ExperimentsAggregations {
   total_estimated_cost_avg?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
 }
 
 export interface ExperimentsGroupNode {

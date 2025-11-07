@@ -21,6 +21,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import { AggregatedFeedbackScore } from "@/types/shared";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -61,11 +62,22 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "feedback_scores",
       label: "Feedback scores",
       type: COLUMN_TYPE.numberDictionary,
-      accessorFn: (row) =>
-        get(row, "feedback_scores", []).map((score) => ({
+      accessorFn: (row) => {
+        const feedbackScores = (
+          get(row, "feedback_scores", []) as AggregatedFeedbackScore[]
+        ).map((score) => ({
+          ...score,
+          name: `${score.name} (avg)`,
+          value: formatNumericData(score.value),
+        }));
+        const experimentScores = (
+          get(row, "experiment_scores", []) as AggregatedFeedbackScore[]
+        ).map((score) => ({
           ...score,
           value: formatNumericData(score.value),
-        })),
+        }));
+        return [...feedbackScores, ...experimentScores];
+      },
       cell: FeedbackScoreListCell as never,
       customMeta: {
         getHoverCardName: (row: Experiment) => row.name,

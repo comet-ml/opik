@@ -111,15 +111,23 @@ const CompareExperimentsDetails: React.FunctionComponent<
           <div className="flex gap-1 overflow-x-auto">
             {sortBy(
               [
-                ...(experiment?.feedback_scores ?? []),
-                ...(experiment?.experiment_scores ?? []),
+                ...(experiment?.feedback_scores ?? []).map((score) => ({
+                  ...score,
+                  isFeedbackScore: true,
+                })),
+                ...(experiment?.experiment_scores ?? []).map((score) => ({
+                  ...score,
+                  isFeedbackScore: false,
+                })),
               ],
               "name",
             ).map((score) => {
               return (
                 <FeedbackScoreTag
                   key={score.name + score.value}
-                  label={score.name}
+                  label={
+                    score.isFeedbackScore ? `${score.name} (avg)` : score.name
+                  }
                   value={score.value}
                 />
               );
