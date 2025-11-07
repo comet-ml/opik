@@ -42,7 +42,7 @@ const AppDebugInfo = () => {
               toast({ description: "Successfully copied version" });
             }}
           >
-            <span className="comet-body-s-accented truncate flex items-center gap-2">
+            <span className="comet-body-s-accented flex items-center gap-2 truncate">
               <OpikIcon className="size-5" />
               OPIK VERSION {APP_VERSION}
             </span>

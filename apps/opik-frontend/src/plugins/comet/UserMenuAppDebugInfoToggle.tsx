@@ -25,13 +25,13 @@ const UserMenuAppDebugInfoToggle = () => {
 
   return (
     <DropdownMenuItem
-      className="flex-row min-w-52 justify-between"
+      className="min-w-52 flex-row justify-between"
       onClick={handleToggle}
     >
       <div className="flex items-center">
         <SquareMousePointerIcon className="mr-2 size-4" />
         <TooltipWrapper content="With this option enabled, you will see app debugging information">
-          <span className="comet-body-s text-foreground truncate">
+          <span className="comet-body-s truncate text-foreground">
             Debugger
           </span>
         </TooltipWrapper>
