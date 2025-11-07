@@ -272,6 +272,20 @@ public class MessageContentNormalizer {
                 }
                 yield "";
             }
+            case "file" -> {
+                Object fileValue = map.get("file");
+                if (fileValue instanceof Map<?, ?> fileMap) {
+                    Object fileId = fileMap.get("file_id");
+                    if (fileId instanceof String fileIdString && StringUtils.isNotBlank(fileIdString)) {
+                        yield renderVideoPlaceholder(fileIdString);
+                    }
+                    Object fileData = fileMap.get("file_data");
+                    if (fileData instanceof String fileDataString && StringUtils.isNotBlank(fileDataString)) {
+                        yield renderVideoPlaceholder(fileDataString);
+                    }
+                }
+                yield "";
+            }
             default -> "";
         };
     }
