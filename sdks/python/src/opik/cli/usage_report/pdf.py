@@ -184,7 +184,26 @@ def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
                             )
                             continue
 
-                        img = Image(chart_path, width=7 * inch, height=4.5 * inch)
+                        # All charts are exactly 14x8 inches (4200x2400 pixels at 300 DPI)
+                        # Scale to fit page with margins (same approach as reference implementation)
+                        # Aspect ratio: 14/8 = 1.75
+                        max_width = 7.5 * inch  # Leave margin
+                        max_height = 9.0 * inch  # Leave margin
+                        chart_aspect_ratio = 14.0 / 8.0  # 1.75
+
+                        if chart_aspect_ratio > max_width / max_height:
+                            # Chart is wider - scale by width
+                            display_width = max_width
+                            display_height = max_width / chart_aspect_ratio
+                        else:
+                            # Chart is taller - scale by height
+                            display_height = max_height
+                            display_width = max_height * chart_aspect_ratio
+
+                        # All charts use the same dimensions, so use fixed scaling
+                        img = Image(
+                            chart_path, width=display_width, height=display_height
+                        )
                         story.append(img)
                         story.append(Spacer(1, 0.1 * inch))
                         story.append(PageBreak())
