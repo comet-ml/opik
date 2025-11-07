@@ -133,7 +133,10 @@ export const supportsImageInput = (model?: string | null): boolean => {
  * Checks if a model supports video input.
  */
 export const supportsVideoInput = (model?: string | null): boolean => {
-  // TODO: model pricing does not yet differentiate video vs. vision.
-  // Keep a separate helper so we can add video-specific behavior once the metadata is available.
+  // When model_pricing.json includes a `supports_video_input` field, update this function to:
+  // 1. Build a VIDEO_CAPABILITIES map (like VISION_CAPABILITIES) from the `supports_video_input` field.
+  // 2. Use VIDEO_CAPABILITIES and normalized keys for lookup, similar to supportsImageInput.
+  // 3. Remove or update this fallback to supportsImageInput as appropriate.
+  // For now, video input support is assumed to match image input support.
   return supportsImageInput(model);
 };
