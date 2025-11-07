@@ -715,7 +715,7 @@ def create_individual_chart(
     # Explicitly set margins to ensure chart uses full width consistently
     # Left margin (10%) accounts for y-axis labels (including formatted labels like "500.00M" or "$350.00")
     # Right margin (5%) is minimal to maximize chart width
-    # Bottom margin (42.5%) accommodates legend inside plot area with ~1 inch of space below
+    # Bottom margin (42.5%) accommodates legend positioned below the plot area (outside axes bounds) with ~1 inch of space below
     # Top margin (8%) for title
     # This ensures ALL charts have identical dimensions regardless of y-axis formatter
     fig.subplots_adjust(left=0.10, right=0.95, top=0.92, bottom=0.425)
