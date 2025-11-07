@@ -573,14 +573,13 @@ def verify_chat_prompt_version(
     version_id: Any = mock.ANY,  # type: ignore
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
-    template_structure: str = "chat",
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
     
     This verifier checks all the same fields as verify_prompt_version but adapted for ChatPrompt:
     - messages instead of template
-    - template_structure field validation
+    - template_structure field is always verified to be "chat"
     """
     testlib.assert_equal(name, chat_prompt.name)
     testlib.assert_equal(messages, chat_prompt.messages)
@@ -594,12 +593,10 @@ def verify_chat_prompt_version(
     ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
     
-    # Verify template_structure by checking the backend representation
-    # Since template_structure isn't stored as a property on ChatPrompt, we verify it indirectly
-    # by checking that to_info_dict includes it
+    # Verify template_structure is "chat" by checking the backend representation
     from opik.api_objects.prompt.chat_prompt import to_info_dict
     info_dict = to_info_dict(chat_prompt)
     actual_template_structure = info_dict.get("version", {}).get("template_structure")
     assert (
-        template_structure == actual_template_structure
-    ), f"Expected template_structure={template_structure}, got {actual_template_structure}"
+        actual_template_structure == "chat"
+    ), f"Expected template_structure='chat', got {actual_template_structure}"

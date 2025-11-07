@@ -28,7 +28,6 @@ def test_chat_prompt__create__happyflow(opik_client: opik.Opik):
         messages=messages,
         metadata={"version": "1.0", "type": "customer_support"},
         type=PromptType.MUSTACHE,
-        template_structure="chat",
     )
 
 
@@ -43,6 +42,13 @@ def test_chat_prompt__format__happyflow(opik_client: opik.Opik):
     ]
 
     chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=messages,
+    )
+
+    # Verify the prompt was created correctly
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
         name=prompt_name,
         messages=messages,
     )
@@ -92,14 +98,12 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
         chat_prompt_v1,
         name=prompt_name,
         messages=messages_v1,
-        template_structure="chat",
     )
     
     verifiers.verify_chat_prompt_version(
         chat_prompt_v2,
         name=prompt_name,
         messages=messages_v2,
-        template_structure="chat",
     )
     
     # Verify they share the same prompt ID but have different version IDs
@@ -138,9 +142,20 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
         messages=messages,
     )
 
+    # Verify both prompts
+    verifiers.verify_chat_prompt_version(
+        chat_prompt_v1,
+        name=prompt_name,
+        messages=messages,
+    )
+    
+    verifiers.verify_chat_prompt_version(
+        chat_prompt_v2,
+        name=prompt_name,
+        messages=messages,
+    )
+
     # Should return same version
-    assert chat_prompt_v2.name == chat_prompt_v1.name
-    assert chat_prompt_v2.messages == chat_prompt_v1.messages
     assert (
         chat_prompt_v2.__internal_api__prompt_id__
         == chat_prompt_v1.__internal_api__prompt_id__
@@ -170,10 +185,12 @@ def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Op
     )
 
     # Verify it was synced to backend
-    assert chat_prompt.name == prompt_name
-    assert chat_prompt.messages == messages
-    assert chat_prompt.commit is not None
-    assert chat_prompt.__internal_api__prompt_id__ is not None
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=messages,
+        metadata={"category": "education"},
+    )
 
 
 def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
@@ -201,7 +218,12 @@ def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
     )
 
     # Verify multimodal content is preserved
-    assert chat_prompt.messages == messages
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=messages,
+    )
+    
     assert len(chat_prompt.messages[1]["content"]) == 2
     assert chat_prompt.messages[1]["content"][0]["type"] == "text"
     assert chat_prompt.messages[1]["content"][1]["type"] == "image_url"
@@ -223,6 +245,13 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
         type=PromptType.MUSTACHE,
     )
 
+    verifiers.verify_chat_prompt_version(
+        chat_prompt_mustache,
+        name=prompt_name_mustache,
+        messages=messages_mustache,
+        type=PromptType.MUSTACHE,
+    )
+
     formatted_mustache = chat_prompt_mustache.format(variables={"name": "Bob"})
     assert formatted_mustache[0]["content"] == "Hello Bob!"
 
@@ -233,6 +262,13 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
     ]
 
     chat_prompt_jinja = opik_client.create_chat_prompt(
+        name=prompt_name_jinja,
+        messages=messages_jinja,
+        type=PromptType.JINJA2,
+    )
+
+    verifiers.verify_chat_prompt_version(
+        chat_prompt_jinja,
         name=prompt_name_jinja,
         messages=messages_jinja,
         type=PromptType.JINJA2,
@@ -254,8 +290,11 @@ def test_chat_prompt__empty_messages__should_work(opik_client: opik.Opik):
         messages=messages,
     )
 
-    assert chat_prompt.messages == []
-    assert chat_prompt.commit is not None
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=[],
+    )
 
 
 def test_chat_prompt__multiple_roles__happyflow(opik_client: opik.Opik):
@@ -271,6 +310,12 @@ def test_chat_prompt__multiple_roles__happyflow(opik_client: opik.Opik):
     ]
 
     chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=messages,
+    )
+
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
         name=prompt_name,
         messages=messages,
     )
@@ -302,6 +347,12 @@ def test_chat_prompt__format_with_supported_modalities__happyflow(
     ]
 
     chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=messages,
+    )
+
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
         name=prompt_name,
         messages=messages,
     )
