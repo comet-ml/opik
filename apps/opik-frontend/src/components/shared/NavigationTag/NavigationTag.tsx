@@ -1,17 +1,8 @@
 import React from "react";
 import ResourceLink, {
   RESOURCE_TYPE,
+  RESOURCE_MAP,
 } from "@/components/shared/ResourceLink/ResourceLink";
-
-const RESOURCE_TYPE_LABELS = {
-  [RESOURCE_TYPE.project]: "project",
-  [RESOURCE_TYPE.dataset]: "dataset",
-  [RESOURCE_TYPE.prompt]: "prompt",
-  [RESOURCE_TYPE.experiment]: "experiment",
-  [RESOURCE_TYPE.optimization]: "optimization",
-  [RESOURCE_TYPE.trial]: "trial",
-  [RESOURCE_TYPE.annotationQueue]: "annotation queue",
-};
 
 type NavigationTagProps = {
   id: string;
@@ -30,9 +21,9 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   params,
   isDeleted = false,
 }) => {
-  const resourceTypeLabel = RESOURCE_TYPE_LABELS[resource];
+  const resourceLabel = RESOURCE_MAP[resource].label;
   const tooltipContent = name
-    ? `Navigate to ${resourceTypeLabel}: ${name}`
+    ? `Navigate to ${resourceLabel}: ${name}`
     : undefined;
 
   return (
@@ -50,4 +41,3 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
 };
 
 export default NavigationTag;
-
