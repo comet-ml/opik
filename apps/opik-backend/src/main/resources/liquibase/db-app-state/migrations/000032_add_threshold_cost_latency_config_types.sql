@@ -10,6 +10,6 @@ ALTER TABLE alert_trigger_configs
     'threshold:latency'
     ) NOT NULL;
 
---rollback ALTER TABLE alert_trigger_configs MODIFY config_type ENUM('scope:project', 'threshold:feedback_score') NOT NULL;
+--rollback empty
 
 

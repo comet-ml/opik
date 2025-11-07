@@ -15,6 +15,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -363,17 +364,19 @@ public class SlackWebhookPayloadMapper {
      * Formats window duration from seconds to human-readable format.
      */
     private static String formatWindowDuration(long seconds) {
-        if (seconds < 60) {
-            return seconds + " second" + (seconds != 1 ? "s" : "");
-        } else if (seconds < 3600) {
-            long minutes = seconds / 60;
-            return minutes + " minute" + (minutes != 1 ? "s" : "");
-        } else if (seconds < 86400) {
-            long hours = seconds / 3600;
-            return hours + " hour" + (hours != 1 ? "s" : "");
-        } else {
-            long days = seconds / 86400;
+        Duration duration = Duration.ofSeconds(seconds);
+
+        if (duration.toDays() > 0) {
+            long days = duration.toDays();
             return days + " day" + (days != 1 ? "s" : "");
+        } else if (duration.toHours() > 0) {
+            long hours = duration.toHours();
+            return hours + " hour" + (hours != 1 ? "s" : "");
+        } else if (duration.toMinutes() > 0) {
+            long minutes = duration.toMinutes();
+            return minutes + " minute" + (minutes != 1 ? "s" : "");
+        } else {
+            return seconds + " second" + (seconds != 1 ? "s" : "");
         }
     }
 

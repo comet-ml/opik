@@ -23,6 +23,7 @@ import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.function.Tuples;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
@@ -139,7 +140,8 @@ public class MetricsAlertJob implements Managed {
 
         // Calculate lock duration: fixedDelay - 1 minute to ensure it expires before the next job run
         // This allows alerts to fire on every job run instead of every other run
-        Duration lockDuration = webhookConfig.getMetrics().getFixedDelay().toJavaDuration().minusMinutes(1);
+        Duration jobDuration = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
+        Duration lockDuration = jobDuration.toMinutes() > 0 ? jobDuration.minusMinutes(1) : jobDuration.minusSeconds(1);
 
         // Try to acquire the lock - if successful, this instance will process the alert
         // If lock already exists, another instance recently fired this alert, so skip it
@@ -211,28 +213,29 @@ public class MetricsAlertJob implements Managed {
                                 ? metricValue.divide(BigDecimal.valueOf(1000), 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
                                 : metricValue;
 
-                        // Create payload with metric details
-                        String eventId = idGenerator.generateId().toString();
-                        String payloadJson = JsonUtils.writeValueAsString(Map.of(
-                                "event_type", trigger.eventType().name(),
-                                "metric_value", metricValueFinal.toString(),
-                                "threshold", config.threshold().toString(),
-                                "window_seconds", config.windowSeconds(),
-                                "project_ids",
-                                config.projectIds() != null
-                                        ? config.projectIds().stream().map(UUID::toString)
-                                                .collect(Collectors.joining(","))
-                                        : ""));
-
-                        // Send webhook directly instead of adding to bucket
-                        return alertWebhookSender.createAndSendWebhook(
-                                alert,
-                                alert.workspaceId(),
-                                "",
-                                trigger.eventType(),
-                                List.of(eventId),
-                                List.of(payloadJson),
-                                List.of("system")); // System user for automated alerts
+                        // Wrap blocking JSON serialization in Mono.fromCallable
+                        return Mono.fromCallable(() -> {
+                            String eventId = idGenerator.generateId().toString();
+                            String payloadJson = JsonUtils.writeValueAsString(Map.of(
+                                    "event_type", trigger.eventType().name(),
+                                    "metric_value", metricValueFinal.toString(),
+                                    "threshold", config.threshold().toString(),
+                                    "window_seconds", config.windowSeconds(),
+                                    "project_ids",
+                                    config.projectIds() != null
+                                            ? config.projectIds().stream().map(UUID::toString)
+                                                    .collect(Collectors.joining(","))
+                                            : ""));
+                            return Tuples.of(eventId, payloadJson);
+                        })
+                                .flatMap(payload -> alertWebhookSender.createAndSendWebhook(
+                                        alert,
+                                        alert.workspaceId(),
+                                        "",
+                                        trigger.eventType(),
+                                        List.of(payload.getT1()),
+                                        List.of(payload.getT2()),
+                                        List.of("system"))); // System user for automated alerts
                     }
 
                     log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}'",
