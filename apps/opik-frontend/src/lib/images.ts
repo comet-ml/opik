@@ -136,7 +136,7 @@ export const DATA_VIDEO_REGEX = new RegExp(
 export const VIDEO_URL_REGEX = new RegExp(
   `https?:\\/\\/[^\\s"'<>{}\\\\|\\^\`]+\\.(${VIDEO_URL_EXTENSIONS.join(
     "|",
-  )})(\\?[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?`,
+  )})\\b(\\?[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?`,
   "gi",
 );
 
@@ -188,14 +188,16 @@ type FileValue = {
   format?: string;
 };
 
-export type VideoContent = {
-  type: "video_url";
-  video_url?: VideoUrlValue | string;
-  file?: FileValue;
-} | {
-  type: "file";
-  file?: FileValue;
-};
+export type VideoContent =
+  | {
+      type: "video_url";
+      video_url?: VideoUrlValue | string;
+      file?: FileValue;
+    }
+  | {
+      type: "file";
+      file?: FileValue;
+    };
 
 export const isVideoContent = (content?: Partial<VideoContent>) => {
   if (!content || !content.type) {
@@ -250,9 +252,8 @@ const ensureVideoDataUrl = (value: string, mimeType?: string): string => {
     return value;
   }
 
-  const safeMime = mimeType && mimeType.startsWith("video/")
-    ? mimeType
-    : "video/mp4";
+  const safeMime =
+    mimeType && mimeType.startsWith("video/") ? mimeType : "video/mp4";
   return `data:${safeMime};base64,${value}`;
 };
 
@@ -489,8 +490,11 @@ export const processInputData = (input?: object): ProcessedInput => {
     images,
     imageIndex,
   ));
-  ({ updatedInput: inputString, nextIndex: videoIndex } =
-    extractDataURIVideos(inputString, videos, videoIndex));
+  ({ updatedInput: inputString, nextIndex: videoIndex } = extractDataURIVideos(
+    inputString,
+    videos,
+    videoIndex,
+  ));
   ({ updatedInput: inputString, nextIndex: imageIndex } =
     extractPrefixedBase64Images(inputString, images, imageIndex));
   extractImageURLs(inputString, images);

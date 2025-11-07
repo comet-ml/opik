@@ -12,10 +12,7 @@ import { Tag } from "@/components/ui/tag";
 import { CircleX } from "lucide-react";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import {
-  isImageBase64String,
-  isVideoBase64String,
-} from "@/lib/images";
+import { isImageBase64String, isVideoBase64String } from "@/lib/images";
 
 type MediaType = "image" | "video";
 
@@ -132,7 +129,9 @@ const PromptMessageMediaTags: React.FunctionComponent<
     if (items.length >= resolvedMaxItems) {
       toast({
         title: "Maximum limit reached",
-        description: `You can only add up to ${resolvedMaxItems} ${type === "image" ? "images" : "videos"}`,
+        description: `You can only add up to ${resolvedMaxItems} ${
+          type === "image" ? "images" : "videos"
+        }`,
         variant: "destructive",
       });
       return;
@@ -158,7 +157,15 @@ const PromptMessageMediaTags: React.FunctionComponent<
 
   const canAddMore = items.length < resolvedMaxItems;
 
-  const icon = useMemo(() => (type === "image" ? <Image className="size-3.5 shrink-0" /> : <Video className="size-3.5 shrink-0" />), [type]);
+  const icon = useMemo(
+    () =>
+      type === "image" ? (
+        <Image className="size-3.5 shrink-0" />
+      ) : (
+        <Video className="size-3.5 shrink-0" />
+      ),
+    [type],
+  );
   const placeholder =
     type === "image"
       ? "Enter image URL, base64, or template variable"

@@ -88,10 +88,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     text: originalPromptText,
     images: originalImages,
     videos: originalVideos,
-  } = useMemo(
-    () => parseContentWithMedia(originalPrompt),
-    [originalPrompt],
-  );
+  } = useMemo(() => parseContentWithMedia(originalPrompt), [originalPrompt]);
 
   const isGenerateMode = !originalPromptText?.trim();
   const title = isGenerateMode ? "Generate prompt" : "Improve prompt";

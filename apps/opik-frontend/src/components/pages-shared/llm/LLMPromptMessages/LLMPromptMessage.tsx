@@ -91,11 +91,17 @@ const LLMPromptMessage = ({
     transition,
   };
 
-  const { localText, images, videos, setImages, setVideos, handleContentChange } =
-    useMessageContent({
-      content,
-      onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
-    });
+  const {
+    localText,
+    images,
+    videos,
+    setImages,
+    setVideos,
+    handleContentChange,
+  } = useMessageContent({
+    content,
+    onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
+  });
 
   return (
     <>

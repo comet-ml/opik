@@ -27,7 +27,10 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
 import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
-import { supportsImageInput, supportsVideoInput } from "@/lib/modelCapabilities";
+import {
+  supportsImageInput,
+  supportsVideoInput,
+} from "@/lib/modelCapabilities";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetEmptyState from "./DatasetEmptyState";
 

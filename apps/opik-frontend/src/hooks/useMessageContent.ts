@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  combineContentWithMedia,
-  parseContentWithMedia,
-} from "@/lib/llm";
+import { combineContentWithMedia, parseContentWithMedia } from "@/lib/llm";
 import { OnChangeFn } from "@/types/shared";
 
 interface UseMessageContentProps {
@@ -24,8 +21,11 @@ export const useMessageContent = ({
   onChangeContent,
 }: UseMessageContentProps): UseMessageContentReturn => {
   const lastProcessedContentRef = useRef<string>(content);
-  const { text: initText, images: initImages, videos: initVideos } =
-    parseContentWithMedia(content);
+  const {
+    text: initText,
+    images: initImages,
+    videos: initVideos,
+  } = parseContentWithMedia(content);
   const [localText, setLocalText] = useState(initText);
   const [images, setImages] = useState<string[]>(initImages);
   const [videos, setVideos] = useState<string[]>(initVideos);

@@ -342,8 +342,14 @@ describe("processInputData", () => {
       messages: [
         {
           content: [
-            { type: "video_url", video_url: { url: "https://example.com/a.mp4" } },
-            { type: "video_url", video_url: { url: "https://example.com/a.mp4" } },
+            {
+              type: "video_url",
+              video_url: { url: "https://example.com/a.mp4" },
+            },
+            {
+              type: "video_url",
+              video_url: { url: "https://example.com/a.mp4" },
+            },
           ],
         },
       ],

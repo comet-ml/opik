@@ -74,11 +74,17 @@ const EditPromptVersionDialog: React.FunctionComponent<
     editable: true,
   });
 
-  const { localText, images, videos, setImages, setVideos, handleContentChange } =
-    useMessageContent({
-      content: template,
-      onChangeContent: setTemplate,
-    });
+  const {
+    localText,
+    images,
+    videos,
+    setImages,
+    setVideos,
+    handleContentChange,
+  } = useMessageContent({
+    content: template,
+    onChangeContent: setTemplate,
+  });
 
   const { mutate } = useCreatePromptVersionMutation();
 

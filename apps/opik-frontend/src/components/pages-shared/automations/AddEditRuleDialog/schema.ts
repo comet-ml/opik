@@ -17,7 +17,10 @@ import {
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
 import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
-import { supportsImageInput, supportsVideoInput } from "@/lib/modelCapabilities";
+import {
+  supportsImageInput,
+  supportsVideoInput,
+} from "@/lib/modelCapabilities";
 import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
 
 const isOpenAIModel = (modelName: string): boolean => {
