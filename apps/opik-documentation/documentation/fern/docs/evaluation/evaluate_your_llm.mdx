@@ -548,31 +548,52 @@ You can also log custom experiment-level metrics that will be displayed alongsid
 
 <CodeBlocks>
 ```python title="Python" language="python"
+from typing import List
 from opik.evaluation.metrics import ExperimentMetricResult
+from opik.evaluation import TestResult
+
+def compute_percentiles(test_results: List[TestResult]) -> List[ExperimentMetricResult]:
+    """Compute p95 and p99 percentiles for hallucination scores."""
+    scores = []
+    for test_result_item in test_results:
+        for score_result in test_result_item.score_results:
+            if score_result.name == "hallucination_metric":
+                scores.append(score_result.value)
+    
+    if not scores:
+        return []
+    
+    sorted_scores = sorted(scores)
+    p95_index = int(len(sorted_scores) * 0.95)
+    p99_index = int(len(sorted_scores) * 0.99)
+    
+    return [
+        ExperimentMetricResult(
+            score_name="hallucination_metric",
+            metric_name="p95",
+            value=sorted_scores[min(p95_index, len(sorted_scores) - 1)]
+        ),
+        ExperimentMetricResult(
+            score_name="hallucination_metric",
+            metric_name="p99",
+            value=sorted_scores[min(p99_index, len(sorted_scores) - 1)]
+        ),
+    ]
 
 evaluation = evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
-    experiment_metrics=[
-        ExperimentMetricResult(
-            score_name="hallucination_metric",
-            metric_name="p95",
-            value=0.95
-        ),
-        ExperimentMetricResult(
-            score_name="hallucination_metric",
-            metric_name="p99",
-            value=0.99
-        ),
-    ]
+    experiment_metrics=[compute_percentiles],
 )
 ```
 
 </CodeBlocks>
 
 These experiment-level metrics will be stored with the experiment and displayed in the Opik UI alongside trace-level scores. You can use them to track percentiles, custom aggregations, or any other experiment-wide statistics that complement the per-test-case scores.
+
+Experiment metric functions receive a `List[TestResult]` parameter containing all test results from the evaluation, allowing you to compute aggregate statistics across the entire experiment.
 
 ### Python SDK
 
