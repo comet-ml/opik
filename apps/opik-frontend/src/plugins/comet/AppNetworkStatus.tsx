@@ -39,7 +39,9 @@ const AppNetworkStatus = () => {
                 : "Not connected to Comet server"
             }
           >
-            <CometIcon className="size-5" />
+            <span>
+              <CometIcon className="size-5" />
+            </span>
           </TooltipWrapper>
         </div>
       )}
