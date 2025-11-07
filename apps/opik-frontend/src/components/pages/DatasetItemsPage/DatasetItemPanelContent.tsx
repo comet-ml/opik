@@ -30,12 +30,12 @@ const DatasetItemPanelContent: React.FunctionComponent<
     },
   );
 
-  const { images, formattedData } = useMemo(
+  const { media, formattedData } = useMemo(
     () => processInputData(data?.data),
     [data?.data],
   );
 
-  const hasImages = images.length > 0;
+  const hasMedia = media.length > 0;
 
   if (isPending) {
     return <Loader />;
@@ -50,13 +50,13 @@ const DatasetItemPanelContent: React.FunctionComponent<
       <Accordion
         type="multiple"
         className="w-full"
-        defaultValue={["images", "data"]}
+        defaultValue={["media", "data"]}
       >
-        {hasImages ? (
-          <AccordionItem value="images">
-            <AccordionTrigger>Images</AccordionTrigger>
+        {hasMedia ? (
+          <AccordionItem value="media">
+            <AccordionTrigger>Media</AccordionTrigger>
             <AccordionContent>
-              <ImagesListWrapper images={images} />
+              <ImagesListWrapper media={media} />
             </AccordionContent>
           </AccordionItem>
         ) : null}
