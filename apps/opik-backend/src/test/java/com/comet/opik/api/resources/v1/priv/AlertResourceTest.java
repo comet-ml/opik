@@ -1670,10 +1670,11 @@ class AlertResourceTest {
 
             // Create an alert with cost threshold configuration
             // Threshold: $50.00, Window: 60 seconds
-            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST, projectId, "50.00", "60");
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST,
+                    projectId, "50.00", "60");
 
             var alert = createAlertForEvent(alertTrigger);
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a trace first
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -1703,6 +1704,12 @@ class AlertResourceTest {
             Map<String, String> costPayload = JsonUtils.readValue(payload, Map.class);
 
             verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId);
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
 
         @Test
@@ -1715,13 +1722,14 @@ class AlertResourceTest {
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
             // Create an alert with latency threshold configuration
-            // Threshold: 2000ms (2 seconds), Window: 60 seconds
-            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_LATENCY, AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "2000.0000", "60");
+            // Threshold: 2 seconds, Window: 60 seconds
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_LATENCY,
+                    AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "2", "60");
 
             var alert = createAlertForEvent(alertTrigger);
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
-            // Create a trace with duration exceeding threshold (3 seconds)
+            // Create a trace with duration exceeding threshold (3 seconds > 2 seconds)
             Instant endTime = Instant.now();
             Instant startTime = endTime.minus(3, ChronoUnit.SECONDS);
 
@@ -1741,10 +1749,17 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             Map<String, String> latencyPayload = JsonUtils.readValue(payload, Map.class);
 
-            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3000.0000", "2000.0000", "60", projectId);
+            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3.0", "2", "60", projectId);
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
 
-        private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue, String threshold, String windowSeconds, UUID projectId) {
+        private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue,
+                String threshold, String windowSeconds, UUID projectId) {
             assertThat(payload).containsEntry("event_type", eventType);
             assertThat(new BigDecimal(payload.get("metric_value")).compareTo(new BigDecimal(metricValue))).isEqualTo(0);
             assertThat(payload).containsEntry("threshold", threshold);
@@ -2570,10 +2585,11 @@ class AlertResourceTest {
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
             // Create alert with cost threshold configuration
-            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST, projectId, "40.00", "60");
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST,
+                    projectId, "40.00", "60");
 
             var alert = createAlertForEvent(alertTrigger, alertType);
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a trace first
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -2594,6 +2610,12 @@ class AlertResourceTest {
             // Verify webhook was called and payload is properly formatted
             verifyPayload(alertType, 1, "Cost Alert",
                     List.of("Cost Alert Triggered", "Current Cost", "Threshold", "Time Window"));
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
@@ -2608,10 +2630,12 @@ class AlertResourceTest {
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
             // Create alert with latency threshold configuration
-            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_LATENCY, AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "1500.0000", "60");
+            // Threshold: 1.5 seconds, Window: 60 seconds
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_LATENCY,
+                    AlertTriggerConfigType.THRESHOLD_LATENCY, projectId, "1.5", "60");
 
             var alert = createAlertForEvent(alertTrigger, alertType);
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a trace with duration exceeding threshold (2.5 seconds > 1.5 seconds)
             Instant startTime = Instant.now().minus(2500, ChronoUnit.MILLIS);
@@ -2629,6 +2653,12 @@ class AlertResourceTest {
             // Verify webhook was called and payload is properly formatted
             verifyPayload(alertType, 1, "Latency Alert",
                     List.of("Latency Alert Triggered", "Current Latency", "Threshold", "Time Window"));
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
     }
 
@@ -2687,7 +2717,7 @@ class AlertResourceTest {
         String workspaceId = UUID.randomUUID().toString();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-        
+
         // Mock the workspace name endpoint for AlertWebhookSender
         wireMock.server().stubFor(
                 get(urlPathEqualTo("/workspaces/workspace-name"))
@@ -2774,6 +2804,9 @@ class AlertResourceTest {
                             .toList();
                     return trigger.toBuilder()
                             .triggerConfigs(configs)
+                            .eventType(trigger.eventType() == AlertEventType.TRACE_COST || trigger.eventType() == AlertEventType.TRACE_LATENCY
+                                    ? AlertEventType.TRACE_ERRORS
+                                    : trigger.eventType())
                             .createdBy(null)
                             .createdAt(null)
                             .build();
@@ -2857,7 +2890,8 @@ class AlertResourceTest {
                 SortableFields.WEBHOOK_URL);
     }
 
-    private static AlertTrigger triggerWithThreshold(AlertEventType eventType, AlertTriggerConfigType configType, UUID projectId, String threshold, String window) {
+    private static AlertTrigger triggerWithThreshold(AlertEventType eventType, AlertTriggerConfigType configType,
+            UUID projectId, String threshold, String window) {
         return AlertTrigger.builder()
                 .eventType(eventType)
                 .triggerConfigs(List.of(

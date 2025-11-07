@@ -258,7 +258,7 @@ class AlertServiceImpl implements AlertService {
                     {
                       "event_type": "TRACE_LATENCY",
                       "metric_value": "5250.5000",
-                      "threshold": "5000.0000",
+                      "threshold": "5",
                       "window_seconds": "1800",
                       "project_ids": ""
                     }

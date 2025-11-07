@@ -187,20 +187,30 @@ public class MetricsAlertJob implements Managed {
             default -> Mono.just(BigDecimal.ZERO);
         };
 
+        // For latency, threshold is in seconds but metric value is in milliseconds
+        // Convert threshold to milliseconds for comparison
+        BigDecimal thresholdForComparison = trigger.eventType() == AlertEventType.TRACE_LATENCY
+                ? config.threshold().multiply(BigDecimal.valueOf(1000))
+                : config.threshold();
+
         return metricValueMono
                 .doOnNext(value -> log.info("Metric value retrieved: '{}'", value))
                 .doOnError(error -> log.error("Error retrieving metric value: '{}'", error.getMessage(), error))
                 .flatMap(metricValue -> {
                     // Compare with threshold
-                    if (metricValue.compareTo(config.threshold()) > 0) {
+                    if (metricValue.compareTo(thresholdForComparison) > 0) {
                         log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}'",
-                                alert.name(), alert.id(), trigger.eventType(), metricValue, config.threshold());
+                                alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
+
+                        var metricValueFinal = trigger.eventType() == AlertEventType.TRACE_LATENCY
+                                ? metricValue.divide(BigDecimal.valueOf(1000)) // Convert back to seconds for payload
+                                : metricValue;
 
                         // Create payload with metric details
                         String eventId = idGenerator.generateId().toString();
                         String payloadJson = JsonUtils.writeValueAsString(Map.of(
                                 "event_type", trigger.eventType().name(),
-                                "metric_value", metricValue.toString(),
+                                "metric_value", metricValueFinal.toString(),
                                 "threshold", config.threshold().toString(),
                                 "window_seconds", config.windowSeconds(),
                                 "project_ids",
@@ -221,7 +231,7 @@ public class MetricsAlertJob implements Managed {
                     }
 
                     log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}'",
-                            alert.name(), alert.id(), trigger.eventType(), metricValue, config.threshold());
+                            alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
                     return Mono.<Void>empty();
                 })
                 .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
