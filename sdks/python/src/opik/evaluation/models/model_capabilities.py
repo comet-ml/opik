@@ -79,6 +79,18 @@ def vision_capability_detector(model_name: str) -> bool:
     return False
 
 
+def video_capability_detector(model_name: str) -> bool:
+    stripped = _strip_provider_prefix(model_name)
+    candidates = {model_name, stripped}
+    for candidate in candidates:
+        normalized = candidate.lower()
+        if "video" in normalized:
+            return True
+        if "qwen" in normalized and "vl" in normalized:
+            return True
+    return False
+
+
 class ModelCapabilitiesRegistry:
     """
     Central registry for model capability detection.
@@ -117,6 +129,12 @@ class ModelCapabilitiesRegistry:
         """
         return self.supports("vision", model_name)
 
+    def supports_video(self, model_name: Optional[str]) -> bool:
+        """
+        Convenience wrapper for video-capable detection.
+        """
+        return self.supports("video", model_name)
+
     def add_vision_model(self, model_name: str) -> None:
         # Extend the module-level registry used by vision_capability_detector
         VISION_MODEL_PREFIXES.add(self._strip_provider_prefix(model_name).lower())
@@ -141,6 +159,9 @@ MODEL_CAPABILITIES_REGISTRY = ModelCapabilitiesRegistry()
 MODEL_CAPABILITIES_REGISTRY.register_capability_detector(
     "vision", vision_capability_detector
 )
+MODEL_CAPABILITIES_REGISTRY.register_capability_detector(
+    "video", video_capability_detector
+)
 
 # Backwards compatibility shim for previous API which exposed a class with classmethods.
 ModelCapabilities = MODEL_CAPABILITIES_REGISTRY
@@ -151,4 +172,5 @@ __all__ = [
     "MODEL_CAPABILITIES_REGISTRY",
     "ModelCapabilities",
     "vision_capability_detector",
+    "video_capability_detector",
 ]
