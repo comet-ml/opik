@@ -105,13 +105,22 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
         <h1 className="comet-title-l truncate break-words">{title}</h1>
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && <DateTag date={experiment?.created_at} />}
-        <ResourceLink
-          id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
-          resource={RESOURCE_TYPE.dataset}
-          asTag
-        />
+        {!isCompare && experiment?.created_at && (
+          <TooltipWrapper content="Trial creation time">
+            <div>
+              <DateTag date={experiment.created_at} />
+            </div>
+          </TooltipWrapper>
+        )}
+        {experiment?.dataset_name && (
+          <ResourceLink
+            id={experiment.dataset_id}
+            name={experiment.dataset_name}
+            resource={RESOURCE_TYPE.dataset}
+            tooltipContent={`Navigate to dataset ${experiment.dataset_name}`}
+            asTag
+          />
+        )}
         {scores.map((score) => (
           <FeedbackScoreTag
             key={score.name + score.value}

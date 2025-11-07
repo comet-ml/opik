@@ -9,7 +9,6 @@ import get from "lodash/get";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Loader from "@/components/shared/Loader/Loader";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
@@ -51,7 +50,6 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
         nameKey: "dataset_name",
         idKey: "dataset_id",
         resource: RESOURCE_TYPE.dataset,
-        enableTooltip: true,
       },
     },
     {
@@ -80,10 +78,6 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       type: COLUMN_TYPE.time,
       accessorFn: (row) => formatDate(row.created_at),
       sortable: true,
-      cell: TimeCell as never,
-      customMeta: {
-        rawValueKey: "created_at",
-      },
     },
   ],
   {},

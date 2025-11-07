@@ -5,6 +5,7 @@ import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Experiment } from "@/types/datasets";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
@@ -107,7 +108,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
     } else {
       return (
         <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
+          <TooltipWrapper content="Feedback scores">
+            <PenLine className="size-4 shrink-0" />
+          </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
             {sortBy(experiment?.feedback_scores ?? [], "name").map(
               (feedbackScore) => {
@@ -172,19 +175,29 @@ const CompareExperimentsDetails: React.FunctionComponent<
         {renderCompareFeedbackScoresButton()}
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && <DateTag date={experiment?.created_at} />}
-        <ResourceLink
-          id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
-          resource={RESOURCE_TYPE.dataset}
-          asTag
-        />
+        {!isCompare && experiment?.created_at && (
+          <TooltipWrapper content="Experiment creation time">
+            <div>
+              <DateTag date={experiment.created_at} />
+            </div>
+          </TooltipWrapper>
+        )}
+        {experiment?.dataset_name && (
+          <ResourceLink
+            id={experiment.dataset_id}
+            name={experiment.dataset_name}
+            resource={RESOURCE_TYPE.dataset}
+            tooltipContent={`Navigate to dataset ${experiment.dataset_name}`}
+            asTag
+          />
+        )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
             <ResourceLink
               id={experiment.prompt_versions[0].prompt_id}
-              name={`Prompt ${experiment.prompt_versions[0].commit}`}
+              name={experiment.prompt_versions[0].commit}
               resource={RESOURCE_TYPE.prompt}
+              tooltipContent={`Navigate to prompt ${experiment.prompt_versions[0].commit}`}
               asTag
             />
           )}
