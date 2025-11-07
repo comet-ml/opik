@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStudioLogs;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
@@ -90,12 +91,14 @@ public class OptimizationsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("dataset_id") UUID datasetId,
             @QueryParam("name") @Schema(description = "Filter optimizations by name (partial match, case insensitive)") String name,
-            @QueryParam("dataset_deleted") Boolean datasetDeleted) {
+            @QueryParam("dataset_deleted") Boolean datasetDeleted,
+            @QueryParam("studio_only") Boolean studioOnly) {
 
         var searchCriteria = OptimizationSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
                 .datasetDeleted(datasetDeleted)
+                .studioOnly(studioOnly)
                 .entityType(EntityType.TRACE)
                 .build();
 
@@ -115,9 +118,11 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "200", description = "Optimization resource", content = @Content(schema = @Schema(implementation = Optimization.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(Optimization.View.Public.class)
-    public Response get(@PathParam("id") UUID id) {
-        log.info("Getting optimization by id '{}'", id);
-        var optimization = optimizationService.getById(id)
+    public Response get(
+            @PathParam("id") UUID id,
+            @QueryParam("include_studio_config") @DefaultValue("false") boolean includeStudioConfig) {
+        log.info("Getting optimization by id '{}', includeStudioConfig: '{}'", id, includeStudioConfig);
+        var optimization = optimizationService.getById(id, includeStudioConfig)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Got optimization by id '{}', datasetId '{}'", optimization.id(), optimization.datasetId());
@@ -174,5 +179,24 @@ public class OptimizationsResource {
         log.info("Updates optimization with id '{}'", id);
 
         return Response.noContent().build();
+    }
+
+    // ==================== Studio Endpoints ====================
+
+    @GET
+    @Path("/studio/{id}/logs")
+    @Operation(operationId = "getStudioOptimizationLogs", summary = "Get Studio optimization logs", description = "Get presigned S3 URL for downloading optimization logs", responses = {
+            @ApiResponse(responseCode = "200", description = "Logs response", content = @Content(schema = @Schema(implementation = OptimizationStudioLogs.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response studioGetLogs(@PathParam("id") UUID id) {
+        log.info("Getting logs for Studio optimization id: '{}'", id);
+
+        var logs = optimizationService.generateStudioLogsResponse(id)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Generated logs URL for Studio optimization id: '{}'", id);
+        return Response.ok(logs).build();
     }
 }
