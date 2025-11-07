@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 import opik
-from opik.api_objects.experiment import experiment_item, experiments_client
+from opik.api_objects.experiment import experiment_item
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
@@ -87,7 +87,7 @@ def test__find_experiment_items_for_dataset__happy_path(
 
     # find experiment items for dataset
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiments = experiments_client.ExperimentsClient(opik_client.rest_client)
+    experiments = opik_client.get_experiments_client()
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],
@@ -215,7 +215,7 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
 
     # find experiment items for dataset
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiments = experiments_client.ExperimentsClient(opik_client.rest_client)
+    experiments = opik_client.get_experiments_client()
     experiment_items_contents = experiments.find_experiment_items_for_dataset(
         dataset_name=dataset_name,
         experiment_ids=[retrieved_experiment.id],

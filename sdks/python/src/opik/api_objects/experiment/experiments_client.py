@@ -2,7 +2,7 @@ import json
 from typing import List, Optional
 
 from . import rest_operations, experiment_item
-from .. import opik_client, opik_query_language
+from .. import opik_query_language
 from ...rest_api import client as rest_api_client
 
 
@@ -62,14 +62,3 @@ class ExperimentsClient:
             truncate=truncate,
             filter_expression=filter_expression,
         )
-
-
-def get_experiments_client() -> ExperimentsClient:
-    """
-    Retrieves an instance of `ExperimentsClient`.
-
-    Returns:
-        An instance of the ExperimentsClient initialized with a cached REST client.
-    """
-    client = opik_client.get_client_cached()
-    return ExperimentsClient(client.rest_client)
