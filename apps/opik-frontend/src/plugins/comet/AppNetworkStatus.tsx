@@ -20,7 +20,7 @@ const AppNetworkStatus = () => {
         <div className="flex items-center gap-2">
           <SatelliteDishIcon className="size-5" />
           <TooltipWrapper content="Round-trip time (RTT) to ping Comet server">
-            <span>RTT: {rttInSeconds}s</span>
+            <span className="comet-body-s-accented">RTT: {rttInSeconds}s</span>
           </TooltipWrapper>
         </div>
       )}
