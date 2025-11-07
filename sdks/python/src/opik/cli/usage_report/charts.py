@@ -6,9 +6,16 @@ import time
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
+try:
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+except ImportError:
+    raise ImportError(
+        "matplotlib is required for chart generation. "
+        "Please install it with: pip install matplotlib"
+    )
+
 from rich.console import Console
 
 from .utils import extract_metric_data
