@@ -131,7 +131,9 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata=metadata,
             model=model,
             provider=self.provider,
-            attachments=video_collection.attachments if video_collection.attachments else None,
+            attachments=video_collection.attachments
+            if video_collection.attachments
+            else None,
         )
 
         return result

@@ -207,7 +207,6 @@ def _video_response_to_dict(output: Any) -> Dict[str, Any]:
     return {"raw": str(output)}
 
 
-
 def _build_video_usage(result: Dict[str, Any]) -> Optional[Dict[str, int]]:
     duration = video_utils.extract_duration_seconds(None, result)
     if duration is None or duration <= 0:

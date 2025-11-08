@@ -94,7 +94,9 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
             and attachments_collection.manifest
             and video_artifacts.VIDEO_METADATA_KEY not in metadata
         ):
-            metadata[video_artifacts.VIDEO_METADATA_KEY] = attachments_collection.manifest
+            metadata[video_artifacts.VIDEO_METADATA_KEY] = (
+                attachments_collection.manifest
+            )
 
         duration_seconds = video_utils.extract_duration_seconds(
             current_span_data.input, output_dict
@@ -136,7 +138,9 @@ def _serialize_response(output: Any) -> Dict[str, Any]:
         try:
             return dict(output.__dict__)
         except Exception:
-            LOGGER.debug("Failed to convert genai video response to dict", exc_info=True)
+            LOGGER.debug(
+                "Failed to convert genai video response to dict", exc_info=True
+            )
 
     if isinstance(output, dict):
         return output
@@ -182,9 +186,9 @@ def _extract_video_manifest(output: Dict[str, Any]) -> Optional[List[Dict[str, A
     return manifest or None
 
 
-def _build_attachment_collection(output: Dict[str, Any]) -> Optional[
-    video_artifacts.VideoArtifactCollection
-]:
+def _build_attachment_collection(
+    output: Dict[str, Any],
+) -> Optional[video_artifacts.VideoArtifactCollection]:
     manifest = _extract_video_manifest(output)
     if not manifest:
         return None
@@ -205,6 +209,8 @@ def _build_attachment_collection(output: Dict[str, Any]) -> Optional[
         )
 
     return video_artifacts.VideoArtifactCollection.from_artifacts(attachments)
+
+
 class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
     """
     Tracks operations.get to enrich spans when a video job completes.
@@ -315,15 +321,11 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
         try:
             response = self._try_download(file_id)
             if response is None:
-                return None, self._record_download_error(
-                    file_id, "empty_response"
-                )
+                return None, self._record_download_error(file_id, "empty_response")
 
             temp_path = self._persist_download(response)
             if temp_path is None:
-                return None, self._record_download_error(
-                    file_id, "persist_failed"
-                )
+                return None, self._record_download_error(file_id, "persist_failed")
 
             file_name = os.path.basename(file_id) or "video.mp4"
             return (
@@ -345,9 +347,7 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
             try:
                 response = self._client.files.download(file={"name": file_id})
             except Exception:
-                LOGGER.debug(
-                    "Fallback download failed for %s", file_id, exc_info=True
-                )
+                LOGGER.debug("Fallback download failed for %s", file_id, exc_info=True)
                 return None
         except Exception:
             LOGGER.debug("Download failed for %s", file_id, exc_info=True)
@@ -403,8 +403,6 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
             return None
 
     def _record_download_error(self, file_id: str, reason: str) -> Dict[str, Any]:
-        message = (
-            f"⚠️  Google GenAI video download failed for {file_id}: {reason}"
-        )
+        message = f"⚠️  Google GenAI video download failed for {file_id}: {reason}"
         LOGGER.warning(message)
         return {"file_id": file_id, "reason": reason}

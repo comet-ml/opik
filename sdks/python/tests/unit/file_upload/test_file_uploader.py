@@ -102,7 +102,9 @@ def test_upload_attachment__local__no_monitor(
     assert route.call_count == 1
 
 
-def test_upload_attachment__cleans_up_temp_file(rest_client_local, respx_mock, tmp_path):
+def test_upload_attachment__cleans_up_temp_file(
+    rest_client_local, respx_mock, tmp_path
+):
     rx_url = re.compile("https://localhost:8080/bucket/*")
     respx_mock.put(rx_url).respond(200)
 

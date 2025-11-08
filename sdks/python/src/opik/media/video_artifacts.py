@@ -49,7 +49,9 @@ class VideoArtifact:
             delete_after_upload=True,
         )
 
-    def manifest_entry(self, attachment: Optional[Attachment]) -> Optional[Dict[str, Any]]:
+    def manifest_entry(
+        self, attachment: Optional[Attachment]
+    ) -> Optional[Dict[str, Any]]:
         has_inline = self.data is not None
         if not has_inline and not self.url:
             return None
@@ -72,7 +74,9 @@ class VideoArtifactCollection:
     manifest: List[Dict[str, Any]]
 
     @classmethod
-    def from_artifacts(cls, artifacts: List[VideoArtifact]) -> "VideoArtifactCollection":
+    def from_artifacts(
+        cls, artifacts: List[VideoArtifact]
+    ) -> "VideoArtifactCollection":
         attachments: List[Attachment] = []
         manifest: List[Dict[str, Any]] = []
 
@@ -360,6 +364,13 @@ def _extension_from_mime(mime_type: Optional[str]) -> str:
 
 def _write_temp_file(data: bytes, suffix: str) -> str:
     fd, path = tempfile.mkstemp(prefix="opik-video-", suffix=suffix)
-    with os.fdopen(fd, "wb") as file:
-        file.write(data)
+    try:
+        with os.fdopen(fd, "wb") as file:
+            file.write(data)
+    except Exception:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        raise
     return path

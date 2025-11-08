@@ -102,7 +102,9 @@ def _patch_generate_videos(
     provider: str,
     project_name: Optional[str],
 ) -> None:
-    decorator = generate_videos_decorator.GenerateVideosTrackDecorator(provider=provider)
+    decorator = generate_videos_decorator.GenerateVideosTrackDecorator(
+        provider=provider
+    )
 
     if hasattr(client.models, "generate_videos"):
         client.models.generate_videos = decorator.track(

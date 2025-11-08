@@ -219,7 +219,9 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             model=model,
             provider=provider.value if provider else None,
             total_cost=total_cost,
-            attachments=video_collection.attachments if video_collection.attachments else None,
+            attachments=video_collection.attachments
+            if video_collection.attachments
+            else None,
         )
 
     @override
