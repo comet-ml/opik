@@ -1,11 +1,7 @@
-import os
 import logging
 import sqlite3
 
 import opik
-import litellm
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator

@@ -15,6 +15,7 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
 import org.redisson.api.options.PlainOptions;
 import org.redisson.api.stream.StreamCreateGroupArgs;
+import org.redisson.api.stream.StreamPendingRangeArgs;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -34,6 +35,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -241,7 +244,7 @@ class BaseRedisSubscriberUnitTest {
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
                 if (count == 1) {
-                    return Mono.error(new RuntimeException("Unexpected error"));
+                    return Mono.error(new NullPointerException("Unexpected error"));
                 }
                 return Mono.empty();
             }));
@@ -308,7 +311,7 @@ class BaseRedisSubscriberUnitTest {
 
             subscriber.start();
 
-            // Then - should handle remove error gracefully and continue processing
+            // Should handle remove error gracefully and continue processing
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(removeAttempts.get()).isGreaterThan(2);
@@ -329,9 +332,24 @@ class BaseRedisSubscriberUnitTest {
                 return Mono.empty();
             }));
             whenAutoClaimReturnEmpty(subscriber.getConsumerId());
-            whenReadGroupReturnMessages();
+            // Simulating a batch of messages, so they're handled in one read
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenReturn(Mono.just(Map.of(
+                            new StreamMessageId(System.currentTimeMillis(), 0),
+                            Map.of(TestStreamConfiguration.PAYLOAD_FIELD, podamFactory.manufacturePojo(String.class)),
+                            new StreamMessageId(System.currentTimeMillis(), 1),
+                            Map.of(TestStreamConfiguration.PAYLOAD_FIELD, podamFactory.manufacturePojo(String.class)),
+                            new StreamMessageId(System.currentTimeMillis(), 2),
+                            Map.of(TestStreamConfiguration.PAYLOAD_FIELD, podamFactory.manufacturePojo(String.class)),
+                            new StreamMessageId(System.currentTimeMillis(), 3),
+                            Map.of(TestStreamConfiguration.PAYLOAD_FIELD, podamFactory.manufacturePojo(String.class)),
+                            new StreamMessageId(System.currentTimeMillis(), 4),
+                            Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                    podamFactory.manufacturePojo(String.class)))));
             whenAckReturn();
-            // Not mocking remove, so unhandled null pointer exceptions occur in post-processing success
+            when(stream.remove(any(StreamMessageId[].class)))
+                    .thenReturn(Mono.error(new RuntimeException("Redis remove error")));
+            when(stream.listPending(any(StreamPendingRangeArgs.class))).thenReturn(Mono.just(List.of()));
 
             subscriber.start();
 
@@ -341,6 +359,36 @@ class BaseRedisSubscriberUnitTest {
                         assertThat(processCount.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                         assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(2);
+                        verify(stream, times(2)).listPending(any(StreamPendingRangeArgs.class));
+                    });
+        }
+
+        @Test
+        void shouldNotDieOnListPendingError() {
+            var listPendingAttempts = new AtomicInteger();
+            var subscriber = trackSubscriber(TestRedisSubscriber.failingRetriesSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+            // Mock list pending to fail once, then succeed
+            when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenAnswer(invocation -> {
+                        int attempt = listPendingAttempts.incrementAndGet();
+                        if (attempt == 1) {
+                            return Mono.error(new RuntimeException("List pending error"));
+                        }
+                        return Mono.just(List.of());
+                    });
+
+            subscriber.start();
+
+            // Should handle list pending error gracefully and continue processing
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(listPendingAttempts.get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(0);
+                        assertThat(subscriber.getFailedMessageCount().get()).isGreaterThan(2);
                     });
         }
 

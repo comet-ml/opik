@@ -651,6 +651,242 @@ evaluation = evaluate(
 )
 ```
 
+### Using Scoring Functions
+
+In addition to using built-in metrics, Opik allows you to define custom scoring functions to evaluate your LLM applications. Scoring functions give you complete control over how your outputs are evaluated and can be tailored to your specific use cases.
+
+There are two types of scoring functions you can use:
+
+1. **Plain Scoring Functions**: Use `dataset_item` and `task_outputs` parameters
+2. **Task Span Scoring Functions**: Use a `task_span` parameter for advanced evaluation
+
+#### Using Plain Scoring Functions in Evaluation
+
+Plain scoring functions receive dataset inputs and task outputs, making them ideal for evaluating the final results of your LLM application:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import Dict, Any
+from opik.evaluation.metrics import score_result
+
+def custom_equals_scorer(
+    dataset_item: Dict[str, Any],
+    task_outputs: Dict[str, Any]
+) -> score_result.ScoreResult:
+    """
+    Custom scoring function that compares expected output with actual output.
+
+    Args:
+        dataset_item: Data from the dataset item (includes expected outputs)
+        task_outputs: Outputs from the evaluation task
+    """
+    expected = dataset_item.get("expected_output")
+    actual = task_outputs.get("output")
+
+    if expected == actual:
+        score = 1.0
+        reason = "Perfect match"
+    else:
+        score = 0.0
+        reason = f"Mismatch: expected '{expected}', got '{actual}'"
+
+    return score_result.ScoreResult(
+        name="custom_equals_scorer",
+        value=score,
+        reason=reason
+    )
+```
+</CodeBlocks>
+
+You can use your custom scoring functions alongside built-in metrics:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Create dataset
+dataset = opik_client.create_dataset("custom_evaluation_dataset")
+dataset.insert([
+    {
+        "input": "What is the capital of France?",
+        "expected_output": "Paris"
+    },
+    {
+        "input": "What is 2 + 2?",
+        "expected_output": "4"
+    }
+])
+
+# Define evaluation task
+def evaluation_task(item):
+    # Your LLM application logic here
+    return {"output": your_llm_application(item["input"])}
+
+# Run evaluation with custom scoring functions
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_functions=[
+        custom_equals_scorer
+    ],
+    scoring_metrics=[
+        Hallucination()  # Mix with built-in metrics
+    ],
+    experiment_name="Custom Scoring Experiment"
+)
+```
+</CodeBlocks>
+
+#### Task Span Scoring Functions
+
+Task span scoring functions provide access to detailed execution information about your LLM tasks. These functions receive a `task_span` parameter containing structured data about the task execution, including input, output, metadata, and nested operations.
+
+Task span functions are particularly useful for evaluating:
+
+- The internal structure and behavior of your LLM applications
+- Performance characteristics like execution patterns
+- Quality of intermediate steps in complex workflows
+- Cost and usage optimization opportunities
+- Agent trajectory analysis
+
+##### Creating Task Span Scoring Functions
+
+Task span scoring functions accept a `task_span` parameter which is a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import Any
+from opik.evaluation.metrics import score_result
+from opik.message_processing.emulation.models import SpanModel
+
+def execution_time_scorer(
+    task_span: SpanModel
+) -> score_result.ScoreResult:
+    """
+    Scoring function that evaluates based on execution time.
+
+    Args:
+        task_span: Complete execution information including timing
+    """
+    if task_span.start_time and task_span.end_time:
+        duration = (task_span.end_time - task_span.start_time).total_seconds()
+
+        # Score based on execution speed
+        if duration < 1.0:
+            score = 1.0
+            reason = f"Fast execution: {duration:.2f}s"
+        elif duration < 5.0:
+            score = 0.8
+            reason = f"Acceptable execution time: {duration:.2f}s"
+        else:
+            score = 0.5
+            reason = f"Slow execution: {duration:.2f}s"
+    else:
+        score = 0.0
+        reason = "Cannot determine execution time"
+
+    return score_result.ScoreResult(
+        name="execution_time_scorer",
+        value=score,
+        reason=reason
+    )
+
+def task_name_scorer(
+    task_span: SpanModel
+) -> score_result.ScoreResult:
+    """
+    Scoring function that validates the task span name.
+    """
+    expected_name = "your_llm_application"  # Adjust to your function name
+
+    score = 1.0 if task_span.name == expected_name else 0.0
+    reason = f"Task name: '{task_span.name}'"
+
+    return score_result.ScoreResult(
+        name="task_name_scorer",
+        value=score,
+        reason=reason
+    )
+```
+</CodeBlocks>
+
+##### Combined Scoring Functions
+
+You can also create scoring functions that use both dataset inputs/outputs AND task span information:
+
+<CodeBlocks>
+```python title="Python" language="python"
+def comprehensive_scorer(
+    dataset_item: Dict[str, Any],
+    task_outputs: Dict[str, Any],
+    task_span: SpanModel
+) -> score_result.ScoreResult:
+    """
+    Comprehensive scoring function using all available information.
+
+    Args:
+        dataset_item: Dataset item data
+        task_outputs: Task execution outputs
+        task_span: Detailed execution information
+    """
+    # Check output correctness
+    expected = dataset_item.get("expected_output")
+    actual = task_outputs.get("output")
+    correctness_score = 1.0 if expected == actual else 0.0
+
+    # Check execution efficiency
+    if task_span.start_time and task_span.end_time:
+        duration = (task_span.end_time - task_span.start_time).total_seconds()
+        efficiency_score = 1.0 if duration < 2.0 else 0.5
+    else:
+        efficiency_score = 0.0
+
+    # Combined score (weighted average)
+    final_score = (correctness_score * 0.7) + (efficiency_score * 0.3)
+
+    return score_result.ScoreResult(
+        name="comprehensive_scorer",
+        value=final_score,
+        reason=f"Correctness: {correctness_score}, Efficiency: {efficiency_score}"
+    )
+```
+</CodeBlocks>
+
+##### Using Task Span Scoring Functions in Evaluation
+
+Task span scoring functions work seamlessly with the evaluation framework:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import track
+
+@track  # Enable span collection for task span metrics
+def evaluation_task(item):
+    return {"output": your_llm_application(item["input"])}
+
+# Run evaluation with task span scoring functions
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,  # Must be decorated with @track
+    scoring_functions=[
+        execution_time_scorer,
+        task_name_scorer,
+        comprehensive_scorer  # Mix different types
+    ],
+    experiment_name="Task Span Evaluation"
+)
+```
+</CodeBlocks>
+
+<Tip>
+When you use task span scoring functions, Opik automatically enables span collection and analysis. You don't need to configure anything special - the system will detect functions with `task_span` parameters and handle them appropriately.
+</Tip>
+
+<Warning>
+Task span scoring functions have access to detailed execution information including inputs, outputs, and metadata. Be mindful of sensitive data and ensure your functions handle this information appropriately.
+</Warning>
+
 ### Using task span evaluation metrics
 
 Opik supports advanced evaluation metrics that can analyze the detailed execution information of your LLM tasks. These metrics receive a `task_span` parameter containing structured data about the task execution, including input, output, metadata, and nested operations.
@@ -1460,6 +1696,58 @@ For the `SpanModel`'s hierarchy given above the `HierarchyAnalysisMetric` metric
 ````
 </CodeBlocks>
 
+#### Quickly testing task span metrics locally
+
+You can validate a task span metric without running a full evaluation by recording spans locally. The SDK provides a context manager that captures all spans/traces created in the block and exposes them in-memory:
+
+<CodeBlocks>
+```python title="Python" language="python"
+import opik
+from opik import track
+from opik.evaluation.metrics import score_result
+from opik.message_processing.emulation.models import SpanModel
+
+# Example metric under test
+class ExecutionTimeMetric:
+    def __init__(self, name: str = "execution_time_metric"):
+        self.name = name
+
+    def score(self, task_span: SpanModel, **_):
+        if task_span.start_time and task_span.end_time:
+            duration = (task_span.end_time - task_span.start_time).total_seconds()
+            value = 1.0 if duration < 2.0 else 0.5
+            reason = f"Duration: {duration:.2f}s"
+        else:
+            value = 0.0
+            reason = "Missing timing information"
+        return score_result.ScoreResult(value=value, name=self.name, reason=reason)
+
+@track
+def my_tracked_function(question: str) -> str:
+    # Your LLM/tool code here that produces spans
+    return f"Answer to: {question}"
+
+with opik.record_traces_locally() as storage:
+    # Execute tracked code that creates spans
+    _ = my_tracked_function("What is the capital of France?")
+
+    # Access the in-memory span tree (flush is automatic before reading)
+    span_trees = storage.span_trees
+    assert len(span_trees) > 0, "No spans recorded"
+    root_span = span_trees[0]
+
+    # Evaluate your task span metric directly
+    metric = ExecutionTimeMetric()
+    result = metric.score(task_span=root_span)
+    print(result)
+```
+
+</CodeBlocks>
+
+<Warning>
+  Local recording cannot be nested. If a recording block is already active, entering another will raise an error.
+</Warning>
+
 #### Best practices for task span metrics
 
 1. **Focus on execution patterns**: Use task span metrics to evaluate how your application executes, not just the final output
@@ -1506,4 +1794,6 @@ You can access all the experiments logged to the platform from the SDK with the
     ```
 
 </CodeBlocks>
+
+
 ````

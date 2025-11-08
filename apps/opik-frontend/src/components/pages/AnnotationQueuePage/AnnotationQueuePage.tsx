@@ -23,6 +23,7 @@ import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELin
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -94,18 +95,25 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       >
         <div className="mb-1 flex gap-4 overflow-x-auto">
           {annotationQueue?.created_at && (
-            <DateTag date={annotationQueue.created_at} />
+            <TooltipWrapper content="Annotation queue creation time">
+              <div>
+                <DateTag date={annotationQueue.created_at} />
+              </div>
+            </TooltipWrapper>
           )}
           {annotationQueue?.scope && (
-            <Tag variant="blue" size="md">
-              {capitalize(annotationQueue.scope)}
-            </Tag>
+            <TooltipWrapper content="Annotation queue scope">
+              <Tag variant="blue" size="md">
+                {capitalize(annotationQueue.scope)}
+              </Tag>
+            </TooltipWrapper>
           )}
           {annotationQueue?.project_id && (
             <ResourceLink
               id={annotationQueue.project_id}
               name={annotationQueue.project_name}
               resource={RESOURCE_TYPE.project}
+              tooltipContent={`Navigate to project: ${annotationQueue.project_name}`}
               asTag
             />
           )}
@@ -114,7 +122,9 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           )}
         </div>
         <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
+          <TooltipWrapper content="Feedback scores">
+            <PenLine className="size-4 shrink-0" />
+          </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
             {allocatedFeedbackScores.map((feedbackScore) => (
               <FeedbackScoreTag

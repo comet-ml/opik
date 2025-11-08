@@ -37,6 +37,7 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     navigationTimeout: 30000,
     actionTimeout: 10000,
+    permissions: ['clipboard-read', 'clipboard-write'],
   },
 
   globalSetup: require.resolve('./global-setup.ts'),
@@ -48,6 +49,11 @@ export default defineConfig({
     timeout: 120000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      OPIK_URL_OVERRIDE: process.env.OPIK_URL_OVERRIDE || 'http://localhost:5173/api',
+      OPIK_WORKSPACE: process.env.OPIK_WORKSPACE || 'default',
+      OPIK_API_KEY: process.env.OPIK_API_KEY || '',
+    },
   },
 
   projects: [

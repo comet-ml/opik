@@ -3,6 +3,7 @@ import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { WorkspacePreference } from "./types";
 
 export const WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT = "PT15M";
+export const WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE = true;
 
 export const WORKSPACE_PREFERENCES_DEFAULT_COLUMNS: ColumnData<WorkspacePreference>[] =
   [

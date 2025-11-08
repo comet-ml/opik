@@ -512,6 +512,9 @@ class OpikTracer(BaseTracer):
         """
         return self._created_traces
 
+    def get_current_span_data_for_run(self, run_id: UUID) -> Optional[span.SpanData]:
+        return self._span_data_map.get(run_id)
+
     def _skip_tracking(self) -> bool:
         if not tracing_runtime_config.is_tracing_active():
             return True

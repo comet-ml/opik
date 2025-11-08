@@ -19,7 +19,7 @@
         <dropwizard.version>4.0.14</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
-        <mysql.version>9.4.0</mysql.version>
+        <mysql.version>9.5.0</mysql.version>
         <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
         <stringtemplate.version>3.49.4</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
@@ -32,8 +32,8 @@
         <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.52.0</redisson.version>
         <opentelmetry.version>2.21.0</opentelmetry.version>
-        <aws.java.sdk.version>2.36.2</aws.java.sdk.version>
-        <json-path.version>2.9.0</json-path.version>
+        <aws.java.sdk.version>2.37.3</aws.java.sdk.version>
+        <json-path.version>2.10.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 

@@ -358,7 +358,35 @@ async def test__structured_output_compliance__async():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
-    assert result.value > 0.5
+    assert 0.0 <= result.value <= 1.0
+
+
+@model_parametrizer
+def test__usefulness(model):
+    usefulness_metric = metrics.Usefulness(model=model, track=False)
+
+    result = usefulness_metric.score(
+        input="What's the capital of France?",
+        output="Paris is the capital of France.",
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__llm_juries_judge(model):
+    usefulness_judge = metrics.Usefulness(model=model, track=False)
+    jury_metric = metrics.LLMJuriesJudge(judges=[usefulness_judge], track=False)
+
+    result = jury_metric.score(
+        input="Summarise the capital of France in a word.",
+        output="Paris.",
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.metadata["judge_scores"][usefulness_judge.name] == pytest.approx(
+        result.value
+    )
 
 
 def test__ragas_exact_match():

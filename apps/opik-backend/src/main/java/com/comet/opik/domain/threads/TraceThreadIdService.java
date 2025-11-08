@@ -28,7 +28,8 @@ import java.util.stream.Collectors;
 @ImplementedBy(TraceThreadIdServiceImpl.class)
 interface TraceThreadIdService {
 
-    Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId);
+    Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId,
+            Instant timestamp);
 
     Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
 
@@ -50,13 +51,13 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
     @Override
     @Cacheable(name = "GET_OR_CREATE_TRACE_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = TraceThreadIdModel.class)
     public Mono<TraceThreadIdModel> getOrCreateTraceThreadId(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull String threadId) {
+            @NonNull String threadId, Instant timestamp) {
         Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
         Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
 
         return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
-                        .switchIfEmpty(createThread(threadId, projectId)))
+                        .switchIfEmpty(createThread(threadId, projectId, timestamp)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .switchIfEmpty(Mono.error(new NotFoundException("Project not found: " + projectId)));
     }
@@ -110,11 +111,13 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                 handle -> handle.attach(TraceThreadIdDAO.class).findByProjectIdAndThreadId(projectId, threadId)));
     }
 
-    private Mono<TraceThreadIdModel> createThread(String threadId, UUID projectId) {
+    private Mono<TraceThreadIdModel> createThread(String threadId, UUID projectId, Instant timestamp) {
         return Mono.deferContextual(context -> Mono.fromCallable(() -> {
 
+            UUID threadModelId = generateThreadModelId(timestamp);
+
             var threadModel = TraceThreadIdModel.builder()
-                    .id(idGenerator.generateId())
+                    .id(threadModelId)
                     .projectId(projectId)
                     .threadId(threadId)
                     .createdBy(context.get(RequestContext.USER_NAME))
@@ -141,6 +144,12 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         traceThreadDAO.save(threadModel);
         log.info("Created trace thread with id '{}' and thread id '{}'", threadModel.id(), threadModel.threadId());
         return threadModel;
+    }
+
+    private UUID generateThreadModelId(Instant timestamp) {
+        // Use the provided timestamp to generate a UUIDv7 if available,
+        // otherwise use the current time
+        return timestamp != null ? idGenerator.generateId(timestamp) : idGenerator.generateId();
     }
 
 }

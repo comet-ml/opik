@@ -19,6 +19,8 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -27,6 +29,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 @UtilityClass
@@ -267,5 +270,49 @@ public class JsonUtils {
 
     public <T> T convertValue(@NonNull Object fromValue, @NonNull TypeReference<T> toValueTypeRef) {
         return MAPPER.convertValue(fromValue, toValueTypeRef);
+    }
+
+    public static JsonNode prependField(
+            JsonNode jsonNode,
+            @NonNull String fieldName,
+            String fieldValue) {
+        if (StringUtils.isBlank(fieldValue)) {
+            return jsonNode;
+        }
+
+        TextNode valueNode = MAPPER.getNodeFactory().textNode(fieldValue);
+        return prependField(jsonNode, fieldName, valueNode);
+    }
+
+    public static JsonNode prependField(
+            JsonNode jsonNode,
+            @NonNull String fieldName,
+            List<String> fieldValues) {
+        if (CollectionUtils.isEmpty(fieldValues)) {
+            return jsonNode;
+        }
+
+        ArrayNode arrayNode = MAPPER.createArrayNode();
+        fieldValues.forEach(arrayNode::add);
+
+        return prependField(jsonNode, fieldName, arrayNode);
+    }
+
+    private static JsonNode prependField(
+            JsonNode jsonNode,
+            @NonNull String fieldKey,
+            @NonNull JsonNode fieldValue) {
+        ObjectNode result = MAPPER.createObjectNode();
+        result.set(fieldKey, fieldValue);
+
+        return copyJsonNode(jsonNode, result);
+    }
+
+    private static ObjectNode copyJsonNode(JsonNode jsonNode, @NonNull ObjectNode result) {
+        if (jsonNode != null && jsonNode.isObject()) {
+            result.setAll((ObjectNode) jsonNode);
+        }
+
+        return result;
     }
 }

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
@@ -19,6 +20,10 @@ public record ProviderApiKeyUpdate(
                 ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) @Size(max = 150) String name,
+        @JsonView({ProviderApiKey.View.Public.class,
+                ProviderApiKey.View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - can be set to migrate legacy custom LLM providers to the new multi-provider format. "
+                        +
+                        "Once set, it cannot be changed. Should only be set for custom LLM providers.", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) Map<String, String> headers,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) Map<String, String> configuration,

@@ -88,4 +88,12 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
                 ? streamConfig.getPendingMessageDuration()
                 : onlineScoringConfig.getPendingMessageDuration();
     }
+
+    @Override
+    public int getMaxRetries() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getMaxRetries() != null
+                ? streamConfig.getMaxRetries()
+                : onlineScoringConfig.getMaxRetries();
+    }
 }

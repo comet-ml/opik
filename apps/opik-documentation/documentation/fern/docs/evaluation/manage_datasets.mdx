@@ -43,6 +43,55 @@ For datasets requiring rich metadata, complex schemas, or programmatic control, 
 
 </Tip>
 
+## Adding traces to a dataset
+
+One of the most powerful ways to build evaluation datasets is by converting production traces into dataset items. This allows you to leverage real-world interactions from your LLM application to create test cases for evaluation.
+
+### Adding traces via the UI
+
+To add traces to a dataset from the Opik UI:
+
+1. Navigate to the traces page
+2. Select one or more traces you want to add to a dataset
+3. Click the **Add to dataset** button in the toolbar
+4. In the dialog that appears:
+   - Select an existing dataset or create a new one
+   - Choose which trace metadata to include:
+     - **Nested spans**: Include all child spans within the trace
+     - **Tags**: Include trace tags
+     - **Feedback scores**: Include any feedback scores attached to the trace
+     - **Comments**: Include comments added to the trace
+     - **Usage metrics**: Include token usage and cost information
+     - **Metadata**: Include custom metadata fields
+5. Click on the dataset name to add the selected traces
+
+<Frame>
+  <img src="/img/evaluation/add_traces_to_dataset.png" alt="Add traces to dataset modal" />
+</Frame>
+
+<Tip>
+  By default, all metadata options are enabled. You can uncheck any options you don't need. The trace's input and output are always included.
+</Tip>
+
+### What gets added to the dataset
+
+When you add a trace to a dataset, the following structure is created:
+
+- **input**: The trace's input data
+- **expected_output**: The trace's output data (stored as `expected_output` for evaluation purposes)
+- **spans** (optional): Array of nested spans with their inputs, outputs, and metadata
+- **tags** (optional): Array of tags associated with the trace
+- **feedback_scores** (optional): Array of feedback scores with name, value, and source
+- **comments** (optional): Array of comments with text and ID
+- **usage** (optional): Token usage and cost information
+- **metadata** (optional): Custom metadata fields
+
+This rich structure allows you to:
+- Evaluate complex multi-step workflows by including nested spans
+- Filter and analyze based on tags and metadata
+- Use existing feedback scores as ground truth for evaluation
+- Preserve context through comments and annotations
+
 ## Creating a dataset using the SDK
 
 You can create a dataset and log items to it using the `get_or_create_dataset` method:

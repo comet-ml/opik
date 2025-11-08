@@ -16,6 +16,7 @@ from . import (
 )
 from .metrics import base_metric
 from .models import ModelCapabilities, base_model, models_factory
+from .scorers import scorer_function, scorer_wrapper_metric
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
 from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
@@ -27,10 +28,24 @@ MODALITY_SUPPORT_DOC_URL = (
 )
 
 
+def _try_notifying_about_experiment_completion(
+    experiment: experiment.Experiment,
+) -> None:
+    try:
+        experiment.experiments_rest_client.finish_experiments(ids=[experiment.id])
+    except Exception:
+        LOGGER.debug(
+            "Failed to notify backend about the experiment completion. Experiment ID: %s",
+            experiment.id,
+            exc_info=True,
+        )
+
+
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -45,7 +60,9 @@ def evaluate(
     trial_count: int = 1,
 ) -> evaluation_result.EvaluationResult:
     """
-    Performs task evaluation on a given dataset.
+    Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
+    evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
+    to receive inputs and outputs from the task.
 
     Args:
         dataset: An Opik dataset instance
@@ -66,6 +83,13 @@ def evaluate(
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
             If no value provided, the experiment won't have any scoring metrics.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default), 2 - outputs are enabled and detailed statistics
@@ -94,9 +118,6 @@ def evaluate(
 
         trial_count: number of times to run the task and evaluate the task output for every dataset item.
     """
-    if scoring_metrics is None:
-        scoring_metrics = []
-
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
@@ -109,6 +130,13 @@ def evaluate(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
+    )
+
+    # wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
     )
 
     return _evaluate_task(
@@ -180,6 +208,8 @@ def _evaluate_task(
 
     client.flush()
 
+    _try_notifying_about_experiment_completion(experiment)
+
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
         experiment_id=experiment.id,
@@ -201,12 +231,15 @@ def _evaluate_task(
 def evaluate_experiment(
     experiment_name: str,
     scoring_metrics: List[base_metric.BaseMetric],
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     scoring_threads: int = 16,
     verbose: int = 1,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
-    """Update the existing experiment with new evaluation metrics.
+    """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
+    evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
+    to receive inputs and outputs from the task.
 
     Args:
         experiment_name: The name of the experiment to update.
@@ -216,6 +249,13 @@ def evaluate_experiment(
             are taken from the `task` output, check the signature
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
@@ -251,6 +291,13 @@ def evaluate_experiment(
         client=client, trace_id=first_trace_id
     )
 
+    # wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
+
     with asyncio_support.async_http_connections_expire_immediately():
         evaluation_engine = engine.EvaluationEngine(
             client=client,
@@ -279,6 +326,8 @@ def evaluate_experiment(
     )
 
     report.display_experiment_link(experiment_url=experiment_url)
+
+    _try_notifying_about_experiment_completion(experiment)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
@@ -352,6 +401,7 @@ def evaluate_prompt(
     messages: List[Dict[str, Any]],
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -375,6 +425,13 @@ def evaluate_prompt(
 
         scoring_metrics: List of metrics to calculate during evaluation.
             The LLM input and output will be passed as arguments to each metric `score(...)` method.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         experiment_name: name of the experiment.
 
@@ -416,9 +473,6 @@ def evaluate_prompt(
         if "model" not in experiment_config:
             experiment_config["model"] = opik_model.model_name
 
-    if scoring_metrics is None:
-        scoring_metrics = []
-
     client = opik_client.get_client_cached()
 
     prompts = [prompt] if prompt else None
@@ -428,6 +482,13 @@ def evaluate_prompt(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
+    )
+
+    # wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
     )
 
     start_time = time.time()
@@ -465,6 +526,8 @@ def evaluate_prompt(
     report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
+
+    _try_notifying_about_experiment_completion(experiment)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,
@@ -587,3 +650,20 @@ def evaluate_optimization_trial(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
     )
+
+
+def _wrap_scoring_functions(
+    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    project_name: Optional[str] = None,
+) -> List[base_metric.BaseMetric]:
+    if scoring_functions:
+        function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
+            scoring_functions, project_name=project_name
+        )
+        if scoring_metrics:
+            scoring_metrics.extend(function_metrics)
+        else:
+            scoring_metrics = function_metrics
+
+    return scoring_metrics if scoring_metrics else []

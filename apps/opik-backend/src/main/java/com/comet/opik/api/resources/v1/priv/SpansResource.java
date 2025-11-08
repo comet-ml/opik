@@ -8,6 +8,7 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
@@ -67,6 +68,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -76,6 +78,7 @@ import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
+import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
 @Path("/v1/private/spans")
 @Produces(MediaType.APPLICATION_JSON)
@@ -93,6 +96,7 @@ public class SpansResource {
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull ProjectService projectService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
@@ -113,9 +117,12 @@ public class SpansResource {
             @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
-            @QueryParam("exclude") String exclude) {
+            @QueryParam("exclude") String exclude,
+            @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var sortingFields = sortingFactory.newSorting(sorting);
 
@@ -139,6 +146,8 @@ public class SpansResource {
                 .filters(spanFilters)
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(sortingFields)
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
                 .build();
@@ -321,9 +330,12 @@ public class SpansResource {
             @QueryParam("project_name") String projectName,
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var searchCriteria = SpanSearchCriteria.builder()
                 .projectName(projectName)
@@ -331,6 +343,8 @@ public class SpansResource {
                 .filters(spanFilters)
                 .traceId(traceId)
                 .type(type)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(List.of())
                 .build();
 
@@ -394,6 +408,7 @@ public class SpansResource {
         var visibility = requestContext.get().getVisibility();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
+        validateTimeRangeParameters(request.fromTime(), request.toTime());
 
         log.info("Streaming spans search results by '{}', workspaceId '{}'", request, workspaceId);
         var criteria = SpanSearchCriteria.builder()
@@ -405,6 +420,8 @@ public class SpansResource {
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
                 .sortingFields(List.of())
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
         projectService.resolveProjectIdAndVerifyVisibility(request.projectId(), request.projectName())

@@ -7,6 +7,7 @@ from json.decoder import JSONDecodeError
 
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
+from ..core.datetime_utils import serialize_datetime
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
@@ -323,6 +324,8 @@ class RawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TracePagePublic]:
         """
@@ -348,6 +351,10 @@ class RawTracesClient:
 
         exclude : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -369,6 +376,8 @@ class RawTracesClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1033,6 +1042,8 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsPublic]:
         """
@@ -1045,6 +1056,10 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1061,6 +1076,8 @@ class RawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1263,6 +1280,8 @@ class RawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TraceThreadPage]:
         """
@@ -1286,6 +1305,10 @@ class RawTracesClient:
 
         sorting : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1306,6 +1329,8 @@ class RawTracesClient:
                 "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1471,6 +1496,8 @@ class RawTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1495,6 +1522,12 @@ class RawTracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1516,6 +1549,8 @@ class RawTracesClient:
                 "limit": limit,
                 "truncate": truncate,
                 "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -1563,6 +1598,8 @@ class RawTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1587,6 +1624,12 @@ class RawTracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1608,6 +1651,8 @@ class RawTracesClient:
                 "limit": limit,
                 "truncate": truncate,
                 "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -2144,6 +2189,8 @@ class AsyncRawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TracePagePublic]:
         """
@@ -2169,6 +2216,10 @@ class AsyncRawTracesClient:
 
         exclude : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2190,6 +2241,8 @@ class AsyncRawTracesClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -2854,6 +2907,8 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsPublic]:
         """
@@ -2866,6 +2921,10 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2882,6 +2941,8 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -3084,6 +3145,8 @@ class AsyncRawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TraceThreadPage]:
         """
@@ -3107,6 +3170,10 @@ class AsyncRawTracesClient:
 
         sorting : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -3127,6 +3194,8 @@ class AsyncRawTracesClient:
                 "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -3292,6 +3361,8 @@ class AsyncRawTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3316,6 +3387,12 @@ class AsyncRawTracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -3337,6 +3414,8 @@ class AsyncRawTracesClient:
                 "limit": limit,
                 "truncate": truncate,
                 "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -3385,6 +3464,8 @@ class AsyncRawTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3409,6 +3490,12 @@ class AsyncRawTracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -3430,6 +3517,8 @@ class AsyncRawTracesClient:
                 "limit": limit,
                 "truncate": truncate,
                 "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",

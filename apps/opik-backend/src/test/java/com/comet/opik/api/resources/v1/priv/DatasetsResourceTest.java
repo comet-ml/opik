@@ -115,8 +115,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -215,7 +215,7 @@ class DatasetsResourceTest {
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
@@ -4012,20 +4012,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
         }
 
         @Test
@@ -4052,22 +4041,12 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("size", 1)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+            List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
 
-                List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
-
-                assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
         }
 
         @Test
@@ -4108,20 +4087,9 @@ class DatasetsResourceTest {
 
             Set<Column> columns = getColumns(data);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
         }
 
         @Test
@@ -4166,20 +4134,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
 
         }
 
@@ -4213,21 +4170,10 @@ class DatasetsResourceTest {
                     .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
                     .toList().reversed();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("truncate", truncate)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("truncate", truncate), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
         }
 
         @Test
@@ -4271,22 +4217,12 @@ class DatasetsResourceTest {
             // Create filter for the new filter API
             var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("filters", toURLEncodedQueryParam(List.of(filter)))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+            List<DatasetItem> expectedContent = List.of(searchableItem);
 
-                List<DatasetItem> expectedContent = List.of(searchableItem);
-
-                assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
         }
 
         // Parameterized test scenarios for search functionality

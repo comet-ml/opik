@@ -44,51 +44,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/**
- * Check if a string contains actual HTML markup
- * Uses a regex pattern to detect common HTML tags while excluding non-HTML text
- * that happens to contain angle brackets (e.g., Python object representations)
- *
- * @param str - The string to check for HTML content
- * @returns true if the string contains valid HTML tags, false otherwise
- *
- * @example
- * containsHTML('<div>Hello</div>') // true
- * containsHTML('<p class="text">Text</p>') // true
- * containsHTML('<br/>') // true
- * containsHTML('<starlette.responses.JSONResponse object at 0x...>') // false
- * containsHTML('<SomeClass>') // false
- * containsHTML('x < 5 and y > 3') // false
- */
-export const containsHTML = (str: string): boolean => {
-  const HTML_TAGS = [
-    "br",
-    "p",
-    "div",
-    "span",
-    "a",
-    "strong",
-    "em",
-    "b",
-    "i",
-    "u",
-    "ul",
-    "ol",
-    "li",
-    "h[1-6]",
-    "table",
-    "tr",
-    "td",
-    "th",
-    "img",
-    "code",
-    "pre",
-  ];
-
-  const htmlTagPattern = `<(${HTML_TAGS.join("|")})(\\s+[^>]*)?\\/?>`;
-  return new RegExp(htmlTagPattern, "i").test(str);
-};
-
 export const isStringMarkdown = (string: unknown): boolean => {
   if (!isString(string)) {
     return false;
@@ -140,9 +95,6 @@ export const isStringMarkdown = (string: unknown): boolean => {
     // Footnote references and definitions
     /\[\^.+?]/, // footnote references
     /^\[\^.+?]:/m, // footnote definitions
-
-    // HTML tags (for conversation rendering)
-    /<[^>]+>/, // any HTML tag
   ];
 
   // Check for markdown patterns

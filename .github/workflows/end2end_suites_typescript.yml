@@ -14,10 +14,11 @@ on:
                 type: choice
                 description: 'Choose which test suite to run'
                 required: true
-                default: 'regression'
+                default: 'fullregression'
                 options:
-                - regression
                 - sanity
+                - happypaths
+                - fullregression
                 - projects
                 - tracing
                 - threads
@@ -26,25 +27,27 @@ on:
                 - experiments
                 - prompts
                 - playground
+                - feedbackscores
+                - onlinescores
 
             ALLURE_JOB_RUN_ID:
                 description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
             ALLURE_USERNAME:
                 description: ALLURE_USERNAME service parameter. Leave blank.
 
-    # pull_request:
-    #   paths:
-    #     - 'sdks/code_generation/fern/openapi/openapi.yaml'
-    #     - 'tests_end_to_end/tests_end_to_end_ts/**'
+    pull_request:
+      paths:
+        - 'sdks/code_generation/fern/openapi/openapi.yaml'
+        - 'tests_end_to_end/tests_end_to_end_ts/**'
 
-run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'regression' }}
+run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'fullregression' }}
 
 permissions:
   contents: read
 
 jobs:
     run_suite:
-        name: "Run TS suite: ${{ github.event.inputs.suite || 'regression' }}"
+        name: "Run TS suite: ${{ github.event.inputs.suite || 'fullregression' }}"
         runs-on: ubuntu-latest
         timeout-minutes: 60
 
@@ -113,7 +116,7 @@ jobs:
                 OPIK_TEST_PROJECT_NAME: automated_tests_project
                 OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
                 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-                TEST_SUITE: ${{ github.event.inputs.suite || 'regression' }}
+                TEST_SUITE: ${{ github.event.inputs.suite || 'fullregression' }}
               run: |
                 # Configure Allure results directory
                 export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests/${ALLURE_RESULTS}"

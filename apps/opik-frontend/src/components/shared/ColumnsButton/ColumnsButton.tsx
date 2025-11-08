@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Columns3, Eye, EyeOff } from "lucide-react";
+import { Columns3 } from "lucide-react";
 import toLower from "lodash/toLower";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuCustomCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -42,14 +42,21 @@ const ColumnsButton = <TColumnData,>({
 }: ColumnsButtonProps<TColumnData>) => {
   const [search, setSearch] = useState("");
 
-  const getAllColumnsIds = () =>
-    (sections || []).reduce<string[]>(
-      (acc, { columns = [] }) => acc.concat(columns.map((c) => c.id)),
-      columns.map((c) => c.id),
-    );
+  const allColumnsIds = useMemo(
+    () =>
+      [{ columns: columns }, ...(sections || [])].flatMap(
+        ({ columns: columnGroup = [] }) =>
+          columnGroup.map((column) => column.id),
+      ),
+    [columns, sections],
+  );
+
+  const allColumnsSelected = useMemo(() => {
+    return selectedColumns.length === allColumnsIds.length;
+  }, [selectedColumns, allColumnsIds]);
 
   const toggleColumns = (value: boolean) => {
-    onSelectionChange(value ? getAllColumnsIds() : []);
+    onSelectionChange(value ? allColumnsIds : []);
   };
 
   const filteredColumns = useMemo(() => {
@@ -89,7 +96,7 @@ const ColumnsButton = <TColumnData,>({
     }
 
     return (
-      <div className="min-w-56 max-w-72 overflow-hidden">
+      <>
         <SortableMenuSection
           columns={filteredColumns}
           selectedColumns={selectedColumns}
@@ -123,16 +130,7 @@ const ColumnsButton = <TColumnData,>({
               </React.Fragment>
             );
           })}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => toggleColumns(true)}>
-          <Eye className="mr-2 size-4" />
-          Show all
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => toggleColumns(false)}>
-          <EyeOff className="mr-2 size-4" />
-          Hide all
-        </DropdownMenuItem>
-      </div>
+      </>
     );
   };
 
@@ -144,7 +142,7 @@ const ColumnsButton = <TColumnData,>({
           Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="pt-12" align="end">
+      <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
         <div
           className="absolute inset-x-1 top-1 h-11"
           onKeyDown={(e) => e.stopPropagation()}
@@ -157,7 +155,23 @@ const ColumnsButton = <TColumnData,>({
           ></SearchInput>
           <Separator className="mt-1" />
         </div>
-        <div className="max-h-[50vh] overflow-y-auto">{renderContent()}</div>
+        <div className="max-h-[calc(50vh-3.5rem)] overflow-y-auto p-1">
+          {renderContent()}
+        </div>
+        {!noData && (
+          <>
+            <Separator />
+            <div className="p-1">
+              <DropdownMenuCustomCheckboxItem
+                checked={allColumnsSelected}
+                onCheckedChange={toggleColumns}
+                onSelect={(event) => event.preventDefault()}
+              >
+                <div className="w-full break-words py-2">Select all</div>
+              </DropdownMenuCustomCheckboxItem>
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

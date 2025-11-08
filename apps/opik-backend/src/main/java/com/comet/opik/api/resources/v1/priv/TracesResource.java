@@ -11,6 +11,7 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
@@ -80,6 +81,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -90,6 +92,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchT
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
+import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
 @Path("/v1/private/traces")
 @Produces(MediaType.APPLICATION_JSON)
@@ -111,6 +114,7 @@ public class TracesResource {
     private final @NonNull Streamer streamer;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     @GET
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
@@ -125,9 +129,12 @@ public class TracesResource {
             @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
-            @QueryParam("exclude") String exclude) {
+            @QueryParam("exclude") String exclude,
+            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceSortingFactory.newSorting(sorting);
 
@@ -149,8 +156,10 @@ public class TracesResource {
                 .filters(traceFilters)
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
-                .sortingFields(sortingFields)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
+                .sortingFields(sortingFields)
                 .build();
 
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
@@ -166,7 +175,8 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(), workspaceId);
+        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(),
+                workspaceId);
 
         return Response.ok(tracePage).build();
     }
@@ -189,6 +199,7 @@ public class TracesResource {
         var workspaceId = requestContext.get().getWorkspaceId();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
+        validateTimeRangeParameters(request.fromTime(), request.toTime());
 
         log.info("Streaming traces search results by '{}', workspaceId '{}'", request, workspaceId);
 
@@ -200,6 +211,8 @@ public class TracesResource {
                 .truncate(request.truncate())
                 .stripAttachments(request.stripAttachments())
                 .sortingFields(List.of())
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
         Visibility visibility = requestContext.get().getVisibility();
@@ -353,14 +366,20 @@ public class TracesResource {
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
+
         var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(traceFilters)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -567,9 +586,12 @@ public class TracesResource {
             @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("filters") String filters,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceThreadSortingFactory.newSorting(sorting);
 
@@ -592,6 +614,8 @@ public class TracesResource {
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
 
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
@@ -631,6 +655,7 @@ public class TracesResource {
         String userName = requestContext.get().getUserName();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
+        validateTimeRangeParameters(request.fromTime(), request.toTime());
 
         log.info("Streaming trace threads search results by '{}', workspaceId '{}'", request, workspaceId);
 
@@ -642,6 +667,8 @@ public class TracesResource {
                 .truncate(request.truncate())
                 .stripAttachments(request.stripAttachments())
                 .sortingFields(List.of())
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
         Flux<TraceThread> items = service.threadsSearch(request.limit(), searchCriteria)

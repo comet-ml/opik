@@ -9,6 +9,8 @@
 export interface ProviderApiKeyUpdate {
     apiKey?: string;
     name?: string;
+    /** Provider name - can be set to migrate legacy custom LLM providers to the new multi-provider format. Once set, it cannot be changed. Should only be set for custom LLM providers. */
+    providerName?: string;
     headers?: Record<string, string>;
     configuration?: Record<string, string>;
     baseUrl?: string;
