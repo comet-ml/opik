@@ -29,7 +29,7 @@ import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 
 const MESSAGE_TYPE_OPTIONS = [
@@ -59,7 +59,6 @@ interface LLMPromptMessageProps {
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
   disableImages?: boolean;
-  disableVideos?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
 }
 
@@ -75,7 +74,6 @@ const LLMPromptMessage = ({
   onDuplicateMessage,
   onRemoveMessage,
   disableImages = true,
-  disableVideos = true,
   improvePromptConfig,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
@@ -91,17 +89,11 @@ const LLMPromptMessage = ({
     transition,
   };
 
-  const {
-    localText,
-    images,
-    videos,
-    setImages,
-    setVideos,
-    handleContentChange,
-  } = useMessageContent({
-    content,
-    onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
-  });
+  const { localText, images, setImages, handleContentChange } =
+    useMessageContent({
+      content,
+      onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
+    });
 
   return (
     <>
@@ -217,20 +209,9 @@ const LLMPromptMessage = ({
               {!disableImages && (
                 <div className="mt-3 flex items-center gap-2">
                   <div className="comet-body-s-accented">Images</div>
-                  <PromptMessageMediaTags
-                    type="image"
-                    items={images}
-                    setItems={setImages}
-                  />
-                </div>
-              )}
-              {!disableVideos && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="comet-body-s-accented">Videos</div>
-                  <PromptMessageMediaTags
-                    type="video"
-                    items={videos}
-                    setItems={setVideos}
+                  <PromptMessageImageTags
+                    images={images}
+                    setImages={setImages}
                   />
                 </div>
               )}

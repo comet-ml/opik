@@ -22,7 +22,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   isLoading,
   search,
 }) => {
-  const { media, formattedData } = useMemo(
+  const { images, formattedData } = useMemo(
     () => processInputData(data.input),
     [data.input],
   );
@@ -34,7 +34,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
       className="w-full"
       defaultValue={["attachments", "error", "input", "output"]}
     >
-      <AttachmentsList data={data} media={media} />
+      <AttachmentsList data={data} images={images} />
       {hasError && (
         <AccordionItem className="group" value="error" disabled={isLoading}>
           <AccordionTrigger>Error</AccordionTrigger>

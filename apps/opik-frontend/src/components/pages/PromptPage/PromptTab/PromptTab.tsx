@@ -18,8 +18,8 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
-import { parseContentWithMedia } from "@/lib/llm";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import { parseContentWithImages } from "@/lib/llm";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -82,12 +82,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     };
   }, [setActiveVersionId]);
 
-  const {
-    text: displayText,
-    images: extractedImages,
-    videos: extractedVideos,
-  } = useMemo(() => {
-    return parseContentWithMedia(activeVersion?.template || "");
+  const { text: displayText, images: extractedImages } = useMemo(() => {
+    return parseContentWithImages(activeVersion?.template || "");
   }, [activeVersion?.template]);
 
   if (!prompt) {
@@ -128,25 +124,9 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <p className="comet-body-s-accented mt-4 text-foreground">
                 Images
               </p>
-              <PromptMessageMediaTags
-                type="image"
-                items={extractedImages}
-                setItems={() => {}}
-                editable={false}
-                preview={true}
-                align="start"
-              />
-            </>
-          )}
-          {extractedVideos.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Videos
-              </p>
-              <PromptMessageMediaTags
-                type="video"
-                items={extractedVideos}
-                setItems={() => {}}
+              <PromptMessageImageTags
+                images={extractedImages}
+                setImages={() => {}}
                 editable={false}
                 preview={true}
                 align="start"

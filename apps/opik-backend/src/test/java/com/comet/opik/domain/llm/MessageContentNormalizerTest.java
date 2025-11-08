@@ -8,7 +8,6 @@ import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -117,20 +116,19 @@ class MessageContentNormalizerTest {
 
         assertThat(normalizedMessage.content()).isInstanceOf(List.class);
         @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
+        var contentList = (List<Content>) normalizedMessage.content();
 
         assertThat(contentList).hasSize(2);
 
         // First content should be text
-        var textContent = (Map<String, Object>) contentList.get(0);
-        assertThat(textContent.get("type")).isEqualTo("text");
-        assertThat(textContent.get("text")).isEqualTo("Here is an image:\n");
+        var textContent = contentList.get(0);
+        assertThat(textContent.type()).isEqualTo(ContentType.TEXT);
+        assertThat(textContent.text()).isEqualTo("Here is an image:\n");
 
         // Second content should be image
-        var imageContent = (Map<String, Object>) contentList.get(1);
-        assertThat(imageContent.get("type")).isEqualTo("image_url");
-        var imagePayload = (Map<String, Object>) imageContent.get("image_url");
-        assertThat(imagePayload.get("url")).isEqualTo("https://example.com/image.png");
+        var imageContent = contentList.get(1);
+        assertThat(imageContent.type()).isEqualTo(ContentType.IMAGE_URL);
+        assertThat(imageContent.imageUrl().getUrl()).isEqualTo("https://example.com/image.png");
     }
 
     @Test
@@ -152,18 +150,19 @@ class MessageContentNormalizerTest {
 
         assertThat(normalizedMessage.content()).isInstanceOf(List.class);
         @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
+        var contentList = (List<Content>) normalizedMessage.content();
 
         assertThat(contentList).hasSize(2);
 
-        var textContent = (Map<String, Object>) contentList.get(0);
-        assertThat(textContent.get("type")).isEqualTo("text");
-        assertThat(textContent.get("text")).isEqualTo("Describe this image:\n");
+        // First content should be text
+        var textContent = contentList.get(0);
+        assertThat(textContent.type()).isEqualTo(ContentType.TEXT);
+        assertThat(textContent.text()).isEqualTo("Describe this image:\n");
 
-        var imageContent = (Map<String, Object>) contentList.get(1);
-        assertThat(imageContent.get("type")).isEqualTo("image_url");
-        var imagePayload = (Map<String, Object>) imageContent.get("image_url");
-        assertThat(imagePayload.get("url")).isEqualTo(base64Image);
+        // Second content should be image
+        var imageContent = contentList.get(1);
+        assertThat(imageContent.type()).isEqualTo(ContentType.IMAGE_URL);
+        assertThat(imageContent.imageUrl().getUrl()).isEqualTo(base64Image);
     }
 
     @Test
@@ -185,58 +184,25 @@ class MessageContentNormalizerTest {
 
         assertThat(normalizedMessage.content()).isInstanceOf(List.class);
         @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
+        var contentList = (List<Content>) normalizedMessage.content();
 
         assertThat(contentList).hasSize(4);
 
-        var firstText = (Map<String, Object>) contentList.get(0);
-        assertThat(firstText.get("type")).isEqualTo("text");
-        assertThat(firstText.get("text")).isEqualTo("First image:\n");
+        // First text
+        assertThat(contentList.get(0).type()).isEqualTo(ContentType.TEXT);
+        assertThat(contentList.get(0).text()).isEqualTo("First image:\n");
 
-        var firstImage = (Map<String, Object>) contentList.get(1);
-        assertThat(firstImage.get("type")).isEqualTo("image_url");
-        assertThat(((Map<String, Object>) firstImage.get("image_url")).get("url"))
-                .isEqualTo("https://example.com/image1.png");
+        // First image
+        assertThat(contentList.get(1).type()).isEqualTo(ContentType.IMAGE_URL);
+        assertThat(contentList.get(1).imageUrl().getUrl()).isEqualTo("https://example.com/image1.png");
 
-        var secondText = (Map<String, Object>) contentList.get(2);
-        assertThat(secondText.get("type")).isEqualTo("text");
-        assertThat(secondText.get("text")).isEqualTo("\n\nSecond image:\n");
+        // Second text
+        assertThat(contentList.get(2).type()).isEqualTo(ContentType.TEXT);
+        assertThat(contentList.get(2).text()).isEqualTo("\n\nSecond image:\n");
 
-        var secondImage = (Map<String, Object>) contentList.get(3);
-        assertThat(secondImage.get("type")).isEqualTo("image_url");
-        assertThat(((Map<String, Object>) secondImage.get("image_url")).get("url"))
-                .isEqualTo("https://example.com/image2.png");
-    }
-
-    @Test
-    void normalizeRequestExpandsVideoPlaceholderForVideoModel() {
-        var userMessage = UserMessage.builder()
-                .content("Here is a clip:\n<<<video>>>https://example.com/video.mp4<<</video>>>")
-                .build();
-
-        var request = ChatCompletionRequest.builder()
-                .messages(List.of(userMessage))
-                .model("qwen/qwen2.5-vl-32b-instruct")
-                .build();
-
-        var normalized = MessageContentNormalizer.normalizeRequest(request);
-
-        assertThat(normalized.messages()).hasSize(1);
-        var normalizedMessage = (UserMessage) normalized.messages().getFirst();
-
-        assertThat(normalizedMessage.content()).isInstanceOf(List.class);
-        @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
-
-        assertThat(contentList).hasSize(2);
-        var textContent = (Map<String, Object>) contentList.get(0);
-        assertThat(textContent.get("type")).isEqualTo("text");
-        assertThat(textContent.get("text")).isEqualTo("Here is a clip:\n");
-
-        var videoContent = (Map<String, Object>) contentList.get(1);
-        assertThat(videoContent.get("type")).isEqualTo("video_url");
-        var videoNode = (Map<String, Object>) videoContent.get("video_url");
-        assertThat(videoNode.get("url")).isEqualTo("https://example.com/video.mp4");
+        // Second image
+        assertThat(contentList.get(3).type()).isEqualTo(ContentType.IMAGE_URL);
+        assertThat(contentList.get(3).imageUrl().getUrl()).isEqualTo("https://example.com/image2.png");
     }
 
     @Test
@@ -257,14 +223,14 @@ class MessageContentNormalizerTest {
 
         assertThat(normalizedMessage.content()).isInstanceOf(List.class);
         @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
+        var contentList = (List<Content>) normalizedMessage.content();
 
         assertThat(contentList).hasSize(1);
 
-        var imageContent = (Map<String, Object>) contentList.get(0);
-        assertThat(imageContent.get("type")).isEqualTo("image_url");
-        var imageNode = (Map<String, Object>) imageContent.get("image_url");
-        assertThat(imageNode.get("url")).isEqualTo("https://example.com/image.png");
+        // Only image content
+        var imageContent = contentList.get(0);
+        assertThat(imageContent.type()).isEqualTo(ContentType.IMAGE_URL);
+        assertThat(imageContent.imageUrl().getUrl()).isEqualTo("https://example.com/image.png");
     }
 
     @Test
@@ -284,14 +250,14 @@ class MessageContentNormalizerTest {
         var normalizedMessage = (UserMessage) normalized.messages().getFirst();
 
         @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
+        var contentList = (List<Content>) normalizedMessage.content();
 
         assertThat(contentList).hasSize(1);
-        var imageContent = (Map<String, Object>) contentList.get(0);
+        var imageContent = contentList.get(0);
 
         // HTML entity &amp; should be unescaped to &
-        var imagePayload = (Map<String, Object>) imageContent.get("image_url");
-        assertThat(imagePayload.get("url")).isEqualTo("https://example.com/image.png?param1=value1&param2=value2");
+        assertThat(imageContent.imageUrl().getUrl())
+                .isEqualTo("https://example.com/image.png?param1=value1&param2=value2");
     }
 
     @Test
@@ -311,15 +277,14 @@ class MessageContentNormalizerTest {
         var normalizedMessage = (UserMessage) normalized.messages().getFirst();
 
         @SuppressWarnings("unchecked")
-        var contentList = (List<Object>) normalizedMessage.content();
+        var contentList = (List<Content>) normalizedMessage.content();
 
+        // Should only have text content, no empty image
         assertThat(contentList).hasSize(2);
-        var firstText = (Map<String, Object>) contentList.get(0);
-        assertThat(firstText.get("type")).isEqualTo("text");
-        assertThat(firstText.get("text")).isEqualTo("Text before");
-        var secondText = (Map<String, Object>) contentList.get(1);
-        assertThat(secondText.get("type")).isEqualTo("text");
-        assertThat(secondText.get("text")).isEqualTo("Text after");
+        assertThat(contentList.get(0).type()).isEqualTo(ContentType.TEXT);
+        assertThat(contentList.get(0).text()).isEqualTo("Text before");
+        assertThat(contentList.get(1).type()).isEqualTo(ContentType.TEXT);
+        assertThat(contentList.get(1).text()).isEqualTo("Text after");
     }
 
     @Test

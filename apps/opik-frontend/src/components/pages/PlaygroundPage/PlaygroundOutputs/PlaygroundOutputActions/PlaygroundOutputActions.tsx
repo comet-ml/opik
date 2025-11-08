@@ -26,11 +26,8 @@ import { cn } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
-import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
-import {
-  supportsImageInput,
-  supportsVideoInput,
-} from "@/lib/modelCapabilities";
+import { hasImagesInContent } from "@/lib/llm";
+import { supportsImageInput } from "@/lib/modelCapabilities";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetEmptyState from "./DatasetEmptyState";
 
@@ -166,23 +163,16 @@ const PlaygroundOutputActions = ({
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
-  const hasMediaCompatibilityIssues = useMemo(() => {
+  const hasImageCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
       if (!prompt.model) return false;
 
       const modelSupportsImages = supportsImageInput(prompt.model);
-      const modelSupportsVideo = supportsVideoInput(prompt.model);
       const hasImages = prompt.messages.some((message) =>
         hasImagesInContent(message.content),
       );
-      const hasVideos = prompt.messages.some((message) =>
-        hasVideosInContent(message.content),
-      );
 
-      return (
-        (hasImages && !modelSupportsImages) ||
-        (hasVideos && !modelSupportsVideo)
-      );
+      return hasImages && !modelSupportsImages;
     });
   }, [promptMap]);
 
@@ -298,14 +288,14 @@ const PlaygroundOutputActions = ({
       isLoadingDatasets ||
       isDatasetRemoved ||
       isDatasetEmpty ||
-      hasMediaCompatibilityIssues;
+      hasImageCompatibilityIssues;
 
     const shouldTooltipAppear =
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       isDatasetEmpty ||
       isDatasetRemoved ||
-      hasMediaCompatibilityIssues;
+      hasImageCompatibilityIssues;
     const style: React.CSSProperties = isDisabledButton
       ? { pointerEvents: "auto" }
       : {};
@@ -315,8 +305,8 @@ const PlaygroundOutputActions = ({
         return promptCount === 1 ? "Run your prompt" : "Run your prompts";
       }
 
-      if (hasMediaCompatibilityIssues) {
-        return "Some prompts contain multimedia (images or videos) but the selected model doesn't support the required input. Please change the model or remove the unsupported media from the messages";
+      if (hasImageCompatibilityIssues) {
+        return "Some prompts contain images but the selected model doesn't support image input. Please change the model or remove images from the messages";
       }
 
       if (isDatasetRemoved) {

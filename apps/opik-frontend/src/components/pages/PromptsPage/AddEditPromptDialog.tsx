@@ -34,7 +34,7 @@ import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import useAppStore from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 
 type AddPromptDialogProps = {
@@ -62,17 +62,11 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     editable: true,
   });
 
-  const {
-    localText,
-    images,
-    videos,
-    setImages,
-    setVideos,
-    handleContentChange,
-  } = useMessageContent({
-    content: template,
-    onChangeContent: setTemplate,
-  });
+  const { localText, images, setImages, handleContentChange } =
+    useMessageContent({
+      content: template,
+      onChangeContent: setTemplate,
+    });
 
   const { mutate: createMutate } = usePromptCreateMutation();
   const { mutate: updateMutate } = usePromptUpdateMutation();
@@ -181,21 +175,9 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
-              <PromptMessageMediaTags
-                type="image"
-                items={images}
-                setItems={setImages}
-                align="start"
-              />
-            </div>
-          )}
-          {!isEdit && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label>Videos</Label>
-              <PromptMessageMediaTags
-                type="video"
-                items={videos}
-                setItems={setVideos}
+              <PromptMessageImageTags
+                images={images}
+                setImages={setImages}
                 align="start"
               />
             </div>

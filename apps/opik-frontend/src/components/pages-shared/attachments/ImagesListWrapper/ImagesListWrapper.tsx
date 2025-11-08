@@ -2,27 +2,27 @@ import React, { useMemo, useState } from "react";
 import {
   ATTACHMENT_TYPE,
   AttachmentPreviewData,
-  ParsedMediaData,
+  ParsedImageData,
 } from "@/types/attachments";
 import AttachmentThumbnail from "@/components/pages-shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
 import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 
 type ImagesListWrapperProps = {
-  media: ParsedMediaData[];
+  images: ParsedImageData[];
 };
 
-const ImagesListWrapper: React.FC<ImagesListWrapperProps> = ({ media }) => {
+const ImagesListWrapper: React.FC<ImagesListWrapperProps> = ({ images }) => {
   const [previewData, setPreviewData] = useState<AttachmentPreviewData | null>(
     null,
   );
 
   const previewDataArray = useMemo(() => {
-    return media.map((item) => ({
-      name: item.name,
-      url: item.url,
-      type: item.type,
+    return images.map((image) => ({
+      name: image.name,
+      url: image.url,
+      type: ATTACHMENT_TYPE.IMAGE,
     }));
-  }, [media]);
+  }, [images]);
 
   return (
     <div className="flex flex-wrap gap-2">

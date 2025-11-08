@@ -14,7 +14,7 @@ import {
   ATTACHMENT_TYPE,
   AttachmentPreviewData,
   AttachmentWithType,
-  ParsedMediaData,
+  ParsedImageData,
 } from "@/types/attachments";
 import {
   ATTACHMENT_ORDER_MAP,
@@ -23,10 +23,10 @@ import {
 
 type AttachmentsListProps = {
   data: Trace | Span;
-  media: ParsedMediaData[];
+  images: ParsedImageData[];
 };
 
-const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, media }) => {
+const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, images }) => {
   const isSpan = isObjectSpan(data);
   const [previewData, setPreviewData] = useState<AttachmentPreviewData | null>(
     null,
@@ -70,15 +70,15 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, media }) => {
         url: attachment.link,
         type: attachment.type,
       })),
-      ...media.map((item) => ({
-        name: item.name,
-        url: item.url,
-        type: item.type,
+      ...images.map((image) => ({
+        name: image.name,
+        url: image.url,
+        type: ATTACHMENT_TYPE.IMAGE,
       })),
     ];
-  }, [attachments, media]);
+  }, [attachments, images]);
 
-  const hasAttachments = previewDataArray.length > 0;
+  const hasAttachments = Boolean(images.length) || Boolean(attachments.length);
   return hasAttachments ? (
     <AccordionItem value="attachments">
       <AccordionTrigger>Attachments</AccordionTrigger>

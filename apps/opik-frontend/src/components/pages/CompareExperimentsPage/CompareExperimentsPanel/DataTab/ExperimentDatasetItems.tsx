@@ -29,14 +29,14 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  const { media, formattedData } = useMemo(
+  const { images, formattedData } = useMemo(
     () => processInputData(selectedData),
     [selectedData],
   );
 
-  const showMedia = media?.length > 0;
+  const showImages = images?.length > 0;
 
-  if (!showMedia) {
+  if (!showImages) {
     return data ? (
       <SyntaxHighlighter
         data={selectedData}
@@ -52,13 +52,13 @@ const ExperimentDatasetItems = ({
     <Accordion
       type="multiple"
       className="w-full"
-      defaultValue={["media", "data"]}
+      defaultValue={["images", "data"]}
     >
-      {showMedia ? (
-        <AccordionItem value="media" className="border-t">
-          <AccordionTrigger>Media</AccordionTrigger>
+      {showImages ? (
+        <AccordionItem value="images" className="border-t">
+          <AccordionTrigger>Images</AccordionTrigger>
           <AccordionContent>
-            <ImagesListWrapper media={media} />
+            <ImagesListWrapper images={images} />
           </AccordionContent>
         </AccordionItem>
       ) : null}

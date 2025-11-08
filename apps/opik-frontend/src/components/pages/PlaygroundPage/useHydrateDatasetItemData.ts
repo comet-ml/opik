@@ -3,19 +3,19 @@ import isObject from "lodash/isObject";
 import { DatasetItem } from "@/types/datasets";
 import { useFetchDatasetItem } from "@/api/datasets/useDatasetItemById";
 
-const MEDIA_PLACEHOLDER_REGEX = /\[(?:image|video)(?:_\d+)?\]/i;
+const IMAGE_PLACEHOLDER_REGEX = /\[image(?:_\d+)?\]/i;
 
-const containsMediaPlaceholder = (value: unknown): boolean => {
+const containsImagePlaceholder = (value: unknown): boolean => {
   if (typeof value === "string") {
-    return MEDIA_PLACEHOLDER_REGEX.test(value);
+    return IMAGE_PLACEHOLDER_REGEX.test(value);
   }
 
   if (Array.isArray(value)) {
-    return value.some(containsMediaPlaceholder);
+    return value.some(containsImagePlaceholder);
   }
 
   if (isObject(value)) {
-    return Object.values(value).some(containsMediaPlaceholder);
+    return Object.values(value).some(containsImagePlaceholder);
   }
 
   return false;
@@ -32,7 +32,7 @@ export function useHydrateDatasetItemData() {
 
       let hydratedData = datasetItem.data ?? {};
 
-      if (containsMediaPlaceholder(hydratedData)) {
+      if (containsImagePlaceholder(hydratedData)) {
         try {
           const fullDatasetItem = await fetchDatasetItem({
             datasetItemId: datasetItem.id,

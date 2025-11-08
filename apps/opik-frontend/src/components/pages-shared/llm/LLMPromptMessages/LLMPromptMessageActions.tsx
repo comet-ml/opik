@@ -67,13 +67,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   );
 
   const { promptId, content } = message;
-  const messageContent = typeof content === "string" ? content : "";
   const { data: promptData } = usePromptById(
     { promptId: promptId! },
     { enabled: !!promptId },
   );
 
-  const hasContent = Boolean(messageContent.trim());
+  const hasContent = Boolean(content?.trim());
   const showGenerateButton = improvePromptConfig && !hasContent;
   const showImproveButton = improvePromptConfig && hasContent;
   const hasModel = Boolean(improvePromptConfig?.model?.trim());
@@ -162,14 +161,14 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     !promptId ||
     promptData?.id !== promptId ||
     (promptData?.id === promptId &&
-      messageContent === promptData?.latest_version?.template);
+      message.content === promptData?.latest_version?.template);
 
-  const saveDisabled = messageContent === "";
+  const saveDisabled = message.content === "";
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      messageContent !== promptData?.latest_version?.template,
+      message.content !== promptData?.latest_version?.template,
   );
   isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning
@@ -268,7 +267,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             value={promptId}
             onValueChange={(id) => {
               if (id !== promptId) {
-                if (messageContent === "" || isUndefined(id)) {
+                if (content === "" || isUndefined(id)) {
                   handleUpdateExternalPromptId(id);
                 } else {
                   setOpen("load");
@@ -322,7 +321,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           open={open === "save"}
           setOpen={setOpen}
           prompt={promptData}
-          template={messageContent}
+          template={content}
           onSave={onSaveHandler}
         />
       </div>
@@ -331,7 +330,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           open={showImproveWizard}
           setOpen={setShowImproveWizard}
           id={message.id}
-          originalPrompt={messageContent}
+          originalPrompt={content}
           model={improvePromptConfig.model}
           provider={improvePromptConfig.provider}
           configs={improvePromptConfig.configs}

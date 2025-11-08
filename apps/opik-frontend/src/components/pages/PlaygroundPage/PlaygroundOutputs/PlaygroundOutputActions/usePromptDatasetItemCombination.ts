@@ -10,18 +10,8 @@ import {
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
-import {
-  IMAGE_TAG_START,
-  IMAGE_TAG_END,
-  VIDEO_TAG_START,
-  VIDEO_TAG_END,
-} from "@/lib/llm";
-import {
-  DATA_IMAGE_REGEX,
-  DATA_VIDEO_REGEX,
-  IMAGE_URL_REGEX,
-  VIDEO_URL_REGEX,
-} from "@/lib/images";
+import { IMAGE_TAG_START, IMAGE_TAG_END } from "@/lib/llm";
+import { DATA_IMAGE_REGEX, IMAGE_URL_REGEX } from "@/lib/images";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import mustache from "mustache";
@@ -62,9 +52,9 @@ const transformMessageIntoProviderMessage = (
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
 
-  // Wrap any raw image/video URLs or base64 data in the content with <<<image>>>...<<</image>>> / <<<video>>>...<<</video>>> tags
-  // This is needed when using datasets with multimedia where mustache directly inserts media data
-  const renderedContent = wrapMediaWithTags(
+  // Wrap any raw image URLs or base64 data in the content with <<<image>>>...<<</image>>> tags
+  // This is needed when using datasets with images where mustache directly inserts image data
+  const renderedContent = wrapImageUrlsWithTags(
     mustache.render(
       message.content,
       serializedDatasetItem,
@@ -83,20 +73,13 @@ const transformMessageIntoProviderMessage = (
 };
 
 /**
- * Wraps raw image/video URLs and base64 data URLs in the content with <<<image>>>...<<</image>>> / <<<video>>>...<<</video>>> tags.
- * Detects:
+ * Wraps raw image URLs and base64 data URLs in the content with <<<image>>>...<<</image>>> tags.
+ * Detects both:
  * - data:image/...;base64,... (base64 encoded images)
  * - http(s)://... image URLs
- * - data:video/...;base64,... (base64 encoded videos)
- * - http(s)://... video URLs
- * - [image_N] / [video_N] placeholders (from processInputData)
+ * - [image_N] placeholders (from processInputData)
  */
-const wrapMediaWithTags = (content: string): string => {
-  if (typeof content !== "string") {
-    // Non-string values cannot be processed for regex replacement; fall back to empty string
-    return "";
-  }
-
+const wrapImageUrlsWithTags = (content: string): string => {
   /**
    * Replacer function that wraps matches with image tags if not already wrapped.
    * Checks the surrounding context at the match position to avoid double-wrapping.
@@ -105,79 +88,36 @@ const wrapMediaWithTags = (content: string): string => {
     match: string,
     offset: number,
     string: string,
-    tagStart: string,
-    tagEnd: string,
   ): string => {
-    const prefix = string.slice(Math.max(0, offset - tagStart.length), offset);
+    const prefix = string.slice(
+      Math.max(0, offset - IMAGE_TAG_START.length),
+      offset,
+    );
     const suffix = string.slice(
       offset + match.length,
-      offset + match.length + tagEnd.length,
+      offset + match.length + IMAGE_TAG_END.length,
     );
 
     // Already wrapped at this position
-    if (prefix === tagStart && suffix === tagEnd) {
+    if (prefix === IMAGE_TAG_START && suffix === IMAGE_TAG_END) {
       return match;
     }
 
-    return `${tagStart}${match}${tagEnd}`;
-  };
-
-  const wrapMatches = (
-    input: string,
-    regex: RegExp,
-    tagStart: string,
-    tagEnd: string,
-  ) => {
-    return input.replace(
-      regex,
-      (match, ...args: Array<string | number | undefined>) => {
-        const argCount = args.length;
-        const offset = args[argCount - 2] as number | undefined;
-        const fullString = args[argCount - 1] as string | undefined;
-
-        if (typeof offset !== "number" || typeof fullString !== "string") {
-          return match;
-        }
-
-        return wrapIfNotAlreadyWrapped(
-          match,
-          offset,
-          fullString,
-          tagStart,
-          tagEnd,
-        );
-      },
-    );
+    return `${IMAGE_TAG_START}${match}${IMAGE_TAG_END}`;
   };
 
   let processedContent = content;
 
-  processedContent = wrapMatches(
-    processedContent,
+  // Wrap data URLs
+  processedContent = processedContent.replace(
     DATA_IMAGE_REGEX,
-    IMAGE_TAG_START,
-    IMAGE_TAG_END,
+    wrapIfNotAlreadyWrapped,
   );
 
-  processedContent = wrapMatches(
-    processedContent,
+  // Wrap HTTP(S) image URLs
+  processedContent = processedContent.replace(
     IMAGE_URL_REGEX,
-    IMAGE_TAG_START,
-    IMAGE_TAG_END,
-  );
-
-  processedContent = wrapMatches(
-    processedContent,
-    DATA_VIDEO_REGEX,
-    VIDEO_TAG_START,
-    VIDEO_TAG_END,
-  );
-
-  processedContent = wrapMatches(
-    processedContent,
-    VIDEO_URL_REGEX,
-    VIDEO_TAG_START,
-    VIDEO_TAG_END,
+    wrapIfNotAlreadyWrapped,
   );
 
   return processedContent;
