@@ -15,6 +15,7 @@ OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
+    download_video_attachments: bool = True,
 ) -> OpenAIClient:
     """Adds Opik tracking wrappers to an OpenAI client.
 
@@ -34,6 +35,10 @@ def track_openai(
     Args:
         openai_client: An instance of OpenAI or AsyncOpenAI client.
         project_name: The name of the project to log data.
+        download_video_attachments: When True (default), completed video jobs download
+            and upload the resulting files to Opik. Set to False to skip automatic
+            downloads if you want to avoid large transfers or are using a backend
+            without attachment support.
 
     Returns:
         The modified OpenAI client with Opik tracking enabled.
@@ -49,7 +54,11 @@ def track_openai(
         _patch_openai_responses(openai_client, project_name)
 
     if hasattr(openai_client, "videos"):
-        _patch_openai_videos(openai_client, project_name)
+        _patch_openai_videos(
+            openai_client,
+            project_name,
+            download_video_attachments=download_video_attachments,
+        )
 
     return openai_client
 
@@ -152,10 +161,12 @@ def _patch_openai_responses(
 def _patch_openai_videos(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
+    download_video_attachments: bool = True,
 ) -> None:
     video_job_decorator = openai_videos_decorator.OpenAIVideoJobTrackDecorator()
-    video_download_decorator = (
-        openai_videos_decorator.OpenAIVideoDownloadTrackDecorator()
+    video_download_decorator = openai_videos_decorator.OpenAIVideoDownloadTrackDecorator(
+        client=openai_client,
+        download_attachments=download_video_attachments,
     )
 
     if openai_client.base_url.host != "api.openai.com":
@@ -186,7 +197,7 @@ def _patch_openai_videos(
 
     if hasattr(openai_client.videos, "download_content"):
         openai_client.videos.download_content = video_download_decorator.track(
-            type="general",
+            type="llm",
             name="videos_download_content",
             project_name=project_name,
         )(openai_client.videos.download_content)
