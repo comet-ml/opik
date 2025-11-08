@@ -377,7 +377,7 @@ const BestPrompt: React.FC<BestPromptProps> = ({
         </div>
         <div>
           {messages ? (
-            <div className="max-h-64 overflow-y-auto pb-2">
+            <div className="overflow-y-auto pb-2">
               {messages.map((message, index) => (
                 <ReadOnlyMessage key={index} message={message} index={index} />
               ))}
