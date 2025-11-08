@@ -105,7 +105,7 @@ public class CostService {
                 BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                String mode = Optional.ofNullable(modelCost.mode()).orElse("");
+                String mode = Optional.ofNullable(modelCost.mode()).orElse("text_generation");
 
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
                 if ("video_generation".equalsIgnoreCase(mode) && videoOutputPrice.compareTo(BigDecimal.ZERO) > 0) {
