@@ -118,7 +118,9 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
             }
         )
         input_payload = {
-            "video_id": kwargs.get("video_id"),
+            "video_id": kwargs.get("video_id")
+            if "video_id" in kwargs
+            else (args[0] if args else None),
             "variant": variant,
         }
 
@@ -169,18 +171,19 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
             video_id = current_span_data.input.get("video_id")
 
         job_metadata = self._resolve_video_metadata(video_id)
+        metadata = current_span_data.metadata
+        resolved_model = current_span_data.model
+        usage = None
+        enriched_input = current_span_data.input
+
         if job_metadata:
             metadata = dict_utils.deepmerge(
                 current_span_data.metadata or {},
                 {"video_job": job_metadata},
             )
-        else:
-            metadata = current_span_data.metadata
-
-        usage = _build_video_usage(job_metadata or {})
-        resolved_model = job_metadata.get("model") if job_metadata else None
-        if resolved_model is None:
-            resolved_model = current_span_data.model
+            resolved_model = job_metadata.get("model") or resolved_model
+            usage = _build_video_usage(job_metadata)
+            enriched_input = _merge_job_input(current_span_data.input, job_metadata)
 
         return arguments_helpers.EndSpanParameters(
             output=output_summary,
@@ -196,6 +199,7 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
             provider=self.provider,
             model=resolved_model,
             usage=usage,
+            input=enriched_input,
         )
 
     @override
@@ -265,3 +269,14 @@ def _build_video_usage(result: Dict[str, Any]) -> Optional[Dict[str, int]]:
     if duration is None or duration <= 0:
         return None
     return {"video_duration_seconds": duration}
+
+
+def _merge_job_input(
+    original_input: Optional[Dict[str, Any]], job_metadata: Dict[str, Any]
+) -> Dict[str, Any]:
+    merged: Dict[str, Any] = dict(original_input or {})
+    for key in ("model", "prompt", "seconds", "size", "status"):
+        value = job_metadata.get(key)
+        if value is not None:
+            merged.setdefault(key, value)
+    return merged
