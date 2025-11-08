@@ -91,9 +91,12 @@ class OpenAIVideoJobTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
 
 class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
-    def __init__(self) -> None:
+    def __init__(self, client: Any, download_attachments: bool = True) -> None:
         super().__init__()
         self.provider = "openai"
+        self.download_attachments = download_attachments
+        self._client = client
+        self._video_metadata_cache: Dict[str, Dict[str, Any]] = {}
 
     @override
     def _start_span_inputs_preprocessor(
@@ -159,19 +162,40 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
             "byte_length": len(payload),
             "variant": variant,
         }
+        attachments = collection.attachments if self.download_attachments else None
+
+        video_id = None
+        if isinstance(current_span_data.input, dict):
+            video_id = current_span_data.input.get("video_id")
+
+        job_metadata = self._resolve_video_metadata(video_id)
+        if job_metadata:
+            metadata = dict_utils.deepmerge(
+                current_span_data.metadata or {},
+                {"video_job": job_metadata},
+            )
+        else:
+            metadata = current_span_data.metadata
+
+        usage = _build_video_usage(job_metadata or {})
+        resolved_model = job_metadata.get("model") if job_metadata else None
+        if resolved_model is None:
+            resolved_model = current_span_data.model
 
         return arguments_helpers.EndSpanParameters(
             output=output_summary,
             metadata=dict_utils.deepmerge(
-                current_span_data.metadata or {},
+                metadata or {},
                 {video_artifacts.VIDEO_METADATA_KEY: collection.manifest}
                 if collection.manifest
                 else {},
             )
             if collection.manifest
-            else current_span_data.metadata,
-            attachments=collection.attachments if collection.attachments else None,
+            else metadata,
+            attachments=attachments,
             provider=self.provider,
+            model=resolved_model,
+            usage=usage,
         )
 
     @override
@@ -180,8 +204,37 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
-        return None
+        ) -> Optional[Any]:
+            return None
+
+    def _resolve_video_metadata(
+        self, video_id: Optional[str]
+    ) -> Optional[Dict[str, Any]]:
+        if not video_id:
+            return None
+        if video_id in self._video_metadata_cache:
+            return self._video_metadata_cache[video_id]
+        try:
+            video = self._client.videos.retrieve(video_id)
+        except Exception:
+            LOGGER.debug(
+                "Failed to retrieve OpenAI video metadata for %s",
+                video_id,
+                exc_info=True,
+            )
+            return None
+
+        data = _video_response_to_dict(video)
+        metadata = {
+            "model": data.get("model"),
+            "seconds": data.get("seconds"),
+            "size": data.get("size"),
+            "status": data.get("status"),
+        }
+        self._video_metadata_cache[video_id] = {
+            key: value for key, value in metadata.items() if value is not None
+        }
+        return self._video_metadata_cache[video_id]
 
 
 def _describe_input_reference(value: Any) -> str:
