@@ -1,0 +1,502 @@
+---
+description: Workflow for generating E2E tests using Playwright agents
+globs: tests_end_to_end/tests_end_to_end_ts/**
+alwaysApply: false
+---
+
+# Playwright Agent E2E Test Workflow
+
+## Overview
+
+This workflow enables developers to automatically generate end-to-end Playwright tests for new features using Playwright's agent capabilities. The workflow uses three specialized agents that work together:
+
+- **🎭 Planner**: Explores the UI and generates markdown test plans
+- **🎭 Generator**: Transforms test plans into executable Playwright tests
+- **🎭 Healer**: Automatically fixes failing tests
+
+## When to Use This Workflow
+
+Use this workflow when:
+
+- Developer completes a full-stack feature (frontend + backend)
+- Developer explicitly requests: "now add an automated test for this path" or similar
+- Developer wants to generate a happy path E2E test for new functionality
+- Developer needs comprehensive test coverage for a new user flow
+
+**Example Triggers:**
+
+```
+"Generate an E2E test for the new project metrics dashboard I just built"
+"Create automated test for the dataset upload flow"
+"Add happy path test for experiment creation"
+"Now write an E2E test for the feature I just implemented"
+```
+
+## Prerequisites
+
+### 1. Opik Application Running Locally
+
+Before generating tests, ensure the Opik application is running:
+
+```bash
+# Start the application with dev-runner.sh
+./scripts/dev-runner.sh --start
+
+# Verify it's accessible
+curl http://localhost:5173
+```
+
+The frontend should be accessible at `http://localhost:5173` (default/BE-only mode) or `http://localhost:5174` (standard dev-runner mode).
+
+### 2. Playwright Test Environment Setup
+
+Ensure the E2E test environment is configured:
+
+```bash
+cd tests_end_to_end/tests_end_to_end_ts/typescript-tests
+
+# Install dependencies if needed
+npm install
+
+# Install Playwright browsers if needed
+npx playwright install chromium
+```
+
+### 3. Agent Definitions Available
+
+Agent definitions are located at:
+- `tests_end_to_end/tests_end_to_end_ts/.cursor/agents/playwright-test-planner.md`
+- `tests_end_to_end/tests_end_to_end_ts/.cursor/agents/playwright-test-generator.md`
+- `tests_end_to_end/tests_end_to_end_ts/.cursor/agents/playwright-test-healer.md`
+
+These agents use the MCP (Model Context Protocol) server configured in:
+- `tests_end_to_end/tests_end_to_end_ts/.mcp.json`
+
+## Agent Workflow
+
+### Phase 1: Planning (🎭 Planner Agent)
+
+**Goal**: Explore the UI and generate a comprehensive test plan
+
+**Process**:
+
+1. **Use the planner agent** to interactively explore the new feature
+2. **Navigate through the UI** to understand the user flow
+3. **Document scenarios** including:
+   - Happy path workflows
+   - User interactions and expected outcomes
+   - UI state changes
+   - Data validation points
+
+**Input**:
+- Running Opik application at `http://localhost:5173` (or `http://localhost:5174` for standard dev-runner mode)
+- Seed test: `tests_end_to_end/tests_end_to_end_ts/typescript-tests/tests/seed-for-planner.spec.ts`
+- Developer description of the feature to test
+
+**Output**:
+- Markdown test plan saved to: `tests_end_to_end/tests_end_to_end_ts/typescript-tests/specs/{feature-name}.md`
+
+**Example Planner Prompt**:
+
+```
+Using the planner agent, explore the new project metrics dashboard and create a test plan.
+The feature allows users to view custom metrics for their projects.
+Start from the projects page and document the complete workflow.
+Save the plan to specs/project-metrics.md
+```
+
+**Plan Structure**:
+
+```markdown
+# Feature Name - Test Plan
+
+## Application Overview
+Brief description of the feature and its context
+
+## Test Scenarios
+
+### 1. Main Feature Workflow
+
+**Seed:** `tests/seed-for-planner.spec.ts`
+
+#### 1.1 Happy Path Scenario
+**Steps:**
+1. Navigate to feature entry point
+2. Perform user action X
+3. Verify result Y
+
+**Expected Results:**
+- UI state changes as expected
+- Data is displayed correctly
+- User feedback is provided
+
+#### 1.2 Edge Case Scenario
+...
+```
+
+### Phase 2: Generation (🎭 Generator Agent)
+
+**Goal**: Transform the markdown test plan into executable Playwright tests
+
+**Process**:
+
+1. **Use the generator agent** with the markdown plan from Phase 1
+2. **Generate test code** that:
+   - Follows existing test patterns in the codebase
+   - Uses appropriate fixtures (base, projects, datasets, etc.)
+   - Includes proper page objects
+   - Has descriptive test names and comments
+3. **Verify selectors** by running interactions in real-time
+4. **Use best practices** from Playwright and the existing test suite
+
+**Input**:
+- Markdown test plan from `specs/{feature-name}.md`
+- Existing fixtures in `typescript-tests/fixtures/`
+- Page objects in `typescript-tests/page-objects/`
+
+**Output**:
+- Executable test file: `tests_end_to_end/tests_end_to_end_ts/typescript-tests/tests/{feature-area}/{test-name}.spec.ts`
+
+**Example Generator Prompt**:
+
+```
+Using the generator agent, create an executable Playwright test from specs/project-metrics.md
+Save the test to tests/projects/project-metrics.spec.ts
+Use the existing projects.fixture.ts and follow the patterns in tests/projects/projects.spec.ts
+```
+
+**Generated Test Structure**:
+
+```typescript
+// spec: specs/project-metrics.md
+// seed: tests/seed-for-planner.spec.ts
+
+import { test, expect } from '../../fixtures/projects.fixture';
+import { ProjectsPage } from '../../page-objects/projects.page';
+
+test.describe('Project Metrics Dashboard', () => {
+  test('should display custom metrics for a project', async ({ page, projectName }) => {
+    // 1. Navigate to projects page
+    const projectsPage = new ProjectsPage(page);
+    await projectsPage.goto();
+
+    // 2. Click on project to view details
+    await projectsPage.clickProject(projectName);
+
+    // 3. Navigate to metrics tab
+    await page.click('[data-testid="metrics-tab"]');
+
+    // Expected: Metrics dashboard is displayed
+    await expect(page.locator('[data-testid="metrics-chart"]')).toBeVisible();
+  });
+});
+```
+
+### Phase 3: Healing (🎭 Healer Agent)
+
+**Goal**: Automatically fix any test failures
+
+**Process**:
+
+1. **Run the generated test** to identify failures
+2. **Debug failed steps** by:
+   - Examining error messages
+   - Capturing page snapshots
+   - Analyzing selectors
+   - Checking timing issues
+3. **Fix the test** by:
+   - Updating selectors to match current UI
+   - Adjusting assertions
+   - Adding proper waits
+   - Fixing data dependencies
+4. **Re-run the test** to verify the fix
+5. **Iterate** until the test passes cleanly
+
+**Input**:
+- Generated test from Phase 2
+- Test failure information
+
+**Output**:
+- Passing test or `test.fixme()` if the feature itself is broken
+
+**Example Healer Prompt**:
+
+```
+Using the healer agent, debug and fix the failing test in tests/projects/project-metrics.spec.ts
+Run the test, identify the failure, and update the code to make it pass.
+```
+
+**Healing Actions**:
+- Update locators that changed
+- Fix timing issues with proper waits
+- Adjust assertions to match actual behavior
+- Add error handling for edge cases
+- Mark as `test.fixme()` if feature is broken
+
+## File Organization
+
+### Directory Structure
+
+```
+tests_end_to_end/tests_end_to_end_ts/
+├── .cursor/
+│   └── agents/                    # Agent definitions
+│       ├── playwright-test-planner.md
+│       ├── playwright-test-generator.md
+│       └── playwright-test-healer.md
+├── .mcp.json                      # MCP server configuration
+└── typescript-tests/
+    ├── specs/                     # Markdown test plans (generated by planner)
+    │   ├── project-metrics.md
+    │   ├── dataset-upload.md
+    │   └── ...
+    ├── tests/                     # Executable tests (generated by generator)
+    │   ├── seed-for-planner.spec.ts  # Seed test for planner agent
+    │   ├── projects/
+    │   │   ├── projects.spec.ts
+    │   │   └── project-metrics.spec.ts  # Generated test
+    │   ├── datasets/
+    │   │   └── dataset-upload.spec.ts   # Generated test
+    │   └── ...
+    ├── fixtures/                  # Test fixtures (use these in generated tests)
+    ├── page-objects/              # Page objects (use these in generated tests)
+    └── helpers/                   # Helper utilities
+```
+
+### Naming Conventions
+
+**Spec Files** (Test Plans):
+- Location: `typescript-tests/specs/`
+- Format: `{feature-name}.md`
+- Examples:
+  - `specs/project-metrics.md`
+  - `specs/dataset-upload.md`
+  - `specs/experiment-comparison.md`
+
+**Test Files** (Executable Tests):
+- Location: `typescript-tests/tests/{feature-area}/`
+- Format: `{test-name}.spec.ts`
+- Examples:
+  - `tests/projects/project-metrics.spec.ts`
+  - `tests/datasets/dataset-upload.spec.ts`
+  - `tests/experiments/experiment-comparison.spec.ts`
+
+**Feature Areas**:
+- `projects/` - Project management features
+- `datasets/` - Dataset operations
+- `experiments/` - Experiment tracking
+- `prompts/` - Prompt management
+- `tracing/` - Trace and span operations
+- `feedback-scores/` - Feedback and scoring
+- `playground/` - Playground features
+
+## Integration with Git Workflow
+
+### When to Generate Tests
+
+Generate E2E tests **before creating a PR** for your feature:
+
+1. Complete feature implementation (frontend + backend)
+2. Test manually to ensure it works
+3. Generate E2E test using this workflow
+4. Include the test in the same commit as the feature
+5. Create PR with both feature code and test
+
+### Commit Message Format
+
+Follow the standard git workflow from [git-workflow.mdc](mdc:.cursor/rules/git-workflow.mdc):
+
+```bash
+# Initial commit with feature and test
+git commit -m "[OPIK-1234] [FE] Add project metrics dashboard + E2E test"
+
+# If test generation is a separate step
+git commit -m "[OPIK-1234] Add E2E test for project metrics dashboard"
+```
+
+### PR Checklist
+
+When creating a PR with agent-generated tests:
+
+- [ ] Feature is fully implemented and manually tested
+- [ ] E2E test plan exists in `specs/`
+- [ ] Executable test exists in `tests/`
+- [ ] Test passes locally
+- [ ] Test follows existing patterns and uses appropriate fixtures
+- [ ] Test is documented with comments
+- [ ] Spec and test files are included in PR
+
+## Best Practices
+
+### For Planner Phase
+
+1. **Be Specific**: Provide clear context about what feature to test
+2. **Define Scope**: Specify whether you want happy path only or include edge cases
+3. **Reference Existing Flows**: Mention related features to maintain consistency
+4. **Include Prerequisites**: Note any setup required (e.g., existing projects, datasets)
+
+### For Generator Phase
+
+1. **Use Existing Fixtures**: Prefer `base.fixture`, `projects.fixture`, etc.
+2. **Follow Patterns**: Look at existing tests for reference
+3. **Use Page Objects**: Leverage page objects for UI interactions
+4. **Add Comments**: Document each step clearly
+5. **Include Cleanup**: Ensure tests clean up after themselves
+
+### For Healer Phase
+
+1. **Let It Iterate**: Allow the healer to try multiple fixes
+2. **Review Changes**: Check that fixes are reasonable
+3. **Manual Verification**: Run tests manually to verify they work
+4. **Mark Broken Features**: Use `test.fixme()` if the app is broken
+
+### General Guidelines
+
+1. **One Feature at a Time**: Generate tests for one feature per workflow
+2. **Happy Path First**: Start with happy path, add edge cases later
+3. **Review Generated Code**: Always review and understand generated tests
+4. **Maintain Test Quality**: Ensure generated tests meet project standards
+5. **Update Documentation**: Add notes to specs if behavior changes
+
+## Troubleshooting
+
+### Application Not Running
+
+**Symptom**: Agent can't access the application
+
+**Solution**:
+```bash
+# Check if app is running
+curl http://localhost:5173
+
+# If not, start it
+./scripts/dev-runner.sh --start
+
+# Verify in browser
+open http://localhost:5173
+```
+
+### Agent Not Found
+
+**Symptom**: Cursor doesn't recognize the agent
+
+**Solution**:
+- Verify agent definitions exist in `.cursor/agents/`
+- Check MCP configuration in `.mcp.json`
+- Restart Cursor if needed
+
+### Test Generation Fails
+
+**Symptom**: Generator can't create test
+
+**Solution**:
+- Ensure spec file is clear and detailed
+- Check that seed test runs successfully
+- Verify fixtures and page objects are available
+- Look for missing dependencies
+
+### Test Keeps Failing
+
+**Symptom**: Healer can't fix the test
+
+**Solution**:
+- Check if the feature actually works manually
+- Look for dynamic selectors or timing issues
+- Consider marking as `test.fixme()` and filing a bug
+- Review generated locators for accuracy
+
+### Wrong Port
+
+**Symptom**: Test tries to access wrong URL
+
+**Solution**:
+- Check `OPIK_BASE_URL` environment variable
+- Verify config in `typescript-tests/config/env.config.ts`
+- Default/BE-only mode uses port 5173, standard dev-runner mode uses 5174
+
+## Example Workflow
+
+### Complete Example: Adding Test for New Dashboard
+
+**Step 1: Developer completes feature**
+
+```bash
+# Feature: New project analytics dashboard
+# Files changed:
+# - apps/opik-frontend/src/features/analytics/Dashboard.tsx
+# - apps/opik-backend/src/main/java/com/comet/opik/api/AnalyticsResource.java
+```
+
+**Step 2: Developer requests test generation**
+
+Prompt to Cursor:
+```
+I just built a new project analytics dashboard. Generate an E2E test for it.
+The dashboard shows project statistics including total traces, average cost, and
+success rate. Users access it from the project details page by clicking the
+"Analytics" tab. Please create a happy path test.
+```
+
+**Step 3: Cursor uses planner agent**
+
+Planner agent:
+1. Starts the seed test
+2. Navigates to projects page
+3. Clicks on a project
+4. Finds the Analytics tab
+5. Documents all visible elements and interactions
+6. Generates `specs/project-analytics-dashboard.md`
+
+**Step 4: Cursor uses generator agent**
+
+Generator agent:
+1. Reads `specs/project-analytics-dashboard.md`
+2. Creates `tests/projects/project-analytics-dashboard.spec.ts`
+3. Uses `projects.fixture` for setup
+4. Uses `ProjectsPage` page object
+5. Generates test code with proper assertions
+
+**Step 5: Cursor uses healer agent**
+
+Healer agent:
+1. Runs the generated test
+2. Finds a selector issue (tab has different attribute)
+3. Updates the selector
+4. Re-runs test
+5. Test passes!
+
+**Step 6: Developer reviews and commits**
+
+```bash
+# Review the generated files
+cat typescript-tests/specs/project-analytics-dashboard.md
+cat typescript-tests/tests/projects/project-analytics-dashboard.spec.ts
+
+# Run test manually to verify
+cd typescript-tests
+npm test -- tests/projects/project-analytics-dashboard.spec.ts
+
+# Commit with feature
+git add .
+git commit -m "[OPIK-5678] [FE] Add project analytics dashboard + E2E test"
+git push origin username/OPIK-5678-analytics-dashboard
+```
+
+## Additional Resources
+
+- [Playwright Test Agents Documentation](https://playwright.dev/docs/test-agents)
+- [Local Development Workflow](mdc:.cursor/rules/local-development-workflow.mdc)
+- [Git Workflow](mdc:.cursor/rules/git-workflow.mdc)
+- [Test Workflow](mdc:.cursor/rules/test-workflow.mdc)
+- [E2E Tests README](tests_end_to_end/tests_end_to_end_ts/typescript-tests/README.md)
+- [E2E Tests Quickstart](tests_end_to_end/tests_end_to_end_ts/QUICKSTART.md)
+
+## Summary
+
+The Playwright Agent E2E Test Workflow automates test generation through three phases:
+
+1. **Plan** (🎭 Planner): Explore UI → Generate test plan → Save to `specs/`
+2. **Generate** (🎭 Generator): Read plan → Create test code → Save to `tests/`
+3. **Heal** (🎭 Healer): Run test → Fix failures → Iterate until passing
+
+This workflow integrates seamlessly with the existing development process, enabling developers to quickly generate high-quality E2E tests for new features with minimal manual effort.

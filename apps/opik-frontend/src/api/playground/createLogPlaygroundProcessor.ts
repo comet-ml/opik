@@ -26,6 +26,7 @@ import {
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -74,7 +75,6 @@ const createBatchExperimentItems = async (
   });
 };
 
-export const PLAYGROUND_PROJECT_NAME = "playground";
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",

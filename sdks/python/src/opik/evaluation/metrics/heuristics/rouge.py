@@ -1,4 +1,4 @@
-from typing import Any, List, Union, Optional
+from typing import Any, List, Optional, Union
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -54,12 +54,6 @@ class ROUGE(base_metric.BaseMetric):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
-        if rouge_scorer is None:
-            raise ImportError(
-                "`rouge-score` libraries are required for ROUGE score calculation. "
-                "Install via `pip install rouge-score`."
-            )
-
         valid_rouge_types = {"rouge1", "rouge2", "rougeL", "rougeLsum"}
         if rouge_type not in valid_rouge_types:
             raise MetricComputationError(
@@ -67,8 +61,8 @@ class ROUGE(base_metric.BaseMetric):
             )
 
         self._rouge_type = rouge_type
-        self._rouge = rouge_scorer.RougeScorer(
-            [rouge_type],
+        self._rouge = _build_rouge_backend(
+            rouge_type=rouge_type,
             use_stemmer=use_stemmer,
             split_summaries=split_summaries,
             tokenizer=tokenizer,
@@ -121,6 +115,8 @@ class ROUGE(base_metric.BaseMetric):
                     raise MetricComputationError("Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
+        if self._rouge is None:
+            raise MetricComputationError("ROUGE backend is not initialized.")
         results = self._rouge.score_multi(reference, output)
         rouge_f1_value = results[rouge_score_type].fmeasure
 
@@ -129,3 +125,24 @@ class ROUGE(base_metric.BaseMetric):
             name=self.name,
             reason=f"{rouge_score_type} score: {rouge_f1_value:.4f}",
         )
+
+
+def _build_rouge_backend(
+    *,
+    rouge_type: str,
+    use_stemmer: bool,
+    split_summaries: bool,
+    tokenizer: Optional[Any],
+) -> Optional[Any]:
+    if rouge_scorer is None:
+        raise ImportError(
+            "`rouge-score` libraries are required for ROUGE score calculation. "
+            "Install via `pip install rouge-score`."
+        )
+
+    return rouge_scorer.RougeScorer(
+        [rouge_type],
+        use_stemmer=use_stemmer,
+        split_summaries=split_summaries,
+        tokenizer=tokenizer,
+    )

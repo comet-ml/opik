@@ -1,17 +1,12 @@
-import functools
 import logging
 import os
 import re
 import threading
-from hashlib import sha256
 from typing import Any, Literal, cast
 
 import litellm
-import pydantic
-import ujson
 from anyio.streams.memory import MemoryObjectSendStream
 from asyncer import syncify
-from cachetools import LRUCache, cached
 from litellm import RetryPolicy
 
 import dspy
@@ -40,8 +35,6 @@ class LM(BaseLM):
         model_type: Literal["chat", "text"] = "chat",
         temperature: float = 0.0,
         max_tokens: int = 1000,
-        cache: bool = True,
-        cache_in_memory: bool = True,
         callbacks: list[BaseCallback] | None = None,
         num_retries: int = 8,
         provider=None,
@@ -59,9 +52,6 @@ class LM(BaseLM):
             model_type: The type of the model, either ``"chat"`` or ``"text"``.
             temperature: The sampling temperature to use when generating responses.
             max_tokens: The maximum number of tokens to generate per response.
-            cache: Whether to cache the model responses for reuse to improve performance
-                   and reduce costs.
-            cache_in_memory: To enable additional caching with LRU in memory.
             callbacks: A list of callback functions to run before and after each request.
             num_retries: The number of times to retry a request if it fails transiently due to
                          network error, rate limiting, etc. Requests are retried with exponential
@@ -73,8 +63,6 @@ class LM(BaseLM):
         # Remember to update LM.copy() if you modify the constructor!
         self.model = model
         self.model_type = model_type
-        self.cache = cache
-        self.cache_in_memory = cache_in_memory
         self.provider = provider or self.infer_provider()
         self.callbacks = callbacks or []
         self.history = []
@@ -106,43 +94,20 @@ class LM(BaseLM):
     @with_callbacks
     def forward(self, prompt=None, messages=None, **kwargs):
         # Build the request.
-        cache = kwargs.pop("cache", self.cache)
-        # disable cache will also disable in memory cache
-        cache_in_memory = cache and kwargs.pop("cache_in_memory", self.cache_in_memory)
         messages = messages or [{"role": "user", "content": prompt}]
         kwargs = {**self.kwargs, **kwargs}
 
-        # Make the request and handle LRU & disk caching.
-        if cache_in_memory:
-            completion = (
-                cached_litellm_completion
-                if self.model_type == "chat"
-                else cached_litellm_text_completion
-            )
+        # Make the request.
+        completion = (
+            litellm_completion if self.model_type == "chat" else litellm_text_completion
+        )
 
-            results = completion(
-                request=dict(model=self.model, messages=messages, **kwargs),
-                num_retries=self.num_retries,
-            )
-        else:
-            completion = (
-                litellm_completion
-                if self.model_type == "chat"
-                else litellm_text_completion
-            )
+        results = completion(
+            request=dict(model=self.model, messages=messages, **kwargs),
+            num_retries=self.num_retries,
+        )
 
-            results = completion(
-                request=dict(model=self.model, messages=messages, **kwargs),
-                num_retries=self.num_retries,
-                # only leverage LiteLLM cache in this case
-                cache={"no-cache": not cache, "no-store": not cache},
-            )
-
-        if (
-            not getattr(results, "cache_hit", False)
-            and dspy.settings.usage_tracker
-            and hasattr(results, "usage")
-        ):
+        if dspy.settings.usage_tracker and hasattr(results, "usage"):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
         self._increment_llm_counter()
@@ -219,8 +184,6 @@ class LM(BaseLM):
         state_keys = [
             "model",
             "model_type",
-            "cache",
-            "cache_in_memory",
             "num_retries",
             "finetuning_model",
             "launch_kwargs",
@@ -229,99 +192,9 @@ class LM(BaseLM):
         return {key: getattr(self, key) for key in state_keys} | self.kwargs
 
 
-def request_cache(maxsize: int | None = None):
-    """
-    A threadsafe decorator to create an in-memory LRU cache for LM inference functions that accept
-    a dictionary-like LM request. An in-memory cache for LM calls is critical for ensuring
-    good performance when optimizing and evaluating DSPy LMs (disk caching alone is too slow).
-
-    Args:
-        maxsize: The maximum size of the cache. If unspecified, no max size is enforced (cache is unbounded).
-
-    Returns:
-        A decorator that wraps the target function with caching.
-    """
-
-    def cache_key(request: dict[str, Any]) -> str:
-        """
-        Obtain a unique cache key for the given request dictionary by hashing its JSON
-        representation. For request fields having types that are known to be JSON-incompatible,
-        convert them to a JSON-serializable format before hashing.
-
-        Note: Values that cannot be converted to JSON should *not* be ignored / discarded, since
-        that would potentially lead to cache collisions. For example, consider request A
-        containing only JSON-convertible values and request B containing the same JSON-convertible
-        values in addition to one unconvertible value. Discarding the unconvertible value would
-        lead to a cache collision between requests A and B, even though they are semantically
-        different.
-        """
-
-        def transform_value(value):
-            if isinstance(value, type) and issubclass(value, pydantic.BaseModel):
-                return value.model_json_schema()
-            elif isinstance(value, pydantic.BaseModel):
-                return value.model_dump()
-            elif (
-                callable(value)
-                and hasattr(value, "__code__")
-                and hasattr(value.__code__, "co_code")
-            ):
-                return value.__code__.co_code.decode("utf-8")
-            else:
-                # Note: We don't attempt to compute a hash of the value, since the default
-                # implementation of hash() is id(), which may collide if the same memory address
-                # is reused for different objects at different times
-                return value
-
-        params = {k: transform_value(v) for k, v in request.items()}
-        return sha256(ujson.dumps(params, sort_keys=True).encode()).hexdigest()
-
-    def decorator(func):
-        @cached(
-            # NB: cachetools doesn't support maxsize=None; it recommends using float("inf") instead
-            cache=LRUCache(maxsize=maxsize or float("inf")),
-            key=lambda key, request, *args, **kwargs: key,
-            # Use a lock to ensure thread safety for the cache when DSPy LMs are queried
-            # concurrently, e.g. during optimization and evaluation
-            lock=threading.RLock(),
-        )
-        def func_cached(key: str, request: dict[str, Any], *args, **kwargs):
-            return func(request, *args, **kwargs)
-
-        @functools.wraps(func)
-        def wrapper(request: dict, *args, **kwargs):
-            try:
-                key = cache_key(request)
-            except Exception:
-                # If the cache key cannot be computed (e.g. because it contains a value that cannot
-                # be converted to JSON), bypass the cache and call the target function directly
-                return func(request, *args, **kwargs)
-            cache_hit = key in func_cached.cache
-            output = func_cached(key, request, *args, **kwargs)
-            if cache_hit and hasattr(output, "usage"):
-                # Clear the usage data when cache is hit, because no LM call is made
-                output.usage = {}
-
-            return func_cached(key, request, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-@request_cache(maxsize=2000)
-def cached_litellm_completion(request: dict[str, Any], num_retries: int):
-    return litellm_completion(
-        request,
-        cache={"no-cache": False, "no-store": False},
-        num_retries=num_retries,
-    )
-
-
 def litellm_completion(
     request: dict[str, Any],
     num_retries: int,
-    cache={"no-cache": True, "no-store": True},
 ):
     retry_kwargs = dict(
         retry_policy=_get_litellm_retry_policy(num_retries),
@@ -338,7 +211,6 @@ def litellm_completion(
         # If `streamify` is not used, or if the exact predict doesn't need to be streamed,
         # we can just return the completion without streaming.
         return litellm.completion(
-            cache=cache,
             **retry_kwargs,
             **request,
         )
@@ -350,7 +222,6 @@ def litellm_completion(
     @syncify
     async def stream_completion():
         response = await litellm.acompletion(
-            cache=cache,
             stream=True,
             **retry_kwargs,
             **request,
@@ -368,19 +239,9 @@ def litellm_completion(
     return stream_completion()
 
 
-@request_cache(maxsize=2000)
-def cached_litellm_text_completion(request: dict[str, Any], num_retries: int):
-    return litellm_text_completion(
-        request,
-        num_retries=num_retries,
-        cache={"no-cache": False, "no-store": False},
-    )
-
-
 def litellm_text_completion(
     request: dict[str, Any],
     num_retries: int,
-    cache={"no-cache": True, "no-store": True},
 ):
     # Extract the provider and model from the model string.
     # TODO: Not all the models are in the format of "provider/model"
@@ -397,7 +258,6 @@ def litellm_text_completion(
     )
 
     return litellm.text_completion(
-        cache=cache,
         model=f"text-completion-openai/{model}",
         api_key=api_key,
         api_base=api_base,
