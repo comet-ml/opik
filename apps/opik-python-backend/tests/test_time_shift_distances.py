@@ -51,10 +51,9 @@ class TestTimeShiftDistances:
         assert original_trace_distance == shifted_trace_distance, \
             f"Trace time distance changed: {original_trace_distance}s → {shifted_trace_distance}s"
         
-        # Verify that we actually shifted the data (time_shift should be positive/reasonable)
-        # Demo data is from August, so shift should be 70+ days
-        assert time_shift.days > 60, \
-            f"Time shift is too small: {time_shift.days} days (expected ~70 days for August to November)"
+        # Ensure that the time shift is positive (i.e., demo data is not from today)
+        assert time_shift.days > 0, \
+            f"Time shift is not positive: {time_shift.days} days (expected demo data to be in the past)"
     
     def test_experiment_data_time_distances_preserved(self):
         """

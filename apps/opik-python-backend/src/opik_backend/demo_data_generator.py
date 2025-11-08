@@ -178,19 +178,18 @@ def get_time_shift(context: DemoDataContext, trace_id):
         return time_shift
     return datetime.timedelta(0)
 
-def process_traces_with_time_shift(traces, spans, context: DemoDataContext, client: opik.Opik):
+def process_traces_with_time_shift(traces, context: DemoDataContext, client: opik.Opik):
     """
     Process traces with proper time shifts and time-based UUIDs.
     
     Shifts all trace timestamps to present time while preserving temporal relationships,
     and generates time-based UUIDs for consistent ordering.
     
-    Calculates time shift from the latest end_time across both traces and spans
+    Calculates time shift from the latest end_time across traces only
     to ensure all data is brought to present while preserving time distances.
     
     Parameters:
     - traces: List of trace dictionaries to process
-    - spans: List of span dictionaries (used to calculate time shift)
     - context: DemoDataContext object holding state
     - client: opik.Opik client for logging traces
     
@@ -357,7 +356,7 @@ def create_demo_evaluation_project(context: DemoDataContext, base_url: str, work
 
             evaluation_traces = experiment_traces_grouped_by_project[project_id]
             evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            time_shift = process_traces_with_time_shift(evaluation_traces, evaluation_spans, context, client)
+            time_shift = process_traces_with_time_shift(evaluation_traces, context, client)
             process_spans_with_time_shift(evaluation_spans, time_shift, context, client)
             client.flush()
             
@@ -456,7 +455,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             # Extract thread IDs before processing traces
             threads = [trace["thread_id"] for trace in demo_traces if "thread_id" in trace and trace["thread_id"] is not None]
             
-            time_shift = process_traces_with_time_shift(demo_traces, demo_spans, context, client)
+            time_shift = process_traces_with_time_shift(demo_traces, context, client)
             process_spans_with_time_shift(demo_spans, time_shift, context, client)
             client.flush()
 
@@ -546,7 +545,7 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
 
             evaluation_traces = experiment_traces_grouped_by_project[project_id]
             evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            time_shift = process_traces_with_time_shift(evaluation_traces, evaluation_spans, context, client)
+            time_shift = process_traces_with_time_shift(evaluation_traces, context, client)
             process_spans_with_time_shift(evaluation_spans, time_shift, context, client)
             client.flush()
 
