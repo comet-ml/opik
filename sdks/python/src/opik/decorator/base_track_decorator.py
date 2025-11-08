@@ -532,7 +532,9 @@ class BaseTrackDecorator(abc.ABC):
 
         if trace_data_to_end is not None:
             trace_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+                **end_arguments.to_kwargs(
+                    ignore_keys=["usage", "model", "provider", "attachments"]
+                ),
             )
 
             client.trace(**trace_data_to_end.as_parameters)

@@ -18,3 +18,4 @@ class Attachment(pydantic.BaseModel):
     data: str
     file_name: Optional[str] = None
     content_type: Optional[str] = None
+    delete_after_upload: bool = False
