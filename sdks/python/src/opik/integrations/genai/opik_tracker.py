@@ -4,6 +4,7 @@ from google import genai
 
 from . import (
     generate_content_decorator,
+    generate_videos_decorator,
     generations_aggregators,
     stream_wrappers,
     encoder_extension,
@@ -11,7 +12,9 @@ from . import (
 
 
 def track_genai(
-    client: genai.Client, project_name: Optional[str] = None
+    client: genai.Client,
+    project_name: Optional[str] = None,
+    download_video_attachments: bool = True,
 ) -> genai.Client:
     """
     Adds Opik tracking to an genai.Client.
@@ -79,4 +82,57 @@ def track_genai(
         generations_aggregator=generations_aggregators.aggregate_response_content_items,
     )(client.aio.models.generate_content_stream)
 
+    _patch_generate_videos(client, provider, project_name)
+    _patch_operations(
+        client,
+        provider,
+        project_name,
+        download_video_attachments=download_video_attachments,
+    )
+
     return client
+
+
+def _patch_generate_videos(
+    client: genai.Client,
+    provider: str,
+    project_name: Optional[str],
+) -> None:
+    decorator = generate_videos_decorator.GenerateVideosTrackDecorator(provider=provider)
+
+    if hasattr(client.models, "generate_videos"):
+        client.models.generate_videos = decorator.track(
+            name="generate_videos",
+            type="llm",
+            project_name=project_name,
+        )(client.models.generate_videos)
+
+    if hasattr(client.aio.models, "generate_videos"):
+        client.aio.models.generate_videos = decorator.track(
+            name="async_generate_videos",
+            type="llm",
+            project_name=project_name,
+        )(client.aio.models.generate_videos)
+
+
+def _patch_operations(
+    client: genai.Client,
+    provider: str,
+    project_name: Optional[str],
+    download_video_attachments: bool,
+) -> None:
+    if not hasattr(client, "operations"):
+        return
+
+    decorator = generate_videos_decorator.GenerateVideosOperationTracker(
+        provider=provider,
+        client=client,
+        download_video_attachments=download_video_attachments,
+    )
+
+    if hasattr(client.operations, "get"):
+        client.operations.get = decorator.track(
+            name="operations_get",
+            type="general",
+            project_name=project_name,
+        )(client.operations.get)
