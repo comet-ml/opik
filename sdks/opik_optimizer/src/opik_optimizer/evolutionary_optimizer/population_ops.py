@@ -62,6 +62,13 @@ class PopulationOps:
             # Detect if we're working with multimodal prompts
             is_multimodal = is_multimodal_prompt(prompt.get_messages())
 
+            def _clone_prompt(messages: list[dict[str, Any]]) -> chat_prompt.ChatPrompt:
+                return chat_prompt.ChatPrompt(
+                    messages=messages,
+                    tools=prompt.tools,
+                    function_map=prompt.function_map,
+                )
+
             # Fresh starts
             if num_fresh_starts > 0:
                 init_pop_report.start_fresh_prompts(num_fresh_starts)
@@ -74,7 +81,8 @@ class PopulationOps:
                             {
                                 "role": "system",
                                 "content": evo_prompts.fresh_start_system_prompt(
-                                    current_output_style_guidance, is_multimodal=is_multimodal
+                                    current_output_style_guidance,
+                                    is_multimodal=is_multimodal,
                                 ),
                             },
                             {"role": "user", "content": fresh_start_user_prompt},
@@ -91,14 +99,12 @@ class PopulationOps:
                         if all(isinstance(p, dict) for p in fresh_prompts) and all(
                             p.get("role") is not None for p in fresh_prompts
                         ):
-                            population.append(
-                                chat_prompt.ChatPrompt(messages=fresh_prompts)
-                            )
+                            population.append(_clone_prompt(fresh_prompts))
                             init_pop_report.success_fresh_prompts(1)
                         elif all(isinstance(p, list) for p in fresh_prompts):
                             population.extend(
                                 [
-                                    chat_prompt.ChatPrompt(messages=p)
+                                    _clone_prompt(p)
                                     for p in fresh_prompts[:num_fresh_starts]
                                 ]
                             )
@@ -136,7 +142,8 @@ class PopulationOps:
                             {
                                 "role": "system",
                                 "content": evo_prompts.variation_system_prompt(
-                                    current_output_style_guidance, is_multimodal=is_multimodal
+                                    current_output_style_guidance,
+                                    is_multimodal=is_multimodal,
                                 ),
                             },
                             {"role": "user", "content": user_prompt_for_variation},
@@ -146,7 +153,9 @@ class PopulationOps:
                     logger.debug(
                         f"Raw response for population variations: {response_content_variations}"
                     )
-                    json_response_variations = utils.json_to_dict(response_content_variations)
+                    json_response_variations = utils.json_to_dict(
+                        response_content_variations
+                    )
                     generated_prompts_variations = [
                         p["prompt"]
                         for p in json_response_variations.get("prompts", [])
@@ -161,7 +170,7 @@ class PopulationOps:
                         )
                         population.extend(
                             [
-                                chat_prompt.ChatPrompt(messages=p)
+                                _clone_prompt(p)
                                 for p in generated_prompts_variations[
                                     :num_variations_on_initial
                                 ]
@@ -214,16 +223,20 @@ class PopulationOps:
         else:
             elites = tools.selBest(population, self.elitism_size)
 
-        seed_prompt = (
-            chat_prompt.ChatPrompt(
-                messages=max(elites, key=lambda x: x.fitness.values[0])
+        if elites:
+            best_elite = max(elites, key=lambda x: x.fitness.values[0])
+            seed_prompt = chat_prompt.ChatPrompt(
+                messages=best_elite,
+                tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
+                function_map=getattr(
+                    best_elite, "function_map", best_prompt_so_far.function_map
+                ),
             )
-            if elites
-            else best_prompt_so_far
-        )
+        else:
+            seed_prompt = best_prompt_so_far
 
         prompt_variants = self._initialize_population(seed_prompt)
-        new_pop = [creator.Individual(p.get_messages()) for p in prompt_variants]
+        new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]  # type: ignore[attr-defined]
 
         for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
             ind.fitness.values = fit

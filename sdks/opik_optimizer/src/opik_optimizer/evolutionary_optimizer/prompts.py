@@ -51,7 +51,9 @@ Return ONLY this descriptive string.
 """
 
 
-def semantic_mutation_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
+def semantic_mutation_system_prompt(
+    output_style_guidance: str | None, is_multimodal: bool = False
+) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -80,7 +82,9 @@ def rephrase_system_prompt() -> str:
     )
 
 
-def fresh_start_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
+def fresh_start_system_prompt(
+    output_style_guidance: str | None, is_multimodal: bool = False
+) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -95,7 +99,9 @@ def fresh_start_system_prompt(output_style_guidance: str | None, is_multimodal: 
     return base_prompt
 
 
-def variation_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
+def variation_system_prompt(
+    output_style_guidance: str | None, is_multimodal: bool = False
+) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -134,7 +140,9 @@ Each prompt variation should aim to get the target LLM to produce answers matchi
     return base_prompt
 
 
-def llm_crossover_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
+def llm_crossover_system_prompt(
+    output_style_guidance: str | None, is_multimodal: bool = False
+) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
@@ -164,7 +172,9 @@ Return a JSON object that is a list of both child prompts. Each child prompt is 
     return base_prompt
 
 
-def radical_innovation_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
+def radical_innovation_system_prompt(
+    output_style_guidance: str | None, is_multimodal: bool = False
+) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."

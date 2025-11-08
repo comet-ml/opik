@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 MessageContent = str | list[dict[str, Any]]
 
@@ -37,6 +38,34 @@ def _content_has_image(content: Any) -> bool:
         lowered = content.lower()
         return "{image" in lowered or "<<<image>>>" in content
     return False
+
+
+def rebuild_content_with_text(
+    original_content: MessageContent,
+    mutated_text: str,
+) -> MessageContent:
+    """
+    Rebuild message content with new text while preserving image parts.
+
+    Args:
+        original_content: Original message content (string or multimodal list)
+        mutated_text: Replacement text to inject
+
+    Returns:
+        MessageContent containing the mutated text and any preserved image parts.
+    """
+    if isinstance(original_content, str):
+        return mutated_text
+
+    if isinstance(original_content, list):
+        result_parts: list[dict[str, Any]] = []
+        result_parts.append({"type": "text", "text": mutated_text})
+        for part in original_content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                result_parts.append(part)
+        return result_parts
+
+    return mutated_text
 
 
 def is_multimodal_prompt(

@@ -10,14 +10,29 @@ Provides common functionality for:
 """
 
 import base64
+import re
 import warnings
 from io import BytesIO
-from typing import Optional, Union
+from typing import Any
 
-from PIL import Image
-import re
+try:  # Pillow is optional for text-only users
+    from PIL import Image as _PillowImage
+except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency guard
+    _PillowImage = None
+    _PIL_IMPORT_ERROR = exc
+else:  # pragma: no cover - import side-effects don't need coverage
+    _PIL_IMPORT_ERROR = None
 
 MIN_OPIK_PYTHON_VERSION = "1.9.4"
+
+
+def _ensure_pillow() -> Any:
+    if _PillowImage is None:
+        raise ModuleNotFoundError(
+            "Pillow is required for image helper utilities. Install it with "
+            "`pip install Pillow` to use multimodal datasets."
+        ) from _PIL_IMPORT_ERROR
+    return _PillowImage
 
 
 def warn_if_python_sdk_outdated(min_version: str = MIN_OPIK_PYTHON_VERSION) -> None:
@@ -64,11 +79,8 @@ def warn_if_python_sdk_outdated(min_version: str = MIN_OPIK_PYTHON_VERSION) -> N
             stacklevel=2,
         )
 
-def encode_pil_to_base64_uri(
-    image: Image.Image,
-    format: str = "PNG",
-    quality: int = 85
-) -> str:
+
+def encode_pil_to_base64_uri(image: Any, format: str = "PNG", quality: int = 85) -> str:
     """
     Encode a PIL Image to a base64 data URI.
 
@@ -109,8 +121,7 @@ def encode_pil_to_base64_uri(
 
 
 def encode_file_to_base64_uri(
-    file_path: str,
-    max_size: Optional[tuple[int, int]] = None
+    file_path: str, max_size: tuple[int, int] | None = None
 ) -> str:
     """
     Encode an image file to base64 data URI.
@@ -125,11 +136,12 @@ def encode_file_to_base64_uri(
     Example:
         >>> uri = encode_file_to_base64_uri("dashcam.jpg", max_size=(800, 600))
     """
-    image = Image.open(file_path)
+    PillowImage = _ensure_pillow()
+    image = PillowImage.open(file_path)
 
     # Resize if needed
     if max_size:
-        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        image.thumbnail(max_size, PillowImage.Resampling.LANCZOS)
 
     # Preserve original format or use PNG
     format = image.format or "PNG"
@@ -137,7 +149,7 @@ def encode_file_to_base64_uri(
     return encode_pil_to_base64_uri(image, format=format)
 
 
-def decode_base64_uri_to_pil(data_uri: str) -> Image.Image:
+def decode_base64_uri_to_pil(data_uri: str) -> Any:
     """
     Decode a base64 data URI to a PIL Image.
 
@@ -165,7 +177,8 @@ def decode_base64_uri_to_pil(data_uri: str) -> Image.Image:
     image_bytes = base64.b64decode(base64_data)
     buffer = BytesIO(image_bytes)
 
-    return Image.open(buffer)
+    PillowImage = _ensure_pillow()
+    return PillowImage.open(buffer)
 
 
 def is_base64_data_uri(value: str) -> bool:
@@ -188,11 +201,11 @@ def is_base64_data_uri(value: str) -> bool:
         return False
 
     # Check for data URI pattern
-    pattern = r'^data:image/[a-z]+;base64,[A-Za-z0-9+/]+=*$'
+    pattern = r"^data:image/[a-z]+;base64,[A-Za-z0-9+/]+=*$"
     return bool(re.match(pattern, value, re.IGNORECASE))
 
 
-def get_image_format_from_uri(data_uri: str) -> Optional[str]:
+def get_image_format_from_uri(data_uri: str) -> str | None:
     """
     Extract image format from a data URI.
 
@@ -206,16 +219,14 @@ def get_image_format_from_uri(data_uri: str) -> Optional[str]:
         >>> get_image_format_from_uri("data:image/jpeg;base64,...")
         'jpeg'
     """
-    match = re.match(r'^data:image/([a-z]+);base64,', data_uri, re.IGNORECASE)
+    match = re.match(r"^data:image/([a-z]+);base64,", data_uri, re.IGNORECASE)
     if match:
         return match.group(1).lower()
     return None
 
 
 def convert_to_structured_content(
-    text: str,
-    image_uri: Optional[str] = None,
-    image_detail: str = "auto"
+    text: str, image_uri: str | None = None, image_detail: str = "auto"
 ) -> list[dict]:
     """
     Convert text and optional image to OpenAI structured content format.
@@ -242,20 +253,17 @@ def convert_to_structured_content(
     parts = [{"type": "text", "text": text}]
 
     if image_uri:
-        parts.append({
-            "type": "image_url",
-            "image_url": {
-                "url": image_uri,
-                "detail": image_detail
+        parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": image_uri, "detail": image_detail},
             }
-        })
+        )
 
     return parts
 
 
-def extract_images_from_structured_content(
-    content: list[dict]
-) -> list[str]:
+def extract_images_from_structured_content(content: list[dict]) -> list[str]:
     """
     Extract all image URIs from structured content.
 
@@ -286,10 +294,8 @@ def extract_images_from_structured_content(
 
 
 def validate_image_size(
-    image: Image.Image,
-    max_width: int = 2048,
-    max_height: int = 2048
-) -> tuple[bool, Optional[str]]:
+    image: Any, max_width: int = 2048, max_height: int = 2048
+) -> tuple[bool, str | None]:
     """
     Validate image dimensions.
 
@@ -317,10 +323,7 @@ def validate_image_size(
     return True, None
 
 
-def estimate_image_tokens(
-    image: Image.Image,
-    model: str = "gpt-4o-mini"
-) -> int:
+def estimate_image_tokens(image: Any, model: str = "gpt-4o-mini") -> int:
     """
     Estimate token count for an image based on model.
 

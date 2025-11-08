@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Any, Literal, cast
+from typing import Any, Literal
 from collections.abc import Iterator
 from dataclasses import dataclass
 

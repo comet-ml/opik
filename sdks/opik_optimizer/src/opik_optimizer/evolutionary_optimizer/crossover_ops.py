@@ -9,7 +9,11 @@ from deap import creator as _creator
 from . import prompts as evo_prompts
 from . import reporting
 from .. import utils
-from ..utils.message_content import MessageContent
+from ..utils.message_content import (
+    MessageContent,
+    extract_text_from_content,
+    rebuild_content_with_text,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -68,25 +72,35 @@ class CrossoverOps:
             "      Recombining prompts by mixing and matching words and sentences.",
             verbose=self.verbose,
         )
-        messages_1_orig: list[dict[str, str]] = ind1
-        messages_2_orig: list[dict[str, str]] = ind2
+        messages_1_orig: list[dict[str, MessageContent]] = ind1
+        messages_2_orig: list[dict[str, MessageContent]] = ind2
 
         for i, message_1 in enumerate(messages_1_orig):
             role: str = message_1["role"]
-            message_1_str: str = message_1["content"]
+            message_1_content: MessageContent = message_1["content"]
             if (len(messages_2_orig) >= i + 1) and (messages_2_orig[i]["role"] == role):
                 message_2 = messages_2_orig[i]
-                message_2_str: str = message_2["content"]
+                message_2_content: MessageContent = message_2["content"]
+                parent1_text = extract_text_from_content(message_1_content)
+                parent2_text = extract_text_from_content(message_2_content)
+
+                if not parent1_text or not parent2_text:
+                    continue
+
                 try:
                     child1_str, child2_str = self._deap_crossover_chunking_strategy(
-                        message_1_str, message_2_str
+                        parent1_text, parent2_text
                     )
                 except ValueError:
                     child1_str, child2_str = self._deap_crossover_word_level(
-                        message_1_str, message_2_str
+                        parent1_text, parent2_text
                     )
-                messages_1_orig[i]["content"] = child1_str
-                messages_2_orig[i]["content"] = child2_str
+                messages_1_orig[i]["content"] = rebuild_content_with_text(
+                    message_1_content, child1_str
+                )
+                messages_2_orig[i]["content"] = rebuild_content_with_text(
+                    message_2_content, child2_str
+                )
             else:
                 pass
 

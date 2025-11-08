@@ -185,7 +185,7 @@ def _load_dhpr_dataset(
                 download_config=download_config,
                 trust_remote_code=True,  # May be needed for custom dataset scripts
             )
-        except Exception as e:
+        except Exception:
             # Fallback: try without streaming if streaming fails
             try:
                 hf_dataset = ds.load_dataset(
@@ -223,8 +223,8 @@ def _load_dhpr_dataset(
 
         if len(data) == 0:
             raise ValueError(
-                f"No items were successfully processed from the DHPR dataset. "
-                f"Please check the dataset format and image processing."
+                "No items were successfully processed from the DHPR dataset. "
+                "Please check the dataset format and image processing."
             )
 
         # Insert into Opik dataset
@@ -266,6 +266,7 @@ def _process_dhpr_item(
     elif isinstance(image_obj, dict) and "bytes" in image_obj:
         # Image stored as bytes
         from io import BytesIO
+
         pil_image = Image.open(BytesIO(image_obj["bytes"]))
     else:
         # Try to convert directly
