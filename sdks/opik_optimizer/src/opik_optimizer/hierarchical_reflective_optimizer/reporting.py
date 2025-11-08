@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from collections.abc import Iterator
 from dataclasses import dataclass
 
@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from ..optimization_config import chat_prompt
+from ..optimization_config.chat_prompt import ImagePart, MessageDict, TextPart
 from ..reporting_utils import (  # noqa: F401
     convert_tqdm_to_rich,
     display_configuration,
@@ -21,19 +22,61 @@ PANEL_WIDTH = 90
 console = get_console()
 
 
+def _content_to_string(content: str | list[TextPart | ImagePart] | None) -> str:
+    """
+    Convert message content to a string representation for diffing.
+
+    Args:
+        content: Message content, either a string or a list of text/image parts.
+
+    Returns:
+        String representation of the content suitable for diffing.
+    """
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content
+
+    # Handle multimodal content (list of parts)
+    parts: list[str] = []
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            text_part = cast(TextPart, part)
+            text_content = text_part.get("text", "")
+            if text_content:
+                parts.append(f"[text] {text_content}")
+        elif part_type == "image_url":
+            image_part = cast(ImagePart, part)
+            image_url = image_part.get("image_url", {})
+            url = image_url.get("url", "") if isinstance(image_url, dict) else ""
+            if url:
+                # Truncate long URLs or base64 data
+                if url.startswith("data:image"):
+                    parts.append("[image] <base64 data>")
+                else:
+                    display_url = url[:50] + "..." if len(url) > 50 else url
+                    parts.append(f"[image] {display_url}")
+            else:
+                parts.append("[image] <no URL>")
+
+    return "\n".join(parts)
+
+
 @dataclass
 class MessageDiffItem:
     """Represents a single message's diff information."""
 
     role: str
     change_type: Literal["added", "removed", "unchanged", "changed"]
-    initial_content: str | None
-    optimized_content: str | None
+    initial_content: str | list[TextPart | ImagePart] | None
+    optimized_content: str | list[TextPart | ImagePart] | None
 
 
 def compute_message_diff_order(
-    initial_messages: list[dict[str, str]],
-    optimized_messages: list[dict[str, str]],
+    initial_messages: list[MessageDict],
+    optimized_messages: list[MessageDict],
 ) -> list[MessageDiffItem]:
     """
     Compute the diff between initial and optimized messages, returning them in optimized message order.
@@ -51,10 +94,10 @@ def compute_message_diff_order(
     """
 
     def group_by_role(
-        messages: list[dict[str, str]],
-    ) -> dict[str, list[tuple[int, str]]]:
+        messages: list[MessageDict],
+    ) -> dict[str, list[tuple[int, str | list[TextPart | ImagePart]]]]:
         """Group messages by role, storing (index, content) tuples."""
-        groups: dict[str, list[tuple[int, str]]] = {}
+        groups: dict[str, list[tuple[int, str | list[TextPart | ImagePart]]]] = {}
         for idx, msg in enumerate(messages):
             role = msg.get("role", "message")
             content = msg.get("content", "")
@@ -98,7 +141,13 @@ def compute_message_diff_order(
         elif initial_content == optimized_content:
             change_type = "unchanged"
         else:
-            change_type = "changed"
+            # For multimodal content, compare string representations
+            initial_str = _content_to_string(initial_content)
+            optimized_str = _content_to_string(optimized_content)
+            if initial_str == optimized_str:
+                change_type = "unchanged"
+            else:
+                change_type = "changed"
 
         diff_items.append(
             MessageDiffItem(
@@ -716,8 +765,8 @@ def display_iteration_improvement(
 
 
 def display_optimized_prompt_diff(
-    initial_messages: list[dict[str, str]],
-    optimized_messages: list[dict[str, str]],
+    initial_messages: list[MessageDict],
+    optimized_messages: list[MessageDict],
     initial_score: float,
     best_score: float,
     verbose: int = 1,
@@ -778,7 +827,8 @@ def display_optimized_prompt_diff(
                 Text("│     ").append(Text(f"{item.role}: (added)", style="green bold"))
             )
             assert item.optimized_content is not None
-            for line in item.optimized_content.splitlines():
+            optimized_str = _content_to_string(item.optimized_content)
+            for line in optimized_str.splitlines():
                 console.print(Text("│       ").append(Text(f"+{line}", style="green")))
             console.print(Text("│"))
         elif item.change_type == "removed":
@@ -787,7 +837,8 @@ def display_optimized_prompt_diff(
                 Text("│     ").append(Text(f"{item.role}: (removed)", style="red bold"))
             )
             assert item.initial_content is not None
-            for line in item.initial_content.splitlines():
+            initial_str = _content_to_string(item.initial_content)
+            for line in initial_str.splitlines():
                 console.print(Text("│       ").append(Text(f"-{line}", style="red")))
             console.print(Text("│"))
         elif item.change_type == "unchanged":
@@ -806,11 +857,15 @@ def display_optimized_prompt_diff(
             assert item.initial_content is not None
             assert item.optimized_content is not None
 
+            # Convert content to strings for diffing
+            initial_str = _content_to_string(item.initial_content)
+            optimized_str = _content_to_string(item.optimized_content)
+
             # Generate unified diff
             diff_lines = list(
                 difflib.unified_diff(
-                    item.initial_content.splitlines(keepends=False),
-                    item.optimized_content.splitlines(keepends=False),
+                    initial_str.splitlines(keepends=False),
+                    optimized_str.splitlines(keepends=False),
                     lineterm="",
                     n=3,  # 3 lines of context
                 )
