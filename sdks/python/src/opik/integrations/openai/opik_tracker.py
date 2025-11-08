@@ -164,9 +164,11 @@ def _patch_openai_videos(
     download_video_attachments: bool = True,
 ) -> None:
     video_job_decorator = openai_videos_decorator.OpenAIVideoJobTrackDecorator()
-    video_download_decorator = openai_videos_decorator.OpenAIVideoDownloadTrackDecorator(
-        client=openai_client,
-        download_attachments=download_video_attachments,
+    video_download_decorator = (
+        openai_videos_decorator.OpenAIVideoDownloadTrackDecorator(
+            client=openai_client,
+            download_attachments=download_video_attachments,
+        )
     )
 
     if openai_client.base_url.host != "api.openai.com":

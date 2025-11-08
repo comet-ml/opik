@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import tempfile
@@ -252,6 +253,14 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         output_dict = _serialize_response(output)
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            try:
+                LOGGER.debug(
+                    "GenAI operations.get payload: %s",
+                    json.dumps(output_dict, sort_keys=True, default=str),
+                )
+            except TypeError:
+                LOGGER.debug("GenAI operations.get payload: %s", output_dict)
         collection = _build_attachment_collection(output_dict)
         manifest = collection.manifest if collection else None
 

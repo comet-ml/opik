@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -208,8 +209,8 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
-        ) -> Optional[Any]:
-            return None
+    ) -> Optional[Any]:
+        return None
 
     def _resolve_video_metadata(
         self, video_id: Optional[str]
@@ -229,8 +230,19 @@ class OpenAIVideoDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator)
             return None
 
         data = _video_response_to_dict(video)
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            try:
+                LOGGER.debug(
+                    "OpenAI video metadata for %s: %s",
+                    video_id,
+                    json.dumps(data, sort_keys=True, default=str),
+                )
+            except TypeError:
+                LOGGER.debug("OpenAI video metadata for %s: %s", video_id, data)
+
         metadata = {
             "model": data.get("model"),
+            "prompt": data.get("prompt"),
             "seconds": data.get("seconds"),
             "size": data.get("size"),
             "status": data.get("status"),
