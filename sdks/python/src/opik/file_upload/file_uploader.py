@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 import httpx
@@ -38,6 +39,9 @@ def upload_attachment(
             exc_info=True,
         )
         raise
+    finally:
+        if upload_options.delete_after_upload:
+            _try_remove_file(upload_options.file_path)
 
 
 def _do_upload_attachment(
@@ -126,3 +130,14 @@ def upload_to_s3_directly(
         upload_metadata=upload_metadata,
         file_parts=sent_file_parts,
     )
+
+
+def _try_remove_file(file_path: str) -> None:
+    try:
+        os.remove(file_path)
+    except FileNotFoundError:
+        LOGGER.debug("Temporary attachment file already removed: %s", file_path)
+    except Exception:
+        LOGGER.warning(
+            "Failed to remove temporary attachment file: %s", file_path, exc_info=True
+        )
