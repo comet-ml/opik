@@ -48,7 +48,8 @@ public class CostService {
     }
 
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
+            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"),
+            SpanCostCalculator::defaultCost);
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
@@ -101,9 +102,15 @@ public class CostService {
                 BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
+                BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                String mode = Optional.ofNullable(modelCost.mode()).orElse("");
 
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
-                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                if ("video_generation".equalsIgnoreCase(mode) && videoOutputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = SpanCostCalculator::videoGenerationCost;
+                } else if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
                         || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
                     calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
                             SpanCostCalculator::textGenerationCost);
@@ -114,7 +121,7 @@ public class CostService {
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                cacheReadInputTokenPrice, calculator));
+                                cacheReadInputTokenPrice, videoOutputPrice, calculator));
             }
         });
 
