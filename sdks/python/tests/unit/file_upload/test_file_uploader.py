@@ -1,3 +1,4 @@
+import os
 import re
 import importlib
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from opik.file_upload import (
     file_upload_monitor,
     upload_options,
 )
+from opik.message_processing import messages
 from opik.rest_client_configurator import retry_decorator
 from . import conftest
 
@@ -98,6 +100,38 @@ def test_upload_attachment__local__no_monitor(
 
     route = respx.put(rx_url)
     assert route.call_count == 1
+
+
+def test_upload_attachment__cleans_up_temp_file(rest_client_local, respx_mock, tmp_path):
+    rx_url = re.compile("https://localhost:8080/bucket/*")
+    respx_mock.put(rx_url).respond(200)
+
+    temp_file = tmp_path / "temp-video.bin"
+    temp_file.write_bytes(b"\x00" * 1024)
+
+    attachment_message = messages.CreateAttachmentMessage(
+        file_path=str(temp_file),
+        file_name="temp-video.bin",
+        mime_type="video/mp4",
+        entity_type="span",
+        entity_id="entity",
+        project_name="project",
+        encoded_url_override="encoded",
+        delete_after_upload=True,
+    )
+    file_to_upload = upload_options.file_upload_options_from_attachment(
+        attachment_message
+    )
+
+    file_uploader.upload_attachment(
+        upload_options=file_to_upload,
+        rest_client=rest_client_local,
+        upload_httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
+    )
+
+    assert not os.path.exists(temp_file)
 
 
 class TestUploadAttachmentRetry:
