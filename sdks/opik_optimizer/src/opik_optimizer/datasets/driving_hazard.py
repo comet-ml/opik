@@ -13,7 +13,14 @@ from __future__ import annotations
 from typing import Any
 
 import opik
-from PIL import Image
+
+try:  # Pillow is optional until an image dataset is loaded
+    from PIL import Image as _PillowImage
+except ModuleNotFoundError as exc:
+    _PillowImage = None
+    _PIL_IMPORT_ERROR = exc
+else:
+    _PIL_IMPORT_ERROR = None
 
 # Import our image utilities
 from opik_optimizer.utils.image_helpers import (
@@ -21,6 +28,15 @@ from opik_optimizer.utils.image_helpers import (
     convert_to_structured_content,
     warn_if_python_sdk_outdated,
 )
+
+
+def _ensure_pillow() -> Any:
+    if _PillowImage is None:
+        raise ModuleNotFoundError(
+            "Pillow is required to use the driving_hazard datasets. "
+            "Install it with `pip install Pillow` to enable multimodal samples."
+        ) from _PIL_IMPORT_ERROR
+    return _PillowImage
 
 
 def driving_hazard_50(
@@ -259,6 +275,8 @@ def _process_dhpr_item(
     if image_obj is None:
         raise ValueError(f"Item {question_id} has no image")
 
+    PillowImage = _ensure_pillow()
+
     # Convert HuggingFace image to PIL Image if needed
     if hasattr(image_obj, "convert"):
         # Already a PIL Image
@@ -266,15 +284,14 @@ def _process_dhpr_item(
     elif isinstance(image_obj, dict) and "bytes" in image_obj:
         # Image stored as bytes
         from io import BytesIO
-
-        pil_image = Image.open(BytesIO(image_obj["bytes"]))
+        pil_image = PillowImage.open(BytesIO(image_obj["bytes"]))
     else:
         # Try to convert directly
-        pil_image = Image.open(image_obj)
+        pil_image = PillowImage.open(image_obj)
 
     # Resize if needed
     if max_image_size:
-        pil_image.thumbnail(max_image_size, Image.Resampling.LANCZOS)
+        pil_image.thumbnail(max_image_size, PillowImage.Resampling.LANCZOS)
 
     # Encode to base64 data URI
     image_uri = encode_pil_to_base64_uri(

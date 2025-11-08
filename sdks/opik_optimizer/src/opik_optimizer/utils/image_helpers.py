@@ -15,8 +15,12 @@ import warnings
 from io import BytesIO
 from typing import Any
 
+PillowImageType: Any
+_PillowImage: Any | None
+_PIL_IMPORT_ERROR: ModuleNotFoundError | None
+
 try:  # Pillow is optional for text-only users
-    from PIL import Image as _PillowImage
+    from PIL import Image as _PillowImage  # type: ignore
 except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency guard
     _PillowImage = None
     _PIL_IMPORT_ERROR = exc
@@ -226,8 +230,10 @@ def get_image_format_from_uri(data_uri: str) -> str | None:
 
 
 def convert_to_structured_content(
-    text: str, image_uri: str | None = None, image_detail: str = "auto"
-) -> list[dict]:
+    text: str,
+    image_uri: str | None = None,
+    image_detail: str = "auto",
+) -> list[dict[str, Any]]:
     """
     Convert text and optional image to OpenAI structured content format.
 
@@ -250,7 +256,7 @@ def convert_to_structured_content(
             {"type": "image_url", "image_url": {"url": "data:...", "detail": "auto"}}
         ]
     """
-    parts = [{"type": "text", "text": text}]
+    parts: list[dict[str, Any]] = [{"type": "text", "text": text}]
 
     if image_uri:
         parts.append(
@@ -263,7 +269,9 @@ def convert_to_structured_content(
     return parts
 
 
-def extract_images_from_structured_content(content: list[dict]) -> list[str]:
+def extract_images_from_structured_content(
+    content: list[dict[str, Any]]
+) -> list[str]:
     """
     Extract all image URIs from structured content.
 

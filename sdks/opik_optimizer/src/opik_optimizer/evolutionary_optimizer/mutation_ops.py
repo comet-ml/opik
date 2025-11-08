@@ -214,7 +214,7 @@ class MutationOps:
 
             # Rebuild content with mutated text, preserving any images
             if mutated_text:
-                new_content = rebuild_content_with_mutated_text(content, mutated_text)
+                new_content = rebuild_content_with_text(content, mutated_text)
                 mutated_messages.append({"role": role, "content": new_content})
             else:
                 mutated_messages.append({"role": role, "content": content})
