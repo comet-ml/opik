@@ -19,6 +19,7 @@ import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import LLMProvider
+from opik.media import video_artifacts
 
 from . import stream_wrappers
 
@@ -100,6 +101,17 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             result_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
 
+        video_collection = video_artifacts.collect_video_artifacts(
+            output,
+            provider=self.provider,
+            source="google.genai.generate_content",
+        )
+        if video_collection.manifest:
+            metadata = dict_utils.deepmerge(
+                metadata or {},
+                {video_artifacts.VIDEO_METADATA_KEY: video_collection.manifest},
+            )
+
         if result_dict.get("model_version") is not None:
             # Gemini **may** add "models/" prefix to some model versions
             model = result_dict["model_version"].split("/")[-1]
@@ -120,6 +132,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata=metadata,
             model=model,
             provider=self.provider,
+            attachments=video_collection.attachments if video_collection.attachments else None,
         )
 
         return result
