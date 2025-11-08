@@ -15,6 +15,7 @@ import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import LLMProvider
+from opik.media import video_artifacts
 
 import litellm
 import litellm.types.utils
@@ -200,6 +201,17 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         opik_usage = _extract_usage_from_response(response_dict)
         total_cost = _calculate_completion_cost(output)
 
+        video_collection = video_artifacts.collect_video_artifacts(
+            output_data,
+            provider=provider.value if provider else None,
+            source="litellm.completion",
+        )
+        if video_collection.manifest:
+            metadata = dict_utils.deepmerge(
+                metadata or {},
+                {video_artifacts.VIDEO_METADATA_KEY: video_collection.manifest},
+            )
+
         return arguments_helpers.EndSpanParameters(
             output=output_data,
             usage=opik_usage,
@@ -207,6 +219,7 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             model=model,
             provider=provider.value if provider else None,
             total_cost=total_cost,
+            attachments=video_collection.attachments if video_collection.attachments else None,
         )
 
     @override
