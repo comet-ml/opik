@@ -78,7 +78,7 @@ optimization_result = optimizer.optimize_prompt(
     dataset=dataset,
     metric=answer_correctness_score,
     max_trials=5,
-    n_samples=10,
+    n_samples=100,
     max_retries=0,
 )
 

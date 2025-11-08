@@ -160,5 +160,6 @@ module.exports = {
   ],
   safelist: [
     "playground-table",
+    "compare-optimizations-table",
   ],
 };
