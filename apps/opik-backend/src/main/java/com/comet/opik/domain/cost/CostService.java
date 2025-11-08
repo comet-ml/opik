@@ -110,13 +110,15 @@ public class CostService {
                 BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
                 if ("video_generation".equalsIgnoreCase(mode) && videoOutputPrice.compareTo(BigDecimal.ZERO) > 0) {
                     calculator = SpanCostCalculator::videoGenerationCost;
-                } else if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                            SpanCostCalculator::textGenerationCost);
-                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = SpanCostCalculator::textGenerationCost;
-                }
+                } else
+                    if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                            || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                                calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                                        SpanCostCalculator::textGenerationCost);
+                            } else
+                        if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                            calculator = SpanCostCalculator::textGenerationCost;
+                        }
 
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
