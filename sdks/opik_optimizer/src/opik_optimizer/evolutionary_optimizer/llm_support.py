@@ -12,6 +12,7 @@ from litellm.types.caching import LiteLLMCacheType
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from .. import _throttle
+from ..utils.message_content import is_multimodal_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -46,14 +47,7 @@ class LlmSupport:
 
     def _has_images_in_messages(self, messages: list[dict[str, Any]]) -> bool:
         """Check if messages contain image content."""
-        for msg in messages:
-            content = msg.get("content", "")
-            # Check for structured content with images
-            if isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "image_url":
-                        return True
-        return False
+        return is_multimodal_prompt(messages)
 
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(

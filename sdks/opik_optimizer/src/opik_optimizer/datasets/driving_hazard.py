@@ -10,7 +10,7 @@ Dataset: https://huggingface.co/datasets/DHPR/Driving-Hazard-Prediction-and-Reas
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import opik
 from PIL import Image
@@ -25,7 +25,7 @@ from opik_optimizer.utils.image_helpers import (
 
 def driving_hazard_50(
     test_mode: bool = False,
-    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
     """
@@ -71,7 +71,7 @@ def driving_hazard_50(
 
 def driving_hazard_100(
     test_mode: bool = False,
-    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
     """
@@ -99,7 +99,7 @@ def driving_hazard_100(
 
 def driving_hazard_test_split(
     test_mode: bool = False,
-    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
     """
@@ -130,7 +130,7 @@ def _load_dhpr_dataset(
     nb_items: int,
     test_mode: bool,
     split: str = "train",
-    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
     """
@@ -235,7 +235,7 @@ def _load_dhpr_dataset(
 
 def _process_dhpr_item(
     item: dict[str, Any],
-    max_image_size: Optional[tuple[int, int]],
+    max_image_size: tuple[int, int] | None,
     image_quality: int,
 ) -> dict[str, Any]:
     """

@@ -203,6 +203,48 @@ def _format_message_content(content: str | list[TextPart | ImagePart]) -> Text:
     return result
 
 
+def content_to_diff_string(
+    content: str | list[TextPart | ImagePart] | None,
+) -> str:
+    """
+    Convert message content (text or multimodal) into a compact string for diff views.
+
+    Args:
+        content: Message content to stringify.
+
+    Returns:
+        Human-readable string describing the content.
+    """
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content
+
+    parts: list[str] = []
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            text_part = cast(TextPart, part)
+            text_content = text_part.get("text", "")
+            if text_content:
+                parts.append(f"[text] {text_content}")
+        elif part_type == "image_url":
+            image_part = cast(ImagePart, part)
+            image_url = image_part.get("image_url", {})
+            url = image_url.get("url", "") if isinstance(image_url, dict) else ""
+            if url:
+                if url.startswith("data:image"):
+                    parts.append("[image] <base64 data>")
+                else:
+                    display_url = url[:50] + "..." if len(url) > 50 else url
+                    parts.append(f"[image] {display_url}")
+            else:
+                parts.append("[image] <no URL>")
+
+    return "\n".join(parts)
+
+
 def display_messages(messages: list[MessageDict], prefix: str = "") -> None:
     """
     Display messages using Rich panels, supporting both string and multimodal content.

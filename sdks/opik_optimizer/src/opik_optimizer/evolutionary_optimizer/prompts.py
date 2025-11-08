@@ -4,42 +4,6 @@
 import json
 
 
-def _is_multimodal_prompt(messages: list[dict] | str | None) -> bool:
-    """
-    Detect if a prompt contains multimodal content (images).
-
-    Args:
-        messages: Prompt messages or content
-
-    Returns:
-        True if multimodal content detected
-    """
-    if not messages:
-        return False
-
-    # Check for structured content with image_url
-    if isinstance(messages, list):
-        for message in messages:
-            if isinstance(message, dict):
-                content = message.get("content", "")
-                # Check for structured content (list of parts)
-                if isinstance(content, list):
-                    for part in content:
-                        if isinstance(part, dict) and part.get("type") == "image_url":
-                            return True
-                # Check for image placeholders in string content
-                elif isinstance(content, str):
-                    if "{image" in content.lower() or "<<<image>>>" in content:
-                        return True
-
-    # Check in string
-    if isinstance(messages, str):
-        if "{image" in messages.lower() or "<<<image>>>" in messages:
-            return True
-
-    return False
-
-
 def _get_multimodal_guidance() -> str:
     """
     Get additional guidance for multimodal/vision tasks.

@@ -1,4 +1,4 @@
-from typing import Any, TYPE_CHECKING, Union, List, Dict
+from typing import Any, TYPE_CHECKING
 from collections.abc import Callable
 
 import json
@@ -10,40 +10,14 @@ from .mcp import EvolutionaryMCPContext, tool_description_mutation
 from ..optimization_config import chat_prompt
 from .. import utils
 from . import reporting
+from ..utils.message_content import (
+    MessageContent,
+    extract_text_from_content,
+    is_multimodal_prompt,
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-# Type alias for multimodal content
-MessageContent = Union[str, List[Dict[str, Any]]]
-
-
-def extract_text_from_content(content: MessageContent) -> str:
-    """
-    Extract text from message content, handling both string and structured formats.
-
-    For structured content (multimodal), extracts only text parts and ignores images.
-
-    Args:
-        content: Message content (string or structured list)
-
-    Returns:
-        Extracted text as a string
-    """
-    if isinstance(content, str):
-        return content
-
-    if isinstance(content, list):
-        # Extract text from structured content
-        text_parts = []
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "text":
-                text_parts.append(part.get("text", ""))
-
-        return " ".join(text_parts)
-
-    return str(content)
 
 
 def rebuild_content_with_mutated_text(
@@ -158,7 +132,7 @@ class MutationOps:
         """Enhanced semantic mutation with multiple strategies."""
         current_output_style_guidance = self.output_style_guidance
         # Detect if we're working with multimodal prompts
-        is_multimodal = evo_prompts._is_multimodal_prompt(prompt.get_messages())
+        is_multimodal = is_multimodal_prompt(prompt.get_messages())
         if random.random() < 0.1:
             return self._radical_innovation_mutation(prompt, initial_prompt)
 
@@ -353,7 +327,7 @@ class MutationOps:
         task_desc_for_llm = self._get_task_description_for_llm(initial_prompt)
         current_output_style_guidance = self.output_style_guidance
         # Detect if we're working with multimodal prompts
-        is_multimodal = evo_prompts._is_multimodal_prompt(prompt.get_messages())
+        is_multimodal = is_multimodal_prompt(prompt.get_messages())
 
         user_prompt_for_radical_innovation = evo_prompts.radical_innovation_user_prompt(
             task_desc_for_llm, current_output_style_guidance, prompt.get_messages()

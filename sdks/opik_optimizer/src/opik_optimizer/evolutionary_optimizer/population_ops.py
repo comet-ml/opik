@@ -11,6 +11,7 @@ from . import reporting
 from .mcp import EvolutionaryMCPContext, initialize_population_mcp
 from ..optimization_config import chat_prompt
 from .. import utils
+from ..utils.message_content import is_multimodal_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class PopulationOps:
             current_output_style_guidance = self.output_style_guidance
 
             # Detect if we're working with multimodal prompts
-            is_multimodal = evo_prompts._is_multimodal_prompt(prompt.get_messages())
+            is_multimodal = is_multimodal_prompt(prompt.get_messages())
 
             # Fresh starts
             if num_fresh_starts > 0:
