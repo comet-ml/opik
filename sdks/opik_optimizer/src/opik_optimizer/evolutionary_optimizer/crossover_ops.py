@@ -8,6 +8,7 @@ from deap import creator as _creator
 
 from . import prompts as evo_prompts
 from . import reporting
+from .mutation_ops import MessageContent
 from .. import utils
 
 

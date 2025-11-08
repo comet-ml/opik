@@ -43,7 +43,7 @@ prompt = ChatPrompt(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": "{image}",
+                        "url": "{image_uri}",
                     },
                 },
             ],
