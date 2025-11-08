@@ -103,7 +103,7 @@ def _extract_passthrough_usage(usage: Dict[str, Any]) -> Tuple[Any, Dict[str, in
 
 def _coerce_int(value: Any) -> Optional[int]:
     if isinstance(value, bool):
-        return int(value)
+        return None
     if isinstance(value, int):
         return value
     if isinstance(value, float):

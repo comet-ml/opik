@@ -30,6 +30,10 @@ def track_genai(
     Args:
         client: An instance of genai.Client.
         project_name: The name of the project to log data.
+        download_video_attachments: When True (default), completed generate_videos
+            operations download the resulting files and upload them to Opik as
+            attachments. Set to False to skip the download step (e.g., to avoid large
+            transfers) while still recording the metadata.
 
     Returns:
         The modified genai.Client with Opik tracking enabled.

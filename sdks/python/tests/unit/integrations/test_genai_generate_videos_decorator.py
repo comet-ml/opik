@@ -5,15 +5,17 @@ try:
 except ModuleNotFoundError:
     pytest.skip("google-genai not installed", allow_module_level=True)
 
+from opik.media import video_utils
+
 
 def test_extract_duration_from_span_input() -> None:
     span_input = {"video_config": {"duration_seconds": "12"}}
-    assert decorator._extract_duration_seconds(span_input, {}) == 12
+    assert video_utils.extract_duration_seconds(span_input, {}) == 12
 
 
 def test_extract_duration_from_response() -> None:
     output = {"response": {"duration_seconds": 6}}
-    assert decorator._extract_duration_seconds({}, output) == 6
+    assert video_utils.extract_duration_seconds({}, output) == 6
 
 
 def test_extract_manifest_builds_entries() -> None:

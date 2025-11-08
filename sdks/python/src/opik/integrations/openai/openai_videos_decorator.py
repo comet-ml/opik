@@ -13,6 +13,7 @@ import opik.dict_utils as dict_utils
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.media import video_artifacts
+from opik.media import video_utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -208,20 +209,7 @@ def _video_response_to_dict(output: Any) -> Dict[str, Any]:
 
 
 def _build_video_usage(result: Dict[str, Any]) -> Optional[Dict[str, int]]:
-    duration = _safe_float(
-        result.get("seconds")
-        or result.get("duration_seconds")
-        or result.get("duration")
-    )
+    duration = video_utils.extract_duration_seconds(None, result)
     if duration is None or duration <= 0:
         return None
-    return {"video_duration_seconds": int(round(duration))}
-
-
-def _safe_float(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    return {"video_duration_seconds": duration}

@@ -7,7 +7,7 @@ from typing_extensions import override
 import opik.dict_utils as dict_utils
 from opik.api_objects import span, attachment
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik.media import video_artifacts
+from opik.media import video_artifacts, video_utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,7 +96,9 @@ class GenerateVideosTrackDecorator(base_track_decorator.BaseTrackDecorator):
         ):
             metadata[video_artifacts.VIDEO_METADATA_KEY] = attachments_collection.manifest
 
-        duration_seconds = _extract_duration_seconds(current_span_data.input, output_dict)
+        duration_seconds = video_utils.extract_duration_seconds(
+            current_span_data.input, output_dict
+        )
         usage: Optional[Dict[str, int]] = None
         if duration_seconds is not None and duration_seconds > 0:
             usage = {"video_duration_seconds": duration_seconds}
@@ -203,44 +205,6 @@ def _build_attachment_collection(output: Dict[str, Any]) -> Optional[
         )
 
     return video_artifacts.VideoArtifactCollection.from_artifacts(attachments)
-
-
-def _extract_duration_seconds(
-    span_input: Optional[Dict[str, Any]],
-    output: Dict[str, Any],
-) -> Optional[int]:
-    candidates: List[Optional[Any]] = []
-    if isinstance(span_input, dict):
-        candidates.extend(
-            [
-                _dig(span_input, ("video_config", "duration_seconds")),
-                _dig(span_input, ("config", "video", "duration_seconds")),
-            ]
-        )
-    response = output.get("response") or {}
-    candidates.append(response.get("duration_seconds"))
-    candidates.append(output.get("duration_seconds"))
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        try:
-            value = int(float(candidate))
-            if value > 0:
-                return value
-        except (TypeError, ValueError):
-            continue
-    return None
-
-
-def _dig(payload: Dict[str, Any], path: Tuple[str, ...]) -> Optional[Any]:
-    current: Any = payload
-    for key in path:
-        if not isinstance(current, dict):
-            return None
-        current = current.get(key)
-    return current
-
-
 class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
     """
     Tracks operations.get to enrich spans when a video job completes.
@@ -292,7 +256,9 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
         if operation_name:
             metadata["genai_operation"] = operation_name
 
-        duration_seconds = _extract_duration_seconds(current_span_data.input, output_dict)
+        duration_seconds = video_utils.extract_duration_seconds(
+            current_span_data.input, output_dict
+        )
         usage = (
             {"video_duration_seconds": duration_seconds}
             if duration_seconds and duration_seconds > 0
@@ -375,13 +341,9 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
     def _try_download(self, file_id: str) -> Optional[Any]:
         try:
             response = self._client.files.download(name=file_id)
-            self._raise_for_status(response)
-            return response
         except TypeError:
             try:
                 response = self._client.files.download(file={"name": file_id})
-                self._raise_for_status(response)
-                return response
             except Exception:
                 LOGGER.debug(
                     "Fallback download failed for %s", file_id, exc_info=True
@@ -390,6 +352,9 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
         except Exception:
             LOGGER.debug("Download failed for %s", file_id, exc_info=True)
             return None
+
+        self._raise_for_status(response)
+        return response
 
     def _raise_for_status(self, response: Any) -> None:
         status_code = getattr(response, "status_code", None)
@@ -406,7 +371,10 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
 
     def _persist_download(self, response: Any) -> Optional[str]:
         fd, temp_path = tempfile.mkstemp(prefix="opik-genai-video-", suffix=".mp4")
-        os.close(fd)
+        try:
+            os.close(fd)
+        except OSError:
+            pass
         try:
             if hasattr(response, "save"):
                 response.save(temp_path)  # type: ignore[attr-defined]
@@ -421,7 +389,7 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
                 data = response.body
 
             if data is None:
-                return None
+                raise RuntimeError("Download response body is empty")
 
             with open(temp_path, "wb") as fp:
                 fp.write(data)
@@ -439,5 +407,4 @@ class GenerateVideosOperationTracker(base_track_decorator.BaseTrackDecorator):
             f"⚠️  Google GenAI video download failed for {file_id}: {reason}"
         )
         LOGGER.warning(message)
-        print(message)
         return {"file_id": file_id, "reason": reason}
