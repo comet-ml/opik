@@ -31,7 +31,6 @@ from opik_optimizer.utils.prompt_segments import extract_prompt_segments
 from .mcp import EvolutionaryMCPContext, finalize_mcp_result
 
 from . import reporting
-from .llm_support import LlmSupport
 from .mutation_ops import MutationOps
 from .crossover_ops import CrossoverOps
 from .population_ops import PopulationOps
@@ -48,19 +47,41 @@ creator = cast(Any, _creator)  # type: ignore[assignment]
 
 class EvolutionaryOptimizer(BaseOptimizer):
     """
-    The Evolutionary Optimizer can be used to optimize prompts using a 4 stage genetic algorithm
-    approach:
+    Evolutionary Optimizer that uses genetic algorithms to evolve and improve prompts over generations.
 
-    1. Generate a set of candidate prompts based on variations of the best prompts (exploitation) as
-    well as completely new prompts (exploration)
-    2. Evaluate the candidate prompts
-    3. Select the best prompts
-    4. Repeat until convergence
+    This optimizer uses a 4-stage genetic algorithm approach:
+
+    1. Generate candidate prompts through variations of the best prompts (exploitation) and
+       completely new prompts (exploration)
+    2. Evaluate the candidate prompts on the dataset
+    3. Select the best prompts based on fitness
+    4. Repeat until convergence or max generations reached
 
     This algorithm is best used if you have a first draft prompt and would like to find a better
-    prompt.
+    prompt through iterative evolution. It supports both single-objective and multi-objective
+    optimization (balancing performance and prompt length).
 
     Note: This algorithm is time consuming and can be expensive to run.
+
+    Args:
+        model: LiteLLM model name for optimizer's internal operations (mutations, crossover, etc.)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        population_size: Number of prompts in the population
+        num_generations: Number of generations to run
+        mutation_rate: Mutation rate for genetic operations
+        crossover_rate: Crossover rate for genetic operations
+        tournament_size: Tournament size for selection
+        elitism_size: Number of elite prompts to preserve across generations
+        adaptive_mutation: Whether to use adaptive mutation that adjusts based on population diversity
+        enable_moo: Whether to enable multi-objective optimization (optimizes metric and prompt length)
+        enable_llm_crossover: Whether to enable LLM-based crossover operations
+        output_style_guidance: Optional guidance for output style in generated prompts
+        infer_output_style: Whether to automatically infer output style from the dataset
+        n_threads: Number of threads for parallel evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     DEFAULT_POPULATION_SIZE = 30
@@ -77,7 +98,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_DIVERSITY_THRESHOLD = 0.7
     DEFAULT_RESTART_THRESHOLD = 0.01
     DEFAULT_RESTART_GENERATIONS = 3
-    DEFAULT_CACHE_SIZE = 1000
     DEFAULT_EARLY_STOPPING_GENERATIONS = 5
     DEFAULT_ENABLE_MOO = True
     DEFAULT_ENABLE_LLM_CROSSOVER = True
@@ -98,43 +118,23 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
+        model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
         crossover_rate: float = DEFAULT_CROSSOVER_RATE,
         tournament_size: int = DEFAULT_TOURNAMENT_SIZE,
-        num_threads: int | None = None,
         elitism_size: int = DEFAULT_ELITISM_SIZE,
         adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = DEFAULT_ENABLE_MOO,
         enable_llm_crossover: bool = DEFAULT_ENABLE_LLM_CROSSOVER,
-        seed: int | None = DEFAULT_SEED,
         output_style_guidance: str | None = None,
         infer_output_style: bool = False,
-        verbose: int = 1,
         n_threads: int = DEFAULT_NUM_THREADS,
-        **model_kwargs: Any,
+        verbose: int = 1,
+        seed: int = DEFAULT_SEED,
     ) -> None:
-        """
-        Args:
-            model: The model to use for evaluation
-            population_size: Number of prompts in the population
-            num_generations: Number of generations to run
-            mutation_rate: Mutation rate for genetic operations
-            crossover_rate: Crossover rate for genetic operations
-            tournament_size: Tournament size for selection
-            n_threads: Number of threads for parallel evaluation
-            elitism_size: Number of elitism prompts
-            adaptive_mutation: Whether to use adaptive mutation
-            enable_moo: Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of the prompt
-            enable_llm_crossover: Whether to enable LLM crossover
-            seed: Random seed for reproducibility
-            output_style_guidance: Output style guidance for prompts
-            infer_output_style: Whether to infer output style
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-            **model_kwargs: Additional model parameters
-        """
         # Initialize base class first
         if sys.version_info >= (3, 13):
             warnings.warn(
@@ -142,42 +142,27 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "You may see asyncio teardown warnings. Prefer Python 3.12.",
                 RuntimeWarning,
             )
-        if "project_name" in model_kwargs:
-            warnings.warn(
-                "The 'project_name' parameter in optimizer constructor is deprecated. "
-                "Set project_name in the ChatPrompt instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            del model_kwargs["project_name"]
 
-        super().__init__(model=model, verbose=verbose, **model_kwargs)
+        super().__init__(
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+        )
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.tournament_size = tournament_size
-        if num_threads is not None:
-            warnings.warn(
-                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
-                "Use 'n_threads' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            n_threads = num_threads
-        self.num_threads = n_threads
+        self.n_threads = n_threads
         self.elitism_size = elitism_size
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
-        self.seed = seed if seed is not None else self.DEFAULT_SEED
+        self.seed = seed
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
-        self._current_optimization_id: str | None = None
         self._current_generation = 0
         self._best_fitness_history: list[float] = []
         self._generations_without_improvement = 0
@@ -249,8 +234,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 func = getattr(cls, name)
                 setattr(self, name, func.__get__(self, self.__class__))
 
-        # LLM calls
-        bind(LlmSupport, ["_call_model"])
+        # LLM calls - now inherited from BaseOptimizer
+        # bind(LlmSupport, ["_call_model"])  # Removed - using BaseOptimizer._call_model
 
         # Mutations
         bind(
@@ -318,6 +303,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> Any:
         individual = creator.Individual(prompt_candidate.get_messages())
         setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
+        setattr(individual, "function_map", prompt_candidate.function_map)
         return individual
 
     def _update_individual_with_prompt(
@@ -325,6 +311,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> Any:
         individual[:] = prompt_candidate.get_messages()
         setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
+        setattr(individual, "function_map", prompt_candidate.function_map)
         return individual
 
     def _get_adaptive_mutation_rate(self) -> float:
@@ -415,13 +402,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
         else:
             elites = tools.selBest(population, self.elitism_size)
 
-        seed_prompt = (
-            chat_prompt.ChatPrompt(
-                messages=max(elites, key=lambda x: x.fitness.values[0])
+        if elites:
+            best_elite = max(elites, key=lambda x: x.fitness.values[0])
+            seed_prompt = chat_prompt.ChatPrompt(
+                messages=best_elite,
+                tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
+                function_map=getattr(
+                    best_elite, "function_map", best_prompt_so_far.function_map
+                ),
             )
-            if elites
-            else best_prompt_so_far
-        )
+        else:
+            seed_prompt = best_prompt_so_far
 
         prompt_variants = self._initialize_population(seed_prompt)
         new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]
@@ -522,6 +513,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
+        max_trials: int = 10,
+        mcp_config: MCPExecutionConfig | None = None,
+        *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -533,21 +528,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
             n_samples: Optional number of samples to use
             auto_continue: Whether to automatically continue optimization
             agent_class: Optional agent class to use
-            **kwargs: Additional keyword arguments including:
-                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+            project_name: Opik project name for logging traces (default: "Optimization")
+            mcp_config: MCP tool calling configuration (default: None)
         """
         # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
-
-        # Extract MCP config from kwargs (for optional MCP workflows)
-        mcp_config = kwargs.pop("mcp_config", None)
+        self._validate_optimization_inputs(prompt, dataset, metric)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
         evaluation_kwargs: dict[str, Any] = {}
         if mcp_config is not None:
             evaluation_kwargs["mcp_config"] = mcp_config
 
-        self.project_name = self.agent_class.project_name
+        # Set project name from parameter
+        self.project_name = project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: optimization.Optimization | None = None
@@ -557,14 +549,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
-            self._current_optimization_id = opik_optimization_run.id
+            self.current_optimization_id = opik_optimization_run.id
         except Exception as e:
             logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
-            self._current_optimization_id = None
+            self.current_optimization_id = None
 
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=self._current_optimization_id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -583,7 +575,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # Step 1. Step variables and define fitness function
-        self.reset_counters()  # Reset counters for run
+        self._reset_counters()  # Reset counters for run
+        trials_used = [0]  # Use list for closure mutability
         self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
@@ -595,7 +588,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
             def _deap_evaluate_individual_fitness(
                 messages: list[dict[str, str]],
-            ) -> tuple[float, float]:
+            ) -> tuple[float, ...]:
+                # Check if we've hit the limit
+                if trials_used[0] >= max_trials:
+                    logger.debug(
+                        f"Skipping evaluation - max_trials ({max_trials}) reached"
+                    )
+                    return (-float("inf"), float("inf"))  # Worst possible fitness
+
+                trials_used[0] += 1
+
                 primary_fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -603,7 +605,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self._current_optimization_id,
+                    optimization_id=self.current_optimization_id,
                     verbose=0,
                     **evaluation_kwargs,
                 )
@@ -614,7 +616,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # Single-objective
             def _deap_evaluate_individual_fitness(
                 messages: list[dict[str, str]],
-            ) -> tuple[float, float]:
+            ) -> tuple[float, ...]:
+                # Check if we've hit the limit
+                if trials_used[0] >= max_trials:
+                    logger.debug(
+                        f"Skipping evaluation - max_trials ({max_trials}) reached"
+                    )
+                    return (-float("inf"),)  # Worst possible fitness
+
+                trials_used[0] += 1
+
                 fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -622,11 +633,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self._current_optimization_id,
+                    optimization_id=self.current_optimization_id,
                     verbose=0,
                     **evaluation_kwargs,
                 )
-                return (fitness_score, 0.0)
+                return (fitness_score,)
 
         self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
 
@@ -644,6 +655,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 else float(len(json.dumps(prompt.get_messages())))
             )
 
+            trials_used[0] = 0
             best_primary_score_overall = initial_primary_score
             best_prompt_overall = prompt
             report_baseline_performance.set_score(initial_primary_score)
@@ -715,14 +727,22 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 )
                 best_primary_score_overall = current_best_for_primary.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
-                    messages=current_best_for_primary
+                    messages=current_best_for_primary,
+                    tools=getattr(current_best_for_primary, "tools", prompt.tools),
+                    function_map=getattr(
+                        current_best_for_primary, "function_map", prompt.function_map
+                    ),
                 )
             else:
                 # Single-objective
                 current_best_on_front = hof[0]
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
-                    messages=current_best_on_front
+                    messages=current_best_on_front,
+                    tools=getattr(current_best_on_front, "tools", prompt.tools),
+                    function_map=getattr(
+                        current_best_on_front, "function_map", prompt.function_map
+                    ),
                 )
 
             if self.enable_moo:
@@ -756,6 +776,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose
         ) as report_evolutionary_algo:
             for generation_idx in range(1, self.num_generations + 1):
+                # Check if we've exhausted our evaluation budget
+                if trials_used[0] >= max_trials:
+                    logger.info(
+                        f"Stopping optimization: max_trials ({max_trials}) reached after {generation_idx - 1} generations"
+                    )
+                    break
+
                 report_evolutionary_algo.start_gen(generation_idx, self.num_generations)
 
                 curr_best_score = self._population_best_score(deap_population)
@@ -854,7 +881,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     final_results_log += f"  Solution {i + 1}: Primary Score={sol.fitness.values[0]:.4f}, Length={sol.fitness.values[1]:.0f}, Prompt='{str(sol)[:100]}...'\n"
                 best_overall_solution = sorted_hof[0]
                 final_best_prompt = chat_prompt.ChatPrompt(
-                    messages=best_overall_solution
+                    messages=best_overall_solution,
+                    tools=getattr(best_overall_solution, "tools", prompt.tools),
+                    function_map=getattr(
+                        best_overall_solution, "function_map", prompt.function_map
+                    ),
                 )
                 final_primary_score = best_overall_solution.fitness.values[0]
                 final_length = best_overall_solution.fitness.values[1]
@@ -922,11 +953,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
 
         logger.info(f"Total LLM calls during optimization: {self.llm_call_counter}")
+        logger.info(f"Total prompt evaluations: {trials_used[0]}")
         if opik_optimization_run:
             try:
                 opik_optimization_run.update(status="completed")
                 logger.info(
-                    f"Opik Optimization run {self._current_optimization_id} status updated to completed."
+                    f"Opik Optimization run {self.current_optimization_id} status updated to completed."
                 )
             except Exception as e:
                 logger.warning(f"Failed to update Opik Optimization run status: {e}")
@@ -952,13 +984,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "seed": self.seed,
                 "prompt_type": "single_string_ga",
                 "initial_score_for_display": initial_score_for_display,
-                "temperature": self.model_kwargs.get("temperature"),
+                "temperature": self.model_parameters.get("temperature"),
                 "stopped_early": stopped_early_flag,
                 "rounds": self.get_history(),
                 "user_output_style_guidance": self.output_style_guidance,
                 "infer_output_style_requested": self.infer_output_style,
                 "final_effective_output_style_guidance": effective_output_style_guidance,
                 "infer_output_style": self.infer_output_style,
+                "trials_used": trials_used[0],
             }
         )
 
@@ -974,14 +1007,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         final_tools = getattr(final_best_prompt, "tools", None)
         if final_tools:
             final_details["final_tools"] = final_tools
-            tool_prompts = {
-                (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
-                    "function", {}
-                ).get("description")
-                for idx, tool in enumerate(final_tools)
-            }
-        else:
-            tool_prompts = None
+        tool_prompts = self._extract_tool_prompts(final_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -995,7 +1021,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             llm_calls=self.llm_call_counter,
             tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
-            optimization_id=self._current_optimization_id,
+            optimization_id=self.current_optimization_id,
             tool_prompts=tool_prompts,
         )
 
@@ -1090,7 +1116,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             self._mcp_context = previous_context
             self.enable_llm_crossover = previous_crossover
 
-        finalize_mcp_result(result, context, panel_style)
+        finalize_mcp_result(result, context, panel_style, optimizer=self)
         return result
 
     # Evaluation is provided by EvaluationOps
@@ -1102,7 +1128,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def _get_reasoning_system_prompt_for_variation(self) -> str:
         return evo_prompts.variation_system_prompt(self.output_style_guidance)
 
-    def get_llm_crossover_system_prompt(self) -> str:
+    def _get_llm_crossover_system_prompt(self) -> str:
         return evo_prompts.llm_crossover_system_prompt(self.output_style_guidance)
 
     def _get_radical_innovation_system_prompt(self) -> str:
