@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events.webhooks.slack;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
@@ -41,6 +42,12 @@ public class AlertPayloadAdapter {
     };
 
     private static final TypeReference<List<Guardrail>> LIST_GUARDRAIL_TYPE_REFERENCE = new TypeReference<>() {
+    };
+
+    private static final TypeReference<List<Experiment>> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
+    };
+
+    private static final TypeReference<String> STRING_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     public static WebhookEvent<Map<String, Object>> prepareWebhookPayload(
@@ -94,6 +101,8 @@ public class AlertPayloadAdapter {
             case TRACE_FEEDBACK_SCORE -> LIST_TRACE_SCORE_TYPE_REFERENCE;
             case TRACE_THREAD_FEEDBACK_SCORE -> LIST_THREAD_SCORE_TYPE_REFERENCE;
             case TRACE_GUARDRAILS_TRIGGERED -> LIST_GUARDRAIL_TYPE_REFERENCE;
+            case EXPERIMENT_FINISHED -> EXPERIMENT_TYPE_REFERENCE;
+            default -> STRING_TYPE_REFERENCE;
         };
     }
 }

@@ -31,11 +31,6 @@ on:
                 description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
             ALLURE_USERNAME:
                 description: ALLURE_USERNAME service parameter. Leave blank.
-                
-    pull_request:
-      paths:
-        - 'sdks/code_generation/fern/openapi/openapi.yaml'
-        - 'tests_end_to_end/**'
 
 run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'regression' }}
 

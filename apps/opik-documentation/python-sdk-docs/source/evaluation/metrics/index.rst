@@ -36,6 +36,33 @@ You can learn more about each metric in the following sections:
    AnswerRelevance
    ContextPrecision
    ContextRecall
-   
+
    BaseMetric
    ConversationThreadMetric
+   HeuristicMetrics
+   ConversationHeuristicMetrics
+   ConversationLLMJudges
+   LLMJudgePresets
+   LLMJuries
+   UtilityMetrics
+
+The pages above fall into two categories:
+
+- Established metric guides (e.g., ``Equals``, ``Hallucination``) that remain the
+  authoritative deep dives.
+- Aggregation pages that collect the expanded metric families so every class
+  exported via :mod:`opik.evaluation.metrics` has an accompanying API reference.
+
+Use these aggregation pages to browse the extended catalog:
+
+- :doc:`HeuristicMetrics` — sentence/word overlap, readability, sentiment, prompt safety, and distribution comparisons.
+- :doc:`ConversationHeuristicMetrics` — fast heuristics for degeneracy and knowledge retention.
+- :doc:`ConversationLLMJudges` — LLM-as-a-judge conversation evaluators and session quality metrics.
+- :doc:`LLMJudgePresets` — pre-built GEval presets and bias checks.
+- :doc:`LLMJuries` — multi-judge aggregation.
+- :doc:`UtilityMetrics` — helpers such as ``AggregatedMetric`` and ``RagasMetricWrapper``.
+
+Import any metric directly from :mod:`opik.evaluation.metrics`, and pair these API
+references with the Fern guides in
+``apps/opik-documentation/documentation/fern/docs/evaluation/metrics`` for workflow
+context.

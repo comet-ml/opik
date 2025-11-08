@@ -1,15 +1,11 @@
 import copy
 import json
 import logging
-import os
 import textwrap
 from typing import Any, cast
 from collections.abc import Callable
 
-import litellm
 import opik
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset, opik_context
 from opik.environment import get_tqdm_for_current_environment
 
@@ -32,10 +28,6 @@ from ..mcp_utils.mcp_workflow import (
 from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
 
 tqdm = get_tqdm_for_current_environment()
-
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging

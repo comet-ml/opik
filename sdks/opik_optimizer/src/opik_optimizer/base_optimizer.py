@@ -17,7 +17,6 @@ from opik import Dataset, opik_context
 from pydantic import BaseModel
 
 from . import _throttle, optimization_result
-from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
 from .utils import create_litellm_agent_class
@@ -83,9 +82,6 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
-
-        # Initialize shared cache
-        initialize_cache()
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""

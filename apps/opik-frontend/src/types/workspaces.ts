@@ -27,4 +27,5 @@ export interface WorkspaceCost {
 
 export interface WorkspaceConfig {
   timeout_to_mark_thread_as_inactive: string | null;
+  truncation_on_tables: boolean | null;
 }

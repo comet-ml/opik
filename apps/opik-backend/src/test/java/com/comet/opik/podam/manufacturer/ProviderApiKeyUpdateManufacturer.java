@@ -19,6 +19,7 @@ public class ProviderApiKeyUpdateManufacturer extends AbstractTypeManufacturer<P
         return new ProviderApiKeyUpdate(
                 RandomStringUtils.secure().nextAlphabetic(20),
                 strategy.getTypeValue(metadata, context, String.class),
+                strategy.getTypeValue(metadata, context, String.class),
                 Map.of(
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),

@@ -9,7 +9,10 @@ export type AlertTriggerPublicEventType =
     | "prompt:created"
     | "prompt:committed"
     | "trace:guardrails_triggered"
-    | "prompt:deleted";
+    | "prompt:deleted"
+    | "experiment:finished"
+    | "trace:cost"
+    | "trace:latency";
 export const AlertTriggerPublicEventType = {
     TraceErrors: "trace:errors",
     TraceFeedbackScore: "trace:feedback_score",
@@ -18,4 +21,7 @@ export const AlertTriggerPublicEventType = {
     PromptCommitted: "prompt:committed",
     TraceGuardrailsTriggered: "trace:guardrails_triggered",
     PromptDeleted: "prompt:deleted",
+    ExperimentFinished: "experiment:finished",
+    TraceCost: "trace:cost",
+    TraceLatency: "trace:latency",
 } as const;
