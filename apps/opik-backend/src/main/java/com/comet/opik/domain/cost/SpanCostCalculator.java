@@ -7,6 +7,8 @@ import java.util.Map;
 
 @UtilityClass
 class SpanCostCalculator {
+    private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
+
     public static BigDecimal textGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
                 .add(modelPrice.outputPrice()
@@ -82,5 +84,13 @@ class SpanCostCalculator {
 
     public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
         return BigDecimal.ZERO;
+    }
+
+    public static BigDecimal videoGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        int durationSeconds = usage.getOrDefault(VIDEO_DURATION_KEY, 0);
+        if (durationSeconds <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return modelPrice.videoOutputPrice().multiply(BigDecimal.valueOf(durationSeconds));
     }
 }
