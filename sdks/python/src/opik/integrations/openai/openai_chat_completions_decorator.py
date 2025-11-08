@@ -20,6 +20,7 @@ from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.integrations.openai import chat_completion_chunks_aggregator
 from opik.types import LLMProvider
+from opik.media import video_artifacts
 
 from . import stream_patchers
 
@@ -106,6 +107,17 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
 
+        video_collection = video_artifacts.collect_video_artifacts(
+            output,
+            provider=self.provider,
+            source="openai.chat_completions",
+        )
+        if video_collection.manifest:
+            metadata = dict_utils.deepmerge(
+                metadata or {},
+                {video_artifacts.VIDEO_METADATA_KEY: video_collection.manifest},
+            )
+
         opik_usage = None
         if result_dict.get("usage") is not None:
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
@@ -123,6 +135,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
             metadata=metadata,
             model=model,
             provider=self.provider,
+            attachments=video_collection.attachments if video_collection.attachments else None,
         )
 
         return result

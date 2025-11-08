@@ -5,6 +5,7 @@ import openai
 from . import (
     chat_completion_chunks_aggregator,
     openai_chat_completions_decorator,
+    openai_videos_decorator,
 )
 import opik.semantic_version as semantic_version
 
@@ -46,6 +47,9 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
+
+    if hasattr(openai_client, "videos"):
+        _patch_openai_videos(openai_client, project_name)
 
     return openai_client
 
@@ -143,3 +147,46 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_videos(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    video_job_decorator = openai_videos_decorator.OpenAIVideoJobTrackDecorator()
+    video_download_decorator = (
+        openai_videos_decorator.OpenAIVideoDownloadTrackDecorator()
+    )
+
+    if openai_client.base_url.host != "api.openai.com":
+        provider_name = openai_client.base_url.host
+        video_job_decorator.provider = provider_name
+        video_download_decorator.provider = provider_name
+
+    if hasattr(openai_client.videos, "create"):
+        openai_client.videos.create = video_job_decorator.track(
+            type="llm",
+            name="videos_create",
+            project_name=project_name,
+        )(openai_client.videos.create)
+
+    if hasattr(openai_client.videos, "create_and_poll"):
+        openai_client.videos.create_and_poll = video_job_decorator.track(
+            type="llm",
+            name="videos_create_and_poll",
+            project_name=project_name,
+        )(openai_client.videos.create_and_poll)
+
+    if hasattr(openai_client.videos, "remix"):
+        openai_client.videos.remix = video_job_decorator.track(
+            type="llm",
+            name="videos_remix",
+            project_name=project_name,
+        )(openai_client.videos.remix)
+
+    if hasattr(openai_client.videos, "download_content"):
+        openai_client.videos.download_content = video_download_decorator.track(
+            type="general",
+            name="videos_download_content",
+            project_name=project_name,
+        )(openai_client.videos.download_content)
