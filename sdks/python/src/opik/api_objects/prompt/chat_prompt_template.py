@@ -152,6 +152,16 @@ def render_image_url_part(
 def render_video_url_part(
     part: ContentPart, variables: Dict[str, Any], template_type: PromptType
 ) -> Optional[ContentPart]:
+    """
+    Render a ``video_url`` part and preserve optional metadata.
+
+    In addition to the rendered ``url`` we keep:
+
+    - ``detail``: free-form provider hints (mirrors the image renderer semantics).
+    - ``mime_type``: the content type callers expect the downstream model to load.
+    - ``duration``: client-supplied duration in seconds to give hosts extra context.
+    - ``format``: a short format label (``mp4``, ``webm``, etc.) when known.
+    """
     video_dict = part.get("video_url", {})
     if not isinstance(video_dict, dict):
         return None

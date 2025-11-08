@@ -80,6 +80,14 @@ def vision_capability_detector(model_name: str) -> bool:
 
 
 def video_capability_detector(model_name: str) -> bool:
+    """
+    Heuristically determine whether a model accepts video inputs.
+
+    Providers rarely expose structured metadata for video support, so we fall back
+    to naming conventions (e.g. models whose names contain ``video`` or ``qwen``
+    + ``vl``). When those heuristics fail we delegate to the vision detector since
+    current SDK integrations treat video as an extension of multimodal/vision APIs.
+    """
     stripped = _strip_provider_prefix(model_name)
     candidates = {model_name, stripped}
     for candidate in candidates:
