@@ -1,7 +1,6 @@
 import logging
 
 import opik
-import litellm
 from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator

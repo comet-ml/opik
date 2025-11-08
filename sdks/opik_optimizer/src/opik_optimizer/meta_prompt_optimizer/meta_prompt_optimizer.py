@@ -5,7 +5,6 @@ import textwrap
 from typing import Any, cast
 from collections.abc import Callable
 
-import litellm
 import opik
 from opik import Dataset, opik_context
 from opik.environment import get_tqdm_for_current_environment

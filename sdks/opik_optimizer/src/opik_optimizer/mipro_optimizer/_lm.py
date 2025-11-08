@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import threading
 from typing import Any, Literal, cast
 
 import litellm
@@ -98,9 +99,7 @@ class LM(BaseLM):
 
         # Make the request.
         completion = (
-            litellm_completion
-            if self.model_type == "chat"
-            else litellm_text_completion
+            litellm_completion if self.model_type == "chat" else litellm_text_completion
         )
 
         results = completion(
@@ -108,10 +107,7 @@ class LM(BaseLM):
             num_retries=self.num_retries,
         )
 
-        if (
-            dspy.settings.usage_tracker
-            and hasattr(results, "usage")
-        ):
+        if dspy.settings.usage_tracker and hasattr(results, "usage"):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
         self._increment_llm_counter()
