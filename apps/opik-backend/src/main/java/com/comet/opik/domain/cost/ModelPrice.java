@@ -11,5 +11,6 @@ public record ModelPrice(
         @NonNull BigDecimal outputPrice,
         @NonNull BigDecimal cacheCreationInputTokenPrice,
         @NonNull BigDecimal cacheReadInputTokenPrice,
+        @NonNull BigDecimal videoOutputPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
 }
