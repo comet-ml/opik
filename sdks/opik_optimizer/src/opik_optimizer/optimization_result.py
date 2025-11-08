@@ -4,8 +4,15 @@ from typing import Any
 
 import pydantic
 import rich
+from rich.text import Text
 
-from .reporting_utils import get_console, get_link_text, get_optimization_run_url_by_id
+from .optimization_config.chat_prompt import MessageDict
+from .reporting_utils import (
+    _format_message_content,
+    get_console,
+    get_link_text,
+    get_optimization_run_url_by_id,
+)
 
 
 def _format_float(value: Any, digits: int = 6) -> str:
@@ -20,7 +27,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     optimizer: str = "Optimizer"
 
-    prompt: list[dict[str, str]]
+    prompt: list[MessageDict]
     score: float
     metric_name: str
 
@@ -28,7 +35,7 @@ class OptimizationResult(pydantic.BaseModel):
     dataset_id: str | None = None
 
     # Initial score
-    initial_prompt: list[dict[str, str]] | None = None
+    initial_prompt: list[MessageDict] | None = None
     initial_score: float | None = None
 
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
@@ -144,12 +151,20 @@ class OptimizationResult(pydantic.BaseModel):
         temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "N/A"
 
         try:
-            final_prompt_display = "\n".join(
-                [
-                    f"  {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:150]}..."
-                    for msg in self.prompt
-                ]
-            )
+            prompt_lines = []
+            for msg in self.prompt:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                # Format content for display - handle both string and multimodal
+                if isinstance(content, str):
+                    content_str = (
+                        content[:150] + "..." if len(content) > 150 else content
+                    )
+                else:
+                    # For multimodal content, create a summary
+                    content_str = f"[multimodal: {len(content)} parts]"
+                prompt_lines.append(f"  {role}: {content_str}")
+            final_prompt_display = "\n".join(prompt_lines)
         except Exception:
             final_prompt_display = str(self.prompt)
 
@@ -306,7 +321,9 @@ class OptimizationResult(pydantic.BaseModel):
             chat_group_items = []
             for msg in self.prompt:
                 role = msg.get("role", "unknown")
-                content = str(msg.get("content", ""))
+                content_value = msg.get("content", "")
+                # Use proper formatting for multimodal content
+                formatted_content = _format_message_content(content_value)
                 role_style = (
                     "bold green"
                     if role == "user"
@@ -316,8 +333,9 @@ class OptimizationResult(pydantic.BaseModel):
                         else ("bold magenta" if role == "system" else "")
                     )
                 )
+                role_text = Text(f"{role.capitalize()}:", style=role_style)
                 chat_group_items.append(
-                    f"[{role_style}]{role.capitalize()}:[/] {content}"
+                    rich.console.Group(role_text, formatted_content)
                 )
                 chat_group_items.append("---")  # Separator
             prompt_renderable = rich.console.Group(*chat_group_items)
