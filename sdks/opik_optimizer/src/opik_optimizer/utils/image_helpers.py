@@ -15,16 +15,16 @@ import warnings
 from io import BytesIO
 from typing import Any
 
-PillowImageType: Any
 _PillowImage: Any | None
 _PIL_IMPORT_ERROR: ModuleNotFoundError | None
 
 try:  # Pillow is optional for text-only users
-    from PIL import Image as _PillowImage  # type: ignore
+    from PIL import Image as _ImportedPillowImage
 except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency guard
     _PillowImage = None
     _PIL_IMPORT_ERROR = exc
 else:  # pragma: no cover - import side-effects don't need coverage
+    _PillowImage = _ImportedPillowImage
     _PIL_IMPORT_ERROR = None
 
 MIN_OPIK_PYTHON_VERSION = "1.9.4"
@@ -106,7 +106,7 @@ def encode_pil_to_base64_uri(image: Any, format: str = "PNG", quality: int = 85)
     buffer = BytesIO()
 
     # Save with appropriate parameters
-    save_kwargs = {"format": format}
+    save_kwargs: dict[str, Any] = {"format": format}
     if format.upper() == "JPEG":
         save_kwargs["quality"] = quality
         save_kwargs["optimize"] = True
@@ -269,9 +269,7 @@ def convert_to_structured_content(
     return parts
 
 
-def extract_images_from_structured_content(
-    content: list[dict[str, Any]]
-) -> list[str]:
+def extract_images_from_structured_content(content: list[dict[str, Any]]) -> list[str]:
     """
     Extract all image URIs from structured content.
 

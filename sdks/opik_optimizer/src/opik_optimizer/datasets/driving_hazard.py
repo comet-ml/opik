@@ -13,21 +13,23 @@ from __future__ import annotations
 from typing import Any
 
 import opik
-
-try:  # Pillow is optional until an image dataset is loaded
-    from PIL import Image as _PillowImage
-except ModuleNotFoundError as exc:
-    _PillowImage = None
-    _PIL_IMPORT_ERROR = exc
-else:
-    _PIL_IMPORT_ERROR = None
-
-# Import our image utilities
 from opik_optimizer.utils.image_helpers import (
     encode_pil_to_base64_uri,
     convert_to_structured_content,
     warn_if_python_sdk_outdated,
 )
+
+_PillowImage: Any | None
+_PIL_IMPORT_ERROR: ModuleNotFoundError | None
+
+try:  # Pillow is optional until an image dataset is loaded
+    from PIL import Image as _ImportedPillowImage
+except ModuleNotFoundError as exc:
+    _PillowImage = None
+    _PIL_IMPORT_ERROR = exc
+else:
+    _PillowImage = _ImportedPillowImage
+    _PIL_IMPORT_ERROR = None
 
 
 def _ensure_pillow() -> Any:
@@ -275,15 +277,15 @@ def _process_dhpr_item(
     if image_obj is None:
         raise ValueError(f"Item {question_id} has no image")
 
-    PillowImage = _ensure_pillow()
-
     # Convert HuggingFace image to PIL Image if needed
+    PillowImage = _ensure_pillow()
     if hasattr(image_obj, "convert"):
         # Already a PIL Image
         pil_image = image_obj
     elif isinstance(image_obj, dict) and "bytes" in image_obj:
         # Image stored as bytes
         from io import BytesIO
+
         pil_image = PillowImage.open(BytesIO(image_obj["bytes"]))
     else:
         # Try to convert directly

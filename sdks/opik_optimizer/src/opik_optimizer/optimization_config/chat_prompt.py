@@ -1,43 +1,26 @@
-from typing import Any, Literal, cast
-from typing_extensions import NotRequired, TypedDict
+from typing import Any, cast, TypeAlias
 from collections.abc import Callable
 
 import copy
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from opik import track
 
 
-class FunctionDefinition(TypedDict):
-    name: str
-    description: str
-    parameters: dict[str, Any]  # JSON Schema object
+class Tool(BaseModel):
+    name: str = Field(..., description="Name of the tool")
+    description: str = Field(..., description="Description of the tool")
+    parameters: dict[str, Any] = Field(
+        ..., description="JSON Schema defining the input parameters for the tool"
+    )
 
 
-class ToolDict(TypedDict):
-    type: Literal["function"]
-    function: FunctionDefinition
-
-
-class TextPart(TypedDict):
-    type: Literal["text"]
-    text: str
-
-
-class ImageUrlDict(TypedDict):
-    url: str
-    detail: NotRequired[Literal["auto", "low", "high"]]
-
-
-class ImagePart(TypedDict):
-    type: Literal["image_url"]
-    image_url: ImageUrlDict
-
-
-class MessageDict(TypedDict):
-    role: str
-    content: str | list[TextPart | ImagePart]
+ToolDict: TypeAlias = dict[str, Any]
+TextPart: TypeAlias = dict[str, Any]
+ImageUrlDict: TypeAlias = dict[str, Any]
+ImagePart: TypeAlias = dict[str, Any]
+MessageDict: TypeAlias = dict[str, Any]
 
 
 class ChatPrompt:
@@ -60,7 +43,7 @@ class ChatPrompt:
         name: str = "chat-prompt",
         system: str | None = None,
         user: str | None = None,
-        messages: list[MessageDict] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         tools: list[ToolDict] | None = None,
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",

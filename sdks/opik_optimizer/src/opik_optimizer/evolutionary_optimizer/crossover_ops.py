@@ -1,4 +1,4 @@
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 
 import logging
 import random
@@ -72,15 +72,17 @@ class CrossoverOps:
             "      Recombining prompts by mixing and matching words and sentences.",
             verbose=self.verbose,
         )
-        messages_1_orig: list[dict[str, MessageContent]] = ind1
-        messages_2_orig: list[dict[str, MessageContent]] = ind2
+        messages_1_orig: list[dict[str, Any]] = ind1
+        messages_2_orig: list[dict[str, Any]] = ind2
 
         for i, message_1 in enumerate(messages_1_orig):
-            role: str = message_1["role"]
-            message_1_content: MessageContent = message_1["content"]
-            if (len(messages_2_orig) >= i + 1) and (messages_2_orig[i]["role"] == role):
+            role = str(message_1.get("role", "user"))
+            message_1_content = cast(MessageContent, message_1.get("content", ""))
+            if (len(messages_2_orig) >= i + 1) and (
+                str(messages_2_orig[i].get("role", "")) == role
+            ):
                 message_2 = messages_2_orig[i]
-                message_2_content: MessageContent = message_2["content"]
+                message_2_content = cast(MessageContent, message_2.get("content", ""))
                 parent1_text = extract_text_from_content(message_1_content)
                 parent2_text = extract_text_from_content(message_2_content)
 
@@ -129,8 +131,11 @@ class CrossoverOps:
         parent2_messages: list[dict[str, MessageContent]] = ind2
         current_output_style_guidance = self.output_style_guidance
 
+        simple_parent1 = self._flatten_messages_for_llm(parent1_messages)
+        simple_parent2 = self._flatten_messages_for_llm(parent2_messages)
+
         user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
-            parent1_messages, parent2_messages, current_output_style_guidance
+            simple_parent1, simple_parent2, current_output_style_guidance
         )
         try:
             logger.debug(
@@ -201,6 +206,21 @@ class CrossoverOps:
                 f"LLM-driven crossover failed: {e}. Falling back to DEAP crossover."
             )
             return self._deap_crossover(ind1, ind2)
+
+    def _flatten_messages_for_llm(
+        self, messages: list[dict[str, MessageContent]]
+    ) -> list[dict[str, str]]:
+        """Convert messages with structured content to string-only form."""
+        flattened: list[dict[str, str]] = []
+        for message in messages:
+            role = str(message.get("role", "user"))
+            content = message.get("content", "")
+            if isinstance(content, str):
+                text = content
+            else:
+                text = extract_text_from_content(content)
+            flattened.append({"role": role, "content": str(text)})
+        return flattened
 
     def _extract_json_arrays(self, text: str) -> list[str]:
         """Extract top-level JSON array substrings from arbitrary text.
