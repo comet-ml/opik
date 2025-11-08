@@ -22,4 +22,6 @@ public interface StreamConfiguration {
     int getClaimIntervalRatio();
 
     Duration getPendingMessageDuration();
+
+    int getMaxRetries();
 }

@@ -17,6 +17,9 @@ export const AlertTriggerWriteEventType: core.serialization.Schema<
     "prompt:committed",
     "trace:guardrails_triggered",
     "prompt:deleted",
+    "experiment:finished",
+    "trace:cost",
+    "trace:latency",
 ]);
 
 export declare namespace AlertTriggerWriteEventType {
@@ -27,5 +30,8 @@ export declare namespace AlertTriggerWriteEventType {
         | "prompt:created"
         | "prompt:committed"
         | "trace:guardrails_triggered"
-        | "prompt:deleted";
+        | "prompt:deleted"
+        | "experiment:finished"
+        | "trace:cost"
+        | "trace:latency";
 }

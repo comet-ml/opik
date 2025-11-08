@@ -10,6 +10,7 @@ if [ "$CREATE_DEMO_DATA" = "true" ]; then
                     -O - "$PYTHON_BACKEND_URL/v1/private/post_user_signup"); then
         echo "❌ Failed to create demo data:"
         echo "$output"
+        exit 1
     else
         echo "✅ Demo data created"
     fi

@@ -24,6 +24,7 @@ class ExperimentItemContent:
     def from_rest_experiment_item_compare(
         cls,
         value: experiment_item_compare.ExperimentItemCompare,
+        dataset_item_data: Optional[Dict[str, Any]] = None,
     ) -> "ExperimentItemContent":
         if value.feedback_scores is None:
             feedback_scores: List[FeedbackScoreDict] = []
@@ -42,7 +43,7 @@ class ExperimentItemContent:
             id=value.id,
             trace_id=value.trace_id,
             dataset_item_id=value.dataset_item_id,
-            dataset_item_data=value.input,
+            dataset_item_data=dataset_item_data if dataset_item_data else value.input,
             evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
         )

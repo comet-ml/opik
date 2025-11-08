@@ -3,7 +3,7 @@ import os
 import certifi
 import pytest
 
-from opik.evaluation.metrics.conversation.session_completeness import (
+from opik.evaluation.metrics.conversation.llm_judges.session_completeness import (
     metric as session_completeness,
 )
 

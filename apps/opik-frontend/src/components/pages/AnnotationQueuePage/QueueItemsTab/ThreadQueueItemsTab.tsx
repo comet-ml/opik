@@ -73,6 +73,7 @@ import { createFilter } from "@/lib/filters";
 import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {
@@ -218,6 +219,7 @@ interface ThreadQueueItemsTabProps {
 const ThreadQueueItemsTab: React.FunctionComponent<
   ThreadQueueItemsTabProps
 > = ({ annotationQueue }) => {
+  const truncationEnabled = useTruncationEnabled();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [search = "", setSearch] = useQueryParam("thread_search", StringParam, {
@@ -294,7 +296,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       placeholderData: keepPreviousData,
@@ -567,6 +569,8 @@ const ThreadQueueItemsTab: React.FunctionComponent<
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
     </>

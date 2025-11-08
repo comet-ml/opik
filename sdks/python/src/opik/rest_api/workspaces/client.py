@@ -105,6 +105,7 @@ class WorkspacesClient:
         self,
         *,
         timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
+        truncation_on_tables: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceConfiguration:
         """
@@ -114,6 +115,9 @@ class WorkspacesClient:
         ----------
         timeout_to_mark_thread_as_inactive : typing.Optional[str]
             Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H for 2 hours, P1D for 1 day). Minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
+
+        truncation_on_tables : typing.Optional[bool]
+            Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -130,7 +134,9 @@ class WorkspacesClient:
         client.workspaces.upsert_workspace_configuration()
         """
         _response = self._raw_client.upsert_workspace_configuration(
-            timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive, request_options=request_options
+            timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive,
+            truncation_on_tables=truncation_on_tables,
+            request_options=request_options,
         )
         return _response.data
 
@@ -391,6 +397,7 @@ class AsyncWorkspacesClient:
         self,
         *,
         timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
+        truncation_on_tables: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceConfiguration:
         """
@@ -400,6 +407,9 @@ class AsyncWorkspacesClient:
         ----------
         timeout_to_mark_thread_as_inactive : typing.Optional[str]
             Duration in ISO-8601 format (e.g., PT30M for 30 minutes, PT2H for 2 hours, P1D for 1 day). Minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.
+
+        truncation_on_tables : typing.Optional[bool]
+            Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -419,7 +429,9 @@ class AsyncWorkspacesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.upsert_workspace_configuration(
-            timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive, request_options=request_options
+            timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive,
+            truncation_on_tables=truncation_on_tables,
+            request_options=request_options,
         )
         return _response.data
 
