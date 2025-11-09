@@ -10,11 +10,15 @@ import com.comet.opik.domain.threads.TraceThreadCriteria;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotNull;
@@ -22,7 +26,6 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
@@ -73,14 +76,45 @@ public interface FeedbackScoreService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class FeedbackScoreServiceImpl implements FeedbackScoreService {
+
+    // Attribute keys for metrics
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
+    private static final AttributeKey<String> PROJECT_ID = AttributeKey.stringKey("project.id");
+    private static final AttributeKey<String> ENTITY_TYPE = AttributeKey.stringKey("entity.type");
 
     private final @NonNull FeedbackScoreDAO dao;
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private LongCounter feedbackScoresCreatedCounter;
+
+    @Inject
+    public FeedbackScoreServiceImpl(@NonNull FeedbackScoreDAO dao,
+            @NonNull SpanDAO spanDAO,
+            @NonNull TraceDAO traceDAO,
+            @NonNull ProjectService projectService,
+            @NonNull TraceThreadService traceThreadService,
+            @NonNull InstrumentationService instrumentationService) {
+        this.dao = dao;
+        this.spanDAO = spanDAO;
+        this.traceDAO = traceDAO;
+        this.projectService = projectService;
+        this.traceThreadService = traceThreadService;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.feedbackScoresCreatedCounter = instrumentationService.createCounter(
+                "opik.feedback_scores.created",
+                "Number of feedback scores created",
+                "scores");
+
+        log.info("FeedbackScoreService initialized with metrics instrumentation");
+    }
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -145,9 +179,35 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(
             EntityType entityType, List<ProjectDto<T>> projects) {
         return getAuthor()
-                .flatMap(author -> Flux.fromIterable(projects)
-                        .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores(), author.orElse(null)))
-                        .reduce(0L, Long::sum));
+                .flatMap(author -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                    return Flux.fromIterable(projects)
+                            .flatMap(
+                                    projectDto -> dao.scoreBatchOf(entityType, projectDto.scores(), author.orElse(null))
+                                            .doOnSuccess(count -> {
+                                                // Record metric: feedback scores created per workspace, project, and entity type
+                                                recordFeedbackScoresCreatedMetric(count, workspaceId,
+                                                        projectDto.project().id(), entityType);
+                                            }))
+                            .reduce(0L, Long::sum);
+                }));
+    }
+
+    /**
+     * Records the opik.feedback_scores.created metric.
+     */
+    private void recordFeedbackScoresCreatedMetric(long count, String workspaceId, UUID projectId,
+            EntityType entityType) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .put(PROJECT_ID, projectId.toString())
+                .put(ENTITY_TYPE, entityType.getType())
+                .build();
+
+        instrumentationService.recordCounter(feedbackScoresCreatedCounter, count, attributes);
+        log.debug("Recorded metric: opik.feedback_scores.created={} for workspace='{}', project='{}', entity_type='{}'",
+                count, workspaceId, projectId, entityType.getType());
     }
 
     private <T extends FeedbackScoreItem> List<ProjectDto<T>> mergeProjectsAndScores(

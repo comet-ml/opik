@@ -17,17 +17,20 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
@@ -118,13 +121,16 @@ public interface ProjectService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectServiceImpl implements ProjectService {
 
     record ProjectRecordSet(List<Project> content, long total) {
     }
 
     private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
+
+    // Attribute keys for metrics
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
+
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -132,6 +138,37 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private LongCounter projectsCreatedCounter;
+
+    @Inject
+    public ProjectServiceImpl(@NonNull TransactionTemplate template,
+            @NonNull IdGenerator idGenerator,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull TraceDAO traceDAO,
+            @NonNull TransactionTemplateAsync transactionTemplateAsync,
+            @NonNull SortingFactoryProjects sortingFactory,
+            @NonNull SortingQueryBuilder sortingQueryBuilder,
+            @NonNull InstrumentationService instrumentationService) {
+        this.template = template;
+        this.idGenerator = idGenerator;
+        this.requestContext = requestContext;
+        this.traceDAO = traceDAO;
+        this.transactionTemplateAsync = transactionTemplateAsync;
+        this.sortingFactory = sortingFactory;
+        this.sortingQueryBuilder = sortingQueryBuilder;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.projectsCreatedCounter = instrumentationService.createCounter(
+                "opik.projects.created",
+                "Number of projects created",
+                "projects");
+
+        log.info("ProjectService initialized with metrics instrumentation");
+    }
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -164,6 +201,9 @@ class ProjectServiceImpl implements ProjectService {
                 var repository = handle.attach(ProjectDAO.class);
 
                 repository.save(workspaceId, newProject);
+
+                // Record metric: projects created
+                recordProjectCreatedMetric(workspaceId);
 
                 return newProject;
             });
@@ -699,6 +739,9 @@ class ProjectServiceImpl implements ProjectService {
 
                         try {
                             projectDAO.save(workspaceId, newProject);
+
+                            // Record metric: projects created
+                            recordProjectCreatedMetric(workspaceId);
                         } catch (UnableToExecuteStatementException e) {
                             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                                 log.warn("Project {} already exists", projectName);
@@ -710,6 +753,18 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
+    }
+
+    /**
+     * Records the opik.projects.created metric.
+     */
+    private void recordProjectCreatedMetric(String workspaceId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .build();
+
+        instrumentationService.recordCounter(projectsCreatedCounter, 1, attributes);
+        log.debug("Recorded metric: opik.projects.created=1 for workspace='{}'", workspaceId);
     }
 
     private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {

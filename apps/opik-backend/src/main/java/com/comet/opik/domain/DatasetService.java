@@ -18,11 +18,15 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -30,7 +34,6 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
@@ -97,11 +100,13 @@ public interface DatasetService {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetServiceImpl implements DatasetService {
 
     private static final String DATASET_ALREADY_EXISTS = "Dataset already exists";
+
+    // Attribute keys for metrics
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -115,6 +120,47 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private LongCounter datasetsCreatedCounter;
+
+    @Inject
+    public DatasetServiceImpl(@NonNull IdGenerator idGenerator,
+            @NonNull TransactionTemplate template,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull ExperimentItemDAO experimentItemDAO,
+            @NonNull DatasetItemDAO datasetItemDAO,
+            @NonNull ExperimentDAO experimentDAO,
+            @NonNull SortingQueryBuilder sortingQueryBuilder,
+            @NonNull FilterQueryBuilder filterQueryBuilder,
+            @NonNull SortingFactoryDatasets sortingFactory,
+            @NonNull @Config BatchOperationsConfig batchOperationsConfig,
+            @NonNull OptimizationDAO optimizationDAO,
+            @NonNull EventBus eventBus,
+            @NonNull InstrumentationService instrumentationService) {
+        this.idGenerator = idGenerator;
+        this.template = template;
+        this.requestContext = requestContext;
+        this.experimentItemDAO = experimentItemDAO;
+        this.datasetItemDAO = datasetItemDAO;
+        this.experimentDAO = experimentDAO;
+        this.sortingQueryBuilder = sortingQueryBuilder;
+        this.filterQueryBuilder = filterQueryBuilder;
+        this.sortingFactory = sortingFactory;
+        this.batchOperationsConfig = batchOperationsConfig;
+        this.optimizationDAO = optimizationDAO;
+        this.eventBus = eventBus;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.datasetsCreatedCounter = instrumentationService.createCounter(
+                "opik.datasets.created",
+                "Number of datasets created",
+                "datasets");
+
+        log.info("DatasetService initialized with metrics instrumentation");
+    }
 
     @Override
     public Dataset save(@NonNull Dataset dataset) {
@@ -139,6 +185,10 @@ class DatasetServiceImpl implements DatasetService {
 
             try {
                 dao.save(newDataset, workspaceId);
+
+                // Record metric: datasets created
+                recordDatasetCreatedMetric(workspaceId);
+
                 return dao.findById(newDataset.id(), workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
@@ -171,6 +221,10 @@ class DatasetServiceImpl implements DatasetService {
                                         .lastUpdatedBy(userName)
                                         .build(),
                                 workspaceId);
+
+                // Record metric: datasets created
+                recordDatasetCreatedMetric(workspaceId);
+
                 return null;
             });
             log.info("Created dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
@@ -658,6 +712,18 @@ class DatasetServiceImpl implements DatasetService {
         return Optional.of(dataset)
                 .filter(d -> !publicOnly || d.visibility() == Visibility.PUBLIC)
                 .orElseThrow(this::newNotFoundException);
+    }
+
+    /**
+     * Records the opik.datasets.created metric.
+     */
+    private void recordDatasetCreatedMetric(String workspaceId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .build();
+
+        instrumentationService.recordCounter(datasetsCreatedCounter, 1, attributes);
+        log.debug("Recorded metric: opik.datasets.created=1 for workspace='{}'", workspaceId);
     }
 
     private Mono<Dataset> handleDatasetCreationError(Throwable throwable, String datasetName) {

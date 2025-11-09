@@ -21,8 +21,12 @@ import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -30,7 +34,6 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
@@ -57,9 +60,12 @@ import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor = @__(@Inject))
 @Slf4j
 public class ExperimentService {
+
+    // Attribute keys for metrics
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
+    private static final AttributeKey<String> DATASET_ID_KEY = AttributeKey.stringKey("dataset.id");
 
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull ExperimentItemDAO experimentItemDAO;
@@ -70,6 +76,41 @@ public class ExperimentService {
     private final @NonNull PromptService promptService;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull ExperimentResponseBuilder responseBuilder;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private LongCounter experimentsCreatedCounter;
+
+    @Inject
+    public ExperimentService(@NonNull ExperimentDAO experimentDAO,
+            @NonNull ExperimentItemDAO experimentItemDAO,
+            @NonNull DatasetService datasetService,
+            @NonNull IdGenerator idGenerator,
+            @NonNull NameGenerator nameGenerator,
+            @NonNull EventBus eventBus,
+            @NonNull PromptService promptService,
+            @NonNull ExperimentSortingFactory sortingFactory,
+            @NonNull ExperimentResponseBuilder responseBuilder,
+            @NonNull InstrumentationService instrumentationService) {
+        this.experimentDAO = experimentDAO;
+        this.experimentItemDAO = experimentItemDAO;
+        this.datasetService = datasetService;
+        this.idGenerator = idGenerator;
+        this.nameGenerator = nameGenerator;
+        this.eventBus = eventBus;
+        this.promptService = promptService;
+        this.sortingFactory = sortingFactory;
+        this.responseBuilder = responseBuilder;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.experimentsCreatedCounter = instrumentationService.createCounter(
+                "opik.experiments.created",
+                "Number of experiments created",
+                "experiments");
+
+        log.info("ExperimentService initialized with metrics instrumentation");
+    }
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -412,8 +453,27 @@ public class ExperimentService {
         return makeMonoContextAware((userName, workspaceId) -> experimentDAO.insert(newExperiment)
                 .thenReturn(newExperiment.id())
                 // The event is posted only when the experiment is successfully created.
-                .doOnSuccess(experimentId -> postExperimentCreatedEvent(newExperiment, workspaceId, userName)))
+                .doOnSuccess(experimentId -> {
+                    // Record metric: experiments created per workspace and dataset
+                    recordExperimentCreatedMetric(newExperiment, workspaceId);
+
+                    postExperimentCreatedEvent(newExperiment, workspaceId, userName);
+                }))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Records the opik.experiments.created metric.
+     */
+    private void recordExperimentCreatedMetric(Experiment experiment, String workspaceId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .put(DATASET_ID_KEY, experiment.datasetId().toString())
+                .build();
+
+        instrumentationService.recordCounter(experimentsCreatedCounter, 1, attributes);
+        log.debug("Recorded metric: opik.experiments.created=1 for workspace='{}', dataset='{}'",
+                workspaceId, experiment.datasetId());
     }
 
     private void postExperimentCreatedEvent(Experiment partialExperiment, String workspaceId, String userName) {

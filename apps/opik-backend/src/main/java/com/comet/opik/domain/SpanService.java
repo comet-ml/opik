@@ -16,15 +16,19 @@ import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -47,7 +51,6 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor = @__(@Inject))
 @Slf4j
 public class SpanService {
 
@@ -55,6 +58,10 @@ public class SpanService {
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
     public static final String PROJECT_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
+
+    // Attribute keys for metrics
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
+    private static final AttributeKey<String> PROJECT_ID = AttributeKey.stringKey("project.id");
 
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull ProjectService projectService;
@@ -64,6 +71,44 @@ public class SpanService {
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private LongCounter spansCreatedCounter;
+    private DoubleHistogram spanDurationHistogram;
+
+    @Inject
+    public SpanService(@NonNull SpanDAO spanDAO,
+            @NonNull ProjectService projectService,
+            @NonNull IdGenerator idGenerator,
+            @NonNull LockService lockService,
+            @NonNull CommentService commentService,
+            @NonNull AttachmentService attachmentService,
+            @NonNull AttachmentStripperService attachmentStripperService,
+            @NonNull AttachmentReinjectorService attachmentReinjectorService,
+            @NonNull InstrumentationService instrumentationService) {
+        this.spanDAO = spanDAO;
+        this.projectService = projectService;
+        this.idGenerator = idGenerator;
+        this.lockService = lockService;
+        this.commentService = commentService;
+        this.attachmentService = attachmentService;
+        this.attachmentStripperService = attachmentStripperService;
+        this.attachmentReinjectorService = attachmentReinjectorService;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.spansCreatedCounter = instrumentationService.createCounter(
+                "opik.spans.created",
+                "Number of spans created",
+                "spans");
+        this.spanDurationHistogram = instrumentationService.createHistogram(
+                "opik.span.duration",
+                "Duration of spans from start to end",
+                "s"); // seconds
+
+        log.info("SpanService initialized with metrics instrumentation");
+    }
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -268,6 +313,10 @@ public class SpanService {
                     .flatMap(processedUpdate ->
             // Step 3: Update the span in database transaction
             spanDAO.update(id, processedUpdate, existingSpan)
+                    .doOnSuccess(__ -> {
+                        // Record span duration metric if both start_time and end_time are present
+                        recordSpanDurationMetric(processedUpdate, existingSpan, workspaceId, project.id());
+                    })
                     .flatMap(updateResult -> {
                         // Step 4: Delete only auto-stripped attachments from the old data
                         // User-uploaded attachments are preserved unless explicitly removed by user
@@ -330,7 +379,15 @@ public class SpanService {
         return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
                 .then(resolveProjects)
                 .flatMap(this::stripAttachmentsFromSpanBatch)
-                .flatMap(spanDAO::batchInsert);
+                .flatMap(spans -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                    return spanDAO.batchInsert(spans)
+                            .doOnSuccess(count -> {
+                                // Record metric: spans created per workspace and project
+                                recordSpansCreatedMetric(spans, workspaceId);
+                            });
+                }));
     }
 
     private Mono<List<Span>> stripAttachmentsFromSpanBatch(List<Span> spans) {
@@ -346,6 +403,54 @@ public class SpanService {
                     })
                     .collectList();
         });
+    }
+
+    /**
+     * Records the opik.span.duration histogram metric when span is completed.
+     */
+    private void recordSpanDurationMetric(SpanUpdate spanUpdate, Span existingSpan,
+            String workspaceId, UUID projectId) {
+        // Only record if update has an endTime (span is being completed)
+        if (spanUpdate.endTime() == null || spanUpdate.endTime().equals(Instant.EPOCH)) {
+            return;
+        }
+
+        // Use existing start time and updated end time
+        Instant startTime = existingSpan.startTime();
+        Instant endTime = spanUpdate.endTime();
+
+        // Only record if both start and end times are present
+        if (startTime != null && !startTime.equals(Instant.EPOCH)) {
+            double durationSeconds = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0;
+
+            Attributes attributes = Attributes.builder()
+                    .put(WORKSPACE_ID, workspaceId)
+                    .put(PROJECT_ID, projectId.toString())
+                    .build();
+
+            instrumentationService.recordHistogram(spanDurationHistogram, durationSeconds, attributes);
+            log.debug("Recorded metric: opik.span.duration={}s for workspace='{}', project='{}'",
+                    durationSeconds, workspaceId, projectId);
+        }
+    }
+
+    /**
+     * Records the opik.spans.created metric, grouped by project.
+     */
+    private void recordSpansCreatedMetric(List<Span> spans, String workspaceId) {
+        // Group spans by project to record separate metrics per project
+        spans.stream()
+                .collect(Collectors.groupingBy(Span::projectId))
+                .forEach((projectId, spansInProject) -> {
+                    Attributes attributes = Attributes.builder()
+                            .put(WORKSPACE_ID, workspaceId)
+                            .put(PROJECT_ID, projectId.toString())
+                            .build();
+
+                    instrumentationService.recordCounter(spansCreatedCounter, spansInProject.size(), attributes);
+                    log.debug("Recorded metric: opik.spans.created={} for workspace='{}', project='{}'",
+                            spansInProject.size(), workspaceId, projectId);
+                });
     }
 
     private List<Span> dedupSpans(List<Span> initialSpans) {

@@ -33,20 +33,20 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
-import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.LongCounter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
@@ -124,7 +124,6 @@ public interface TraceService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceServiceImpl implements TraceService {
 
     public static final String TRACE_KEY = "Trace";
@@ -147,7 +146,8 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull InstrumentationService instrumentationService;
 
     // Metrics
-    private final LongCounter tracesCreatedCounter;
+    private LongCounter tracesCreatedCounter;
+    private DoubleHistogram traceDurationHistogram;
 
     @Inject
     public TraceServiceImpl(@NonNull TraceDAO dao,
@@ -180,6 +180,10 @@ class TraceServiceImpl implements TraceService {
                 "opik.traces.created",
                 "Number of traces created",
                 "traces");
+        this.traceDurationHistogram = instrumentationService.createHistogram(
+                "opik.trace.duration",
+                "Duration of traces from start to end",
+                "s"); // seconds
 
         log.info("TraceService initialized with metrics instrumentation");
     }
@@ -296,6 +300,35 @@ class TraceServiceImpl implements TraceService {
                                                 userName);
                                     }));
                 }));
+    }
+
+    /**
+     * Records the opik.trace.duration histogram metric when trace is completed.
+     */
+    private void recordTraceDurationMetric(TraceUpdate traceUpdate, Trace existingTrace,
+            String workspaceId, UUID projectId) {
+        // Only record if update has an endTime (trace is being completed)
+        if (traceUpdate.endTime() == null || traceUpdate.endTime().equals(Instant.EPOCH)) {
+            return;
+        }
+
+        // Use existing start time and updated end time
+        Instant startTime = existingTrace.startTime();
+        Instant endTime = traceUpdate.endTime();
+
+        // Only record if both start and end times are present
+        if (startTime != null && !startTime.equals(Instant.EPOCH)) {
+            double durationSeconds = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0;
+
+            Attributes attributes = Attributes.builder()
+                    .put(WORKSPACE_ID, workspaceId)
+                    .put(PROJECT_ID, projectId.toString())
+                    .build();
+
+            instrumentationService.recordHistogram(traceDurationHistogram, durationSeconds, attributes);
+            log.debug("Recorded metric: opik.trace.duration={}s for workspace='{}', project='{}'",
+                    durationSeconds, workspaceId, projectId);
+        }
     }
 
     /**
@@ -487,6 +520,10 @@ class TraceServiceImpl implements TraceService {
                     .flatMap(processedUpdate ->
             // Step 3: Update in database transaction
             template.nonTransaction(connection -> dao.update(processedUpdate, id, connection))
+                    .doOnSuccess(__ -> {
+                        // Record trace duration metric if both start_time and end_time are present
+                        recordTraceDurationMetric(processedUpdate, trace, workspaceId, project.id());
+                    })
                     .then(Mono.defer(() -> {
                         // Step 4: Delete only auto-stripped attachments from the old data
                         // User-uploaded attachments are preserved unless explicitly removed by user

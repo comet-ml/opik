@@ -73,6 +73,9 @@ class TraceServiceImplTest {
     private final TraceThreadSortingFactory traceThreadSortingFactory = new TraceThreadSortingFactory();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
 
+    private final com.comet.opik.infrastructure.instrumentation.InstrumentationService instrumentationService = mock(
+            com.comet.opik.infrastructure.instrumentation.InstrumentationService.class);
+
     @BeforeEach
     void setUp() {
         // Mock AttachmentStripperService to return JsonNode unchanged (no stripping for tests)
@@ -90,7 +93,8 @@ class TraceServiceImplTest {
                 traceSortingFactory,
                 attachmentStripperService,
                 attachmentService,
-                attachmentReinjectorService);
+                attachmentReinjectorService,
+                instrumentationService);
     }
 
     @Nested

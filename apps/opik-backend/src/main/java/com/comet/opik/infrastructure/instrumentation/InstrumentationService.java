@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Centralized service for creating and managing OpenTelemetry metrics.
- * 
+ *
  * This service provides a unified interface for instrumenting the application with
  * OpenTelemetry metrics. It handles meter creation and caches metric instruments
  * to avoid recreation overhead.
@@ -36,7 +36,7 @@ public class InstrumentationService {
 
     /**
      * Creates or retrieves a cached long counter metric.
-     * 
+     *
      * @param name the metric name
      * @param description the metric description
      * @param unit the metric unit (e.g., "requests", "errors")
@@ -54,7 +54,7 @@ public class InstrumentationService {
 
     /**
      * Creates or retrieves a cached double histogram metric.
-     * 
+     *
      * @param name the metric name
      * @param description the metric description
      * @param unit the metric unit (e.g., "seconds", "bytes")
@@ -73,7 +73,7 @@ public class InstrumentationService {
 
     /**
      * Records a value to a counter with the specified attributes.
-     * 
+     *
      * @param counter the counter to increment
      * @param value the value to add
      * @param attributes the attributes to attach
@@ -88,7 +88,7 @@ public class InstrumentationService {
 
     /**
      * Records a value to a histogram with the specified attributes.
-     * 
+     *
      * @param histogram the histogram to record to
      * @param value the value to record
      * @param attributes the attributes to attach
@@ -103,11 +103,10 @@ public class InstrumentationService {
 
     /**
      * Returns the underlying OpenTelemetry Meter for advanced use cases.
-     * 
+     *
      * @return the meter instance
      */
     public Meter getMeter() {
         return meter;
     }
 }
-

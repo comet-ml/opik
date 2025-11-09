@@ -58,6 +58,8 @@ class ExperimentServiceTest {
 
     @Mock
     private ExperimentResponseBuilder responseBuilder;
+    @Mock
+    private com.comet.opik.infrastructure.instrumentation.InstrumentationService instrumentationService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -73,7 +75,8 @@ class ExperimentServiceTest {
                 eventBus,
                 promptService,
                 sortingFactory,
-                responseBuilder);
+                responseBuilder,
+                instrumentationService);
     }
 
     @Nested
