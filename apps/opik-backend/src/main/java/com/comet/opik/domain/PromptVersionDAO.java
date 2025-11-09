@@ -18,6 +18,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(PromptVersion.class)
 @RegisterConstructorMapper(PromptVersionId.class)
+@RegisterConstructorMapper(PromptVersionInfo.class)
 interface PromptVersionDAO {
 
     @SqlUpdate("INSERT INTO prompt_versions (id, prompt_id, commit, template, metadata, change_description, type, created_by, workspace_id) "
@@ -44,5 +45,14 @@ interface PromptVersionDAO {
 
     @SqlQuery("SELECT id, commit FROM prompt_versions WHERE id IN (<ids>) AND workspace_id = :workspace_id")
     List<PromptVersionId> findCommitByVersionsIds(@BindList("ids") Set<UUID> ids,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT pv.id, pv.commit, p.name AS prompt_name
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.id IN (<ids>) AND pv.workspace_id = :workspace_id
+            """)
+    List<PromptVersionInfo> findPromptVersionInfoByVersionsIds(@BindList("ids") Set<UUID> ids,
             @Bind("workspace_id") String workspaceId);
 }

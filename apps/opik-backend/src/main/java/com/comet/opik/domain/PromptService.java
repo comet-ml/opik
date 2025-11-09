@@ -74,6 +74,8 @@ public interface PromptService {
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
+
+    Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 }
 
 @Singleton
@@ -628,6 +630,22 @@ class PromptServiceImpl implements PromptService {
 
                     return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
+                })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
+    public Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(@NonNull Set<UUID> versionsIds) {
+
+        if (versionsIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                    PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                    return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
+                            .collect(toMap(PromptVersionInfo::id, info -> info));
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
