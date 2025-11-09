@@ -23,7 +23,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -250,9 +249,10 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 2);
 
-            JsonNode metadata = JsonNodeFactory.instance.objectNode()
-                    .put("author", "test-user")
-                    .put("purpose", "testing");
+            Map<String, String> metadata = Map.of(
+                    "author", "test-user",
+                    "purpose", "testing",
+                    "version_number", "1");
 
             var versionCreate = DatasetVersionCreate.builder()
                     .changeDescription("Test version")
@@ -272,9 +272,11 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
 
                 var version = response.readEntity(DatasetVersion.class);
-                // Metadata is stored and should be returned
                 assertThat(version.changeDescription()).isEqualTo("Test version");
-                // Note: Full metadata validation will be tested after snapshot creation (OPIK-3015) is implemented
+                assertThat(version.metadata()).isNotNull();
+                assertThat(version.metadata().get("author")).isEqualTo("test-user");
+                assertThat(version.metadata().get("purpose")).isEqualTo("testing");
+                assertThat(version.metadata().get("version_number")).isEqualTo("1");
             }
         }
 
