@@ -2,7 +2,6 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -11,6 +10,7 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -26,7 +26,7 @@ public record DatasetVersion(
         @JsonView(DatasetVersion.View.Public.class) @Schema(description = "Number of items modified since last version") Integer itemsModified,
         @JsonView(DatasetVersion.View.Public.class) @Schema(description = "Number of items deleted since last version") Integer itemsDeleted,
         @JsonView(DatasetVersion.View.Public.class) @Nullable String changeDescription,
-        @JsonView(DatasetVersion.View.Public.class) @Nullable JsonNode metadata,
+        @JsonView(DatasetVersion.View.Public.class) @Nullable Map<String, String> metadata,
         @JsonView(DatasetVersion.View.Public.class) Instant createdAt,
         @JsonView(DatasetVersion.View.Public.class) String createdBy,
         @JsonView(DatasetVersion.View.Public.class) Instant lastUpdatedAt,
