@@ -94,11 +94,10 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       >
         <div className="mb-1 flex gap-4 overflow-x-auto">
           {annotationQueue?.created_at && (
-            <TooltipWrapper content="Annotation queue creation time">
-              <div>
-                <DateTag date={annotationQueue.created_at} />
-              </div>
-            </TooltipWrapper>
+            <DateTag
+              date={annotationQueue.created_at}
+              resource={RESOURCE_TYPE.annotationQueue}
+            />
           )}
           {annotationQueue?.scope && (
             <TooltipWrapper content="Annotation queue scope">
