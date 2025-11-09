@@ -8,13 +8,12 @@ import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScore
 import { Experiment } from "@/types/datasets";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
+import NavigationTag from "@/components/shared/NavigationTag";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -173,19 +172,17 @@ const CompareExperimentsDetails: React.FunctionComponent<
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
         {!isCompare && <DateTag date={experiment?.created_at} />}
-        <ResourceLink
+        <NavigationTag
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
           resource={RESOURCE_TYPE.dataset}
-          asTag
         />
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
-            <ResourceLink
+            <NavigationTag
               id={experiment.prompt_versions[0].prompt_id}
               name={`Prompt ${experiment.prompt_versions[0].commit}`}
               resource={RESOURCE_TYPE.prompt}
-              asTag
             />
           )}
       </div>
