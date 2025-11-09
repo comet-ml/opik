@@ -2,7 +2,7 @@ import React from "react";
 import usePluginsStore from "@/store/PluginsStore";
 import { Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
-import ThemeToggle from "../ThemeToggle/ThemeToggle";
+import ThemeToggle from "@/components/layout/ThemeToggle/ThemeToggle";
 
 export const SMEPageLayout = ({
   children = <Outlet />,

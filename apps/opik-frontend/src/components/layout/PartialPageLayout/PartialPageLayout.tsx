@@ -4,7 +4,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
 import AppDebugInfo from "../AppDebugInfo/AppDebugInfo";
-import ThemeToggle from "../ThemeToggle/ThemeToggle";
+import ThemeToggle from "@/components/layout/ThemeToggle/ThemeToggle";
 
 export const PartialPageLayout = ({
   children = <Outlet />,
