@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
@@ -72,8 +73,6 @@ public interface PromptService {
     PromptVersion retrievePromptVersion(String name, String commit);
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
-
-    Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 }
@@ -618,22 +617,6 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
-
-        if (versionsIds.isEmpty()) {
-            return Mono.just(Map.of());
-        }
-
-        return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                    PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-                    return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
-                            .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
-                })).subscribeOn(Schedulers.boundedElastic()));
-    }
-
-    @Override
     public Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(@NonNull Set<UUID> versionsIds) {
 
         if (versionsIds.isEmpty()) {
@@ -645,7 +628,7 @@ class PromptServiceImpl implements PromptService {
                     PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
                     return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
-                            .collect(toMap(PromptVersionInfo::id, info -> info));
+                            .collect(toMap(PromptVersionInfo::id, Function.identity()));
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 

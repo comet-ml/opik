@@ -17,7 +17,6 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(PromptVersion.class)
-@RegisterConstructorMapper(PromptVersionId.class)
 @RegisterConstructorMapper(PromptVersionInfo.class)
 interface PromptVersionDAO {
 
@@ -42,10 +41,6 @@ interface PromptVersionDAO {
 
     @SqlUpdate("DELETE FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     int deleteByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);
-
-    @SqlQuery("SELECT id, commit FROM prompt_versions WHERE id IN (<ids>) AND workspace_id = :workspace_id")
-    List<PromptVersionId> findCommitByVersionsIds(@BindList("ids") Set<UUID> ids,
-            @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
             SELECT pv.id, pv.commit, p.name AS prompt_name
