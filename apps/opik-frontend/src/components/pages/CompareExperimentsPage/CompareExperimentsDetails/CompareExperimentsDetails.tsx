@@ -172,7 +172,12 @@ const CompareExperimentsDetails: React.FunctionComponent<
         {renderCompareFeedbackScoresButton()}
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && <DateTag date={experiment?.created_at} />}
+        {!isCompare && (
+          <DateTag
+            date={experiment?.created_at}
+            resource={RESOURCE_TYPE.experiment}
+          />
+        )}
         <ResourceLink
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
