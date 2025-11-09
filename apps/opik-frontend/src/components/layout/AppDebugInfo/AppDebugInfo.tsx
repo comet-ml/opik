@@ -12,7 +12,7 @@ import { useEffect } from "react";
 
 const AppDebugInfo = () => {
   const showAppDebugInfo = useDebugStore((state) => state.showAppDebugInfo);
-  const isCometDebuggerModeEnabled = useIsFeatureEnabled(
+  const cometDebuggerModeEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.COMET_DEBUGGER_MODE_ENABLED,
   );
   const setShowAppDebugInfo = useDebugStore(
@@ -22,10 +22,58 @@ const AppDebugInfo = () => {
   useEffect(() => {
     const localStorageValue = localStorage.getItem(COMET_DEBUGGER_MODE_KEY);
     const shouldShowAppDebugInfo =
-      isCometDebuggerModeEnabled && localStorageValue?.toLowerCase() === "true";
+      cometDebuggerModeEnabled && localStorageValue?.toLowerCase() === "true";
 
     setShowAppDebugInfo(shouldShowAppDebugInfo);
-  }, [isCometDebuggerModeEnabled, setShowAppDebugInfo]);
+  }, [cometDebuggerModeEnabled, setShowAppDebugInfo]);
+
+  // Keyboard shortcut handler for debugger mode: Meta/Ctrl + c + .
+  useEffect(() => {
+    if (!cometDebuggerModeEnabled) {
+      return;
+    }
+
+    let isWaitingForPeriod = false;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isMetaOrCtrl = event.metaKey || event.ctrlKey;
+      const isCKey = event.key === "c" || event.key === "C";
+      const isPeriodKey = event.key === "." || event.key === ">";
+
+      // First part: Meta/Ctrl + c - start waiting for period
+      if (isMetaOrCtrl && isCKey && !isWaitingForPeriod) {
+        isWaitingForPeriod = true;
+        return;
+      }
+
+      // Second part: Period while still holding Meta/Ctrl - complete sequence
+      if (isMetaOrCtrl && isPeriodKey && isWaitingForPeriod) {
+        event.preventDefault();
+        event.stopPropagation();
+        isWaitingForPeriod = false;
+
+        // Toggle debugger mode
+        const shouldShowAppDebugInfo = !showAppDebugInfo;
+        localStorage.setItem(
+          COMET_DEBUGGER_MODE_KEY,
+          String(shouldShowAppDebugInfo).toLowerCase(),
+        );
+        setShowAppDebugInfo(shouldShowAppDebugInfo);
+        return;
+      }
+
+      // If waiting for period and any other key is pressed, reset sequence
+      if (isWaitingForPeriod) {
+        isWaitingForPeriod = false;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [cometDebuggerModeEnabled, setShowAppDebugInfo, showAppDebugInfo]);
 
   return (
     showAppDebugInfo && (

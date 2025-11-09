@@ -17,14 +17,8 @@ import {
 import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
 import { toast } from "../ui/use-toast";
-import UserMenuAppDebugInfoToggle from "@/plugins/comet/UserMenuAppDebugInfoToggle";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "../feature-toggles-provider";
 
 const NoUserMenu = () => {
-  const isCometDebuggerModeEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.COMET_DEBUGGER_MODE_ENABLED,
-  );
   const { theme, themeOptions, currentOption, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
 
@@ -40,7 +34,6 @@ const NoUserMenu = () => {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          {isCometDebuggerModeEnabled && <UserMenuAppDebugInfoToggle />}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
               <CurrentIcon className="mr-2 size-4" />
