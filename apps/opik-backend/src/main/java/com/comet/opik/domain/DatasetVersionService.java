@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
@@ -22,10 +21,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -69,15 +66,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
-            var datasetItemDAOHandle = handle.attach(DatasetItemDAO.class);
 
-            // Get current draft items - use streaming to collect all items
-            var currentItems = datasetItemDAOHandle.getItems(datasetId, Integer.MAX_VALUE, null)
-                    .collectList()
-                    .block();
-
-            // Calculate hash based on current items
-            String versionHash = calculateVersionHash(currentItems);
+            // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
+            // For now, use timestamp-based hash as placeholder
+            String versionHash = calculatePlaceholderVersionHash(datasetId);
 
             // Check if version with this hash already exists (deduplication)
             var existingVersion = datasetVersionDAO.findByHash(datasetId, versionHash, workspaceId);
@@ -99,8 +91,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 return datasetVersionDAO.findById(existingVersion.get().id(), workspaceId).orElseThrow();
             }
 
-            // Calculate diff statistics
-            var diffStats = calculateDiffStats(datasetId, currentItems, workspaceId);
+            // TODO OPIK-3015: Get actual item count and calculate diff stats from ClickHouse
+            // For now, use placeholder values for metadata-only testing
+            int itemsCount = 0;
+            int itemsAdded = 0;
+            int itemsModified = 0;
+            int itemsDeleted = 0;
 
             // Create new version
             var versionId = idGenerator.generateId();
@@ -108,10 +104,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     .id(versionId)
                     .datasetId(datasetId)
                     .versionHash(versionHash)
-                    .itemsCount(currentItems.size())
-                    .itemsAdded(diffStats.added())
-                    .itemsModified(diffStats.modified())
-                    .itemsDeleted(diffStats.deleted())
+                    .itemsCount(itemsCount)
+                    .itemsAdded(itemsAdded)
+                    .itemsModified(itemsModified)
+                    .itemsDeleted(itemsDeleted)
                     .changeDescription(request.changeDescription())
                     .metadata(request.metadata())
                     .createdBy(userName)
@@ -131,6 +127,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                             java.util.List.of("Tag '%s' already exists for this dataset".formatted(request.tag()))));
                 }
             }
+
+            // TODO OPIK-3015: Create immutable snapshots in ClickHouse dataset_item_versions table
 
             return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
         });
@@ -267,69 +265,29 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     /**
-     * Calculate SHA-256 hash of dataset items for version identification and deduplication.
-     * Hash is deterministic - same items produce same hash.
+     * Calculate placeholder hash for version identification.
+     * TODO OPIK-3015: Replace with actual content-based hash from dataset items.
      */
-    private String calculateVersionHash(List<DatasetItem> items) {
+    private String calculatePlaceholderVersionHash(UUID datasetId) {
         try {
+            // Use timestamp + dataset ID for unique hash per commit
+            String input = datasetId.toString() + ":" + System.currentTimeMillis();
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-
-            // Sort items by ID to ensure deterministic order
-            var sortedItems = items.stream()
-                    .sorted((a, b) -> a.id().compareTo(b.id()))
-                    .collect(Collectors.toList());
-
-            // Hash each item's ID and data
-            for (DatasetItem item : sortedItems) {
-                digest.update(item.id().toString().getBytes(StandardCharsets.UTF_8));
-                if (item.data() != null) {
-                    digest.update(item.data().toString().getBytes(StandardCharsets.UTF_8));
-                }
-            }
+            byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
 
             // Convert to hex string (first 16 chars for display)
-            byte[] hashBytes = digest.digest();
             StringBuilder hexString = new StringBuilder();
-            for (byte b : hashBytes) {
-                String hex = Integer.toHexString(0xff & b);
+            for (int i = 0; i < 8; i++) {
+                String hex = Integer.toHexString(0xff & hashBytes[i]);
                 if (hex.length() == 1) {
                     hexString.append('0');
                 }
                 hexString.append(hex);
             }
 
-            return hexString.toString().substring(0, 16); // Short hash for display
+            return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 algorithm not available", e);
         }
-    }
-
-    /**
-     * Calculate diff statistics by comparing current items with last version.
-     */
-    private DiffStats calculateDiffStats(UUID datasetId, List<DatasetItem> currentItems, String workspaceId) {
-        // Get last version
-        var lastVersion = template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findLatestVersion(datasetId, workspaceId);
-        });
-
-        // If no previous version, all items are added
-        if (lastVersion.isEmpty()) {
-            return new DiffStats(currentItems.size(), 0, 0);
-        }
-
-        // For now, we'll track items added/deleted by count since OPIK-3015 handles actual storage
-        // This is metadata-only tracking
-        int previousCount = lastVersion.get().itemsCount();
-        int currentCount = currentItems.size();
-
-        int added = Math.max(0, currentCount - previousCount);
-        int deleted = Math.max(0, previousCount - currentCount);
-
-        return new DiffStats(added, 0, deleted); // Modified will be calculated in OPIK-3015
-    }
-
-    private record DiffStats(int added, int modified, int deleted) {
     }
 }
