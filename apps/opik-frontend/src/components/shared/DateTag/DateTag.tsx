@@ -11,7 +11,7 @@ interface DateTagProps {
 }
 
 const DateTag = ({ date, resource }: DateTagProps) => {
-  const label = RESOURCE_MAP[resource].label;
+  const { label } = RESOURCE_MAP[resource];
 
   if (!date) {
     return null;
