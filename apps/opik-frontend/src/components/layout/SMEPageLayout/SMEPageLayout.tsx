@@ -2,7 +2,7 @@ import React from "react";
 import usePluginsStore from "@/store/PluginsStore";
 import { Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
-import NoUserMenu from "../NoUserMenu";
+import ThemeToggle from "../ThemeToggle/ThemeToggle";
 
 export const SMEPageLayout = ({
   children = <Outlet />,
@@ -22,7 +22,7 @@ export const SMEPageLayout = ({
       <main>
         <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
           <div className="flex-1 pl-0.5">{logo}</div>
-          <NoUserMenu />
+          <ThemeToggle />
         </nav>
 
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">

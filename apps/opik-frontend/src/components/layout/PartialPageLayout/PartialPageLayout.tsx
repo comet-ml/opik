@@ -4,7 +4,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
 import AppDebugInfo from "../AppDebugInfo/AppDebugInfo";
-import NoUserMenu from "../NoUserMenu";
+import ThemeToggle from "../ThemeToggle/ThemeToggle";
 
 export const PartialPageLayout = ({
   children = <Outlet />,
@@ -32,7 +32,7 @@ export const PartialPageLayout = ({
           </div>
 
           <AppDebugInfo />
-          {UserMenu ? <UserMenu /> : <NoUserMenu />}
+          {UserMenu ? <UserMenu /> : <ThemeToggle />}
         </nav>
 
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
