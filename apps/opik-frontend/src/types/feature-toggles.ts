@@ -6,5 +6,4 @@ export enum FeatureToggleKeys {
   TOGGLE_OPIK_AI_ENABLED = "opik_aienabled",
   TOGGLE_ALERTS_ENABLED = "alerts_enabled",
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
-  COMET_DEBUGGER_MODE_ENABLED = "comet_debugger_mode_enabled",
 }

@@ -526,9 +526,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
-  # Default: true
-  # Description: Whether or not Comet Debugger Mode is enabled
-  cometDebuggerModeEnabled: ${TOGGLE_COMET_DEBUGGER_MODE_ENABLED:-"true"}
 
 
 # Trace Thread configuration
