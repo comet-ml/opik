@@ -15,6 +15,7 @@ import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -107,7 +108,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
     } else {
       return (
         <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
+          <TooltipWrapper content="Feedback scores">
+            <PenLine className="size-4 shrink-0" />
+          </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
             {sortBy(experiment?.feedback_scores ?? [], "name").map(
               (feedbackScore) => {
