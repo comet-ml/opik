@@ -2,8 +2,11 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
+import com.comet.opik.infrastructure.db.JsonNodeColumnMapper;
+import com.comet.opik.infrastructure.db.StringListColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
@@ -18,6 +21,8 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
+@RegisterColumnMapper(JsonNodeColumnMapper.class)
+@RegisterColumnMapper(StringListColumnMapper.class)
 @RegisterConstructorMapper(DatasetVersion.class)
 public interface DatasetVersionDAO {
 
