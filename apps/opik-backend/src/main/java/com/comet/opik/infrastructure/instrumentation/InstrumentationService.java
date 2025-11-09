@@ -72,6 +72,29 @@ public class InstrumentationService {
     }
 
     /**
+     * Gets or creates a counter for a specific exception type.
+     * This creates separate metrics per exception type for easier querying and alerting.
+     *
+     * Example: NotFoundException -> opik.exceptions.not_found
+     *
+     * @param exceptionClass the exception class
+     * @return the counter for this exception type
+     */
+    public LongCounter getExceptionCounter(@NonNull Class<? extends Throwable> exceptionClass) {
+        String exceptionName = exceptionClass.getSimpleName()
+                .replaceAll("Exception$", "")
+                .replaceAll("([a-z])([A-Z])", "$1_$2")
+                .toLowerCase();
+
+        String metricName = "opik.exceptions." + exceptionName;
+
+        return createCounter(
+                metricName,
+                "Number of " + exceptionClass.getSimpleName() + " exceptions",
+                "exceptions");
+    }
+
+    /**
      * Records a value to a counter with the specified attributes.
      *
      * @param counter the counter to increment

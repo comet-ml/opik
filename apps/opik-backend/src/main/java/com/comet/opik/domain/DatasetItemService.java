@@ -14,7 +14,11 @@ import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -22,7 +26,6 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -60,9 +63,11 @@ public interface DatasetItemService {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetItemServiceImpl implements DatasetItemService {
+
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> DATASET_ID_KEY = AttributeKey.stringKey("dataset_id");
 
     private final @NonNull DatasetItemDAO dao;
     private final @NonNull DatasetService datasetService;
@@ -72,6 +77,40 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull TransactionTemplate template;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private DoubleHistogram datasetItemBatchSizeHistogram;
+
+    @Inject
+    public DatasetItemServiceImpl(
+            @NonNull DatasetItemDAO dao,
+            @NonNull DatasetService datasetService,
+            @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
+            @NonNull TraceEnrichmentService traceEnrichmentService,
+            @NonNull IdGenerator idGenerator,
+            @NonNull SortingFactoryDatasets sortingFactory,
+            @NonNull TransactionTemplate template,
+            @NonNull InstrumentationService instrumentationService) {
+        this.dao = dao;
+        this.datasetService = datasetService;
+        this.traceService = traceService;
+        this.spanService = spanService;
+        this.traceEnrichmentService = traceEnrichmentService;
+        this.idGenerator = idGenerator;
+        this.sortingFactory = sortingFactory;
+        this.template = template;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.datasetItemBatchSizeHistogram = instrumentationService.createHistogram(
+                "opik.dataset_items.batch_size",
+                "Number of dataset items in each batch insert",
+                "items");
+
+        log.info("DatasetItemService initialized with metrics instrumentation");
+    }
 
     @Override
     @WithSpan
@@ -205,8 +244,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             return validateSpans(workspaceId, items)
                     .then(Mono.defer(() -> validateTraces(workspaceId, items)))
-                    .then(Mono.defer(() -> dao.save(id, items)));
+                    .then(Mono.defer(() -> dao.save(id, items)))
+                    .doOnSuccess(count -> {
+                        // Record metric: dataset items batch size
+                        recordDatasetItemBatchSizeMetric(items.size(), workspaceId, id);
+                    });
         });
+    }
+
+    /**
+     * Records the opik.dataset_items.batch_size histogram metric.
+     */
+    private void recordDatasetItemBatchSizeMetric(int batchSize, String workspaceId, UUID datasetId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .put(DATASET_ID_KEY, datasetId.toString())
+                .build();
+
+        instrumentationService.recordHistogram(datasetItemBatchSizeHistogram, batchSize, attributes);
+        log.debug("Recorded metric: opik.dataset_items.batch_size={} for workspace='{}', dataset='{}'",
+                batchSize, workspaceId, datasetId);
     }
 
     private Mono<Void> validateSpans(String workspaceId, List<DatasetItem> items) {

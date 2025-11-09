@@ -131,6 +131,7 @@ class TraceServiceImpl implements TraceService {
     // Attribute keys for metrics
     private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
     private static final AttributeKey<String> PROJECT_ID = AttributeKey.stringKey("project.id");
+    private static final AttributeKey<String> OPERATION = AttributeKey.stringKey("operation");
 
     private final @NonNull TraceDAO dao;
     private final @NonNull TransactionTemplateAsync template;
@@ -148,6 +149,7 @@ class TraceServiceImpl implements TraceService {
     // Metrics
     private LongCounter tracesCreatedCounter;
     private DoubleHistogram traceDurationHistogram;
+    private DoubleHistogram traceBatchSizeHistogram;
 
     @Inject
     public TraceServiceImpl(@NonNull TraceDAO dao,
@@ -184,6 +186,10 @@ class TraceServiceImpl implements TraceService {
                 "opik.trace.duration",
                 "Duration of traces from start to end",
                 "s"); // seconds
+        this.traceBatchSizeHistogram = instrumentationService.createHistogram(
+                "opik.traces.batch_size",
+                "Number of traces in each batch insert",
+                "traces");
 
         log.info("TraceService initialized with metrics instrumentation");
     }
@@ -291,15 +297,19 @@ class TraceServiceImpl implements TraceService {
                             .flatMap(traces -> template
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(count -> {
-                                        // Record metric: traces created per workspace and project
+                                        // Record metrics
                                         recordTracesCreatedMetric(traces, workspaceId);
+                                        recordTraceBatchSizeMetric(traces.size(), workspaceId);
 
                                         // Post events
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName));
                                         raiseAlertEventIfApplicableForBatch(traces, workspaceId, workspaceName,
                                                 userName);
-                                    }));
-                }));
+                                    })
+                                    .doOnError(
+                                            error -> recordExceptionMetric(error, "create_trace_batch", workspaceId)));
+                }))
+                .doOnError(error -> recordExceptionMetric(error, "create_trace_batch", null));
     }
 
     /**
@@ -329,6 +339,36 @@ class TraceServiceImpl implements TraceService {
             log.debug("Recorded metric: opik.trace.duration={}s for workspace='{}', project='{}'",
                     durationSeconds, workspaceId, projectId);
         }
+    }
+
+    /**
+     * Records the opik.traces.batch_size histogram metric.
+     */
+    private void recordTraceBatchSizeMetric(int batchSize, String workspaceId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .build();
+
+        instrumentationService.recordHistogram(traceBatchSizeHistogram, batchSize, attributes);
+        log.debug("Recorded metric: opik.traces.batch_size={} for workspace='{}'", batchSize, workspaceId);
+    }
+
+    /**
+     * Records exception metrics with separate counters per exception type.
+     * Example: NotFoundException -> opik.exceptions.not_found
+     */
+    private void recordExceptionMetric(Throwable exception, String operation, String workspaceId) {
+        var attributesBuilder = Attributes.builder()
+                .put(OPERATION, operation);
+
+        if (workspaceId != null) {
+            attributesBuilder = attributesBuilder.put(WORKSPACE_ID, workspaceId);
+        }
+
+        LongCounter exceptionCounter = instrumentationService.getExceptionCounter(exception.getClass());
+        instrumentationService.recordCounter(exceptionCounter, 1, attributesBuilder.build());
+        log.debug("Recorded metric: opik.exceptions.{} for operation='{}', workspace='{}'",
+                exception.getClass().getSimpleName().toLowerCase(), operation, workspaceId);
     }
 
     /**

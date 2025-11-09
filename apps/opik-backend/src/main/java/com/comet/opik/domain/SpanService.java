@@ -62,6 +62,7 @@ public class SpanService {
     // Attribute keys for metrics
     private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
     private static final AttributeKey<String> PROJECT_ID = AttributeKey.stringKey("project.id");
+    private static final AttributeKey<String> OPERATION = AttributeKey.stringKey("operation");
 
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull ProjectService projectService;
@@ -76,6 +77,7 @@ public class SpanService {
     // Metrics
     private LongCounter spansCreatedCounter;
     private DoubleHistogram spanDurationHistogram;
+    private DoubleHistogram spanBatchSizeHistogram;
 
     @Inject
     public SpanService(@NonNull SpanDAO spanDAO,
@@ -106,6 +108,10 @@ public class SpanService {
                 "opik.span.duration",
                 "Duration of spans from start to end",
                 "s"); // seconds
+        this.spanBatchSizeHistogram = instrumentationService.createHistogram(
+                "opik.spans.batch_size",
+                "Number of spans in each batch insert",
+                "spans");
 
         log.info("SpanService initialized with metrics instrumentation");
     }
@@ -384,8 +390,9 @@ public class SpanService {
 
                     return spanDAO.batchInsert(spans)
                             .doOnSuccess(count -> {
-                                // Record metric: spans created per workspace and project
+                                // Record metrics
                                 recordSpansCreatedMetric(spans, workspaceId);
+                                recordSpanBatchSizeMetric(spans.size(), workspaceId);
                             });
                 }));
     }
@@ -432,6 +439,36 @@ public class SpanService {
             log.debug("Recorded metric: opik.span.duration={}s for workspace='{}', project='{}'",
                     durationSeconds, workspaceId, projectId);
         }
+    }
+
+    /**
+     * Records the opik.spans.batch_size histogram metric.
+     */
+    private void recordSpanBatchSizeMetric(int batchSize, String workspaceId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .build();
+
+        instrumentationService.recordHistogram(spanBatchSizeHistogram, batchSize, attributes);
+        log.debug("Recorded metric: opik.spans.batch_size={} for workspace='{}'", batchSize, workspaceId);
+    }
+
+    /**
+     * Records exception metrics with separate counters per exception type.
+     * Example: NotFoundException -> opik.exceptions.not_found
+     */
+    private void recordExceptionMetric(Throwable exception, String operation, String workspaceId) {
+        var attributesBuilder = Attributes.builder()
+                .put(OPERATION, operation);
+
+        if (workspaceId != null) {
+            attributesBuilder = attributesBuilder.put(WORKSPACE_ID, workspaceId);
+        }
+
+        LongCounter exceptionCounter = instrumentationService.getExceptionCounter(exception.getClass());
+        instrumentationService.recordCounter(exceptionCounter, 1, attributesBuilder.build());
+        log.debug("Recorded metric: opik.exceptions.{} for operation='{}', workspace='{}'",
+                exception.getClass().getSimpleName().toLowerCase(), operation, workspaceId);
     }
 
     /**

@@ -18,6 +18,7 @@ import com.google.inject.Singleton;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -92,6 +93,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     // Metrics
     private LongCounter feedbackScoresCreatedCounter;
+    private DoubleHistogram feedbackScoreBatchSizeHistogram;
 
     @Inject
     public FeedbackScoreServiceImpl(@NonNull FeedbackScoreDAO dao,
@@ -111,6 +113,10 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         this.feedbackScoresCreatedCounter = instrumentationService.createCounter(
                 "opik.feedback_scores.created",
                 "Number of feedback scores created",
+                "scores");
+        this.feedbackScoreBatchSizeHistogram = instrumentationService.createHistogram(
+                "opik.feedback_scores.batch_size",
+                "Number of feedback scores in each batch insert",
                 "scores");
 
         log.info("FeedbackScoreService initialized with metrics instrumentation");
@@ -186,12 +192,31 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .flatMap(
                                     projectDto -> dao.scoreBatchOf(entityType, projectDto.scores(), author.orElse(null))
                                             .doOnSuccess(count -> {
-                                                // Record metric: feedback scores created per workspace, project, and entity type
+                                                // Record metrics
                                                 recordFeedbackScoresCreatedMetric(count, workspaceId,
                                                         projectDto.project().id(), entityType);
+                                                recordFeedbackScoreBatchSizeMetric(projectDto.scores().size(),
+                                                        workspaceId, projectDto.project().id(), entityType);
                                             }))
                             .reduce(0L, Long::sum);
                 }));
+    }
+
+    /**
+     * Records the opik.feedback_scores.batch_size histogram metric.
+     */
+    private void recordFeedbackScoreBatchSizeMetric(int batchSize, String workspaceId, UUID projectId,
+            EntityType entityType) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .put(PROJECT_ID, projectId.toString())
+                .put(ENTITY_TYPE, entityType.getType())
+                .build();
+
+        instrumentationService.recordHistogram(feedbackScoreBatchSizeHistogram, batchSize, attributes);
+        log.debug(
+                "Recorded metric: opik.feedback_scores.batch_size={} for workspace='{}', project='{}', entity_type='{}'",
+                batchSize, workspaceId, projectId, entityType.getType());
     }
 
     /**

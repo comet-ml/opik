@@ -3,14 +3,17 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.google.common.base.Preconditions;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
@@ -22,13 +25,38 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class ExperimentItemService {
+
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace_id");
 
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private DoubleHistogram experimentItemBatchSizeHistogram;
+
+    @Inject
+    public ExperimentItemService(
+            @NonNull ExperimentItemDAO experimentItemDAO,
+            @NonNull ExperimentService experimentService,
+            @NonNull DatasetItemDAO datasetItemDAO,
+            @NonNull InstrumentationService instrumentationService) {
+        this.experimentItemDAO = experimentItemDAO;
+        this.experimentService = experimentService;
+        this.datasetItemDAO = datasetItemDAO;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.experimentItemBatchSizeHistogram = instrumentationService.createHistogram(
+                "opik.experiment_items.batch_size",
+                "Number of experiment items in each batch insert",
+                "items");
+
+        log.info("ExperimentItemService initialized with metrics instrumentation");
+    }
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
@@ -41,8 +69,25 @@ public class ExperimentItemService {
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
             return experimentItemDAO.insert(experimentItemsWithValidIds)
+                    .doOnSuccess(count -> {
+                        // Record metric: experiment items batch size
+                        recordExperimentItemBatchSizeMetric(experimentItemsWithValidIds.size(), workspaceId);
+                    })
                     .then();
         });
+    }
+
+    /**
+     * Records the opik.experiment_items.batch_size histogram metric.
+     */
+    private void recordExperimentItemBatchSizeMetric(int batchSize, String workspaceId) {
+        Attributes attributes = Attributes.builder()
+                .put(WORKSPACE_ID, workspaceId)
+                .build();
+
+        instrumentationService.recordHistogram(experimentItemBatchSizeHistogram, batchSize, attributes);
+        log.debug("Recorded metric: opik.experiment_items.batch_size={} for workspace='{}'",
+                batchSize, workspaceId);
     }
 
     private Set<ExperimentItem> addIdIfAbsentAndValidateIt(Set<ExperimentItem> experimentItems, String workspaceId) {
