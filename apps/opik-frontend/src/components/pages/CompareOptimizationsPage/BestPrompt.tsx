@@ -82,6 +82,60 @@ const extractMessageContent = (
 };
 
 /**
+ * Validates if an array contains valid OpenAI message objects.
+ */
+const isValidOpenAIMessages = (messages: unknown[]): boolean => {
+  return messages.every(
+    (msg: unknown) =>
+      isObject(msg) &&
+      "role" in msg &&
+      isString(msg.role) &&
+      ("content" in msg || "text" in msg),
+  );
+};
+
+/**
+ * Extracts OpenAI messages from various data formats.
+ * Handles both array format and object with messages property.
+ */
+const extractOpenAIMessages = (data: unknown): OpenAIMessage[] | null => {
+  // Check if it's an array of messages (OpenAI format)
+  if (isArray(data)) {
+    if (isValidOpenAIMessages(data)) {
+      return data as OpenAIMessage[];
+    }
+  }
+
+  // Check if it's an object with a messages array
+  if (isObject(data) && "messages" in data) {
+    const promptObj = data as { messages?: unknown };
+    if (isArray(promptObj.messages)) {
+      if (isValidOpenAIMessages(promptObj.messages)) {
+        return promptObj.messages as OpenAIMessage[];
+      }
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Formats OpenAI messages as readable text.
+ */
+const formatMessagesAsText = (messages: OpenAIMessage[]): string => {
+  return messages
+    .map((msg) => {
+      const roleName =
+        LLM_MESSAGE_ROLE_NAME_MAP[
+          msg.role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP
+        ] || msg.role;
+      const content = extractMessageContent(msg.content);
+      return `${roleName}: ${content}`;
+    })
+    .join("\n\n");
+};
+
+/**
  * Read-only message component similar to LLMPromptMessage but simplified.
  */
 const ReadOnlyMessage: React.FC<{ message: OpenAIMessage; index: number }> = ({
@@ -144,43 +198,7 @@ const BestPrompt: React.FC<BestPromptProps> = ({
       return null;
     }
 
-    // Check if it's an array of messages (OpenAI format)
-    if (isArray(promptData)) {
-      // Validate that it looks like OpenAI messages
-      const promptArray = promptData as unknown[];
-      const isValidMessages = promptArray.every(
-        (msg: unknown) =>
-          isObject(msg) &&
-          "role" in msg &&
-          isString(msg.role) &&
-          ("content" in msg || "text" in msg),
-      );
-
-      if (isValidMessages) {
-        return promptArray as OpenAIMessage[];
-      }
-    }
-
-    // Check if it's an object with a messages array
-    if (isObject(promptData) && "messages" in promptData) {
-      const promptObj = promptData as { messages?: unknown };
-      if (isArray(promptObj.messages)) {
-        const messagesArray = promptObj.messages as unknown[];
-        const isValidMessages = messagesArray.every(
-          (msg: unknown) =>
-            isObject(msg) &&
-            "role" in msg &&
-            isString(msg.role) &&
-            ("content" in msg || "text" in msg),
-        );
-
-        if (isValidMessages) {
-          return messagesArray as OpenAIMessage[];
-        }
-      }
-    }
-
-    return null;
+    return extractOpenAIMessages(promptData);
   }, [promptData]);
 
   const fallbackPrompt = useMemo(() => {
@@ -209,57 +227,9 @@ const BestPrompt: React.FC<BestPromptProps> = ({
     );
     if (!val) return null;
 
-    // Check if it's an array of messages (OpenAI format)
-    if (isArray(val)) {
-      const promptArray = val as unknown[];
-      const isValidMessages = promptArray.every(
-        (msg: unknown) =>
-          isObject(msg) &&
-          "role" in msg &&
-          isString(msg.role) &&
-          ("content" in msg || "text" in msg),
-      );
-      if (isValidMessages) {
-        const messages = promptArray as OpenAIMessage[];
-        return messages
-          .map((msg) => {
-            const roleName =
-              LLM_MESSAGE_ROLE_NAME_MAP[
-                msg.role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP
-              ] || msg.role;
-            const content = extractMessageContent(msg.content);
-            return `${roleName}: ${content}`;
-          })
-          .join("\n\n");
-      }
-    }
-
-    // Check if it's an object with a messages array
-    if (isObject(val) && "messages" in val) {
-      const promptObj = val as { messages?: unknown };
-      if (isArray(promptObj.messages)) {
-        const messagesArray = promptObj.messages as unknown[];
-        const isValidMessages = messagesArray.every(
-          (msg: unknown) =>
-            isObject(msg) &&
-            "role" in msg &&
-            isString(msg.role) &&
-            ("content" in msg || "text" in msg),
-        );
-        if (isValidMessages) {
-          const messages = messagesArray as OpenAIMessage[];
-          return messages
-            .map((msg) => {
-              const roleName =
-                LLM_MESSAGE_ROLE_NAME_MAP[
-                  msg.role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP
-                ] || msg.role;
-              const content = extractMessageContent(msg.content);
-              return `${roleName}: ${content}`;
-            })
-            .join("\n\n");
-        }
-      }
+    const extractedMessages = extractOpenAIMessages(val);
+    if (extractedMessages) {
+      return formatMessagesAsText(extractedMessages);
     }
 
     return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
@@ -267,17 +237,7 @@ const BestPrompt: React.FC<BestPromptProps> = ({
 
   const currentPromptText = useMemo(() => {
     if (messages) {
-      // Convert messages to readable text format
-      return messages
-        .map((msg) => {
-          const roleName =
-            LLM_MESSAGE_ROLE_NAME_MAP[
-              msg.role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP
-            ] || msg.role;
-          const content = extractMessageContent(msg.content);
-          return `${roleName}: ${content}`;
-        })
-        .join("\n\n");
+      return formatMessagesAsText(messages);
     }
     return fallbackPrompt || "";
   }, [messages, fallbackPrompt]);
