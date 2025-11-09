@@ -28,10 +28,14 @@ import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.instrumentation.InstrumentationService;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
@@ -125,6 +129,10 @@ class TraceServiceImpl implements TraceService {
 
     public static final String TRACE_KEY = "Trace";
 
+    // Attribute keys for metrics
+    private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace.id");
+    private static final AttributeKey<String> PROJECT_ID = AttributeKey.stringKey("project.id");
+
     private final @NonNull TraceDAO dao;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
@@ -136,6 +144,45 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
+    private final @NonNull InstrumentationService instrumentationService;
+
+    // Metrics
+    private final LongCounter tracesCreatedCounter;
+
+    @Inject
+    public TraceServiceImpl(@NonNull TraceDAO dao,
+            @NonNull TransactionTemplateAsync template,
+            @NonNull ProjectService projectService,
+            @NonNull IdGenerator idGenerator,
+            @NonNull LockService lockService,
+            @NonNull EventBus eventBus,
+            @NonNull TraceThreadSortingFactory traceThreadSortingFactory,
+            @NonNull TraceSortingFactory traceSortingFactory,
+            @NonNull AttachmentStripperService attachmentStripperService,
+            @NonNull AttachmentService attachmentService,
+            @NonNull AttachmentReinjectorService attachmentReinjectorService,
+            @NonNull InstrumentationService instrumentationService) {
+        this.dao = dao;
+        this.template = template;
+        this.projectService = projectService;
+        this.idGenerator = idGenerator;
+        this.lockService = lockService;
+        this.eventBus = eventBus;
+        this.traceThreadSortingFactory = traceThreadSortingFactory;
+        this.traceSortingFactory = traceSortingFactory;
+        this.attachmentStripperService = attachmentStripperService;
+        this.attachmentService = attachmentService;
+        this.attachmentReinjectorService = attachmentReinjectorService;
+        this.instrumentationService = instrumentationService;
+
+        // Initialize metrics
+        this.tracesCreatedCounter = instrumentationService.createCounter(
+                "opik.traces.created",
+                "Number of traces created",
+                "traces");
+
+        log.info("TraceService initialized with metrics instrumentation");
+    }
 
     @Override
     @WithSpan
@@ -239,12 +286,35 @@ class TraceServiceImpl implements TraceService {
                     return resolveProjects
                             .flatMap(traces -> template
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
-                                    .doOnSuccess(__ -> {
+                                    .doOnSuccess(count -> {
+                                        // Record metric: traces created per workspace and project
+                                        recordTracesCreatedMetric(traces, workspaceId);
+
+                                        // Post events
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName));
                                         raiseAlertEventIfApplicableForBatch(traces, workspaceId, workspaceName,
                                                 userName);
                                     }));
                 }));
+    }
+
+    /**
+     * Records the opik.traces.created metric, grouped by project.
+     */
+    private void recordTracesCreatedMetric(List<Trace> traces, String workspaceId) {
+        // Group traces by project to record separate metrics per project
+        traces.stream()
+                .collect(Collectors.groupingBy(Trace::projectId))
+                .forEach((projectId, tracesInProject) -> {
+                    Attributes attributes = Attributes.builder()
+                            .put(WORKSPACE_ID, workspaceId)
+                            .put(PROJECT_ID, projectId.toString())
+                            .build();
+
+                    instrumentationService.recordCounter(tracesCreatedCounter, tracesInProject.size(), attributes);
+                    log.debug("Recorded metric: opik.traces.created={} for workspace='{}', project='{}'",
+                            tracesInProject.size(), workspaceId, projectId);
+                });
     }
 
     // Traces could belong to different projects
