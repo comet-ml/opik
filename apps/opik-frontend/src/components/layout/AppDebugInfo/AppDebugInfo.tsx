@@ -1,26 +1,17 @@
+import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import AppNetworkStatus from "@/plugins/comet/AppNetworkStatus";
 import OpikIcon from "@/icons/opik.svg?react";
-import { useDebugStore } from "@/store/DebugStore";
 import copy from "clipboard-copy";
 import { Copy } from "lucide-react";
-import { useEffect } from "react";
 
 const COMET_DEBUGGER_MODE_KEY = "comet-debugger-mode"; // Same in EM
 
 const AppDebugInfo = () => {
-  const showAppDebugInfo = useDebugStore((state) => state.showAppDebugInfo);
-  const setShowAppDebugInfo = useDebugStore(
-    (state) => state.setShowAppDebugInfo,
+  const [showAppDebugInfo, setShowAppDebugInfo] = useState(
+    () => localStorage.getItem(COMET_DEBUGGER_MODE_KEY) === "true",
   );
-
-  useEffect(() => {
-    const localStorageValue = localStorage.getItem(COMET_DEBUGGER_MODE_KEY);
-    const shouldShowAppDebugInfo = localStorageValue?.toLowerCase() === "true";
-
-    setShowAppDebugInfo(shouldShowAppDebugInfo);
-  }, [setShowAppDebugInfo]);
 
   // Keyboard shortcut handler for debugger mode: Meta/Ctrl + c + .
   useEffect(() => {
@@ -44,12 +35,11 @@ const AppDebugInfo = () => {
         isWaitingForPeriod = false;
 
         // Toggle debugger mode
-        const shouldShowAppDebugInfo = !showAppDebugInfo;
-        localStorage.setItem(
-          COMET_DEBUGGER_MODE_KEY,
-          String(shouldShowAppDebugInfo).toLowerCase(),
-        );
-        setShowAppDebugInfo(shouldShowAppDebugInfo);
+        setShowAppDebugInfo((prev) => {
+          const newValue = !prev;
+          localStorage.setItem(COMET_DEBUGGER_MODE_KEY, String(newValue));
+          return newValue;
+        });
         return;
       }
 
@@ -64,7 +54,7 @@ const AppDebugInfo = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [setShowAppDebugInfo, showAppDebugInfo]);
+  }, []);
 
   return (
     showAppDebugInfo && (
