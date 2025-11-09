@@ -13,6 +13,10 @@ interface DateTagProps {
 const DateTag = ({ date, resource }: DateTagProps) => {
   const label = RESOURCE_MAP[resource].label;
 
+  if (!date) {
+    return null;
+  }
+
   return (
     <TooltipWrapper content={`${capitalize(label)} creation time`}>
       <Tag
