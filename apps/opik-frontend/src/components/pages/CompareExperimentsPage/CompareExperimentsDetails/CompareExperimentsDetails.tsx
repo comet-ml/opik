@@ -14,6 +14,7 @@ import useCompareExperimentsChartsData from "@/components/pages/CompareExperimen
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
 import NavigationTag from "@/components/shared/NavigationTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -106,7 +107,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
     } else {
       return (
         <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
+          <TooltipWrapper content="Feedback scores">
+            <PenLine className="size-4 shrink-0" />
+          </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
             {sortBy(experiment?.feedback_scores ?? [], "name").map(
               (feedbackScore) => {
@@ -171,7 +174,12 @@ const CompareExperimentsDetails: React.FunctionComponent<
         {renderCompareFeedbackScoresButton()}
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && <DateTag date={experiment?.created_at} />}
+        {!isCompare && (
+          <DateTag
+            date={experiment?.created_at}
+            resource={RESOURCE_TYPE.experiment}
+          />
+        )}
         <NavigationTag
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
