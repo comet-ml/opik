@@ -14,7 +14,8 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetVersionCreate(
-        @Nullable @Size(max = 100, message = "Tag must be at most 100 characters") @Schema(description = "Optional tag for this version (e.g., 'baseline', 'v1.0')") String tag,
-        @Nullable @Schema(description = "Optional description of changes in this version") String changeDescription,
-        @Nullable @Schema(description = "Optional user-defined metadata") Map<String, String> metadata) {
+        @Nullable @Size(max = 100, message = "Tag must be at most 100 characters") @Schema(description = "Optional tag for this version", examples = {
+                "baseline", "v1.0"}) String tag,
+        @Nullable @Schema(description = "Optional description of changes in this version", example = "Initial baseline version with production data") String changeDescription,
+        @Nullable @Schema(description = "Optional user-defined metadata") Map<String, String> metadata){
 }
