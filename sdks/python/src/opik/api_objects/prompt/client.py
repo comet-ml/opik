@@ -75,7 +75,7 @@ class PromptClient:
         self,
         name: str,
         prompt: str,
-        type: PromptVersionDetailType,
+        type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         template_structure: str = "string",
     ) -> prompt_version_detail.PromptVersionDetail:
