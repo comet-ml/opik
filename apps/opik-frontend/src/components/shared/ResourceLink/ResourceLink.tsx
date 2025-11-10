@@ -27,48 +27,55 @@ export enum RESOURCE_TYPE {
   annotationQueue,
 }
 
-const RESOURCE_MAP = {
+export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
     url: "/$workspaceName/projects/$projectId/traces",
     icon: LayoutGrid,
     param: "projectId",
     deleted: "Deleted project",
+    label: "project",
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
     icon: Database,
     param: "datasetId",
     deleted: "Deleted dataset",
+    label: "dataset",
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
     icon: FileTerminal,
     param: "promptId",
     deleted: "Deleted prompt",
+    label: "prompt",
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
     icon: FlaskConical,
     param: "datasetId",
     deleted: "Deleted experiment",
+    label: "experiment",
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
     icon: SparklesIcon,
     param: "datasetId",
     deleted: "Deleted optimization",
+    label: "optimization run",
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
     icon: SparklesIcon,
     param: "datasetId",
     deleted: "Deleted optimization",
+    label: "trial",
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
     icon: UserPen,
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
+    label: "annotation queue",
   },
 };
 
@@ -78,6 +85,7 @@ type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
+  tooltipContent?: string;
   asTag?: boolean;
   isDeleted?: boolean;
 };
@@ -88,6 +96,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   id,
   search,
   params,
+  tooltipContent = "",
   asTag = false,
   isDeleted = false,
 }) => {
@@ -112,7 +121,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       disabled={deleted}
     >
       {asTag ? (
-        <TooltipWrapper content={text} stopClickPropagation>
+        <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <Tag
             size="md"
             variant="gray"

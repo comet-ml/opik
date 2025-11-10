@@ -53,6 +53,7 @@ Opik supports integration with various AI providers, including:
 - Gemini
 - VertexAI
 - Azure OpenAI
+- Amazon Bedrock
 - LM Studio (coming soon)
 - vLLM / Ollama / any other OpenAI API-compliant provider
 
@@ -229,23 +230,72 @@ Step 4: Create and Download the Key
 
 4. Click **Add configuration**
 
+#### Amazon Bedrock
+
+Amazon Bedrock provides access to foundation models from leading AI companies through AWS. You can use Bedrock models in the Opik Playground by configuring it as a custom provider.
+
+##### Getting AWS Credentials
+
+1. Log into the [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
+2. Go to the **API Keys** section
+3. Generate or copy your API Key
+4. Keep this API Key secure - you'll need it for Opik configuration
+
+##### Configuring Bedrock in Opik
+
+1. In Opik, go to **Configuration → AI Providers**
+2. Click **"Add Configuration"**
+3. Select **"vLLM / Custom provider"** from the dropdown
+4. Enter your Bedrock endpoint URL in the URL field
+5. Add your AWS Bedrock API Key in the API Key field
+6. In the Models section, write the Bedrock models you want to use
+7. Click **Save** to store the configuration
+
+##### Bedrock URL Format by Region
+
+Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
+
+**Examples by Region:**
+
+- **US East 1**: `https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1`
+- **US West 2**: `https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1`
+- **Europe West 1 (Ireland)**: `https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1`
+- **Europe Central 1 (Frankfurt)**: `https://bedrock-runtime.eu-central-1.amazonaws.com/openai/v1`
+- **Asia Pacific (Tokyo)**: `https://bedrock-runtime.ap-northeast-1.amazonaws.com/openai/v1`
+- **Asia Pacific (Singapore)**: `https://bedrock-runtime.ap-southeast-1.amazonaws.com/openai/v1`
+
+<Tip>
+  Not all Bedrock models are available in all regions. Check the [AWS Bedrock model availability documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html) to verify model availability in your chosen region before configuring.
+</Tip>
+
 #### vLLM / Custom Provider
 
-Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc.
+Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc. **You can configure multiple custom providers**, each with their own unique name, URL, and models.
 
 <Frame>
   <img src="/img/configuration/vllm_configuration.png" alt="New Custom AI Provider Modal" />
 </Frame>
 
-For the URL section, enter your server URL, for example: `http://host.docker.internal:8000/v1`.
+##### Configuration Steps
+
+1. **Provider Name**: Enter a unique name to identify this custom provider (e.g., "vLLM Production", "Ollama Local", "Azure OpenAI Dev")
+2. **URL**: Enter your server URL, for example: `http://host.docker.internal:8000/v1`
+3. **API Key** (optional): If your model access requires authentication, enter the API key. Otherwise, leave this field blank.
+4. **Models**: List all models available on your server. You'll be able to select one of them for use later.
 
 <Tip>
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
 
-If your model access requires authentication via an API key, enter it in the API Key field. Otherwise, you can leave this field blank.
+##### Managing Multiple Custom Providers
 
-In the Models section, list all models available on your server. You’ll be able to select one of them for use later.
+Once you've configured multiple custom providers, you can:
+
+- **Edit** any custom provider by selecting it from the provider dropdown in the configuration dialog
+- **Delete** custom providers that are no longer needed
+- **Switch between** different custom providers in the Playground and Automation Rules
+
+Each custom provider appears as a separate option in the provider dropdown, making it easy to work with multiple self-hosted or custom LLM deployments.
 
 ## API Key Security
 

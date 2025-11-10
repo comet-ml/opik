@@ -55,11 +55,11 @@ const PlaygroundOutputs = ({
 
     return (
       <div className="flex w-full gap-[var(--item-gap)] pb-4 pt-2">
-        {promptIds?.map((promptId, promptIdx) => (
+        {promptIds?.map((promptId) => (
           <PlaygroundOutput
             key={`output-${promptId}`}
             promptId={promptId}
-            index={promptIdx}
+            totalOutputs={promptIds.length}
           />
         ))}
       </div>
@@ -75,6 +75,7 @@ const PlaygroundOutputs = ({
       <PlaygroundOutputActions
         datasetId={datasetId}
         datasetItems={datasetItems}
+        datasetColumns={datasetColumns}
         workspaceName={workspaceName}
         onChangeDatasetId={onChangeDatasetId}
         loadingDatasetItems={isLoadingDatasetItems}

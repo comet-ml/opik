@@ -62,7 +62,13 @@ if "OPENAI_API_KEY" not in os.environ:
 
 ## Logging CrewAI calls
 
-To log a CrewAI pipeline run, you can use the [`track_crewai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/crewai/track_crewai.html). This callback will log each CrewAI call to Opik.
+To log a CrewAI pipeline run, you can use the [`track_crewai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/crewai/track_crewai.html) function. This will log each CrewAI call to Opik, including LLM calls made by your agents.
+
+<Tip>
+  **CrewAI v1.0.0+ requires the `crew` parameter**: To ensure LLM calls are properly logged in CrewAI v1.0.0 and later, you must pass your Crew instance to `track_crewai(crew=your_crew)`. This is required because CrewAI v1.0.0+ changed how LLM providers are handled internally.
+  
+  For CrewAI v0.x, the `crew` parameter is optional as LLM tracking works through LiteLLM delegation.
+</Tip>
 
 ### Creating a CrewAI Project
 
@@ -115,20 +121,24 @@ class YourCrewName:
 
 ### Running with Opik Tracking
 
-Now we can import Opik's tracker and run our `crew`:
+Now we can import Opik's tracker and run our `crew`. **For CrewAI v1.0.0+, pass the crew instance to `track_crewai`** to ensure LLM calls are logged:
 
 ```python
 from opik.integrations.crewai import track_crewai
 
-track_crewai(project_name="crewai-integration-demo")
-
+# Create the crew
 my_crew = YourCrewName().crew()
+
+track_crewai(project_name="crewai-integration-demo", crew=my_crew)
+
+# Run the crew
 result = my_crew.kickoff()
 
 print(result)
 ```
 
-Each run will now be logged to the Opik platform.
+Each run will now be logged to the Opik platform, including all agent activities and LLM calls.
+
 
 ## Logging CrewAI Flows
 
@@ -142,6 +152,7 @@ Opik also supports the CrewAI Flows API. When you enable tracking with `track_cr
 Example:
 
 ```python
+import litellm
 from crewai.flow.flow import Flow, start, listen
 from opik.integrations.crewai import track_crewai
 
@@ -152,8 +163,7 @@ class ExampleFlow(Flow):
 
     @start()
     def generate_city(self):
-        from litellm import completion
-        response = completion(
+        response = litellm.completion(
             model=self.model,
             messages=[{"role": "user", "content": "Return the name of a random city."}],
         )
@@ -161,8 +171,7 @@ class ExampleFlow(Flow):
 
     @listen(generate_city)
     def generate_fun_fact(self, random_city):
-        from litellm import completion
-        response = completion(
+        response = litellm.completion(
             model=self.model,
             messages=[{"role": "user", "content": f"Tell me a fun fact about {random_city}"}],
         )
@@ -196,10 +205,11 @@ The `thread_id` can be passed to the CrewAI crew as a parameter, which will be u
 from crewai import Agent, Crew, Task, Process
 from opik.integrations.crewai import track_crewai
 
-track_crewai(project_name="crewai-integration-demo")
-
 # Define your crew (using the example from above)
 my_crew = YourCrewName().crew()
+
+# Enable tracking with the crew instance (required for v1.0.0+)
+track_crewai(project_name="crewai-integration-demo", crew=my_crew)
 
 # Pass thread_id via opik_args
 args_dict = {

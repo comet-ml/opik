@@ -17,15 +17,20 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 
+@Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {
 
@@ -38,8 +43,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
-        var providerConfig = getProviderApiKey(workspaceId, llmProvider);
-
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider, model);
         var config = buildConfig(providerConfig);
 
         return Optional.ofNullable(services.get(llmProvider))
@@ -49,19 +53,27 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
+        var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
+
+        // For custom LLM providers, add provider_name to configuration if present
+        if (providerConfig.provider() == LlmProvider.CUSTOM_LLM
+                && StringUtils.isNotBlank(providerConfig.providerName())) {
+            configuration = new HashMap<>(configuration);
+            configuration.put("provider_name", providerConfig.providerName());
+        }
+
         return LlmProviderClientApiConfig.builder()
                 .apiKey(providerConfig.apiKey() != null ? decrypt(providerConfig.apiKey()) : null)
                 .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
-                .configuration(Optional.ofNullable(providerConfig.configuration()).orElse(Map.of()))
+                .configuration(configuration)
                 .build();
     }
 
     public ChatModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
-        var providerConfig = getProviderApiKey(workspaceId, llmProvider);
-
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider, modelParameters.name());
         var config = buildConfig(providerConfig);
 
         return Optional.ofNullable(services.get(llmProvider))
@@ -101,13 +113,61 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     /**
      * Finding API keys isn't paginated at the moment.
      * Even in the future, the number of supported LLM providers per workspace is going to be very low.
+     *
+     * For custom LLM providers, this method matches the model against configured models to find the correct provider.
+     * This is necessary because model names can contain slashes (e.g., "mistralai/Mistral-7B-Instruct-v0.3"),
+     * making it impossible to reliably extract the provider name from the model string alone.
      */
-    private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider) {
+    private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider, String model) {
         return llmProviderApiKeyService.find(workspaceId).content().stream()
-                .filter(providerApiKey -> llmProvider.equals(providerApiKey.provider()))
+                .filter(providerApiKey -> {
+                    // Match provider type
+                    if (!llmProvider.equals(providerApiKey.provider())) {
+                        return false;
+                    }
+
+                    // For custom LLMs, match the model against configured models
+                    if (llmProvider == LlmProvider.CUSTOM_LLM) {
+                        return isModelConfiguredForProvider(model, providerApiKey);
+                    }
+
+                    return true;
+                })
                 .findFirst()
-                .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
-                        llmProvider.getValue())));
+                .orElseThrow(() -> new BadRequestException(
+                        "API key not configured for LLM. provider='%s', model='%s'".formatted(
+                                llmProvider.getValue(), model)));
+    }
+
+    /**
+     * Checks if a model is configured for a specific custom LLM provider.
+     * Uses direct string comparison between the requested model and configured models.
+     *
+     * The database stores models in the same format as they are requested:
+     *   - Legacy format: "custom-llm/model-name" (e.g., "custom-llm/mistralai/Mistral-7B-Instruct-v0.3")
+     *   - Named provider format: "custom-llm/provider-name/model-name" (e.g., "custom-llm/ollama/llama-3.2")
+     *
+     * @param model The full model identifier from the request
+     * @param providerApiKey The provider configuration from the database
+     * @return true if the model is in the provider's configured model list
+     */
+    private boolean isModelConfiguredForProvider(String model, ProviderApiKey providerApiKey) {
+        var configuredModels = Optional.ofNullable(providerApiKey.configuration())
+                .map(config -> config.get("models"))
+                .map(Object::toString)
+                .orElse("");
+
+        if (configuredModels.isEmpty()) {
+            return false;
+        }
+
+        if (!CustomLlmModelNameChecker.isCustomLlmModel(model)) {
+            return false;
+        }
+
+        return Arrays.stream(configuredModels.split(","))
+                .map(String::trim)
+                .anyMatch(configuredModel -> model.equals(configuredModel));
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(

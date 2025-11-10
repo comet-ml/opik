@@ -15,6 +15,7 @@ export const test = base.extend<BaseFixtures & DatasetsFixtures>({
     }
 
     await helperClient.createDataset(datasetName);
+    await helperClient.waitForDatasetVisible(datasetName);
     await use(datasetName);
 
     try {
@@ -36,6 +37,10 @@ export const test = base.extend<BaseFixtures & DatasetsFixtures>({
     const datasetsPage = new DatasetsPage(page);
     await datasetsPage.goto();
     await datasetsPage.createDatasetByName(datasetName);
+
+    // Wait for the dataset to be visible in the backend after UI creation
+    await helperClient.waitForDatasetVisible(datasetName);
+
     await use(datasetName);
 
     try {

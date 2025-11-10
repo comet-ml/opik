@@ -12,9 +12,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
-import com.comet.opik.infrastructure.WorkspaceSettings;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
@@ -23,8 +21,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
@@ -34,7 +30,6 @@ import org.glassfish.jersey.client.ChunkedInput;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -46,28 +41,18 @@ import java.util.concurrent.TimeoutException;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class DatasetsResourceIntegrationTest {
 
-    private static final DatasetService service = Mockito.mock(DatasetService.class);
-    private static final DatasetItemService itemService = Mockito.mock(DatasetItemService.class);
-    private static final DatasetExpansionService expansionService = Mockito.mock(DatasetExpansionService.class);
-    private static final RequestContext requestContext = Mockito.mock(RequestContext.class);
-    private static final WorkspaceMetadataService workspaceMetadataService = Mockito
-            .mock(WorkspaceMetadataService.class);
-    private static final TimeBasedEpochGenerator timeBasedGenerator = Generators.timeBasedEpochGenerator();
+    private static final DatasetService service = mock(DatasetService.class);
+    private static final DatasetItemService itemService = mock(DatasetItemService.class);
+    private static final DatasetExpansionService expansionService = mock(DatasetExpansionService.class);
+    private static final RequestContext requestContext = mock(RequestContext.class);
+    private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
-
-    static {
-        // Mock WorkspaceMetadataService to return default metadata (unlimited workspace size)
-        WorkspaceSettings workspaceSettings = new WorkspaceSettings();
-        workspaceSettings.setMaxSizeToAllowSorting(-1); // Unlimited
-        WorkspaceMetadata defaultMetadata = new WorkspaceMetadata(0, 0, 0, workspaceSettings);
-        when(workspaceMetadataService.getWorkspaceMetadata(Mockito.anyString()))
-                .thenReturn(reactor.core.publisher.Mono.just(defaultMetadata));
-    }
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(

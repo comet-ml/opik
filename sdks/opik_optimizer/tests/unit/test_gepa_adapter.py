@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("gepa", reason="gepa package required for GEPA adapter tests")
+try:
+    import gepa  # noqa: F401
+except ImportError:
+    pytest.fail("gepa package is required for GEPA adapter tests")  # pragma: no cover
 
 
 class DummyMetricResult:

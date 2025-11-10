@@ -13,7 +13,7 @@ The `ParameterOptimizer` uses Bayesian optimization to tune LLM call parameters 
 </Note>
 
 <Info>
-  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq)
+  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/faq)
   answers common questions, including when to use this optimizer, how parameters like `default_n_trials` and `local_search_ratio`
   work, and how to define custom parameter search spaces.
 </Info>
@@ -281,9 +281,6 @@ You can optimize nested parameters in `model_kwargs`:
 The ParameterOptimizer supports all models available through LiteLLM. This provides broad
 compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others,
 including locally hosted models.
-
-For detailed instructions on how to specify different models and configure providers, please refer
-to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
 ### Configuration Example using LiteLLM model string
 

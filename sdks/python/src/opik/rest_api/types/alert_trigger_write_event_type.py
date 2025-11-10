@@ -11,6 +11,9 @@ AlertTriggerWriteEventType = typing.Union[
         "prompt:committed",
         "trace:guardrails_triggered",
         "prompt:deleted",
+        "experiment:finished",
+        "trace:cost",
+        "trace:latency",
     ],
     typing.Any,
 ]

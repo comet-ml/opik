@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
@@ -125,6 +125,9 @@ type AddEditRuleDialogProps = {
   setOpen: (open: boolean) => void;
   projectId?: string;
   rule?: EvaluatorsRule;
+  projectName?: string; // Optional: project name for pre-selected projects
+  datasetColumnNames?: string[]; // Optional: dataset column names from playground
+  hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -146,6 +149,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   setOpen,
   projectId,
   rule: defaultRule,
+  projectName,
+  datasetColumnNames,
+  hideScopeSelector = false,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -200,6 +206,27 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
 
   const formProjectId = form.watch("projectId");
+
+  // Reset form to default values when dialog opens for creating a new rule
+  useEffect(() => {
+    if (open && !defaultRule) {
+      // Reset the entire form to default values
+      const defaultScope = EVALUATORS_RULE_SCOPE.trace;
+      const defaultUIType = UI_EVALUATORS_RULE_TYPE.llm_judge;
+
+      form.reset({
+        ruleName: "",
+        projectId: projectId || "",
+        samplingRate: 1,
+        uiType: defaultUIType,
+        scope: defaultScope,
+        type: EVALUATORS_RULE_TYPE.llm_judge,
+        enabled: true,
+        filters: [],
+        llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
+      });
+    }
+  }, [open, defaultRule, projectId, form]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -432,39 +459,43 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     }}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="scope"
-                    render={({ field }) => (
-                      <FormItem className="flex-1">
-                        <Label className="flex items-center">
-                          Scope{" "}
-                          <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
-                            <Info className="ml-1 size-4 text-light-slate" />
-                          </TooltipWrapper>
-                        </Label>
-                        <FormControl>
-                          <Select
-                            value={field.value}
-                            onValueChange={handleScopeChange}
-                            disabled={isEdit}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select scope" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
-                                Trace
-                              </SelectItem>
-                              <SelectItem value={EVALUATORS_RULE_SCOPE.thread}>
-                                Thread
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                  {!hideScopeSelector && (
+                    <FormField
+                      control={form.control}
+                      name="scope"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <Label className="flex items-center">
+                            Scope{" "}
+                            <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
+                              <Info className="ml-1 size-4 text-light-slate" />
+                            </TooltipWrapper>
+                          </Label>
+                          <FormControl>
+                            <Select
+                              value={field.value}
+                              onValueChange={handleScopeChange}
+                              disabled={isEdit}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select scope" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
+                                  Trace
+                                </SelectItem>
+                                <SelectItem
+                                  value={EVALUATORS_RULE_SCOPE.thread}
+                                >
+                                  Thread
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
 
                 <FormField
@@ -516,6 +547,21 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
                                 field.onChange(value);
                                 form.setValue("type", type);
+
+                                // Reset details when switching types
+                                if (
+                                  value === UI_EVALUATORS_RULE_TYPE.llm_judge
+                                ) {
+                                  form.setValue(
+                                    "llmJudgeDetails",
+                                    cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
+                                  );
+                                } else {
+                                  form.setValue(
+                                    "pythonCodeDetails",
+                                    cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
+                                  );
+                                }
                               }}
                             >
                               <ToggleGroupItem
@@ -564,9 +610,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   <LLMJudgeRuleDetails
                     workspaceName={workspaceName}
                     form={form}
+                    projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
                   />
                 ) : (
-                  <PythonCodeRuleDetails form={form} />
+                  <PythonCodeRuleDetails
+                    form={form}
+                    projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
+                  />
                 )}
 
                 {/* Filtering Section */}

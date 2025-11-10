@@ -11,12 +11,22 @@ from flask_cors import CORS
 
 from routes.projects import projects_bp
 from routes.datasets import datasets_bp
+from routes.traces import traces_bp
+from routes.threads import threads_bp
+from routes.feedback_scores import feedback_scores_bp
+from routes.experiments import experiments_bp
+from routes.prompts import prompts_bp
 
 app = Flask(__name__)
 CORS(app)
 
-app.register_blueprint(projects_bp)
-app.register_blueprint(datasets_bp)
+app.register_blueprint(projects_bp, url_prefix="/api/projects")
+app.register_blueprint(datasets_bp, url_prefix="/api/datasets")
+app.register_blueprint(traces_bp, url_prefix="/api/traces")
+app.register_blueprint(threads_bp, url_prefix="/api/threads")
+app.register_blueprint(feedback_scores_bp, url_prefix="/api/feedback-scores")
+app.register_blueprint(experiments_bp, url_prefix="/api/experiments")
+app.register_blueprint(prompts_bp, url_prefix="/api/prompts")
 
 
 @app.route("/health", methods=["GET"])

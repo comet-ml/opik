@@ -21,6 +21,7 @@ from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
 from .dataset import rest_operations as dataset_rest_operations
+from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
@@ -713,6 +714,38 @@ class Opik:
             )
 
             self._streamer.put(add_trace_feedback_scores_batch_message)
+
+    def log_threads_feedback_scores(
+        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
+        """
+        Log feedback scores for threads.
+
+        Args:
+            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a thread id via `id` key for each score is mandatory.
+            project_name: The name of the project in which the threads are logged. If not set, the project name
+                which was configured when the Opik instance was created will be used.
+
+        Returns:
+            None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> scores = [
+            >>>     {
+            >>>         "id": "thread_123",
+            >>>         "name": "user_satisfaction",
+            >>>         "value": 0.85,
+            >>>         "reason": "User seemed satisfied with the conversation"
+            >>>     }
+            >>> ]
+            >>> client.log_threads_feedback_scores(scores=scores)
+        """
+        self.get_threads_client().log_threads_feedback_scores(
+            scores=scores, project_name=project_name
+        )
 
     def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
         """
@@ -1467,6 +1500,15 @@ class Opik:
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
         _ = self._rest_client.optimizations.get_optimization_by_id(id)
         return optimization.Optimization(id=id, rest_client=self._rest_client)
+
+    def get_experiments_client(self) -> experiments_client.ExperimentsClient:
+        """
+        Retrieves an instance of `ExperimentsClient`.
+
+        Returns:
+            An instance of the ExperimentsClient initialized with a cached REST client.
+        """
+        return experiments_client.ExperimentsClient(self._rest_client)
 
 
 @functools.lru_cache()

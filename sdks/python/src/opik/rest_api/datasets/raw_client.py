@@ -20,6 +20,7 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
+from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
 
@@ -195,6 +196,56 @@ class RawDatasetsClient:
                 "dataset_id": dataset_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/from-traces",
+            method="POST",
+            json={
+                "trace_ids": trace_ids,
+                "enrichment_options": convert_and_respect_annotation_metadata(
+                    object_=enrichment_options, annotation=TraceEnrichmentOptions, direction="write"
                 ),
             },
             headers={
@@ -523,6 +574,8 @@ class RawDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetItemPageCompare]:
@@ -540,6 +593,10 @@ class RawDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -559,6 +616,8 @@ class RawDatasetsClient:
                 "size": size,
                 "experiment_ids": experiment_ids,
                 "filters": filters,
+                "sorting": sorting,
+                "search": search,
                 "truncate": truncate,
             },
             request_options=request_options,
@@ -1063,6 +1122,56 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/from-traces",
+            method="POST",
+            json={
+                "trace_ids": trace_ids,
+                "enrichment_options": convert_and_respect_annotation_metadata(
+                    object_=enrichment_options, annotation=TraceEnrichmentOptions, direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_dataset_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DatasetPublic]:
@@ -1377,6 +1486,8 @@ class AsyncRawDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetItemPageCompare]:
@@ -1394,6 +1505,10 @@ class AsyncRawDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1413,6 +1528,8 @@ class AsyncRawDatasetsClient:
                 "size": size,
                 "experiment_ids": experiment_ids,
                 "filters": filters,
+                "sorting": sorting,
+                "search": search,
                 "truncate": truncate,
             },
             request_options=request_options,

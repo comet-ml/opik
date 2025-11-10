@@ -1227,6 +1227,28 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/{dataset_id}/items/from-traces:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from traces
+      description: Create dataset items from traces with enriched metadata
+      operationId: createDatasetItemsFromTraces
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetItemsFromTracesRequest"
+      responses:
+        "204":
+          description: No content
   /v1/private/datasets/{id}:
     get:
       tags:
@@ -1391,6 +1413,14 @@ paths:
         schema:
           type: string
       - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: search
         in: query
         schema:
           type: string
@@ -1829,6 +1859,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentGroupAggregationsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/finish:
+    post:
+      tags:
+      - Experiments
+      summary: Finish experiments
+      description: Finish experiments and trigger alert events
+      operationId: finishExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteIdsHolder"
+      responses:
+        "204":
+          description: No content
         "400":
           description: Bad Request
           content:
@@ -3281,6 +3332,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Spans resource
@@ -3541,6 +3606,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Span stats resource
@@ -3776,6 +3855,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace resource
@@ -4048,6 +4141,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace stats resource
@@ -4198,6 +4305,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+            Must be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created up to this time (ISO-8601 format).
+            Must be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace threads resource
@@ -4890,6 +5011,9 @@ components:
           - prompt:committed
           - trace:guardrails_triggered
           - prompt:deleted
+          - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5006,6 +5130,9 @@ components:
           - prompt:committed
           - trace:guardrails_triggered
           - prompt:deleted
+          - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -5151,6 +5278,9 @@ components:
           - prompt:committed
           - trace:guardrails_triggered
           - prompt:deleted
+          - experiment:finished
+          - trace:cost
+          - trace:latency
         trigger_configs:
           type: array
           items:
@@ -7274,6 +7404,39 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+    CreateDatasetItemsFromTracesRequest:
+      required:
+      - enrichment_options
+      - trace_ids
+      type: object
+      properties:
+        trace_ids:
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: Set of trace IDs to add to the dataset
+          items:
+            type: string
+            description: Set of trace IDs to add to the dataset
+            format: uuid
+        enrichment_options:
+          $ref: "#/components/schemas/TraceEnrichmentOptions"
+    TraceEnrichmentOptions:
+      type: object
+      properties:
+        includeSpans:
+          type: boolean
+        includeTags:
+          type: boolean
+        includeFeedbackScores:
+          type: boolean
+        includeComments:
+          type: boolean
+        includeUsage:
+          type: boolean
+        includeMetadata:
+          type: boolean
+      description: Options for enriching trace data
     DatasetIdentifier:
       required:
       - dataset_name
@@ -7457,6 +7620,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column_Compare"
+        sortableBy:
+          type: array
+          items:
+            type: string
     DatasetItem_Compare:
       required:
       - data
@@ -7931,6 +8098,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Column:
       type: object
       properties:
@@ -8486,6 +8657,16 @@ components:
           type: integer
           format: int32
           readOnly: true
+        providers:
+          type: array
+          description: "List of unique provider names from all spans in this trace,\
+            \ sorted alphabetically"
+          readOnly: true
+          items:
+            type: string
+            description: "List of unique provider names from all spans in this trace,\
+              \ sorted alphabetically"
+            readOnly: true
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -8931,6 +9112,19 @@ components:
       properties:
         aggregations:
           $ref: "#/components/schemas/AggregationData"
+    IdsHolder:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -9578,6 +9772,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9627,6 +9829,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9672,6 +9882,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - to uniquely identify custom providers (e.g.,\
+            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
+            \ Anthropic, etc.)."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -9692,6 +9910,14 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+        provider_name:
+          maxLength: 150
+          minLength: 0
+          type: string
+          description: "Provider name - can be set to migrate legacy custom LLM providers\
+            \ to the new multi-provider format. Once set, it cannot be changed. Should\
+            \ only be set for custom LLM providers."
+          example: ollama
         headers:
           type: object
           additionalProperties:
@@ -11189,6 +11415,16 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+        from_time:
+          type: string
+          description: Filter spans created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter spans created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     SpanUpdate:
       required:
       - trace_id
@@ -11501,6 +11737,16 @@ components:
           type: integer
           format: int32
           readOnly: true
+        providers:
+          type: array
+          description: "List of unique provider names from all spans in this trace,\
+            \ sorted alphabetically"
+          readOnly: true
+          items:
+            type: string
+            description: "List of unique provider names from all spans in this trace,\
+              \ sorted alphabetically"
+            readOnly: true
     TraceThread:
       type: object
       properties:
@@ -11723,6 +11969,16 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        from_time:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+            Must be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter trace threads created up to this time (ISO-8601 format).
+            Must be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -11754,6 +12010,16 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        from_time:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     TraceUpdate:
       type: object
       properties:
@@ -11903,6 +12169,12 @@ components:
             \ for 2 hours, P1D for 1 day). Minimum precision supported is seconds,\
             \ please use a duration with seconds precision or higher. Also, the max\
             \ duration allowed is 7 days."
+        truncation_on_tables:
+          type: boolean
+          description: "Enable or disable data truncation in table views. When disabled,\
+            \ the frontend will limit pagination to prevent performance issues. Default:\
+            \ true (truncation enabled)."
+          example: true
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

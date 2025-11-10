@@ -10,9 +10,8 @@ import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueBy
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL";
 import DateTag from "@/components/shared/DateTag/DateTag";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import NavigationTag from "@/components/shared/NavigationTag";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import ConfigurationTab from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
@@ -23,6 +22,7 @@ import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELin
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -94,19 +94,23 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       >
         <div className="mb-1 flex gap-4 overflow-x-auto">
           {annotationQueue?.created_at && (
-            <DateTag date={annotationQueue.created_at} />
+            <DateTag
+              date={annotationQueue.created_at}
+              resource={RESOURCE_TYPE.annotationQueue}
+            />
           )}
           {annotationQueue?.scope && (
-            <Tag variant="blue" size="md">
-              {capitalize(annotationQueue.scope)}
-            </Tag>
+            <TooltipWrapper content="Annotation queue scope">
+              <Tag variant="blue" size="md">
+                {capitalize(annotationQueue.scope)}
+              </Tag>
+            </TooltipWrapper>
           )}
           {annotationQueue?.project_id && (
-            <ResourceLink
+            <NavigationTag
               id={annotationQueue.project_id}
               name={annotationQueue.project_name}
               resource={RESOURCE_TYPE.project}
-              asTag
             />
           )}
           {annotationQueue && (
@@ -114,7 +118,9 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           )}
         </div>
         <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
+          <TooltipWrapper content="Feedback scores">
+            <PenLine className="size-4 shrink-0" />
+          </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
             {allocatedFeedbackScores.map((feedbackScore) => (
               <FeedbackScoreTag

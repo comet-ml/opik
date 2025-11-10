@@ -5,184 +5,48 @@ keywords: "LLM optimization, prompt engineering, agent optimization, MetaPrompt,
 og:image: "/img/agent_optimization/introducing.png"
 ---
 
-**Opik Agent Optimizer** is a comprehensive toolkit designed to enhance the performance and
-efficiency of your Large Language Model (LLM) applications. Rather than manually editing prompts
-and running evaluation, you can use Opik Agent Optimizer to automatically optimize your prompts.
+**Opik Agent Optimizer** is a turnkey, open-source agent and prompt optimization SDK. It automatically tunes prompts, tools, and agent workflows using the datasets, metrics, and traces you already log to Opik. Instead of hand-editing instructions and re-running evaluations, pick an optimizer (MetaPrompt, Hierarchical Reflective, Evolutionary, GEPA, etc.) and let it iterate for you online or fully offline inside Docker and Kubernetes.
 
-[//]: # (TODO: Replace with video of the optimizer in action)
 <Frame>
-  <img src="/img/agent_optimization/dashboard.png" alt="Opik Agent Optimizer Dashboard" />
+  <img src="/img/agent_optimization/dashboard.png" alt="Opik Agent Optimizer Dashboard showing optimization progress" />
 </Frame>
 
-## Getting Started
+## Why teams choose Opik Agent Optimizer
 
-Here's a simple step-by-step guide to get you up and running with Opik Agent Optimizer:
+- **Automatic prompt optimization** – end-to-end workflow that installs in minutes and runs locally or in your  stack.
+- **Open-source and framework agnostic** – no lock-in, use Opik’s first-party optimizers or community favorites like GEPA in the same SDK.
+- **Agent-aware** – optimize beyond system prompts, including MCP tool signatures, function-calling schemas, and full multi-agent systems.
+- **Deep observability** – every trial logs prompts, tool calls, traces, and metric reasons to Opik so you can explain and ship changes confidently.
+
+## Key capabilities
+
+<Cards>
+  <Card title="Optimizers" body="MetaPrompt, Hierarchical Reflective, Few-Shot Bayesian, Evolutionary, GEPA, Parameter tuning—all open-source, mixing in-house algorithms with popular public projects." />
+  <Card title="Tool & MCP support" body="Optimize beyond system prompts: MCP tool signatures, OpenAI function calling, and traditional prompt text all benefit from the same workflows." />
+  <Card title="Agent integrations" body="Ready-made adapters for LangGraph, Google ADK, MCP workflows, and custom agents, plus the ability to build your own `OptimizableAgent`." />
+  <Card title="Dashboard analytics" body="Optimization runs show progress charts, per-trial prompts, dataset coverage, and traces for root-cause analysis." />
+  <Card title="Secure & offline" body="Run the SDK locally or inside Opik’s Docker compose to keep data inside your network." />
+</Cards>
+
+## How it works
 
 <Steps>
-  <Step title="1. Set up your account and API key">
-    First, you'll need an Opik account and API key:
-    ```bash
-    # Install Opik and the optimizer package
-    pip install opik opik-optimizer
-    
-    # Configure your API key
-    opik configure
-    ```
-    If you don't have an account yet, [sign up here](https://www.comet.com/signup?from=llm).
+  <Step title="1. Prepare data & metrics">
+    Use Opik datasets (CSV upload, API, or trace exports) plus deterministic metrics/`ScoreResult` functions. See [Define datasets](/agent_optimization/optimization/define_datasets) and [Define metrics](/agent_optimization/optimization/define_metrics).
   </Step>
-  <Step title="2. Run the optimization code">
-  
-  The goal of the Opik Agent Optimizer is to allow you to optimize your existing agent, simply pass
-  your prompt or agent to the optimizer:
-
-  <CodeBlocks>
-      ```python maxLines=1000 title="Optimizing a prompt"
-      import opik
-      from opik.evaluation.metrics import score_result
-      import opik_optimizer
-
-      # Define the prompt to optimize
-      prompt = opik_optimizer.ChatPrompt(
-        messages=[
-          {"role": "system", "content": "You are a helpful assistant."},
-          {"role": "user", "content": "{question}"},
-        ],
-        model="gpt-4o"
-      )
-
-      # Define the metric for
-      def short_response(dataset_item, llm_output):
-        if len(llm_output) < 100:
-          return score_result.ScoreResult(name="short_response", value=1, reason="Response is short as expected.")
-        else:
-          return score_result.ScoreResult(name="short_response", value=0, reason="Response is too long.")
-
-      # Define the dataset to optimize on
-      client = opik.Opik()
-      dataset = client.get_or_create_dataset(name='prompt_optimization')
-      dataset.insert([
-        {"question": "What is agent optimization?"},
-        {"question": "What are best practices for prompt optimization?"},
-      ])
-      
-      # Run the optimizer
-      optimizer = opik_optimizer.HierarchicalReflectiveOptimizer()
-      result = optimizer.optimize_prompt(
-        prompt=prompt,
-        dataset=dataset,
-        metric=short_response,
-        max_trials=1
-      )
-
-      result.display()
-      ```
-
-      ```python maxLines=1000 title="Agent Optimization"
-      import opik
-      from opik.evaluation.metrics import score_result
-      import opik_optimizer
-
-      # Define the prompt to optimize
-      ## Define a simple tool
-      @opik.track(type="tool")
-      def get_context(question):
-        return "Agent optimization is the process of automatically improving the performance of an agent with Opik."
-
-      ## Define the prompt and available tools
-      prompt = opik_optimizer.ChatPrompt(
-        messages=[
-          {"role": "system", "content": "You are a helpful assistant."},
-          {"role": "user", "content": "{question}"},
-        ],
-        tools=[
-          {
-            "type": "function",
-            "function": {
-              "name": "get_context",
-              "description": "Always call this tool to get additional context",
-              "parameters": {
-                "type": "object",
-                "properties": {
-                  "question": {
-                    "type": "string",
-                    "description": "The question to get context for"
-                  }
-                }
-              },
-              "required": ["question"]
-            }
-          }
-        ],
-        function_map={
-          "get_context": lambda question: get_context(question)
-        },
-        model="gpt-4o"
-      )
-
-      # Define the metric to optimize
-      def short_response(dataset_item, llm_output):
-        if len(llm_output) < 250:
-          return score_result.ScoreResult(
-            name="short_response",
-            value=1,
-            reason="Response is less than 250 characters."
-          )
-        else:
-          return score_result.ScoreResult(
-            name="short_response",
-            value=0,
-            reason="Response is too long, should be less than 250 characters."
-          )
-
-      # Define the dataset to optimize on
-      client = opik.Opik()
-      dataset = client.get_or_create_dataset(name='prompt_optimization')
-      dataset.insert([
-        {"question": "What is agent optimization?"},
-        {"question": "What are best practices for prompt optimization?"},
-      ])
-
-      # Run the optimizer
-      optimizer = opik_optimizer.HierarchicalReflectiveOptimizer()
-
-      result = optimizer.optimize_prompt(
-        prompt=prompt,
-        dataset=dataset,
-        metric=short_response,
-        max_trials=1
-      )
-
-      result.display()
-      ```
-  </CodeBlocks>
-
+  <Step title="2. Pick an optimizer">
+    Choose the best algorithm for your task (see [Optimization algorithms](/agent_optimization/algorithms/overview)). All optimizers expose the same API, so you can swap them easily or chain runs.
   </Step>
-  <Step title="3. Analyze your results">
-    After optimization completes, you can view results in multiple ways:
-    
-    <Tabs>
-      <Tab value="cli" title="CLI Output">
-        Call `result.display()` to see a summary in your terminal:
-        ```bash
-        result.display()
-        ```
-        <img src="/img/agent_optimization/cli_results.png" alt="CLI optimization results" />
-      </Tab>
-      <Tab value="dashboard" title="Dashboard">
-        View detailed results in the Opik Agent Optimization dashboard:
-        <img src="/img/agent_optimization/dashboard_results.png" alt="Dashboard optimization results" />
-      </Tab>
-      <Tab value="programmatic" title="Programmatic">
-        Access individual result fields programmatically:
-        ```python
-        print(f"Optimized prompt: {result.prompt}")
-        print(f"Score: {result.score}")
-        print(f"Improvement: {result.improvement}")
-        ```
-      </Tab>
-    </Tabs>
+  <Step title="3. Inspect & ship">
+    Results land in the Opik dashboard under **Evaluation → Optimization runs**, where you can compare prompts, failure modes, and dataset coverage before promoting the change.
   </Step>
 </Steps>
+
+## Start fast
+
+- Follow the [Quickstart](/agent_optimization/getting_started/quickstart) to run your first optimization locally.
+- Prefer notebooks? Launch the [Quickstart notebook](/agent_optimization/getting_started/quickstart_notebook).
+- Need scenario-specific guidance? Explore the [Cookbooks](/agent_optimization/cookbooks/optimizer_introduction_cookbook).
 
 ## Optimization Algorithms
 
@@ -200,43 +64,8 @@ Optimizer as a first step:
 | [Parameter Optimization](/agent_optimization/algorithms/parameter_optimizer)                   | Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization. Uses Optuna for efficient parameter search with global and local search phases. Best for tuning model behavior without changing the prompt.                                         |
 
 <Tip>
-  If you would like us to implement another optimization algorithm, reach out to us on
-  [Github](https://github.com/comet-ml/opik) or feel free to contribute by [extending
-  optimizers](/agent_optimization/advanced/extending_optimizer).
+  Want to see numbers? Check the new [optimizer benchmarks](/agent_optimization/algorithms/benchmarks) page for the latest performance table and instructions for running the benchmark suite yourself.
 </Tip>
-
-### Benchmark results
-
-<Warning>
-  We are currently working on the benchmarking results, these are early preliminary results and are subject to change.
-  You can learn more about our benchmarks
-  [here](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/benchmarks/run_benchmark.py).
-</Warning>
-
-Each optimization algorithm is evaluated against different use-cases and datasets:
-
-1. Arc: The [ai2_arc](https://huggingface.co/datasets/allenai/ai2_arc) dataset contains a set of
-   multiple choice science questions
-2. GSM8K: The [gsm8k](https://huggingface.co/datasets/openai/gsm8k) dataset contains a set of math problems
-3. medhallu: The [medhallu](https://huggingface.co/datasets/UTAustin-AIHealth/MedHallu) dataset
-   contains a set of medical questions
-4. RagBench: The [ragbench](https://huggingface.co/datasets/wandb/ragbench-sentence-relevance-balanced/discussions)
-   dataset contains a set of retrieval (RAG) examples.
-
-Our latest benchmarks shows the following results:
-
-| Rank | Algorithm/Optimizer                  | Average Score | Arc    | GSM8K  | RagBench |
-| ---- | ------------------------------------ | ------------- | ------ | ------ | -------- |
-| 1    | Hierarchical Reflective Optimization | 67.83%        | 92.70% | 28.00% | 82.8%    |
-| 2    | Few-shot Bayesian Optimization       | 59.17%        | 28.09% | 59.26% | 90.15%   |
-| 3    | Evolutionary Optimization            | 52.51%        | 40.00% | 25.53% | 92.00%   |
-| 4    | MetaPrompt Optimization              | 38.75%        | 25.00% | 26.93% | 64.31%   |
-| 5    | GEPA Optimization                    | 32.27%        |  6.55% | 26.08% | 64.17%   |
-| 6    | No optimization                      | 11.85%        |  1.69% | 24.06% |  9.81%   |
-
-The results above are benchmarks tested against `gpt-4o-mini`, we are using various metrics
-depending on the dataset including Levenshtein Ratio, Answer Relevance and Hallucination. The
-results might change if you use a different model, configuration, dataset and starting prompt(s).
 
 ## Next Steps
 
@@ -245,5 +74,5 @@ results might change if you use a different model, configuration, dataset and st
 3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
 
 <Info>
-  🚀 Want to see Opik Agent Optimizer in action? Check out our [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart) for runnable Colab notebooks covering real-world optimization workflows, including HotPotQA and synthetic data generation.
+  🚀 Want to see Opik Agent Optimizer in action? Check out our [Example Projects & Cookbooks](/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook) for runnable Colab notebooks covering real-world optimization workflows, including HotPotQA and synthetic data generation.
 </Info>

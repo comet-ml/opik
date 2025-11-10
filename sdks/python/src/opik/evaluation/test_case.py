@@ -8,3 +8,4 @@ class TestCase:
     dataset_item_id: str
     scoring_inputs: Dict[str, Any]
     task_output: Dict[str, Any]
+    dataset_item_content: Dict[str, Any] = dataclasses.field(default_factory=dict)

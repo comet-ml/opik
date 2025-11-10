@@ -72,8 +72,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -232,7 +232,7 @@ class AutomationRuleEvaluatorsResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> mysql = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickhouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
 

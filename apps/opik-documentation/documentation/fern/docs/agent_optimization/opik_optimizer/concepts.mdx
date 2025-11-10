@@ -40,7 +40,7 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="ChatPrompt">
     The object to optimize which contains your chat messages with placeholders for variables that change on each example.
-    See the [API Reference](/agent_optimization/opik_optimizer/reference#chatprompt).
+    See the [API Reference](/agent_optimization/api-reference#chatprompt).
   </Accordion>
   <Accordion title="Metric">
     An object defining how to measure the performance of a prompt. The metric functions should accept two parameters:
@@ -60,7 +60,8 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="Optimization Trial">
     Each optimization run is made up of one or more optimization trials. A trial corresponds to a
-    single evaluation of a candidate prompt or prompt configuration. You can few each
+    single evaluation of a candidate prompt or prompt configuration. You can view each trial's prompt,
+    score, and reasoning history inside the Opik UI to understand optimizer progress.
   </Accordion>
   <Accordion title="Prompt model">
   The model that is used to evaluate the prompt. This is the model that you use the prompt with,
@@ -79,6 +80,6 @@ examples, or tool interactions.
 - Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
 
 <Info>
-  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart)
+  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook)
   for step-by-step, runnable Colab notebooks.
 </Info>

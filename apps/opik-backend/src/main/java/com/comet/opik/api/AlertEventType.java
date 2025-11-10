@@ -16,7 +16,10 @@ public enum AlertEventType {
     PROMPT_CREATED("prompt:created"),
     PROMPT_COMMITTED("prompt:committed"),
     TRACE_GUARDRAILS_TRIGGERED("trace:guardrails_triggered"),
-    PROMPT_DELETED("prompt:deleted");
+    PROMPT_DELETED("prompt:deleted"),
+    EXPERIMENT_FINISHED("experiment:finished"),
+    TRACE_COST("trace:cost"),
+    TRACE_LATENCY("trace:latency");
 
     @JsonValue
     private final String value;

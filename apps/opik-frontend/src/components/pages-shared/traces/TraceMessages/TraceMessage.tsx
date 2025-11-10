@@ -1,12 +1,17 @@
 import React, { useMemo } from "react";
+import JsonView from "react18-json-view";
+import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 
 import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
-import { MessageRenderer } from "@/components/shared/MessageRenderer";
+import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import LikeFeedback from "@/components/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
-import { cn } from "@/lib/utils";
+import { prettifyMessage } from "@/lib/traces";
+import { cn, toString } from "@/lib/utils";
+import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import isFunction from "lodash/isFunction";
 
 type TraceMessageProps = {
@@ -18,6 +23,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   trace,
   handleOpenTrace,
 }) => {
+  const jsonViewTheme = useJsonViewTheme();
   const withActions = isFunction(handleOpenTrace);
 
   const userFeedback = useMemo(() => {
@@ -26,6 +32,46 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     )?.value as USER_FEEDBACK_SCORE;
   }, [trace.feedback_scores]);
 
+  const input = useMemo(() => {
+    const message = prettifyMessage(trace.input).message;
+
+    if (isObject(message)) {
+      return (
+        <JsonView
+          src={message}
+          {...jsonViewTheme}
+          className="comet-code"
+          collapseStringsAfterLength={10000}
+          enableClipboard={false}
+        />
+      );
+    } else if (isUndefined(message)) {
+      return <span>-</span>;
+    } else {
+      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
+    }
+  }, [trace.input, jsonViewTheme]);
+
+  const output = useMemo(() => {
+    const message = prettifyMessage(trace.output, { type: "output" }).message;
+
+    if (isObject(message)) {
+      return (
+        <JsonView
+          src={message}
+          className="comet-code"
+          {...jsonViewTheme}
+          collapseStringsAfterLength={10000}
+          enableClipboard={false}
+        />
+      );
+    } else if (isUndefined(message)) {
+      return "-";
+    } else {
+      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
+    }
+  }, [trace.output, jsonViewTheme]);
+
   return (
     <div
       className={cn("pt-4 first:pt-0", withActions && "border-b")}
@@ -33,20 +79,12 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
-          <MessageRenderer
-            message={trace.input}
-            attemptTextExtraction={true}
-            extractionContext="input"
-          />
+          {input}
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2 dark:bg-secondary">
-          <MessageRenderer
-            message={trace.output}
-            attemptTextExtraction={true}
-            extractionContext="output"
-          />
+          {output}
         </div>
       </div>
       {withActions && (

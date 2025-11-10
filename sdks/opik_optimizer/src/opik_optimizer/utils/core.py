@@ -310,6 +310,25 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
+def get_trial_compare_url(
+    *, dataset_id: str | None, optimization_id: str | None, trial_ids: list[str]
+) -> str:
+    if dataset_id is None or optimization_id is None:
+        raise ValueError("dataset_id and optimization_id are required")
+    if not trial_ids:
+        raise ValueError("trial_ids must be a non-empty list")
+
+    opik_config = opik.config.get_from_user_inputs()
+    url_override = opik_config.url_override
+    base = ensure_ending_slash(url_override)
+
+    trials_query = urllib.parse.quote(json.dumps(trial_ids))
+    compare_path = (
+        f"optimizations/{optimization_id}/{dataset_id}/compare?trials={trials_query}"
+    )
+    return urllib.parse.urljoin(base, compare_path)
+
+
 def create_litellm_agent_class(
     prompt: "ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:

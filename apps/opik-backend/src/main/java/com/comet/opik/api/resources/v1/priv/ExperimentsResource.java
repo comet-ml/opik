@@ -18,6 +18,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.grouping.ExperimentGroupingFactory;
@@ -34,7 +35,6 @@ import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -125,12 +125,13 @@ public class ExperimentsResource {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata metadata = workspaceMetadataService
+        var metadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -155,7 +156,7 @@ public class ExperimentsResource {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
                 .map(experimentPage -> {
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (metadata.cannotUseDynamicSorting()) {
                         return experimentPage.toBuilder().sortableBy(List.of()).build();
                     }
                     return experimentPage;
@@ -311,6 +312,25 @@ public class ExperimentsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Deleted experiments, count '{}'", request.ids());
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/finish")
+    @Operation(operationId = "finishExperiments", summary = "Finish experiments", description = "Finish experiments and trigger alert events", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response finishExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid IdsHolder request) {
+
+        log.info("Finishing experiments, count '{}'", request.ids().size());
+        experimentService.finishExperiments(request.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Finished experiments, count '{}'", request.ids().size());
+
         return Response.noContent().build();
     }
 

@@ -48,6 +48,9 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
+import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -67,6 +70,7 @@ const ROW_HEIGHT_KEY = "dataset-items-row-height";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
+  const truncationEnabled = useTruncationEnabled();
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -115,7 +119,7 @@ const DatasetItemsPage = () => {
       page: page as number,
       size: size as number,
       search: search!,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       placeholderData: keepPreviousData,
@@ -335,10 +339,16 @@ const DatasetItemsPage = () => {
   return (
     <div className="pt-6">
       <div className="mb-4">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-2">
           <h1 className="comet-title-l truncate break-words">
             {dataset?.name}
           </h1>
+          <div className="flex items-center gap-2">
+            <UseDatasetDropdown
+              datasetName={dataset?.name}
+              datasetId={datasetId}
+            />
+          </div>
         </div>
         {dataset?.description && (
           <div className="-mt-3 mb-4 text-muted-slate">
@@ -347,7 +357,10 @@ const DatasetItemsPage = () => {
         )}
         {dataset?.created_at && (
           <div className="mb-2 flex gap-4 overflow-x-auto">
-            <DateTag date={dataset?.created_at} />
+            <DateTag
+              date={dataset?.created_at}
+              resource={RESOURCE_TYPE.dataset}
+            />
           </div>
         )}
         <DatasetTagsList
@@ -433,7 +446,9 @@ const DatasetItemsPage = () => {
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </div>
       <ResizableSidePanel
         panelId="dataset-items"

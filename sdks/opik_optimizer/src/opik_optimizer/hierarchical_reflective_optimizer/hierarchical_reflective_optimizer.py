@@ -1,10 +1,6 @@
-import os
 import logging
 
 import opik
-import litellm
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
@@ -27,10 +23,6 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
-
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging

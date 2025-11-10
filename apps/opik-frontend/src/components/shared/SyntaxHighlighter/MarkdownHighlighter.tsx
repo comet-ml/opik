@@ -2,18 +2,13 @@ import React, { ReactNode, useMemo } from "react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
-import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
-import { isStringMarkdown } from "@/lib/utils";
-import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
+import { cn, isStringMarkdown } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
 import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
-import { ExpandedState } from "@tanstack/react-table";
-
-const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;
@@ -23,10 +18,6 @@ export interface MarkdownHighlighterProps {
   modeSelector: ReactNode;
   copyButton: ReactNode;
   withSearch?: boolean;
-  controlledExpanded?: ExpandedState;
-  onExpandedChange?: (
-    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-  ) => void;
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   maxHeight?: string;
@@ -40,8 +31,6 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   modeSelector,
   copyButton,
   withSearch,
-  controlledExpanded,
-  onExpandedChange,
   scrollRef,
   onScroll,
   maxHeight,
@@ -54,66 +43,16 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     });
 
   const markdownPreview = useMemo(() => {
-    if (isNull(codeOutput.message)) {
-      return <div className="comet-code text-muted-foreground">null</div>;
-    }
-
-    // Handle object messages - render as JSON table
-    if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
-      return (
-        <JsonKeyValueTable
-          data={codeOutput.message}
-          maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-          localStorageKey={
-            controlledExpanded ? undefined : "json-table-expanded-state"
-          }
-          controlledExpanded={controlledExpanded}
-          onExpandedChange={onExpandedChange}
-        />
-      );
-    }
-
-    // Handle structured result from prettifyMessage
-    if (
-      typeof codeOutput.message === "object" &&
-      codeOutput.message !== null &&
-      "renderType" in codeOutput.message
-    ) {
-      const structuredResult = codeOutput.message as {
-        renderType: string;
-        data: unknown;
-      };
-      if (structuredResult.renderType === "json-table") {
-        return (
-          <JsonKeyValueTable
-            data={structuredResult.data}
-            maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-            localStorageKey={
-              controlledExpanded ? undefined : "json-table-expanded-state"
-            }
-            controlledExpanded={controlledExpanded}
-            onExpandedChange={onExpandedChange}
-          />
-        );
-      }
-    }
+    if (isNull(codeOutput.message)) return "";
 
     if (isStringMarkdown(codeOutput.message)) {
-      // Transform the markdown to make headings collapsible
-      const collapsibleMarkdown = makeHeadingsCollapsible(codeOutput.message, {
-        defaultOpen: false,
-        className: "collapsible-heading",
-        summaryClassName: "collapsible-heading-summary",
-        contentClassName: "collapsible-heading-content",
-      });
-
       return (
         <ReactMarkdown
-          className="comet-markdown comet-markdown-highlighter prose dark:prose-invert"
+          className={cn("prose dark:prose-invert comet-markdown")}
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
           rehypePlugins={[rehypeRaw]}
         >
-          {collapsibleMarkdown}
+          {codeOutput.message}
         </ReactMarkdown>
       );
     }
@@ -123,32 +62,14 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         {searchPlainText(codeOutput.message)}
       </div>
     );
-  }, [
-    codeOutput.message,
-    searchPlugin,
-    searchPlainText,
-    controlledExpanded,
-    onExpandedChange,
-  ]);
-
-  // Check if the content is a JSON table (not searchable)
-  const isJsonTable = useMemo(() => {
-    if (isNull(codeOutput.message)) return false;
-
-    // Handle object messages - render as JSON table
-    if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
-      return true;
-    }
-
-    return false;
-  }, [codeOutput.message]);
+  }, [codeOutput.message, searchPlugin, searchPlainText]);
 
   return (
     <SyntaxHighlighterLayout
       leftHeader={modeSelector}
       rightHeader={
         <>
-          {withSearch && !isJsonTable && (
+          {withSearch && (
             <SyntaxHighlighterSearch
               searchValue={localSearchValue}
               onSearch={setLocalSearchValue}

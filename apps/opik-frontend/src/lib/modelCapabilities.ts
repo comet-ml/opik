@@ -13,6 +13,23 @@ const modelEntries = modelPricing as Record<string, ModelPricingEntry>;
 const VISION_CAPABILITIES = new Map<string, boolean>();
 const NORMALIZED_VISION_CAPABILITIES = new Map<string, boolean>();
 
+// Hardcoded vision-capable models or patterns that should support vision
+// This list overrides the JSON configuration to handle cases where:
+// - The JSON uses different naming conventions (e.g., openrouter/ prefix)
+// - Models are missing from the JSON
+// - The JSON is not yet updated with new vision models
+const VISION_MODEL_PATTERNS = [
+  /qwen.*vl/i, // Qwen VL models (e.g., qwen/qwen-vl-plus, qwen2.5-vl-32b-instruct)
+];
+
+/**
+ * Checks if a model name matches any of the hardcoded vision patterns.
+ */
+const matchesVisionPattern = (modelName: string): boolean => {
+  const normalized = normalizeModelName(modelName);
+  return VISION_MODEL_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
 // Initialize vision capabilities from model pricing data
 Object.entries(modelEntries).forEach(([modelName, entry]) => {
   if (!modelName) {
@@ -87,13 +104,19 @@ export const supportsImageInput = (model?: string | null): boolean => {
     return true;
   }
 
-  // First try exact match
+  // Check hardcoded vision patterns first (highest priority)
+  // This overrides JSON configuration to handle naming inconsistencies
+  if (matchesVisionPattern(model)) {
+    return true;
+  }
+
+  // First try exact match from JSON
   const exact = VISION_CAPABILITIES.get(model);
   if (exact !== undefined) {
     return exact;
   }
 
-  // Try fuzzy matching with candidate keys
+  // Try fuzzy matching with candidate keys from JSON
   for (const key of candidateKeys(model)) {
     const capability = NORMALIZED_VISION_CAPABILITIES.get(key);
     if (capability !== undefined) {

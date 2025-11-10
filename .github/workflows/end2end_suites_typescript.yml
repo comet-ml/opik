@@ -1,0 +1,149 @@
+name: Application E2E Tests (TypeScript)
+env:
+  OPIK_SENTRY_ENABLE: False
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
+
+on:
+    workflow_dispatch:
+        inputs:
+            suite:
+                type: choice
+                description: 'Choose which test suite to run'
+                required: true
+                default: 'fullregression'
+                options:
+                - sanity
+                - happypaths
+                - fullregression
+                - projects
+                - tracing
+                - threads
+                - attachments
+                - datasets
+                - experiments
+                - prompts
+                - playground
+                - feedbackscores
+                - onlinescores
+
+            ALLURE_JOB_RUN_ID:
+                description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
+            ALLURE_USERNAME:
+                description: ALLURE_USERNAME service parameter. Leave blank.
+
+    pull_request:
+      paths:
+        - 'sdks/code_generation/fern/openapi/openapi.yaml'
+        - 'tests_end_to_end/tests_end_to_end_ts/**'
+
+run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'fullregression' }}
+
+permissions:
+  contents: read
+
+jobs:
+    run_suite:
+        name: "Run TS suite: ${{ github.event.inputs.suite || 'fullregression' }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                node-version: '20'
+                cache: 'npm'
+                cache-dependency-path: tests_end_to_end/tests_end_to_end_ts/typescript-tests/package-lock.json
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: 3.12
+
+            - name: Install Opik Python SDK
+              run: pip install ${{ github.workspace }}/sdks/python
+
+            - name: Install Test Helper Service Dependencies
+              run: |
+                pip install -r ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/test-helper-service/requirements.txt
+
+            - name: Install TypeScript Test Dependencies
+              working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
+              run: |
+                npm ci
+                npx playwright install chromium
+
+            - name: Install allurectl
+              uses: allure-framework/setup-allurectl@v1
+
+            - name: Install Opik (Local)
+              env:
+                OPIK_USAGE_REPORT_ENABLED: false
+              run: |
+                cd ${{ github.workspace }}
+                TOGGLE_WELCOME_WIZARD_ENABLED="false" ./opik.sh --build
+
+            - name: Check Docker pods are up (Local)
+              run: |
+                chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+              shell: bash
+
+            - name: Check backend health (Local)
+              run: |
+                chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
+                ./tests_end_to_end/installer_utils/check_backend.sh
+              shell: bash
+
+            - name: Check app is up via the UI (Local)
+              run: |
+                pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+                playwright install
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
+
+            - name: Run TypeScript E2E suite
+              working-directory: ${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests
+              env:
+                OPIK_BASE_URL: http://localhost:5173
+                OPIK_TEST_WORKSPACE: default
+                OPIK_TEST_PROJECT_NAME: automated_tests_project
+                OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+                TEST_SUITE: ${{ github.event.inputs.suite || 'fullregression' }}
+              run: |
+                # Configure Allure results directory
+                export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/tests_end_to_end_ts/typescript-tests/${ALLURE_RESULTS}"
+
+                # Run tests with allurectl watch for TestOps integration
+                allurectl watch -- npx playwright test
+
+            - name: Upload Allure Results
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                name: allure-results
+                path: tests_end_to_end/tests_end_to_end_ts/typescript-tests/allure-results
+                retention-days: 7
+
+            - name: Upload Playwright Report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                name: playwright-report
+                path: tests_end_to_end/tests_end_to_end_ts/typescript-tests/playwright-report
+                retention-days: 7
+
+            - name: Stop Opik server (Local)
+              if: always()
+              run: |
+                cd ${{ github.workspace }}
+                ./opik.sh --stop
+
+        continue-on-error: ${{ github.event_name == 'pull_request' }}

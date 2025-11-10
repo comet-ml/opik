@@ -25,6 +25,7 @@ import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -693,6 +694,21 @@ class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_BY_TRACE_IDS = """
+            SELECT
+                s.*,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                    NULL) AS duration
+            FROM spans s
+            WHERE workspace_id = :workspace_id
+            AND trace_id IN :trace_ids
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
+
     private static final String SELECT_BY_PROJECT_ID = """
             WITH comments_final AS (
               SELECT
@@ -885,6 +901,7 @@ class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1026,6 +1043,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1233,6 +1251,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1702,6 +1721,27 @@ class SpanDAO {
     }
 
     @WithSpan
+    public Flux<Span> getByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting spans for '{}' traces", traceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_BY_TRACE_IDS)
+                            .bind("trace_ids", traceIds.toArray(new UUID[0]));
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_by_trace_ids");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(this::mapToDto);
+    }
+
+    @WithSpan
     public Mono<Long> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
@@ -1742,7 +1782,16 @@ class SpanDAO {
 
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
 
-        return result.map((row, rowMetadata) -> Span.builder()
+        return result.map((row, rowMetadata) -> mapRowToSpan(row, rowMetadata, exclude));
+    }
+
+    private Span mapRowToSpan(Row row, RowMetadata rowMetadata, Set<SpanField> exclude) {
+        String provider = StringUtils.defaultIfBlank(
+                getValue(exclude, SpanField.PROVIDER, row, SpanField.PROVIDER.getValue(), String.class), null);
+
+        JsonNode metadata = getMetadataWithProvider(row, exclude, provider);
+
+        return Span.builder()
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
                 .traceId(row.get("trace_id", UUID.class))
@@ -1750,28 +1799,27 @@ class SpanDAO {
                         .filter(str -> !str.isBlank())
                         .map(UUID::fromString)
                         .orElse(null))
-                .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class), null))
+                .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class),
+                        null))
                 .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
                 .startTime(getValue(exclude, SpanField.START_TIME, row, "start_time", Instant.class))
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
+                                row,
                                 value))
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated",
+                                row,
                                 value))
                         .orElse(null))
-                .metadata(Optional
-                        .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                        .orElse(null))
-                .model(StringUtils.defaultIfBlank(getValue(exclude, SpanField.MODEL, row, "model", String.class), null))
-                .provider(StringUtils.defaultIfBlank(
-                        getValue(exclude, SpanField.PROVIDER, row, "provider", String.class), null))
+                .metadata(metadata)
+                .model(StringUtils.defaultIfBlank(getValue(exclude, SpanField.MODEL, row, "model", String.class),
+                        null))
+                .provider(provider)
                 .totalEstimatedCost(
                         Optional.ofNullable(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST, row,
                                 "total_estimated_cost", BigDecimal.class))
@@ -1808,7 +1856,7 @@ class SpanDAO {
                 .lastUpdatedBy(
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
-                .build());
+                .build();
     }
 
     private Publisher<Span> mapToPartialDto(Result result) {
@@ -1994,6 +2042,12 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        if (spanSearchCriteria.uuidFromTime() != null) {
+            template.add("uuid_from_time", spanSearchCriteria.uuidFromTime());
+            template.add("uuid_to_time", spanSearchCriteria.uuidToTime());
+        }
         return template;
     }
 
@@ -2010,6 +2064,13 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        Optional.ofNullable(spanSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> {
+                    statement.bind("uuid_from_time", uuid_from_time);
+                    statement.bind("uuid_to_time", spanSearchCriteria.uuidToTime());
+                });
     }
 
     @WithSpan
@@ -2179,5 +2240,18 @@ class SpanDAO {
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
+    }
+
+    private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
+        // Parse base metadata from database
+        JsonNode baseMetadata = Optional
+                .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
+                .filter(str -> !str.isBlank())
+                .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                .orElse(null);
+
+        // Inject provider as first field in metadata
+        return JsonUtils.prependField(
+                baseMetadata, SpanField.PROVIDER.getValue(), provider);
     }
 }

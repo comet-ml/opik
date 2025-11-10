@@ -55,7 +55,6 @@ prompt = ChatPrompt(
 
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
-    reflection_model="openai/gpt-4o",  # stronger reflector is often helpful
     n_threads=6,
     temperature=0.2,
     max_tokens=200,
@@ -72,6 +71,23 @@ result = optimizer.optimize_prompt(
 
 result.display()
 ```
+
+### Determinism and tool usage
+
+- GEPA’s seed is forwarded directly to the underlying `gepa.optimize` call, but any non-determinism in your prompt (tool calls, non-zero temperature, external APIs) will still introduce variance. To test seeding in isolation, disable tools or substitute cached responses.
+- GEPA emits its own baseline evaluation inside the optimization loop. You’ll see one baseline score from Opik’s wrapper and another from GEPA before the first trial; this is expected and does not double-charge the metric budget.
+- Reflection only triggers after GEPA accepts at least `reflection_minibatch_size` unique prompts. If the minibatch is larger than the trial budget, the optimizer logs a warning and skips reflection.
+
+### GEPA scores vs. Opik scores
+
+- The **GEPA Score** column reflects the aggregate score GEPA computes on its train/validation split when deciding which candidates stay on the Pareto front. It is useful for understanding how GEPA’s evolutionary search ranks prompts.
+- The **Opik Score** column is a fresh evaluation performed through Opik’s metric pipeline on the same dataset (respecting `n_samples`). This is the score you should use when comparing against your baseline or other optimizers.
+- Because the GEPA score is based on GEPA’s internal aggregation, it can diverge from the Opik score for the same prompt. This is expected—treat the GEPA score as a hint about why GEPA kept or discarded a candidate, and rely on the Opik score for final comparisons.
+
+### `skip_perfect_score`
+
+- When `skip_perfect_score=True`, GEPA immediately ignores any candidate whose GEPA score meets or exceeds the `perfect_score` threshold (default `1.0`). This keeps the search moving toward imperfect prompts instead of spending budget refining already perfect ones.
+- Set `skip_perfect_score=False` if your metric tops out below `1.0`, or if you still want to see how GEPA mutates a perfect-scoring prompt—for example, when you care about ties being broken by Opik’s rescoring step rather than GEPA’s aggregate.
 
 ## Configuration Options
 
@@ -114,13 +130,11 @@ The `optimize_prompt` method has the following parameters:
 
 ### Model Support
 
-There are two models to consider when using the `HierarchicalReflectiveOptimizer`:
-- `HierarchicalReflectiveOptimizer.model`: The model used for the root cause analysis and failure mode synthesis.
-- `ChatPrompt.model`: The model used to evaluate the prompt.
+GEPA coordinates two model contexts:
+- `GepaOptimizer.model`: LiteLLM model string the optimizer uses for internal reasoning (reflection, mutation prompts, etc.).
+- `ChatPrompt.model`: The model evaluated against your dataset—this should match what you run in production.
 
-The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
-`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
-using the `model_parameters` parameter:
+Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
 
 ```python
 optimizer = GepaOptimizer(
@@ -131,6 +145,14 @@ optimizer = GepaOptimizer(
     }
 )
 ```
+
+Reflection is handled internally; there is no separate `reflection_model` argument to set.
+
+## Limitations & tips
+
+- **Instruction-focused**: The current wrapper optimizes the instruction/system portion of your prompt. If you rely heavily on few-shot exemplars, consider pairing GEPA with the Few-Shot Bayesian optimizer or an Evolutionary run.
+- **Reflection can misfire**: GEPA’s reflective mutations are only as good as the metric reasons you supply. If `ScoreResult.reason` is vague, the optimizer may reinforce bad behaviors. Invest in descriptive metrics before running GEPA at scale.
+- **Cost-aware**: Although GEPA is more sample-efficient than some RL-based methods, reflection and Pareto scoring still consume multiple LLM calls per trial. Start with small `max_trials` and monitor API usage.
 
 ## Next Steps
 

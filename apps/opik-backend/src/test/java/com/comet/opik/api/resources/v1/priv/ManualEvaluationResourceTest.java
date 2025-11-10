@@ -1,9 +1,11 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -35,6 +37,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -48,8 +51,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -81,7 +84,7 @@ class ManualEvaluationResourceTest {
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
@@ -174,13 +177,18 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // Create trace
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            // Create entity (trace or thread) based on endpoint
+            UUID entityId;
+            if ("traces".equals(endpoint)) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                entityId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            } else {
+                entityId = createThreadAndGetModelId(projectName);
+            }
 
             // Create rule
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
@@ -193,7 +201,7 @@ class ManualEvaluationResourceTest {
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
-                    .entityIds(List.of(traceId))
+                    .entityIds(List.of(entityId))
                     .ruleIds(List.of(ruleId))
                     .entityType(entityType)
                     .build();
@@ -227,19 +235,26 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // Create multiple traces
-            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var traceId1 = traceResourceClient.createTrace(trace1, API_KEY, WORKSPACE_NAME);
-            var traceId2 = traceResourceClient.createTrace(trace2, API_KEY, WORKSPACE_NAME);
+            // Create multiple entities (traces or threads) based on endpoint
+            UUID entityId1;
+            UUID entityId2;
+            if ("traces".equals(endpoint)) {
+                var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                entityId1 = traceResourceClient.createTrace(trace1, API_KEY, WORKSPACE_NAME);
+                entityId2 = traceResourceClient.createTrace(trace2, API_KEY, WORKSPACE_NAME);
+            } else {
+                entityId1 = createThreadAndGetModelId(projectName);
+                entityId2 = createThreadAndGetModelId(projectName);
+            }
 
             // Create multiple rules
             var rule1 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
@@ -263,7 +278,7 @@ class ManualEvaluationResourceTest {
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
-                    .entityIds(List.of(traceId1, traceId2))
+                    .entityIds(List.of(entityId1, entityId2))
                     .ruleIds(List.of(ruleId1, ruleId2))
                     .entityType(entityType)
                     .build();
@@ -428,12 +443,8 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            // Create thread with thread_model_id
+            var threadModelId = createThreadAndGetModelId(projectName);
 
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
@@ -449,7 +460,7 @@ class ManualEvaluationResourceTest {
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
-                    .entityIds(List.of(traceId))
+                    .entityIds(List.of(threadModelId))
                     .ruleIds(List.of(ruleId))
                     .entityType(ManualEvaluationEntityType.THREAD)
                     .build();
@@ -462,5 +473,166 @@ class ManualEvaluationResourceTest {
             assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
             assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
         }
+
+        @Test
+        @DisplayName("should handle trace evaluation with span-level LLM_AS_JUDGE rule and store correct project_id")
+        void shouldHandleTraceEvaluationWithSpanLevelLlmAsJudgeRule(LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Create span-level LLM as Judge rule
+            var rule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .samplingRate(1f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .build();
+            var ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
+
+            var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
+                    .entityIds(List.of(traceId))
+                    .ruleIds(List.of(ruleId))
+                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .build();
+
+            // When
+            var evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
+
+            // Wait for async scoring to complete and verify feedback score was stored with correct project_id
+            Awaitility.await().untilAsserted(() -> {
+                var retrievedTrace = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
+                assertThat(retrievedTrace.feedbackScores()).isNotEmpty();
+
+                // Verify the feedback score has the correct project_id (not the default project)
+                FeedbackScore feedbackScore = retrievedTrace.feedbackScores().getFirst();
+                assertThat(feedbackScore.name()).isEqualTo("Relevance");
+                assertThat(feedbackScore.value()).isNotNull();
+
+                // The key assertion: verify trace's project_id matches the request's project_id
+                assertThat(retrievedTrace.projectId()).isEqualTo(projectId);
+            });
+        }
+
+        @Test
+        @DisplayName("should handle mixed rule types (span-level and trace-thread) and store correct project_id for all")
+        void shouldHandleMixedRuleTypes(LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Create span-level LLM as Judge rule
+            var spanLevelRule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .samplingRate(1f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .build();
+            var spanLevelRuleId = evaluatorResourceClient.createEvaluator(spanLevelRule, WORKSPACE_NAME, API_KEY);
+
+            // Create trace-thread LLM as Judge rule
+            var traceThreadRule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .samplingRate(1f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .build();
+            var traceThreadRuleId = evaluatorResourceClient.createEvaluator(traceThreadRule, WORKSPACE_NAME, API_KEY);
+
+            var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
+                    .entityIds(List.of(traceId))
+                    .ruleIds(List.of(spanLevelRuleId, traceThreadRuleId))
+                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .build();
+
+            // When
+            var evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(2);
+
+            // Wait for async scoring to complete and verify feedback scores from both rule types
+            Awaitility.await().untilAsserted(() -> {
+                var retrievedTrace = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
+                assertThat(retrievedTrace.feedbackScores()).hasSizeGreaterThanOrEqualTo(1);
+
+                // The key assertion: verify trace's project_id matches the request's project_id
+                assertThat(retrievedTrace.projectId()).isEqualTo(projectId);
+            });
+        }
+    }
+
+    /**
+     * Helper method to create a thread with thread_model_id.
+     * Creates traces with a thread_id and waits for the thread to be created in the trace_threads table.
+     *
+     * @return The UUID thread_model_id of the created thread
+     */
+    private UUID createThreadAndGetModelId(String projectName) {
+        var threadId = UUID.randomUUID().toString();
+
+        // Create traces with the same thread_id
+        var traces = List.of(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .threadId(threadId)
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build(),
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .threadId(threadId)
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build());
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        UUID projectId = projectResourceClient.getByName(projectName, API_KEY, WORKSPACE_NAME).id();
+
+        // Wait for the thread to be created in the trace_threads table
+        Awaitility.await().untilAsserted(() -> {
+            var traceThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME);
+            assertThat(traceThread.threadModelId()).isNotNull();
+        });
+
+        var traceThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME);
+        return traceThread.threadModelId();
     }
 }

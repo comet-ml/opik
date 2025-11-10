@@ -1,6 +1,17 @@
 import logging
 import datetime
-from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast, Tuple
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Set,
+    TYPE_CHECKING,
+    cast,
+    Tuple,
+    Callable,
+)
 import contextvars
 from uuid import UUID
 
@@ -36,6 +47,15 @@ language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
 SpanType = Literal["llm", "tool", "general"]
 
+# A callable that receives an error string and returns True if the error should be skipped,
+# or False otherwise.
+SkipErrorCallback = Callable[[str], bool]
+
+# Placeholder output dictionary used when errors are intentionally skipped
+# via the skip_error_callback. This signals that the output was not produced
+# due to a handled/ignored error during execution.
+ERROR_SKIPPED_OUTPUTS = {"warning": "Error output skipped by skip_error_callback."}
+
 
 def _get_span_type(run: Dict[str, Any]) -> SpanType:
     if run.get("run_type") in ["llm", "tool"]:
@@ -48,14 +68,7 @@ def _get_span_type(run: Dict[str, Any]) -> SpanType:
 
 
 class OpikTracer(BaseTracer):
-    """Langchain Opik Tracer.
-
-    Args:
-        tags: List of tags to be applied to each trace logged by the tracer.
-        metadata: Additional metadata for each trace logged by the tracer.
-        graph: A LangGraph Graph object to track the Graph Definition in Opik.
-        project_name: The name of the project to log data.
-    """
+    """Langchain Opik Tracer."""
 
     def __init__(
         self,
@@ -65,8 +78,28 @@ class OpikTracer(BaseTracer):
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
         thread_id: Optional[str] = None,
+        skip_error_callback: Optional[SkipErrorCallback] = None,
         **kwargs: Any,
     ) -> None:
+        """
+        Initializes an instance of the class with various parameters for traces, metadata, and project configuration.
+
+        Args:
+            tags: List of tags associated with logged traces.
+            metadata: Dictionary containing metadata information for logged traces.
+            graph: A LangGraph Graph object for representing dependencies or flow
+                to track the Graph Definition in Opik.
+            project_name: Name of the project associated with the traces.
+            distributed_headers: Headers for distributed tracing context.
+            thread_id: Unique identifier for the conversational thread
+                to be associated with traces.
+            skip_error_callback : Callback function to handle skip errors logic.
+                Allows defining custom logic for handling errors that are intentionally skipped.
+                Please note that in traces/spans where errors are intentionally skipped,
+                the output will be replaced with `ERROR_SKIPPED_OUTPUTS`. You can provide
+                the output manually using `opik_context.get_current_span_data().update(output=...)`.
+            **kwargs: Additional arguments passed to the parent class constructor.
+        """
         validator = parameters_validator.create_validator(
             method_name="__init__", class_name=self.__class__.__name__
         )
@@ -113,6 +146,8 @@ class OpikTracer(BaseTracer):
             Optional[str]
         ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
 
+        self._skip_error_callback = skip_error_callback
+
     def _is_opik_span_created_by_this_tracer(self, span_id: str) -> bool:
         return any(span_.id == span_id for span_ in self._span_data_map.values())
 
@@ -135,17 +170,22 @@ class OpikTracer(BaseTracer):
         error_info: Optional[ErrorInfoDict]
         trace_additional_metadata: Dict[str, Any] = {}
 
-        if run_dict["error"] is not None:
-            output = None
-            error_info = ErrorInfoDict(
-                exception_type="Exception",
-                traceback=run_dict["error"],
+        error_str = run_dict.get("error")
+        outputs = None
+        error_info = None
+
+        if error_str is not None:
+            if not self._should_skip_error(error_str):
+                error_info = ErrorInfoDict(
+                    exception_type="Exception",
+                    traceback=error_str,
+                )
+            else:
+                outputs = ERROR_SKIPPED_OUTPUTS
+        elif (outputs := run_dict.get("outputs")) is not None:
+            outputs, trace_additional_metadata = (
+                langchain_helpers.split_big_langgraph_outputs(outputs)
             )
-        else:
-            output, trace_additional_metadata = (
-                langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
-            )
-            error_info = None
 
         if (
             span_data.parent_span_id is not None
@@ -169,7 +209,7 @@ class OpikTracer(BaseTracer):
             if trace_additional_metadata:
                 trace_data.update(metadata=trace_additional_metadata)
 
-            trace_data.init_end_time().update(output=output, error_info=error_info)
+            trace_data.init_end_time().update(output=outputs, error_info=error_info)
             trace_ = self._opik_client.trace(**trace_data.as_parameters)
 
             assert trace_ is not None
@@ -446,6 +486,12 @@ class OpikTracer(BaseTracer):
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
+    def _should_skip_error(self, error_str: str) -> bool:
+        if self._skip_error_callback is None:
+            return False
+
+        return self._skip_error_callback(error_str)
+
     def _process_end_span_with_error(self, run: Run) -> None:
         if run.id not in self._span_data_map:
             LOGGER.warning(
@@ -457,15 +503,20 @@ class OpikTracer(BaseTracer):
         try:
             run_dict: Dict[str, Any] = run.dict()
             span_data = self._span_data_map[run.id]
-            error_info: ErrorInfoDict = {
-                "exception_type": "Exception",
-                "traceback": run_dict["error"],
-            }
+            error_str = run_dict["error"]
 
-            span_data.init_end_time().update(
-                output=None,
-                error_info=error_info,
-            )
+            if self._should_skip_error(error_str):
+                span_data.init_end_time().update(output=ERROR_SKIPPED_OUTPUTS)
+            else:
+                error_info = ErrorInfoDict(
+                    exception_type="Exception",
+                    traceback=error_str,
+                )
+                span_data.init_end_time().update(
+                    output=None,
+                    error_info=error_info,
+                )
+
             if tracing_runtime_config.is_tracing_active():
                 self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
@@ -511,6 +562,9 @@ class OpikTracer(BaseTracer):
             List[Trace]: A list of traces.
         """
         return self._created_traces
+
+    def get_current_span_data_for_run(self, run_id: UUID) -> Optional[span.SpanData]:
+        return self._span_data_map.get(run_id)
 
     def _skip_tracking(self) -> bool:
         if not tracing_runtime_config.is_tracing_active():

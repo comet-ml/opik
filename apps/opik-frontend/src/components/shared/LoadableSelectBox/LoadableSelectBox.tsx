@@ -34,6 +34,7 @@ interface BaseLoadableSelectBoxProps {
   buttonClassName?: string;
   actionPanel?: ReactElement;
   minWidth?: number;
+  emptyState?: ReactElement;
 }
 
 interface SingleSelectProps extends BaseLoadableSelectBoxProps {
@@ -71,6 +72,7 @@ export const LoadableSelectBox = ({
   actionPanel,
   minWidth = 0,
   multiselect = false,
+  emptyState,
   ...props
 }: LoadableSelectBoxProps) => {
   const showSelectAll =
@@ -315,6 +317,8 @@ export const LoadableSelectBox = ({
                 </div>
               ))}
             </>
+          ) : emptyState ? (
+            emptyState
           ) : (
             <NoOptions text={noDataText} onLoadMore={onLoadMore} />
           )}
