@@ -54,6 +54,7 @@ export interface ExperimentPromptVersion {
   id: string;
   commit: string;
   prompt_id: string;
+  prompt_name: string;
 }
 
 export enum EXPERIMENT_TYPE {

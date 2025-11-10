@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
@@ -73,7 +74,7 @@ public interface PromptService {
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
-    Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
+    Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 }
 
 @Singleton
@@ -616,7 +617,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
+    public Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(@NonNull Set<UUID> versionsIds) {
 
         if (versionsIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -626,8 +627,8 @@ class PromptServiceImpl implements PromptService {
                 .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
                     PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-                    return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
-                            .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
+                    return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
+                            .collect(toMap(PromptVersionInfo::id, Function.identity()));
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
