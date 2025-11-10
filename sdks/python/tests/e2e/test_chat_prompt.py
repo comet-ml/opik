@@ -446,7 +446,7 @@ def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
     # Should only return chat prompts, not string prompts
     assert len(results) == 2
     assert all(isinstance(p, opik.ChatPrompt) for p in results)
-    
+
     result_names = {p.name for p in results}
     assert chat_prompt_1.name in result_names
     assert chat_prompt_2.name in result_names

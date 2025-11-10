@@ -501,7 +501,10 @@ def test_search_prompts__returns_both_types(opik_client: opik.Opik):
     chat_prompts = [p for p in results if isinstance(p, opik.ChatPrompt)]
     assert len(string_prompts) == 2
     assert len(chat_prompts) == 2
-    assert {p.name for p in string_prompts} == {string_prompt_1.name, string_prompt_2.name}
+    assert {p.name for p in string_prompts} == {
+        string_prompt_1.name,
+        string_prompt_2.name,
+    }
     assert {p.name for p in chat_prompts} == {chat_prompt_1.name, chat_prompt_2.name}
 
 
@@ -514,7 +517,7 @@ def test_search_prompts__filter_by_template_structure_string(opik_client: opik.O
         name=f"string-search-{unique_id}",
         prompt="String prompt",
     )
-    chat_prompt = opik_client.create_chat_prompt(
+    _ = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}",
         messages=[{"role": "user", "content": "Chat"}],
     )
@@ -535,7 +538,7 @@ def test_search_prompts__filter_by_template_structure_chat(opik_client: opik.Opi
     unique_id = str(uuid.uuid4())[-6:]
 
     # Create string and chat prompts
-    string_prompt = opik_client.create_prompt(
+    _ = opik_client.create_prompt(
         name=f"string-search-{unique_id}",
         prompt="String prompt",
     )

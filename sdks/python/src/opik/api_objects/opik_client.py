@@ -1574,7 +1574,9 @@ class Opik:
         for prompt_name, version in name_and_versions:
             if version.template_structure == "chat":
                 prompts.append(
-                    prompt_module.ChatPrompt.from_fern_prompt_version(prompt_name, version)
+                    prompt_module.ChatPrompt.from_fern_prompt_version(
+                        prompt_name, version
+                    )
                 )
             else:
                 prompts.append(

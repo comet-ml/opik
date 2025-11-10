@@ -269,7 +269,6 @@ class PromptClient:
                 try:
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(
                         name=prompt_name,
-                        
                     )
                     results.append((prompt_name, latest_version))
                 except rest_api_core.ApiError as e:
