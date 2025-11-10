@@ -5,6 +5,7 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { PromptVersionRetrieveDetailTemplateStructure } from "../../types/PromptVersionRetrieveDetailTemplateStructure";
 
 export const PromptVersionRetrieveDetail: core.serialization.Schema<
     serializers.PromptVersionRetrieveDetail.Raw,
@@ -12,11 +13,16 @@ export const PromptVersionRetrieveDetail: core.serialization.Schema<
 > = core.serialization.object({
     name: core.serialization.string(),
     commit: core.serialization.string().optional(),
+    templateStructure: core.serialization.property(
+        "template_structure",
+        PromptVersionRetrieveDetailTemplateStructure.optional(),
+    ),
 });
 
 export declare namespace PromptVersionRetrieveDetail {
     export interface Raw {
         name: string;
         commit?: string | null;
+        template_structure?: PromptVersionRetrieveDetailTemplateStructure.Raw | null;
     }
 }

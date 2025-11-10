@@ -25,7 +25,6 @@ class PromptVersionPublic(UniversalBaseModel):
     metadata: typing.Optional[JsonNodePublic] = None
     type: typing.Optional[PromptVersionPublicType] = None
     change_description: typing.Optional[str] = None
-    variables: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
 

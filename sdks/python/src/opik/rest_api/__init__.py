@@ -454,7 +454,7 @@ from .projects import (
     ProjectUpdateVisibility,
     ProjectWriteVisibility,
 )
-from .prompts import PromptWriteTemplateStructure, PromptWriteType
+from .prompts import PromptVersionRetrieveDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
 from .spans import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
@@ -800,6 +800,7 @@ __all__ = [
     "PromptVersionPagePublic",
     "PromptVersionPublic",
     "PromptVersionPublicType",
+    "PromptVersionRetrieveDetailTemplateStructure",
     "PromptVersionType",
     "PromptWriteTemplateStructure",
     "PromptWriteType",

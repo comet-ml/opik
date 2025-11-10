@@ -6,7 +6,6 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { PromptPublicTemplateStructure } from "./PromptPublicTemplateStructure";
-import { PromptVersionPublic } from "./PromptVersionPublic";
 
 export const PromptPublic: core.serialization.ObjectSchema<serializers.PromptPublic.Raw, OpikApi.PromptPublic> =
     core.serialization.object({
@@ -20,7 +19,6 @@ export const PromptPublic: core.serialization.ObjectSchema<serializers.PromptPub
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         versionCount: core.serialization.property("version_count", core.serialization.number().optional()),
-        latestVersion: core.serialization.property("latest_version", PromptVersionPublic.optional()),
     });
 
 export declare namespace PromptPublic {
@@ -35,6 +33,5 @@ export declare namespace PromptPublic {
         last_updated_at?: string | null;
         last_updated_by?: string | null;
         version_count?: number | null;
-        latest_version?: PromptVersionPublic.Raw | null;
     }
 }

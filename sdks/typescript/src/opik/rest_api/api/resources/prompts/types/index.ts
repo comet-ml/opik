@@ -1,2 +1,3 @@
 export * from "./PromptWriteType";
 export * from "./PromptWriteTemplateStructure";
+export * from "./PromptVersionRetrieveDetailTemplateStructure";

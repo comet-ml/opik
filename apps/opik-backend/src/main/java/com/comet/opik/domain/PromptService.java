@@ -73,6 +73,8 @@ public interface PromptService {
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
+    PromptVersion retrievePromptVersion(String name, String commit, TemplateStructure templateStructure);
+
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
@@ -581,6 +583,11 @@ class PromptServiceImpl implements PromptService {
 
     @Override
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
+        return retrievePromptVersion(name, commit, null);
+    }
+
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit,
+            TemplateStructure templateStructure) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
@@ -591,6 +598,20 @@ class PromptServiceImpl implements PromptService {
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
+            }
+
+            // Default to STRING for backward compatibility if not specified
+            TemplateStructure requestedStructure = templateStructure != null
+                    ? templateStructure
+                    : TemplateStructure.STRING;
+
+            // Validate template structure
+            if (!prompt.templateStructure().equals(requestedStructure)) {
+                String expectedType = requestedStructure == TemplateStructure.CHAT ? "chat" : "string";
+                String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "string";
+                throw new BadRequestException(
+                        "Prompt '%s' is a %s prompt, but %s prompt was requested".formatted(
+                                name, actualType, expectedType));
             }
 
             if (commit == null) {

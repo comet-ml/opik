@@ -6,7 +6,6 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .prompt_public_template_structure import PromptPublicTemplateStructure
-from .prompt_version_public import PromptVersionPublic
 
 
 class PromptPublic(UniversalBaseModel):
@@ -24,7 +23,6 @@ class PromptPublic(UniversalBaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     version_count: typing.Optional[int] = None
-    latest_version: typing.Optional[PromptVersionPublic] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

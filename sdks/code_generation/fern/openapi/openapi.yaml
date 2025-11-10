@@ -9776,9 +9776,10 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - to uniquely identify custom providers (e.g.,\
-            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
-            \ Anthropic, etc.)."
+          description: "Provider name - required for custom LLM providers to uniquely\
+            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
+            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
+            \ etc.). This requirement is conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -9833,9 +9834,10 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - to uniquely identify custom providers (e.g.,\
-            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
-            \ Anthropic, etc.)."
+          description: "Provider name - required for custom LLM providers to uniquely\
+            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
+            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
+            \ etc.). This requirement is conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -9886,9 +9888,10 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - to uniquely identify custom providers (e.g.,\
-            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
-            \ Anthropic, etc.)."
+          description: "Provider name - required for custom LLM providers to uniquely\
+            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
+            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
+            \ etc.). This requirement is conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -10920,13 +10923,6 @@ components:
           - jinja2
         change_description:
           type: string
-        variables:
-          uniqueItems: true
-          type: array
-          readOnly: true
-          items:
-            type: string
-            readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10934,7 +10930,6 @@ components:
         created_by:
           type: string
           readOnly: true
-      readOnly: true
     PromptPage_Public:
       type: object
       properties:
@@ -11002,8 +10997,6 @@ components:
           type: integer
           format: int64
           readOnly: true
-        latest_version:
-          $ref: "#/components/schemas/PromptVersion_Public"
     PromptVersionRetrieve_Detail:
       required:
       - name
@@ -11014,6 +11007,11 @@ components:
           type: string
         commit:
           type: string
+        template_structure:
+          type: string
+          enum:
+          - string
+          - chat
     Prompt_Updatable:
       required:
       - name

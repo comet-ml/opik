@@ -16,5 +16,4 @@ export interface PromptPublic {
     lastUpdatedAt?: Date;
     lastUpdatedBy?: string;
     versionCount?: number;
-    latestVersion?: OpikApi.PromptVersionPublic;
 }

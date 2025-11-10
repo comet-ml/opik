@@ -19,7 +19,6 @@ export const PromptVersionPublic: core.serialization.ObjectSchema<
     metadata: JsonNodePublic.optional(),
     type: PromptVersionPublicType.optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
-    variables: core.serialization.list(core.serialization.string()).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
 });
@@ -33,7 +32,6 @@ export declare namespace PromptVersionPublic {
         metadata?: JsonNodePublic.Raw | null;
         type?: PromptVersionPublicType.Raw | null;
         change_description?: string | null;
-        variables?: string[] | null;
         created_at?: string | null;
         created_by?: string | null;
     }

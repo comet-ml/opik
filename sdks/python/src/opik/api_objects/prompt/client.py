@@ -110,6 +110,7 @@ class PromptClient:
         self,
         name: str,
         commit: Optional[str] = None,
+        template_structure: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
@@ -117,6 +118,7 @@ class PromptClient:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            template_structure: Optional template structure filter ("string" or "chat"). Defaults to "string" if not specified.
 
         Returns:
             Prompt: The details of the specified prompt.
@@ -125,10 +127,14 @@ class PromptClient:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
+                template_structure=template_structure,
             )
             return prompt_version
 
         except rest_api_core.ApiError as e:
+            if e.status_code == 400:
+                # Backend returns 400 when template_structure doesn't match
+                return None
             if e.status_code != 404:
                 raise e
 

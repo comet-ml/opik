@@ -1404,36 +1404,114 @@ class Opik:
         commit: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
-        Retrieve the prompt detail for a given prompt name and commit version.
+        Retrieve a string prompt by name and optional commit version.
+        
+        This method only returns string prompts. If the prompt is a chat prompt,
+        None will be returned (the backend validates the template_structure).
 
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            Prompt: The details of the specified prompt.
+            Prompt: The details of the specified string prompt, or None if not found or if it's a chat prompt.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        fern_prompt_version = prompt_client_.get_prompt(name=name, commit=commit)
+        fern_prompt_version = prompt_client_.get_prompt(
+            name=name, commit=commit, template_structure="string"
+        )
         if fern_prompt_version is None:
             return None
 
         return prompt_module.Prompt.from_fern_prompt_version(name, fern_prompt_version)
+    
+    def get_chat_prompt(
+        self,
+        name: str,
+        commit: Optional[str] = None,
+    ) -> Optional[prompt_module.ChatPrompt]:
+        """
+        Retrieve a chat prompt by name and optional commit version.
+        
+        This method only returns chat prompts. If the prompt is a string prompt,
+        None will be returned (the backend validates the template_structure).
+
+        Parameters:
+            name: The name of the prompt.
+            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+
+        Returns:
+            ChatPrompt: The details of the specified chat prompt, or None if not found or if it's a string prompt.
+        """
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        fern_prompt_version = prompt_client_.get_prompt(
+            name=name, commit=commit, template_structure="chat"
+        )
+        if fern_prompt_version is None:
+            return None
+
+        return prompt_module.ChatPrompt.from_fern_prompt_version(name, fern_prompt_version)
 
     def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
         """
-        Retrieve all the prompt versions history for a given prompt name.
+        Retrieve all string prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of Prompt instances for the given name.
+            List[Prompt]: A list of string Prompt instances for the given name.
+        
+        Raises:
+            ValueError: If the prompt is a chat prompt (use get_chat_prompt_history instead).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        
+        if not fern_prompt_versions:
+            return []
+        
+        # Check the first version to determine prompt type
+        template_structure = getattr(fern_prompt_versions[0], "template_structure", "string") or "string"
+        if template_structure == "chat":
+            raise ValueError(
+                f"Prompt '{name}' is a chat prompt. Use get_chat_prompt_history() instead of get_prompt_history()."
+            )
+        
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
+            for version in fern_prompt_versions
+        ]
+        return result
+    
+    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+        """
+        Retrieve all chat prompt versions history for a given prompt name.
+
+        Parameters:
+            name: The name of the prompt.
+
+        Returns:
+            List[ChatPrompt]: A list of ChatPrompt instances for the given name.
+        
+        Raises:
+            ValueError: If the prompt is a string prompt (use get_prompt_history instead).
+        """
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        
+        if not fern_prompt_versions:
+            return []
+        
+        # Check the first version to determine prompt type
+        template_structure = getattr(fern_prompt_versions[0], "template_structure", "string") or "string"
+        if template_structure != "chat":
+            raise ValueError(
+                f"Prompt '{name}' is a string prompt. Use get_prompt_history() instead of get_chat_prompt_history()."
+            )
+        
+        result = [
+            prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
@@ -1458,7 +1536,7 @@ class Opik:
         self, filter_string: Optional[str] = None
     ) -> List[prompt_module.Prompt]:
         """
-        Retrieve the latest prompt versions for the given search parameters.
+        Retrieve the latest string prompt versions for the given search parameters.
 
         Parameters:
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
@@ -1482,10 +1560,10 @@ class Opik:
                 - `created_by = "user@example.com"` - Filter by creator
                 - `id starts_with "prompt_"` - Filter by ID prefix
 
-                If not provided, all prompts matching the name filter will be returned.
+                If not provided, all string prompts will be returned.
 
         Returns:
-            List[Prompt]: A list of Prompt instances found.
+            List[Prompt]: A list of string Prompt instances found (excludes chat prompts).
         """
         parsed_filters = None
         if filter_string:
@@ -1494,10 +1572,68 @@ class Opik:
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
-        prompts: List[prompt_module.Prompt] = [
-            prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
-            for (prompt_name, version) in name_and_versions
-        ]
+        
+        # Filter to only include string prompts
+        prompts: List[prompt_module.Prompt] = []
+        for prompt_name, version in name_and_versions:
+            template_structure = getattr(version, "template_structure", "string") or "string"
+            if template_structure == "string":
+                prompts.append(
+                    prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
+                )
+        
+        return prompts
+    
+    def search_chat_prompts(
+        self, filter_string: Optional[str] = None
+    ) -> List[prompt_module.ChatPrompt]:
+        """
+        Retrieve the latest chat prompt versions for the given search parameters.
+
+        Parameters:
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`: String fields
+                - `tags`: List field (use "contains" operator only)
+                - `created_by`: String field
+
+                Supported operators by column:
+                - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `tags`: contains (only)
+
+                Examples:
+                - `tags contains "alpha"` - Filter by tag
+                - `tags contains "alpha" AND tags contains "beta"` - Filter by multiple tags
+                - `name contains "summary"` - Filter by name substring
+                - `created_by = "user@example.com"` - Filter by creator
+                - `id starts_with "prompt_"` - Filter by ID prefix
+
+                If not provided, all chat prompts will be returned.
+
+        Returns:
+            List[ChatPrompt]: A list of ChatPrompt instances found (excludes string prompts).
+        """
+        parsed_filters = None
+        if filter_string:
+            oql = opik_query_language.OpikQueryLanguage(filter_string)
+            parsed_filters = oql.get_filter_expressions()
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
+        
+        # Filter to only include chat prompts
+        prompts: List[prompt_module.ChatPrompt] = []
+        for prompt_name, version in name_and_versions:
+            template_structure = getattr(version, "template_structure", "string") or "string"
+            if template_structure == "chat":
+                prompts.append(
+                    prompt_module.ChatPrompt.from_fern_prompt_version(prompt_name, version)
+                )
+        
         return prompts
 
     def create_optimization(
