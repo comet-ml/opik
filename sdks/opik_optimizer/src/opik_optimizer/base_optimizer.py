@@ -362,6 +362,8 @@ class BaseOptimizer(ABC):
             If response_model is provided, returns an instance of that model.
             Otherwise, returns the raw string response.
         """
+        # TODO: Detect multimodal payloads and automatically budget
+        # max_tokens/max_completion_tokens to reserve context window headroom.
         self._increment_llm_counter()
 
         # Build dict of call-time LiteLLM parameter overrides (non-None only)

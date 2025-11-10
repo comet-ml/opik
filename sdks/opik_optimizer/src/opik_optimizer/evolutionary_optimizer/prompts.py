@@ -3,25 +3,7 @@
 
 import json
 
-
-def _get_multimodal_guidance() -> str:
-    """
-    Get additional guidance for multimodal/vision tasks.
-
-    Returns:
-        String with multimodal-specific instructions
-    """
-    return """
-IMPORTANT - MULTIMODAL/VISION TASK GUIDANCE:
-- This task involves analyzing IMAGES along with text
-- Image content is provided via {image_content} placeholders or structured content
-- DO NOT modify or remove image placeholders - they are data, not instructions
-- Focus your prompt improvements on HOW to analyze the visual content
-- Consider: What aspects of the image should be examined? How should hazards/features be identified?
-- Visual tasks need clear guidance on: what to look for, where to look, how to describe findings
-- Example good additions: "Examine the entire frame for...", "Pay attention to movement/position/distance..."
-- Example bad changes: Removing {image_content}, adding text where images should be
-"""
+from ..utils.multimodal import get_multimodal_reasoning_guidance
 
 
 INFER_STYLE_SYSTEM_PROMPT = """You are an expert in linguistic analysis and prompt engineering. Your task is to analyze a few input-output examples from a dataset and provide a concise, actionable description of the desired output style. This description will be used to guide other LLMs in generating and refining prompts.
@@ -64,7 +46,7 @@ def semantic_mutation_system_prompt(
         "Follow the specific modification instruction provided."
     )
     if is_multimodal:
-        return base_prompt + _get_multimodal_guidance()
+        return base_prompt + " " + get_multimodal_reasoning_guidance()
     return base_prompt
 
 
@@ -95,7 +77,7 @@ def fresh_start_system_prompt(
         f"'{style}'. Output ONLY a raw JSON list of message objects (with 'role' and 'content' fields)."
     )
     if is_multimodal:
-        return base_prompt + _get_multimodal_guidance()
+        return base_prompt + " " + get_multimodal_reasoning_guidance()
     return base_prompt
 
 
@@ -136,7 +118,7 @@ Return a JSON array of prompts with the following structure:
 Each prompt variation should aim to get the target LLM to produce answers matching the desired style: '{style}'.
 """
     if is_multimodal:
-        return base_prompt + _get_multimodal_guidance()
+        return base_prompt + " " + get_multimodal_reasoning_guidance()
     return base_prompt
 
 
@@ -168,7 +150,7 @@ Return a JSON object that is a list of both child prompts. Each child prompt is 
 
 """
     if is_multimodal:
-        return base_prompt + _get_multimodal_guidance()
+        return base_prompt + " " + get_multimodal_reasoning_guidance()
     return base_prompt
 
 
@@ -186,7 +168,7 @@ Consider clarity, specificity, constraints, and how to best guide the language m
 Return only the new prompt string, with no preamble or explanation.
 """
     if is_multimodal:
-        return base_prompt + _get_multimodal_guidance()
+        return base_prompt + " " + get_multimodal_reasoning_guidance()
     return base_prompt
 
 

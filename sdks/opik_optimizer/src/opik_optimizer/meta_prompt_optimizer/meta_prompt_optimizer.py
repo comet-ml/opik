@@ -30,7 +30,14 @@ from ..mcp_utils.mcp_workflow import (
     MCPSecondPassCoordinator,
     extract_tool_arguments,
 )
+from ..utils.multimodal import (
+    get_multimodal_reasoning_guidance,
+    get_multimodal_structure_guidance,
+)
 from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
+
+_MULTIMODAL_STRUCTURE_GUIDANCE = get_multimodal_structure_guidance()
+_MULTIMODAL_REASONING_GUIDANCE = get_multimodal_reasoning_guidance()
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -147,7 +154,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "reasoning": "why this improvement should help"
                 }
             ]
-        }"""
+        }}
+
+        """
+    _REASONING_SYSTEM_PROMPT = (
+        _REASONING_SYSTEM_PROMPT
+        + "\n\n"
+        + _MULTIMODAL_STRUCTURE_GUIDANCE
+        + "\n\n"
+        + _MULTIMODAL_REASONING_GUIDANCE
+    )
 
     def __init__(
         self,

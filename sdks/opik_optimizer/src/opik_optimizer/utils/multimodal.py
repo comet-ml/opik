@@ -8,6 +8,7 @@ structured-content helpers that work for upcoming video/file attachment support.
 import base64
 import copy
 import re
+import textwrap
 import warnings
 from io import BytesIO
 from typing import Any, Iterable
@@ -190,6 +191,39 @@ def replace_label_in_multimodal_content(
         else:
             new_parts.append(copy.deepcopy(part))
     return new_parts
+
+
+def get_multimodal_reasoning_guidance() -> str:
+    """
+    Shared guidance appended to LLM system prompts when a task includes multimodal inputs.
+    """
+    return textwrap.dedent(
+        """
+        IMPORTANT - MULTIMODAL/VISION TASK GUIDANCE:
+        - This task can include images, video frames, or other attachments alongside text.
+        - Structured content is provided via placeholders (e.g., {image_content}) or OpenAI-style message parts.
+        - DO NOT modify or remove attachment placeholders — they are data, not instructions.
+        - Focus your improvements on HOW to analyze the visual content and how to reference it in the answer.
+        - Consider: What aspects of the media should be examined? How should hazards/features be identified?
+        - Example additions: "Examine the entire frame for...", "Pay attention to movement/position/distance..."
+        - Example mistakes: Removing {image_content}, rewriting attachments as plain text, or injecting fake media.
+        """
+    ).strip()
+
+
+def get_multimodal_structure_guidance() -> str:
+    """
+    Guidance reminding LLMs to preserve structured content when editing prompts.
+    """
+    return textwrap.dedent(
+        """
+        IMPORTANT: Preserve structured multimodal content exactly as provided.
+        - Keep the same number of messages and the same `role`/`content` layout.
+        - If a message's content is a list of parts (text, image_url, video_url, file_url, etc.), return a list with the same structure.
+        - Maintain the original content type: strings must stay strings; structured lists must stay lists/JSON arrays.
+        - Never delete or rename placeholders such as {image_content}, {video_frame}, or dataset variables.
+        """
+    ).strip()
 
 
 def encode_pil_to_base64_uri(image: Any, format: str = "PNG", quality: int = 85) -> str:
@@ -455,4 +489,6 @@ __all__ = [
     "validate_structured_content_parts",
     "replace_label_in_media_part",
     "replace_label_in_multimodal_content",
+    "get_multimodal_reasoning_guidance",
+    "get_multimodal_structure_guidance",
 ]
