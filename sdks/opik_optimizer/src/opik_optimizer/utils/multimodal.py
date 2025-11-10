@@ -351,7 +351,7 @@ def is_base64_data_uri(value: str) -> bool:
         return False
 
     # Check for data URI pattern
-    pattern = r"^data:image/[a-z]+;base64,[A-Za-z0-9+/]+=*$"
+    pattern = r"^data:image/[a-zA-Z]+;base64,[A-Za-z0-9+/]+=*$"
     return bool(re.match(pattern, value, re.IGNORECASE))
 
 
