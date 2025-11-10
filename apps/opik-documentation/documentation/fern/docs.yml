@@ -671,11 +671,13 @@ navigation:
             icon: fa-regular fa-screwdriver-wrench
             path: docs/agent_optimization/optimization/optimize_tools.mdx
             slug: optimize_tools
-          - page: Optimize agents
-            icon: fa-regular fa-diagram-project
-            path: docs/agent_optimization/optimization/optimize_agents/overview.mdx
-            slug: optimize_agents
-            children:
+          - section: Optimize agents
+            slug: /optimize-agents
+            contents:
+              - page: Overview
+                icon: fa-regular fa-diagram-project
+                path: docs/agent_optimization/optimization/optimize_agents/overview.mdx
+                slug: optimize_agents
               - page: LangGraph
                 path: docs/agent_optimization/optimization/optimize_agents/langgraph.mdx
                 slug: optimize_langgraph
