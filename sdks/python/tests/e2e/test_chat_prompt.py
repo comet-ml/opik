@@ -414,8 +414,8 @@ def test_get_chat_prompt_history__string_prompt__returns_empty_list(
     assert len(history) == 0
 
 
-def test_search_chat_prompts__only_returns_chat_prompts(opik_client: opik.Opik):
-    """Test that search_chat_prompts() only returns chat prompts, not string prompts."""
+def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
+    """Test that search_prompts() with template_structure filter returns only ChatPrompt instances."""
     unique_id = str(uuid.uuid4())[-6:]
 
     # Create string prompts
@@ -428,7 +428,7 @@ def test_search_chat_prompts__only_returns_chat_prompts(opik_client: opik.Opik):
         prompt="String prompt 2",
     )
 
-    # Create chat prompts with similar names
+    # Create chat prompts
     chat_prompt_1 = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}-1",
         messages=[{"role": "user", "content": "Chat 1"}],
@@ -438,15 +438,15 @@ def test_search_chat_prompts__only_returns_chat_prompts(opik_client: opik.Opik):
         messages=[{"role": "user", "content": "Chat 2"}],
     )
 
-    # Search for all chat prompts with the unique_id
-    results = opik_client.search_chat_prompts(
-        filter_string=f'name contains "{unique_id}"'
+    # Search for only chat prompts using template_structure filter
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "{unique_id}" AND template_structure = "chat"'
     )
 
-    # Should only return chat prompts
+    # Should only return chat prompts, not string prompts
     assert len(results) == 2
     assert all(isinstance(p, opik.ChatPrompt) for p in results)
-
+    
     result_names = {p.name for p in results}
     assert chat_prompt_1.name in result_names
     assert chat_prompt_2.name in result_names

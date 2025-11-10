@@ -600,14 +600,9 @@ class PromptServiceImpl implements PromptService {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
-            // Default to STRING for backward compatibility if not specified
-            TemplateStructure requestedStructure = templateStructure != null
-                    ? templateStructure
-                    : TemplateStructure.STRING;
-
-            // Validate template structure
-            if (!prompt.templateStructure().equals(requestedStructure)) {
-                String expectedType = requestedStructure == TemplateStructure.CHAT ? "chat" : "string";
+            // Validate template structure only if specified
+            if (templateStructure != null && !prompt.templateStructure().equals(templateStructure)) {
+                String expectedType = templateStructure == TemplateStructure.CHAT ? "chat" : "string";
                 String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "string";
                 throw new BadRequestException(
                         "Prompt '%s' is a %s prompt, but %s prompt was requested".formatted(

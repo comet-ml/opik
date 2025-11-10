@@ -260,7 +260,7 @@ def test_prompt__search_prompts__returns_all_versions(opik_client: opik.Opik):
 
     prompts = opik_client.search_prompts()
 
-    templates = {p.prompt for p in prompts}
+    templates = {p.prompt for p in prompts if isinstance(p, opik.Prompt)}
     assert "new-template-1" in templates
     assert "some-template-2" in templates
 
@@ -308,7 +308,7 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     # Search by name substring via OQL (no additional filters) to retrieve only two matching prompts
     results = opik_client.search_prompts(filter_string='name contains "common-prefix"')
 
-    names = set(p.name for p in results)
+    names = set(p.name for p in results if isinstance(p, opik.Prompt))
     assert len(results) == 2
     assert names == set([prompt_name_1, prompt_name_2])
 
@@ -468,8 +468,8 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
     assert len(history) == 0
 
 
-def test_search_prompts__only_returns_string_prompts(opik_client: opik.Opik):
-    """Test that search_prompts() only returns string prompts, not chat prompts."""
+def test_search_prompts__returns_both_types(opik_client: opik.Opik):
+    """Test that search_prompts() returns both string and chat prompts."""
     unique_id = str(uuid.uuid4())[-6:]
 
     # Create string prompts
@@ -495,15 +495,64 @@ def test_search_prompts__only_returns_string_prompts(opik_client: opik.Opik):
     # Search for all prompts with the unique_id
     results = opik_client.search_prompts(filter_string=f'name contains "{unique_id}"')
 
-    # Should only return string prompts
-    assert len(results) == 2
-    assert all(isinstance(p, opik.Prompt) for p in results)
+    # Should return both string and chat prompts
+    assert len(results) == 4
+    string_prompts = [p for p in results if isinstance(p, opik.Prompt)]
+    chat_prompts = [p for p in results if isinstance(p, opik.ChatPrompt)]
+    assert len(string_prompts) == 2
+    assert len(chat_prompts) == 2
+    assert {p.name for p in string_prompts} == {string_prompt_1.name, string_prompt_2.name}
+    assert {p.name for p in chat_prompts} == {chat_prompt_1.name, chat_prompt_2.name}
 
-    result_names = {p.name for p in results}
-    assert string_prompt_1.name in result_names
-    assert string_prompt_2.name in result_names
-    assert chat_prompt_1.name not in result_names
-    assert chat_prompt_2.name not in result_names
+
+def test_search_prompts__filter_by_template_structure_string(opik_client: opik.Opik):
+    """Test that search_prompts() can filter by template_structure='string'."""
+    unique_id = str(uuid.uuid4())[-6:]
+
+    # Create string and chat prompts
+    string_prompt = opik_client.create_prompt(
+        name=f"string-search-{unique_id}",
+        prompt="String prompt",
+    )
+    chat_prompt = opik_client.create_chat_prompt(
+        name=f"chat-search-{unique_id}",
+        messages=[{"role": "user", "content": "Chat"}],
+    )
+
+    # Search for only string prompts
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "{unique_id}" AND template_structure = "string"'
+    )
+
+    # Should only return string prompts
+    assert len(results) == 1
+    assert isinstance(results[0], opik.Prompt)
+    assert results[0].name == string_prompt.name
+
+
+def test_search_prompts__filter_by_template_structure_chat(opik_client: opik.Opik):
+    """Test that search_prompts() can filter by template_structure='chat'."""
+    unique_id = str(uuid.uuid4())[-6:]
+
+    # Create string and chat prompts
+    string_prompt = opik_client.create_prompt(
+        name=f"string-search-{unique_id}",
+        prompt="String prompt",
+    )
+    chat_prompt = opik_client.create_chat_prompt(
+        name=f"chat-search-{unique_id}",
+        messages=[{"role": "user", "content": "Chat"}],
+    )
+
+    # Search for only chat prompts
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "{unique_id}" AND template_structure = "chat"'
+    )
+
+    # Should only return chat prompts
+    assert len(results) == 1
+    assert isinstance(results[0], opik.ChatPrompt)
+    assert results[0].name == chat_prompt.name
 
 
 def test_get_prompt__with_commit__string_prompt(opik_client: opik.Opik):
