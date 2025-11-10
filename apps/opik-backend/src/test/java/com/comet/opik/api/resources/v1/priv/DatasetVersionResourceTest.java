@@ -635,6 +635,7 @@ class DatasetVersionResourceTest {
                     .tag("staging")
                     .build();
 
+            String versionHash;
             try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path("versions")
@@ -644,11 +645,15 @@ class DatasetVersionResourceTest {
                     .post(Entity.json(versionCreate))) {
 
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+                var version = response.readEntity(DatasetVersion.class);
+                versionHash = version.versionHash();
             }
 
             // When - Delete tag
             try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
+                    .path("versions")
+                    .path(versionHash)
                     .path("tags")
                     .path("staging")
                     .request()
@@ -679,10 +684,28 @@ class DatasetVersionResourceTest {
         void deleteTag__whenTagNotFound__thenReturnNotFound() {
             // Given
             var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
 
-            // When
+            // Create a version to get a valid versionHash
+            var versionCreate = DatasetVersionCreate.builder().build();
+            String versionHash;
             try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
+                    .path("versions")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(versionCreate))) {
+
+                var version = response.readEntity(DatasetVersion.class);
+                versionHash = version.versionHash();
+            }
+
+            // When - Try to delete a non-existent tag
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .path(versionHash)
                     .path("tags")
                     .path("nonexistent")
                     .request()
