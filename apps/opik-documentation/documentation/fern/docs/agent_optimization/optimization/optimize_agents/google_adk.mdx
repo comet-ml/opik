@@ -5,36 +5,39 @@ description: "Log Google AI Agent Builder runs to Opik and optimize their prompt
 
 Google’s Agent Developer Kit (ADK) exposes agent flows via REST and event hooks. Combine those hooks with Opik tracing to capture data for optimization. See `sdks/opik_optimizer/scripts/llm_frameworks/adk/` for reference implementations (`adk_agent.py`, `adk_evolutionary_hotpot_example.py`).
 
-## Connect ADK to Opik
+## End-to-end flow
 
-1. Configure ADK to send execution webhooks to a lightweight service.
-2. In that service, call `opik.traces.log_trace(...)` to capture the conversation turns, tool calls, and metadata.
-3. Tag traces with the ADK agent version so you can compare runs over time.
+<Steps>
+  <Step title="Connect ADK to Opik">
+    1. Configure ADK to send execution webhooks to a lightweight service.  
+    2. In that service, call `opik.traces.log_trace(...)` (or use the `@trace` decorator) to capture turns, tool calls, and metadata.  
+    3. Tag traces with the ADK agent version so you can compare runs over time.
 
-```python
-from opik import trace
+    ```python
+    from opik import trace
 
-@trace(name="google-adk-run", metadata={"agent": "support-bot"})
-def handle_adk_webhook(payload):
-    # Map ADK fields into Opik spans
-    ...
-```
+    @trace(name="google-adk-run", metadata={"agent": "support-bot"})
+    def handle_adk_webhook(payload):
+        # Map ADK fields into Opik spans
+        ...
+    ```
 
-## Build datasets
-
-- Export logged ADK runs as CSV/JSON and import them via `opik dataset upload`.
-- Include ADK-specific context (e.g., app locale, user intent) under `metadata` so optimizations respect those constraints.
-
-## Optimize
-
-- Start with MetaPrompt to refine the agent’s instruction prompt.
-- Switch to Hierarchical Reflective if you need root-cause reports for failed ADK sessions.
-- Use `ParameterOptimizer` when you want to tune sampling parameters enforced by ADK policies.
-
-## Deploy updates
-
-- Replace the ADK prompt definition with the optimized prompt.
-- Re-run ADK evaluation suites, then monitor traces in Opik to confirm real users see the improvements.
+    - Follow the detailed steps in the [Google ADK tracing guide](/integrations/adk).
+  </Step>
+  <Step title="Build datasets">
+    - Curate your dataset for your agent which can be based on existing traces.
+    - Import dataset as CSV/JSON and import them via `opik dataset upload`.  
+  </Step>
+  <Step title="Optimize">
+    - Start with an optimizer like MetaPrompt to refine the instruction prompt.  
+    - Switch to Hierarchical Reflective for root-cause reports on failed sessions.  
+    - Use `ParameterOptimizer` when you want to tune sampling parameters enforced by ADK policies.
+  </Step>
+  <Step title="Deploy updates">
+    - Replace the ADK prompt definition with the optimized prompt.  
+    - Re-run ADK evaluation suites, then monitor traces in Opik to ensure real users see the improvement.
+  </Step>
+</Steps>
 
 <Info>
   A full ADK reference implementation is on the roadmap. Watch the [changelog](/agent_optimization/getting_started/changelog) for sample apps.
