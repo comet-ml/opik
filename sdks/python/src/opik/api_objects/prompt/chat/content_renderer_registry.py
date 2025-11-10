@@ -11,11 +11,13 @@ class ChatContentRendererRegistry:
     """
 
     def __init__(self) -> None:
-        self._part_renderers: MutableMapping[str, RendererFn] = {}
-        self._part_modalities: MutableMapping[str, Optional[prompt_types.ModalityName]] = {}
-        self._modality_placeholders: MutableMapping[ModalityName, Tuple[str, str]] = {
-            "vision": ("<<<image>>>", "<<</image>>>")
-        }
+        self._part_renderers: MutableMapping[str, prompt_types.RendererFn] = {}
+        self._part_modalities: MutableMapping[
+            str, Optional[prompt_types.ModalityName]
+        ] = {}
+        self._modality_placeholders: MutableMapping[
+            prompt_types.ModalityName, Tuple[str, str]
+        ] = {"vision": ("<<<image>>>", "<<</image>>>")}
         self._default_placeholder: Tuple[str, str] = ("<<<media>>>", "<<</media>>>")
         self._placeholder_value_limit = 500
 
@@ -43,7 +45,7 @@ class ChatContentRendererRegistry:
         variables: Dict[str, Any],
         template_type: prompt_types.PromptType,
         *,
-        supported_modalities: Optional[SupportedModalities] = None,
+        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
     ) -> prompt_types.MessageContent:
         if supported_modalities is None:
             modality_flags: Dict[str, bool] = {}
@@ -76,19 +78,21 @@ class ChatContentRendererRegistry:
         return rendered_parts
 
     def normalize_template_type(
-        self, template_type: Union[str, PromptType]
-    ) -> PromptType:
-        if isinstance(template_type, PromptType):
+        self, template_type: Union[str, prompt_types.PromptType]
+    ) -> prompt_types.PromptType:
+        if isinstance(template_type, prompt_types.PromptType):
             return template_type
         try:
-            return PromptType(template_type)
+            return prompt_types.PromptType(template_type)
         except ValueError:
-            return PromptType.MUSTACHE
+            return prompt_types.PromptType.MUSTACHE
 
-    def infer_modalities(self, content: prompt_types.MessageContent) -> set[ModalityName]:
+    def infer_modalities(
+        self, content: prompt_types.MessageContent
+    ) -> set[prompt_types.ModalityName]:
         if not isinstance(content, list):
             return set()
-        modalities: set[ModalityName] = set()
+        modalities: set[prompt_types.ModalityName] = set()
         for part in content:
             if not isinstance(part, dict):
                 continue

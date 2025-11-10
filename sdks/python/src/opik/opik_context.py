@@ -97,7 +97,7 @@ def update_current_span(
         return
 
     if prompts is not None:
-        prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
+        prompts = [prompt.to_info_dict(p) for p in prompts]
 
     new_params = {
         "name": name,
@@ -151,7 +151,7 @@ def update_current_trace(
         return
 
     if prompts is not None:
-        prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
+        prompts = [prompt.to_info_dict(p) for p in prompts]
 
     new_params = {
         "name": name,

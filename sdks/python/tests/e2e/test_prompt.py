@@ -343,7 +343,10 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
 
     # Verify the error message contains relevant information
     assert exc_info.value.status_code == 400
-    assert "template structure mismatch" in str(exc_info.value).lower() or "template_structure" in str(exc_info.value).lower()
+    assert (
+        "template structure mismatch" in str(exc_info.value).lower()
+        or "template_structure" in str(exc_info.value).lower()
+    )
 
 
 def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik):
@@ -379,4 +382,7 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
 
     # Verify the error message contains relevant information
     assert exc_info.value.status_code == 400
-    assert "template structure mismatch" in str(exc_info.value).lower() or "template_structure" in str(exc_info.value).lower()
+    assert (
+        "template structure mismatch" in str(exc_info.value).lower()
+        or "template_structure" in str(exc_info.value).lower()
+    )

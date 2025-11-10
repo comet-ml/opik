@@ -32,7 +32,9 @@ class ChatPrompt:
             type: The template type (MUSTACHE or JINJA2).
         """
 
-        self._chat_template = chat_prompt_template.ChatPromptTemplate(messages=messages, template_type=type)
+        self._chat_template = chat_prompt_template.ChatPromptTemplate(
+            messages=messages, template_type=type
+        )
         self._name = name
         self._metadata = metadata
         self._type = type

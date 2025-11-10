@@ -358,9 +358,9 @@ def _build_prompt_evaluation_task(
             )
         },
     )
-    chat_prompt_template = chat_prompt_template.ChatPromptTemplate(messages=messages)
+    chat_prompt_template_ = chat_prompt_template.ChatPromptTemplate(messages=messages)
 
-    required_modalities = chat_prompt_template.required_modalities()
+    required_modalities = chat_prompt_template_.required_modalities()
     unsupported_modalities = {
         modality
         for modality in required_modalities
@@ -379,7 +379,7 @@ def _build_prompt_evaluation_task(
 
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         template_type_override = prompt_variables.get("type")
-        processed_messages = chat_prompt_template.format(
+        processed_messages = chat_prompt_template_.format(
             variables=prompt_variables,
             supported_modalities=supported_modalities,
             template_type=template_type_override,

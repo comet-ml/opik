@@ -25,11 +25,15 @@ class ChatPromptTemplate:
         messages: List[Dict[str, prompt_types.MessageContent]],
         template_type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         *,
-        registry: Optional[content_renderer_registry.ChatContentRendererRegistry] = None,
+        registry: Optional[
+            content_renderer_registry.ChatContentRendererRegistry
+        ] = None,
     ) -> None:
         self._messages = messages
         self._template_type = template_type
-        self._registry = registry or content_renderer_registry.DEFAULT_CHAT_RENDERER_REGISTRY
+        self._registry = (
+            registry or content_renderer_registry.DEFAULT_CHAT_RENDERER_REGISTRY
+        )
 
     @property
     def messages(self) -> List[Dict[str, prompt_types.MessageContent]]:
@@ -113,7 +117,9 @@ def _render_template_string(
 
 
 def render_text_part(
-    part: prompt_types.ContentPart, variables: Dict[str, Any], template_type: prompt_types.PromptType
+    part: prompt_types.ContentPart,
+    variables: Dict[str, Any],
+    template_type: prompt_types.PromptType,
 ) -> Optional[prompt_types.ContentPart]:
     text_template = part.get("text", "")
     rendered_text = _render_template_string(text_template, variables, template_type)
@@ -121,7 +127,9 @@ def render_text_part(
 
 
 def render_image_url_part(
-    part: prompt_types.ContentPart, variables: Dict[str, Any], template_type: prompt_types.PromptType
+    part: prompt_types.ContentPart,
+    variables: Dict[str, Any],
+    template_type: prompt_types.PromptType,
 ) -> Optional[prompt_types.ContentPart]:
     image_dict = part.get("image_url", {})
     if not isinstance(image_dict, dict):
@@ -146,8 +154,3 @@ content_renderer_registry.register_default_chat_part_renderer(
     modality="vision",
     placeholder=("<<<image>>>", "<<</image>>>"),
 )
-
-
-__all__ = [
-    "ChatPromptTemplate",
-]
