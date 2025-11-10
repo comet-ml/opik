@@ -667,27 +667,10 @@ navigation:
             icon: fa-regular fa-wand-magic-sparkles
             path: docs/agent_optimization/optimization/optimize_prompts.mdx
             slug: optimize_prompts
-          - page: Optimize tools
-            icon: fa-regular fa-screwdriver-wrench
-            path: docs/agent_optimization/optimization/optimize_tools.mdx
-            slug: optimize_tools
-          - section: Optimize agents
-            slug: /optimize-agents
-            contents:
-              - page: Overview
-                icon: fa-regular fa-diagram-project
-                path: docs/agent_optimization/optimization/optimize_agents/overview.mdx
-                slug: optimize_agents
-              - page: LangGraph
-                path: docs/agent_optimization/optimization/optimize_agents/langgraph.mdx
-                slug: optimize_langgraph
-              - page: Google ADK
-                path: docs/agent_optimization/optimization/optimize_agents/google_adk.mdx
-                slug: optimize_google_adk
-          - page: Optimize MCP
-            icon: fa-regular fa-diagram-cells
-            path: docs/agent_optimization/optimization/optimize_mcp.mdx
-            slug: optimize_mcp
+          - page: Optimize agents
+            icon: fa-regular fa-diagram-project
+            path: docs/agent_optimization/optimization/optimize_agents/overview.mdx
+            slug: optimize_agents
           - page: Optimize multimodal
             icon: fa-regular fa-image
             path: docs/agent_optimization/optimization/optimize_multimodal.mdx
