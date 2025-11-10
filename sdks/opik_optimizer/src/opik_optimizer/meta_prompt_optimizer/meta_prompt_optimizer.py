@@ -992,7 +992,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                         response
                     )
                 else:
-                    parsed_candidates = CandidatePromptsResponse.model_validate(response)  # type: ignore[arg-type]
+                    parsed_candidates = CandidatePromptsResponse.model_validate(
+                        response
+                    )  # type: ignore[arg-type]
 
                 valid_prompts: list[chat_prompt.ChatPrompt] = []
                 for candidate in parsed_candidates.prompts:

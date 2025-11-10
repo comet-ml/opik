@@ -65,7 +65,7 @@ def warn_if_python_sdk_outdated(min_version: str = MIN_OPIK_PYTHON_VERSION) -> N
     """
     try:
         import opik  # Local import to avoid optional dependency at module import time
-    except Exception:
+    except ModuleNotFoundError:
         warnings.warn(
             "Could not import the Opik Python SDK. Image datasets may not function correctly.",
             stacklevel=2,
@@ -74,7 +74,7 @@ def warn_if_python_sdk_outdated(min_version: str = MIN_OPIK_PYTHON_VERSION) -> N
 
     try:
         from packaging import version
-    except Exception:
+    except ModuleNotFoundError:
         warnings.warn(
             "Could not import 'packaging'. Please install it to enable Opik version checks.",
             stacklevel=2,
