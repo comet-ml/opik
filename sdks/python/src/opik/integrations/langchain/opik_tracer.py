@@ -68,14 +68,7 @@ def _get_span_type(run: Dict[str, Any]) -> SpanType:
 
 
 class OpikTracer(BaseTracer):
-    """Langchain Opik Tracer.
-
-    Args:
-        tags: List of tags to be applied to each trace logged by the tracer.
-        metadata: Additional metadata for each trace logged by the tracer.
-        graph: A LangGraph Graph object to track the Graph Definition in Opik.
-        project_name: The name of the project to log data.
-    """
+    """Langchain Opik Tracer."""
 
     def __init__(
         self,
@@ -88,6 +81,25 @@ class OpikTracer(BaseTracer):
         skip_error_callback: Optional[SkipErrorCallback] = None,
         **kwargs: Any,
     ) -> None:
+        """
+        Initializes an instance of the class with various parameters for traces, metadata, and project configuration.
+
+        Args:
+            tags: List of tags associated with logged traces.
+            metadata: Dictionary containing metadata information for logged traces.
+            graph: A LangGraph Graph object for representing dependencies or flow
+                to track the Graph Definition in Opik.
+            project_name: Name of the project associated with the traces.
+            distributed_headers: Headers for distributed tracing context.
+            thread_id: Unique identifier for the conversational thread
+                to be associated with traces.
+            skip_error_callback : Callback function to handle skip errors logic.
+                Allows defining custom logic for handling errors that are intentionally skipped.
+                Please note that in traces/spans where errors are intentionally skipped,
+                the output will be replaced with `ERROR_SKIPPED_OUTPUTS`. You can provide
+                the output manually using `opik_context.get_current_span_data().update(output=...)`.
+            **kwargs: Additional arguments passed to the parent class constructor.
+        """
         validator = parameters_validator.create_validator(
             method_name="__init__", class_name=self.__class__.__name__
         )
