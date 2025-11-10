@@ -6,6 +6,10 @@ import copy
 from pydantic import BaseModel, Field
 
 from opik import track
+from opik_optimizer.utils.multimodal import (
+    replace_label_in_multimodal_content,
+    validate_structured_content_parts,
+)
 
 
 class Tool(BaseModel):
@@ -18,8 +22,7 @@ class Tool(BaseModel):
 
 ToolDict: TypeAlias = dict[str, Any]
 TextPart: TypeAlias = dict[str, Any]
-ImageUrlDict: TypeAlias = dict[str, Any]
-ImagePart: TypeAlias = dict[str, Any]
+MediaPart: TypeAlias = dict[str, Any]
 MessageDict: TypeAlias = dict[str, Any]
 
 
@@ -94,62 +97,28 @@ class ChatPrompt:
 
     @staticmethod
     def validate_messages(messages: list[MessageDict]) -> list[MessageDict]:
-        """Validate and normalize messages to MessageDict format.
-
-        Args:
-            messages: List of message dictionaries to validate
-
-        Returns:
-            List of validated MessageDict instances
-
-        Raises:
-            ValueError: If messages structure is invalid
-        """
+        """Validate and normalize messages to MessageDict format."""
         if not isinstance(messages, list):
             raise ValueError("`messages` must be a list")
 
         normalised: list[MessageDict] = []
         for message in messages:
-            if not isinstance(message, dict):
-                raise ValueError("Each item in `messages` must be a dictionary")
-            if "role" not in message or "content" not in message:
-                raise ValueError("Each message must include 'role' and 'content'")
-
-            # Validate content structure if it's a list (multimodal)
-            content = message["content"]
-            if isinstance(content, list):
-                for part in content:
-                    if not isinstance(part, dict):
-                        raise ValueError(
-                            "Multimodal content parts must be dictionaries"
-                        )
-                    part_type = part.get("type")
-                    if part_type == "text":
-                        text_part = cast(TextPart, part)
-                        if "text" not in text_part:
-                            raise ValueError(
-                                "Text content part must include 'text' field"
-                            )
-                    elif part_type == "image_url":
-                        image_part = cast(ImagePart, part)
-                        if "image_url" not in image_part:
-                            raise ValueError(
-                                "Image content part must include 'image_url' field"
-                            )
-                        image_url = image_part["image_url"]
-                        if not isinstance(image_url, dict) or "url" not in image_url:
-                            raise ValueError(
-                                "Image 'image_url' must be a dict with 'url' field"
-                            )
-                    else:
-                        raise ValueError(
-                            f"Unknown content part type: {part_type}. "
-                            "Expected 'text' or 'image_url'"
-                        )
-
+            ChatPrompt._validate_message_dict(message)
             normalised.append(cast(MessageDict, message))
 
         return normalised
+
+    @staticmethod
+    def _validate_message_dict(message: MessageDict) -> None:
+        if not isinstance(message, dict):
+            raise ValueError("Each item in `messages` must be a dictionary")
+
+        if "role" not in message or "content" not in message:
+            raise ValueError("Each message must include 'role' and 'content'")
+
+        content = message["content"]
+        if isinstance(content, list):
+            validate_structured_content_parts(content)
 
     def get_messages(
         self,
@@ -161,90 +130,57 @@ class ChatPrompt:
         if not dataset_item:
             return messages
 
-        def _replace_in_text_part(
-            part: TextPart, label: str, replacement: str
-        ) -> TextPart:
-            if label in part["text"]:
-                return {
-                    "type": "text",
-                    "text": part["text"].replace(label, replacement),
-                }
-            return part
+        for key, value in dataset_item.items():
+            label = "{" + str(key) + "}"
+            for i, message in enumerate(messages):
+                messages[i] = self._replace_in_message(message, label, value)
+        return messages
 
-        def _replace_in_image_part(
-            part: ImagePart, label: str, replacement: str
-        ) -> ImagePart:
-            url = part["image_url"]["url"].replace(label, replacement)
-            # Build the image_url dict, preserving detail if present
-            image_url: ImageUrlDict = {"url": url}
-            if "detail" in part["image_url"]:
-                image_url["detail"] = part["image_url"]["detail"]
-            return cast(
-                ImagePart,
-                {
-                    "type": "image_url",
-                    "image_url": image_url,
-                },
+    @staticmethod
+    def _replace_in_message(
+        message: MessageDict, label: str, replacement_value: Any
+    ) -> MessageDict:
+        content = message["content"]
+
+        if (
+            isinstance(content, str)
+            and isinstance(replacement_value, list)
+            and content.strip() == label
+        ):
+            ChatPrompt.validate_messages(
+                [{"role": message["role"], "content": replacement_value}]
             )
-
-        def _replace_in_content(
-            content: str | list[TextPart | ImagePart], label: str, replacement: str
-        ) -> str | list[TextPart | ImagePart]:
-            if isinstance(content, str):
-                return content.replace(label, replacement)
-            new_parts: list[TextPart | ImagePart] = []
-            for p in content:
-                if p["type"] == "text":
-                    new_parts.append(
-                        _replace_in_text_part(cast(TextPart, p), label, replacement)
-                    )
-                else:
-                    new_parts.append(
-                        _replace_in_image_part(cast(ImagePart, p), label, replacement)
-                    )
-            return new_parts
-
-        def _replace_in_message(
-            message: MessageDict, label: str, replacement_value: Any
-        ) -> MessageDict:
-            content = message["content"]
-
-            if (
-                isinstance(content, str)
-                and isinstance(replacement_value, list)
-                and content.strip() == label
-            ):
-                ChatPrompt.validate_messages(
-                    [{"role": message["role"], "content": replacement_value}]
-                )
-                return cast(
-                    MessageDict,
-                    {
-                        "role": message["role"],
-                        "content": copy.deepcopy(replacement_value),
-                    },
-                )
-
-            replacement = str(replacement_value)
-            new_content: str | list[TextPart | ImagePart]
-            if isinstance(content, str):
-                new_content = content.replace(label, replacement)
-            else:
-                new_content = _replace_in_content(content, label, replacement)
-
             return cast(
                 MessageDict,
                 {
                     "role": message["role"],
-                    "content": new_content,
+                    "content": copy.deepcopy(replacement_value),
                 },
             )
 
-        for key, value in dataset_item.items():
-            label = "{" + str(key) + "}"
-            for i, message in enumerate(messages):
-                messages[i] = _replace_in_message(message, label, value)
-        return messages
+        replacement = str(replacement_value)
+        new_content = ChatPrompt._replace_in_content(content, label, replacement)
+
+        return cast(
+            MessageDict,
+            {
+                "role": message["role"],
+                "content": new_content,
+            },
+        )
+
+    @staticmethod
+    def _replace_in_content(
+        content: str | list[TextPart | MediaPart], label: str, replacement: str
+    ) -> str | list[TextPart | MediaPart]:
+        if isinstance(content, str):
+            return content.replace(label, replacement)
+        if isinstance(content, list):
+            replaced = replace_label_in_multimodal_content(
+                cast(list[dict[str, Any]], content), label, replacement
+            )
+            return cast(list[TextPart | MediaPart], replaced)
+        return content
 
     def _standardize_prompts(self, **kwargs: Any) -> list[MessageDict]:
         standardize_messages: list[MessageDict] = []

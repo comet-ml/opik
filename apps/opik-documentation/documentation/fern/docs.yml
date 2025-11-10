@@ -635,6 +635,10 @@ navigation:
           - page: Optimizer Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
+          - page: Feature Matrix
+            icon: fa-regular fa-table
+            path: docs/agent_optimization/features.mdx
+            slug: features
           - page: Multi-Metric Optimization
             icon: fa-regular fa-chart-line
             path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx

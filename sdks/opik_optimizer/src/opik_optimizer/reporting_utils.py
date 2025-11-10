@@ -10,8 +10,12 @@ from rich.panel import Panel
 from rich.progress import track
 from rich.text import Text
 
-from .optimization_config.chat_prompt import ImagePart, MessageDict, TextPart
+from .optimization_config.chat_prompt import MediaPart, MessageDict, TextPart
 from .utils import get_optimization_run_url_by_id
+from .utils.multimodal import (
+    MULTIMODAL_URL_FIELDS,
+    SUPPORTED_MULTIMODAL_PART_TYPES,
+)
 
 PANEL_WIDTH = 70
 
@@ -113,7 +117,7 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     return normalized
 
 
-def _format_message_content(content: str | list[TextPart | ImagePart]) -> Text:
+def _format_message_content(content: str | list[TextPart | MediaPart]) -> Text:
     """
     Format message content for display, handling both string and multimodal content.
 
@@ -143,52 +147,8 @@ def _format_message_content(content: str | list[TextPart | ImagePart]) -> Text:
                 formatted_parts.append(
                     Text("\n".join(formatted_lines), overflow="fold")
                 )
-        elif part_type == "image_url":
-            image_part = cast(ImagePart, part)
-            image_url = image_part.get("image_url", {})
-            url = image_url.get("url", "") if isinstance(image_url, dict) else ""
-
-            if url:
-                # Check if it's a base64 data URI
-                if url.startswith("data:image"):
-                    # Extract base64 part (after the comma)
-                    if "," in url:
-                        base64_part = url.split(",", 1)[1]
-                        # Show first 10 characters of base64
-                        preview = (
-                            base64_part[:10] + "..."
-                            if len(base64_part) > 10
-                            else base64_part
-                        )
-                        formatted_parts.append(
-                            Text(
-                                f"image_url:\n  | {preview}",
-                                overflow="fold",
-                                style="dim",
-                            )
-                        )
-                    else:
-                        formatted_parts.append(
-                            Text(
-                                f"image_url:\n  | {url[:50]}...",
-                                overflow="fold",
-                                style="dim",
-                            )
-                        )
-                else:
-                    # Regular URL
-                    display_url = url[:80] + "..." if len(url) > 80 else url
-                    formatted_parts.append(
-                        Text(
-                            f"image_url:\n  | {display_url}",
-                            overflow="fold",
-                            style="dim",
-                        )
-                    )
-            else:
-                formatted_parts.append(
-                    Text("image_url:\n  | <no URL>", overflow="fold", style="dim")
-                )
+        elif part_type in SUPPORTED_MULTIMODAL_PART_TYPES:
+            formatted_parts.append(_format_multimodal_part(cast(MediaPart, part)))
 
     # Combine all parts with spacing
     if not formatted_parts:
@@ -203,8 +163,76 @@ def _format_message_content(content: str | list[TextPart | ImagePart]) -> Text:
     return result
 
 
+def _attachment_label(part_type: str) -> str:
+    """Convert part type to a human-readable label."""
+    label = part_type.removesuffix("_url")
+    return label.replace("_", " ") or "attachment"
+
+
+def _format_url_lines(url: str | None) -> list[str]:
+    """Produce formatted lines for either data URIs or standard URLs."""
+    if not isinstance(url, str) or not url:
+        return ["  | <no URL>"]
+
+    if url.startswith("data:"):
+        header = url.split(",", 1)[0][5:] if "," in url else url[5:]
+        lines = [f"  | data:{header}"]
+        if "," in url:
+            payload = url.split(",", 1)[1]
+            preview = payload[:10] + "..." if len(payload) > 10 else payload
+            lines.append(f"  | preview={preview}")
+        return lines
+
+    display_url = url[:80] + "..." if len(url) > 80 else url
+    return [f"  | {display_url}"]
+
+
+def _format_multimodal_part(part: MediaPart) -> Text:
+    """Render a video/image/file part into Rich text."""
+    part_type = str(part.get("type", "attachment"))
+    payload_key = MULTIMODAL_URL_FIELDS.get(part_type)
+
+    if payload_key is None:
+        return Text(
+            f"{_attachment_label(part_type)}:\n  | <unsupported payload>",
+            overflow="fold",
+            style="dim",
+        )
+
+    payload = part.get(payload_key, {})
+    url = payload.get("url") if isinstance(payload, dict) else None
+    lines = [f"{_attachment_label(part_type)}:"]
+    lines.extend(_format_url_lines(url))
+
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key == "url":
+                continue
+            lines.append(f"  | {key}={value}")
+
+    return Text("\n".join(lines), overflow="fold", style="dim")
+
+
+def _summarize_media_part(part: MediaPart) -> str:
+    """Return single-line summary for diff output."""
+    part_type = str(part.get("type", "attachment"))
+    payload_key = MULTIMODAL_URL_FIELDS.get(part_type)
+    payload = part.get(payload_key, {})
+    url = payload.get("url", "") if isinstance(payload, dict) else ""
+    label = _attachment_label(part_type)
+
+    if not url:
+        return f"[{label}] <no URL>"
+
+    if url.startswith("data:"):
+        return f"[{label}] <base64 data>"
+
+    display_url = url[:50] + "..." if len(url) > 50 else url
+    return f"[{label}] {display_url}"
+
+
 def content_to_diff_string(
-    content: str | list[TextPart | ImagePart] | None,
+    content: str | list[TextPart | MediaPart] | None,
 ) -> str:
     """
     Convert message content (text or multimodal) into a compact string for diff views.
@@ -229,18 +257,8 @@ def content_to_diff_string(
             text_content = text_part.get("text", "")
             if text_content:
                 parts.append(f"[text] {text_content}")
-        elif part_type == "image_url":
-            image_part = cast(ImagePart, part)
-            image_url = image_part.get("image_url", {})
-            url = image_url.get("url", "") if isinstance(image_url, dict) else ""
-            if url:
-                if url.startswith("data:image"):
-                    parts.append("[image] <base64 data>")
-                else:
-                    display_url = url[:50] + "..." if len(url) > 50 else url
-                    parts.append(f"[image] {display_url}")
-            else:
-                parts.append("[image] <no URL>")
+        elif part_type in SUPPORTED_MULTIMODAL_PART_TYPES:
+            parts.append(_summarize_media_part(cast(MediaPart, part)))
 
     return "\n".join(parts)
 
@@ -255,7 +273,7 @@ def display_messages(messages: list[MessageDict], prefix: str = "") -> None:
     """
     for i, msg in enumerate(messages):
         # MessageDict requires content, but we use .get() for defensive programming
-        content: str | list[TextPart | ImagePart] = msg.get("content", "")
+        content: str | list[TextPart | MediaPart] = msg.get("content", "")
         formatted_content = _format_message_content(content)
         role = msg.get("role", "message")
 
@@ -412,7 +430,7 @@ def display_result(
     content.append(Text("\nOptimized prompt:"))
     for i, msg in enumerate(best_prompt):
         # MessageDict requires content, but we use .get() for defensive programming
-        content_value: str | list[TextPart | ImagePart] = msg.get("content", "")
+        content_value: str | list[TextPart | MediaPart] = msg.get("content", "")
         formatted_content = _format_message_content(content_value)
         role = msg.get("role", "message")
 

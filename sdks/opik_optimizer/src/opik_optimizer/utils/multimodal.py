@@ -1,19 +1,16 @@
 """
-Reusable image utilities for multimodal datasets and optimizers.
+Reusable multimodal utilities for datasets and optimizers.
 
-Provides common functionality for:
-- Encoding images to base64 data URIs
-- Decoding base64 images
-- Detecting image formats
-- Converting between formats
-- Validating image data
+Currently focused on image helpers (encoding/decoding, validation) and generic
+structured-content helpers that work for upcoming video/file attachment support.
 """
 
 import base64
+import copy
 import re
 import warnings
 from io import BytesIO
-from typing import Any
+from typing import Any, Iterable
 
 _PillowImage: Any | None
 _PIL_IMPORT_ERROR: ModuleNotFoundError | None
@@ -28,6 +25,25 @@ else:  # pragma: no cover - import side-effects don't need coverage
     _PIL_IMPORT_ERROR = None
 
 MIN_OPIK_PYTHON_VERSION = "1.9.4"
+
+# ---------------------------------------------------------------------------
+# Structured content metadata
+# ---------------------------------------------------------------------------
+
+MULTIMODAL_URL_FIELDS: dict[str, str] = {
+    "image_url": "image_url",
+    "video_url": "video_url",
+    "file_url": "file_url",
+}
+SUPPORTED_MULTIMODAL_PART_TYPES: tuple[str, ...] = tuple(MULTIMODAL_URL_FIELDS.keys())
+PLACEHOLDER_TOKENS: tuple[str, ...] = (
+    "{image",
+    "<<<image>>>",
+    "{video",
+    "<<<video>>>",
+    "{file",
+    "<<<file>>>",
+)
 
 
 def _ensure_pillow() -> Any:
@@ -82,6 +98,98 @@ def warn_if_python_sdk_outdated(min_version: str = MIN_OPIK_PYTHON_VERSION) -> N
             % (installed_version, min_version),
             stacklevel=2,
         )
+
+
+def is_multimodal_part(part: Any) -> bool:
+    """Return True if the structured content part is a supported multimodal attachment."""
+    return (
+        isinstance(part, dict)
+        and isinstance(part.get("type"), str)
+        and part["type"] in SUPPORTED_MULTIMODAL_PART_TYPES
+    )
+
+
+def contains_multimodal_placeholder(text: str) -> bool:
+    """Return True if the string contains a placeholder token for multimodal content."""
+    lowered = text.lower()
+    return any(token in lowered for token in PLACEHOLDER_TOKENS)
+
+
+def validate_structured_content_parts(content: list[dict[str, Any]]) -> None:
+    """
+    Validate OpenAI-style structured content parts.
+
+    Raises:
+        ValueError: if a part is malformed or uses an unsupported type.
+    """
+    for part in content:
+        if not isinstance(part, dict):
+            raise ValueError("Multimodal content parts must be dictionaries")
+
+        part_type = part.get("type")
+        if part_type == "text":
+            if "text" not in part:
+                raise ValueError("Text content part must include 'text' field")
+            continue
+
+        if part_type not in SUPPORTED_MULTIMODAL_PART_TYPES:
+            allowed_types = "', '".join(("text", *SUPPORTED_MULTIMODAL_PART_TYPES))
+            raise ValueError(
+                f"Unknown content part type: {part_type}. Expected one of '{allowed_types}'"
+            )
+
+        payload_key = MULTIMODAL_URL_FIELDS[part_type]
+        payload = part.get(payload_key)
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"{part_type} content part must include '{payload_key}' dict payload"
+            )
+
+        media_url = payload.get("url")
+        if not isinstance(media_url, str) or not media_url:
+            raise ValueError(
+                f"{part_type} payload must include non-empty string 'url' field"
+            )
+
+
+def replace_label_in_media_part(
+    part: dict[str, Any], label: str, replacement: str
+) -> dict[str, Any]:
+    """
+    Clone a media part and replace occurrences of a label in its URL.
+    """
+    if not is_multimodal_part(part):
+        return copy.deepcopy(part)
+
+    cloned = copy.deepcopy(part)
+    payload_key = MULTIMODAL_URL_FIELDS[cloned["type"]]
+    payload = cloned.get(payload_key, {})
+    if isinstance(payload, dict) and isinstance(payload.get("url"), str):
+        payload["url"] = payload["url"].replace(label, replacement)
+    return cloned
+
+
+def replace_label_in_multimodal_content(
+    content: list[dict[str, Any]], label: str, replacement: str
+) -> list[dict[str, Any]]:
+    """
+    Replace placeholders inside structured content (text + attachments).
+    """
+    new_parts: list[dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            new_parts.append(copy.deepcopy(part))
+            continue
+
+        part_type = part.get("type")
+        if part_type == "text":
+            text_value = str(part.get("text", ""))
+            new_parts.append({"type": "text", "text": text_value.replace(label, replacement)})
+        elif part_type in SUPPORTED_MULTIMODAL_PART_TYPES:
+            new_parts.append(replace_label_in_media_part(part, label, replacement))
+        else:
+            new_parts.append(copy.deepcopy(part))
+    return new_parts
 
 
 def encode_pil_to_base64_uri(image: Any, format: str = "PNG", quality: int = 85) -> str:
@@ -329,53 +437,6 @@ def validate_image_size(
     return True, None
 
 
-def estimate_image_tokens(image: Any, model: str = "gpt-4o-mini") -> int:
-    """
-    Estimate token count for an image based on model.
-
-    Different vision models have different token costs per image.
-
-    Args:
-        image: PIL Image
-        model: Vision model name
-
-    Returns:
-        Estimated token count
-
-    Note:
-        This is an approximation. Actual token usage may vary.
-
-    Example:
-        >>> img = Image.new("RGB", (512, 512))
-        >>> estimate_image_tokens(img, "gpt-4o-mini")
-        85
-    """
-    width, height = image.size
-
-    # GPT-4o/4o-mini: 85 tokens per 512x512 tile (low detail)
-    # High detail: scales with image size
-    if "gpt-4o" in model.lower():
-        # Simplified estimation
-        if width <= 512 and height <= 512:
-            return 85
-        else:
-            # High detail: ~170 tokens per 512x512 tile
-            tiles_width = (width + 511) // 512
-            tiles_height = (height + 511) // 512
-            return 85 + (170 * tiles_width * tiles_height)
-
-    # Claude: ~1600 tokens per image (approximation)
-    elif "claude" in model.lower():
-        return 1600
-
-    # Gemini: Variable, ~258 tokens baseline
-    elif "gemini" in model.lower():
-        return 258
-
-    # Default estimation
-    return 500
-
-
 __all__ = [
     "encode_pil_to_base64_uri",
     "encode_file_to_base64_uri",
@@ -385,6 +446,13 @@ __all__ = [
     "convert_to_structured_content",
     "extract_images_from_structured_content",
     "validate_image_size",
-    "estimate_image_tokens",
     "warn_if_python_sdk_outdated",
+    "MULTIMODAL_URL_FIELDS",
+    "SUPPORTED_MULTIMODAL_PART_TYPES",
+    "PLACEHOLDER_TOKENS",
+    "is_multimodal_part",
+    "contains_multimodal_placeholder",
+    "validate_structured_content_parts",
+    "replace_label_in_media_part",
+    "replace_label_in_multimodal_content",
 ]

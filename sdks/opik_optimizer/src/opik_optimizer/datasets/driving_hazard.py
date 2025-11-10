@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 import opik
-from opik_optimizer.utils.image_helpers import (
+from opik_optimizer.utils.multimodal import (
     encode_pil_to_base64_uri,
     convert_to_structured_content,
     warn_if_python_sdk_outdated,

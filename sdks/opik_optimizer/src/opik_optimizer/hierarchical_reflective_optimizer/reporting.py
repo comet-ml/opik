@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from ..optimization_config import chat_prompt
-from ..optimization_config.chat_prompt import ImagePart, MessageDict, TextPart
+from ..optimization_config.chat_prompt import MediaPart, MessageDict, TextPart
 from ..reporting_utils import (  # noqa: F401
     content_to_diff_string,
     convert_tqdm_to_rich,
@@ -29,8 +29,8 @@ class MessageDiffItem:
 
     role: str
     change_type: Literal["added", "removed", "unchanged", "changed"]
-    initial_content: str | list[TextPart | ImagePart] | None
-    optimized_content: str | list[TextPart | ImagePart] | None
+    initial_content: str | list[TextPart | MediaPart] | None
+    optimized_content: str | list[TextPart | MediaPart] | None
 
 
 def compute_message_diff_order(
@@ -54,9 +54,9 @@ def compute_message_diff_order(
 
     def group_by_role(
         messages: list[MessageDict],
-    ) -> dict[str, list[tuple[int, str | list[TextPart | ImagePart]]]]:
+    ) -> dict[str, list[tuple[int, str | list[TextPart | MediaPart]]]]:
         """Group messages by role, storing (index, content) tuples."""
-        groups: dict[str, list[tuple[int, str | list[TextPart | ImagePart]]]] = {}
+        groups: dict[str, list[tuple[int, str | list[TextPart | MediaPart]]]] = {}
         for idx, msg in enumerate(messages):
             role = msg.get("role", "message")
             content = msg.get("content", "")

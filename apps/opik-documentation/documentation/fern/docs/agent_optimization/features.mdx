@@ -1,0 +1,45 @@
+---
+title: "Optimizer Feature Matrix"
+subtitle: "At-a-glance view of what each optimizer supports"
+description: "Compare Opik Agent Optimizer algorithms across prompt formats, tool support, and advanced capabilities such as MCP tool optimization or multimodal awareness."
+---
+
+Choosing the right optimizer is easier when you can see which capabilities are covered. The table
+below highlights the primary features that customers ask about most often—prompt inputs, agent
+interfaces, tool optimization, and multimodal awareness.
+
+| Optimizer | ChatPrompt Input | OptimizableAgent Support | Function or Tool Use¹ | Prompt Optimization | Tool Signature Optimization² | MCP Tool Optimization (Beta) | Multimodal Heuristics³ |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Hierarchical Reflective** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ⚠️ Manual token caps |
+| **MetaPrompt** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Manual token caps |
+| **Evolutionary** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ Auto context budgeting |
+| **Few-shot Bayesian** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ⚠️ Manual token caps |
+| **GEPA** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ⚠️ Manual token caps |
+| **Parameter** | ✅ | ✅ | ✅ | ❌ LLM parameter search only | ❌ | ❌ | ⚠️ Manual token caps |
+
+**Legend**
+
+- ✅ — Supported out of the box
+- ⚠️ — Works, but requires manual configuration (e.g., set `max_tokens` yourself)
+- ❌ — Not supported today
+
+<Info>
+¹ Every optimizer built on `ChatPrompt` can optimize prompts that make function calls or invoke tool
+sandboxes. This is different from optimizing tool *schemas*.
+</Info>
+
+<Info>
+² Tool signature optimization (editing tool descriptions, arguments, or MCP manifests) is currently
+available only through the MetaPrompt optimizer as documented in
+[Tool Optimization (MCP & Functions)](/agent_optimization/algorithms/tool_optimization). Other
+optimizers can still optimize prompts that *use* tools.
+</Info>
+
+<Info>
+³ All optimizers can accept multimodal `ChatPrompt` content. Today the Evolutionary optimizer is the
+only one with built-in heuristics (automatic token budgeting and mutation rules) for image/video
+payloads; the rest require you to set conservative `model_parameters` manually.
+</Info>
+
+Need more detail? Jump back to the [algorithm deep dive section](/agent_optimization/overview#optimization-algorithms)
+for per-optimizer configuration guides.

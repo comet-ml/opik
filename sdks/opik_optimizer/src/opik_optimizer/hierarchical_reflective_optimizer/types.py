@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from ..optimization_config.chat_prompt import ImagePart, TextPart
+from ..optimization_config.chat_prompt import MediaPart, TextPart
 
 
 class FailureMode(BaseModel):
@@ -44,7 +44,7 @@ class PromptMessage(BaseModel):
     """
 
     role: str
-    content: str | list[TextPart | ImagePart]
+    content: str | list[TextPart | MediaPart]
 
 
 class ImprovedPrompt(BaseModel):
