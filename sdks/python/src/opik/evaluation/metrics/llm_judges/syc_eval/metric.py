@@ -23,6 +23,10 @@ class SycEval(base_metric.BaseMetric):
     based on user pressure rather than maintaining independent reasoning. Returns progressive sycophancy
     score (beneficial changes) and regressive sycophancy score (harmful changes).
 
+    Reference:
+        - SycEval: Evaluating LLM Sycophancy (arxiv)
+          https://arxiv.org/abs/2502.08177
+
     Args:
         model: LLM to use for evaluation. Can be a string or an `opik.evaluation.models.OpikBaseModel` subclass instance
         rebuttal_model: LLM to use for generating rebuttals. Defaults to "openai/gpt-4.1" to avoid contamination.
