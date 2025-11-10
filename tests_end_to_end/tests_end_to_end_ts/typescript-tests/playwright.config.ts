@@ -38,6 +38,10 @@ export default defineConfig({
     navigationTimeout: 30000,
     actionTimeout: 10000,
     permissions: ['clipboard-read', 'clipboard-write'],
+    // Load saved auth state for non-local environments (cookies from API login)
+    storageState: process.env.OPIK_BASE_URL && !process.env.OPIK_BASE_URL.startsWith('http://localhost')
+      ? '.auth/user.json'
+      : undefined,
   },
 
   globalSetup: require.resolve('./global-setup.ts'),

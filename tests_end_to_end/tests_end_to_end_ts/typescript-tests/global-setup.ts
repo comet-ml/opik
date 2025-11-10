@@ -1,10 +1,19 @@
 /**
  * Global Setup for Playwright Tests
  * Handles authentication for non-local environments
+ * 
+ * Follows the same pattern as Python tests:
+ * 1. Authenticate via REST API to get API key
+ * 2. API response sets cookies in browser context
+ * 3. Save cookies/storage state for tests to reuse
  */
 
 import { chromium, FullConfig } from '@playwright/test';
 import { getEnvironmentConfig } from './config/env.config';
+import * as path from 'path';
+import * as fs from 'fs';
+
+const authFile = path.join(__dirname, '.auth/user.json');
 
 async function globalSetup(config: FullConfig) {
   console.log('🔧 Running global setup...');
@@ -19,6 +28,12 @@ async function globalSetup(config: FullConfig) {
   if (!envConfig.isLocal()) {
     console.log('🔐 Non-local environment detected, performing authentication...');
 
+    // Ensure .auth directory exists
+    const authDir = path.dirname(authFile);
+    if (!fs.existsSync(authDir)) {
+      fs.mkdirSync(authDir, { recursive: true });
+    }
+
     const browser = await chromium.launch();
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -29,6 +44,7 @@ async function globalSetup(config: FullConfig) {
 
       console.log(`🔑 Authenticating at: ${authUrl}`);
 
+      // This API call sets cookies in the browser context automatically
       const response = await page.request.post(authUrl, {
         data: {
           email: envData.testUserEmail,
@@ -53,6 +69,10 @@ async function globalSetup(config: FullConfig) {
       process.env.OPIK_API_KEY = responseData.apiKeys[0];
 
       console.log('✅ Authentication successful, API key obtained');
+
+      // Save the authenticated state (including cookies) for tests to reuse
+      await context.storageState({ path: authFile });
+      console.log(`✅ Authentication state saved to ${authFile}`);
 
     } catch (error) {
       console.error('❌ Authentication failed:', error);
