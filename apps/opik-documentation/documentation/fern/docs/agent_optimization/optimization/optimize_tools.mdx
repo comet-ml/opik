@@ -1,0 +1,52 @@
+---
+title: "Optimize tools"
+description: "Improve prompts that invoke MCP and function tools using MetaPrompt Optimizer’s tool workflow."
+---
+
+Tool-aware prompts have extra moving parts: schemas, fallback behavior, and structured outputs. Follow this guide to optimize tool usage safely.
+
+## When to use tool optimization
+
+- Your agent calls MCP tools or OpenAI function tools and you want the optimizer to adjust instructions without breaking schemas.
+- You need to refine tool descriptions, required parameters, or invocation order.
+- You want to surface tool-specific failures (e.g., wrong schema, missing context) in the dashboard.
+
+## Configuration
+
+Tool optimization is currently powered by the MetaPrompt Optimizer. Supply MCP metadata via `MCPExecutionConfig`.
+
+```python
+from opik_optimizer import MetaPromptOptimizer
+from opik_optimizer.mcp_utils import mcp_workflow
+
+second_pass = mcp_workflow.MCPSecondPassCoordinator.from_manifest("mcp.json")
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
+
+result = optimizer.optimize_mcp(
+    prompt=prompt_with_tools,
+    dataset=dataset,
+    metric=metric,
+    tool_name="search_academic_database",
+    second_pass=second_pass,
+    n_samples=25,
+)
+```
+
+## Best practices
+
+- Keep `mcp.json` and `llms.txt` checked into your repo so both humans and agents understand available tools.
+- Provide tool-specific metrics (e.g., did the tool return citations?) to help the optimizer learn faster.
+- Start with small trial counts; tool runs often cost more tokens than standard prompts.
+
+## Debugging
+
+| Issue | Resolution |
+| --- | --- |
+| `ValueError: Prompt must include tools` | Ensure your `ChatPrompt` has a `tools` array and matching `function_map`. |
+| Tool schema mismatches | Validate the schema in your manifest and confirm parameters align with actual function signatures. |
+| Optimizer skips tool calls | Set `allow_tool_use_on_second_pass=True` if your tool needs follow-up calls during evaluation. |
+
+## Learn more
+
+- Full reference: [Tool optimization guide](/agent_optimization/algorithms/tool_optimization)
+- Advanced flows: [Optimize MCP](/agent_optimization/optimization/optimize_mcp)

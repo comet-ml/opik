@@ -1,0 +1,50 @@
+---
+title: "Optimize MCP workflows"
+description: "Use MetaPrompt Optimizer with MCP manifests, llms.txt files, and tool chains."
+---
+
+Model Context Protocol (MCP) lets you describe tools in manifests so multiple agents can share them. Opik consumes those manifests and optimizes the prompts that call into them.
+
+## Checklist
+
+- `mcp.json` manifest located in your repo and committed.
+- `llms.txt` describing the agent, tools, and entrypoints (helpful for agents and automation).
+- Tool implementations instrumented with `@track(type="tool")` so traces capture I/O.
+
+## Run the optimizer
+
+```python
+from opik_optimizer import MetaPromptOptimizer
+from opik_optimizer.mcp_utils.mcp_workflow import MCPSecondPassCoordinator
+
+coordinator = MCPSecondPassCoordinator.from_manifest("mcp.json")
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
+
+result = optimizer.optimize_mcp(
+    prompt=prompt,
+    dataset=dataset,
+    metric=metric,
+    tool_name="search_academic_database",
+    second_pass=coordinator,
+    allow_tool_use_on_second_pass=True,
+)
+```
+
+## Tips
+
+- Store secrets via environment variables referenced in `mcp.json`; never hard-code them into prompts.
+- Use dataset metadata to indicate which tool combinations should run on each row.
+- Track tool performance separately so you can tell whether regressions stem from prompts or external systems.
+
+## Troubleshooting
+
+| Error | Resolution |
+| --- | --- |
+| `Tool 'X' not present in prompt tools` | Ensure the `tool_name` matches the `ChatPrompt.tools` entry exactly. |
+| `Cannot deserialize MCP manifest` | Validate the JSON schema; comments are not allowed. |
+| Optimizer skips MCP second pass | Reduce `max_trials` or set `allow_tool_use_on_second_pass=True` so follow-up calls can execute. |
+
+## Related docs
+
+- [Optimize tools](/agent_optimization/optimization/optimize_tools)
+- [Tool optimization reference](/agent_optimization/algorithms/tool_optimization)

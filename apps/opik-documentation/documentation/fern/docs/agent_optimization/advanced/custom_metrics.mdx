@@ -1,0 +1,49 @@
+---
+title: "Custom metrics"
+description: "Build specialized metrics, integrate external models, and reuse them across optimizations."
+---
+
+Use custom metrics when built-in metrics are not enough (domain-specific scoring, safety validators, multimodal checks).
+
+## Design principles
+
+- **Deterministic** – cache external model calls or set temperature to 0 so repeated runs match.
+- **Explainable** – always set `reason` on `ScoreResult` for better dashboards.
+- **Composable** – wrap helpers into utility modules so multiple optimizers share them.
+
+## Example: safety + completeness metric
+
+```python
+from opik.evaluation.metrics import AnswerRelevance
+from opik.evaluation.metrics.score_result import ScoreResult
+from some_safety_model import classify_risk
+
+safety_model = classify_risk.Client()
+
+def safety_and_completeness(item, output):
+    relevance = AnswerRelevance().score(
+        context=[item["answer"]], output=output, input=item["question"]
+    )
+    safety = safety_model.score(text=output)
+
+    value = 1.0 if relevance.value > 0.75 and safety["label"] == "safe" else 0.0
+    reason = f"Relevant={relevance.value:.2f}, safety={safety['label']}"
+
+    return ScoreResult(name="safety_completeness", value=value, reason=reason)
+```
+
+## Share metrics across repos
+
+- Publish metrics in a shared Python package or internal repo.
+- Version metric modules so teams know when logic changes.
+- Document required environment variables (API keys) in `README` files and `.env.example` templates.
+
+## Testing
+
+- Write pytest cases that feed canned dataset items into the metric and assert expected scores.
+- Run metrics against a golden dataset on CI to catch regressions.
+
+## Related docs
+
+- [Define metrics](/agent_optimization/optimization/define_metrics)
+- [Multi-metric optimization](/agent_optimization/best_practices/multi_metric_optimization)

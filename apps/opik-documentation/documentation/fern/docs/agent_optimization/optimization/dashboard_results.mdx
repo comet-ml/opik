@@ -1,0 +1,51 @@
+---
+title: "Dashboard results"
+description: "Analyze optimization trials, failure modes, and improvements inside Opik."
+---
+
+After each optimization run, visit the Opik dashboard to understand what changed and decide whether to ship the new prompt.
+
+## Navigate to your run
+
+1. Open [https://www.comet.com/opik](https://www.comet.com/opik).
+2. Select the **Agent Optimization** workspace or the project you set on your `ChatPrompt`.
+3. Click the latest optimization run to open the detail view.
+
+## Key panels
+
+<AccordionGroup>
+  <Accordion title="Trial table">
+    Shows each candidate prompt, its score, metric breakdowns, and token usage. Sort by improvement to spot the best candidate quickly.
+  </Accordion>
+  <Accordion title="Failure modes">
+    Hierarchical Reflective runs group similar failures. Expand a failure mode to read metric reasons and representative traces.
+  </Accordion>
+  <Accordion title="Dataset coverage">
+    Confirms how many dataset rows were sampled per trial so you can judge statistical significance.
+  </Accordion>
+  <Accordion title="Trace explorer">
+    Dive into individual runs, inspect tool calls, and compare outputs side-by-side.
+  </Accordion>
+</AccordionGroup>
+
+## Export results
+
+Use the **Download** button in the run header to export:
+- Optimized prompt JSON
+- Trial history CSV
+- Metric breakdowns (per sample)
+
+You can also programmatically access the results:
+
+```python
+from opik_optimizer import optimization_result
+
+optimized_prompt = result.prompt
+history = result.history
+```
+
+## Next steps
+
+- Feed the exported prompt back into your application.
+- Attach dashboards or screenshots to your PR so reviewers understand the improvement.
+- Archive notable runs using Opik’s pin feature for future reference.

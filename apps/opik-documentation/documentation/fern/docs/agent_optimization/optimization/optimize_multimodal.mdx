@@ -1,0 +1,52 @@
+---
+title: "Optimize multimodal prompts"
+description: "Run optimizations for prompts that combine text, images, and other modalities."
+---
+
+Multimodal agents often juggle text instructions, image references, and structured outputs. Follow these practices to keep optimizations reliable.
+
+## Dataset design
+
+- Store image or audio references as signed URLs in your dataset items (`metadata["image_url"]`).
+- Include textual descriptions alongside assets so metrics can run without downloading large files when possible.
+- Tag rows with modality info (`metadata["modality"] = "image+text"`) to filter during analysis.
+
+## Prompt structure
+
+```python
+from opik_optimizer import ChatPrompt
+
+prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "Analyze the provided image and answer the question."},
+        {"role": "user", "content": "<image>{image_url}</image>\nQuestion: {question}"},
+    ],
+    model="openai/gpt-4o-mini"
+)
+```
+
+- Keep placeholders explicit (`{image_url}`) so optimizers can substitute dataset values.
+- Describe the expected output schema (JSON, markdown table, etc.) to reduce ambiguity.
+
+## Metrics
+
+- Reuse existing text metrics when possible by comparing textual descriptions.
+- For vision-specific scoring, call external models from your metric function, but cache results to control cost.
+- Record reasons that mention the modality: “Image not described” or “Chart incorrectly transcribed”.
+
+## Running optimizations
+
+- Start with MetaPrompt for wording improvements.
+- Use Hierarchical Reflective to catch recurring multimodal failures (e.g., missing chart descriptions).
+- Monitor token usage because multimodal prompts can exceed context limits faster.
+
+## Validation
+
+- Spot-check generated outputs with the associated media in the dashboard.
+- Confirm that dataset asset URLs remain valid for the duration of the optimization.
+- When sharing results, include thumbnails or sample outputs so reviewers understand the changes.
+
+## Related guides
+
+- [Define datasets](/agent_optimization/optimization/define_datasets)
+- [Define metrics](/agent_optimization/optimization/define_metrics)

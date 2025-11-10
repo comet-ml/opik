@@ -1,0 +1,55 @@
+---
+title: "Optimize LangGraph agents"
+description: "Trace LangGraph workflows, build datasets, and optimize their prompts."
+---
+
+## Overview
+
+LangGraph applications often combine tool calls, branching logic, and persistence. Use Opik to trace those runs, turn them into datasets, and then feed them into the Agent Optimizer.
+
+## Instrument LangGraph
+
+```python
+from langgraph.graph import StateGraph
+from opik import track
+from opik.tracing import OpikTracer
+
+# define your graph
+workflow = StateGraph(...)
+app = workflow.compile()
+
+with OpikTracer(project_name="agent-optimizer-langgraph"):
+    result = app.invoke({"messages": [
+        {"role": "user", "content": "Summarize Opik in two sentences"}
+    ]})
+```
+
+- Every node run becomes a span in Opik, letting you inspect intermediate tool calls.
+- Add `@track(type="tool")` to custom functions for richer traces.
+
+## Build datasets from traces
+
+1. Filter traces by tag (scenario, dataset split) in the dashboard.
+2. Export the inputs/outputs as JSON via the “Create dataset from traces” action.
+3. Use that dataset in the optimizer run to mirror real LangGraph behavior.
+
+## Optimize prompts
+
+- Extract the agent’s system instructions as a `ChatPrompt`.
+- If your LangGraph uses tool calls, pair with [Optimize tools](/agent_optimization/optimization/optimize_tools).
+- Run a MetaPrompt or Hierarchical Reflective optimization depending on whether you need wording tweaks or failure diagnostics.
+
+## Deploy back to LangGraph
+
+```python
+optimized_prompt = result.prompt
+workflow.update_node("assistant", system_prompt=optimized_prompt.messages[0]["content"])
+```
+
+- Version prompts in git so you can roll back if a change regresses.
+- Re-run your LangGraph smoke tests before promoting to production.
+
+## Resources
+
+- [LangGraph integration guide](/integrations/langgraph)
+- [Dataset design](/agent_optimization/optimization/define_datasets)

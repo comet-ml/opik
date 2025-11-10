@@ -1,0 +1,29 @@
+---
+title: "Optimization algorithms overview"
+description: "Compare Agent Optimizer algorithms and pick the right one for your workload."
+---
+
+Use this page to quickly decide which optimizer to run before diving into the detailed guides.
+
+## Selection matrix
+
+| Optimizer | Best for | Key inputs | Notes |
+| --- | --- | --- | --- |
+| [MetaPrompt](/agent_optimization/algorithms/metaprompt_optimizer) | General prompt refinement | Prompt + dataset + metric | LLM critiques and rewrites prompts, supports MCP workflows. |
+| [Hierarchical Reflective](/agent_optimization/algorithms/hierarchical_reflective_optimizer) | Root-cause analysis | Requires metrics with rich reasons | Batches failures, proposes targeted fixes. |
+| [Few-Shot Bayesian](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Optimizing few-shot examples | Dataset with demonstrations | Finds best example subset and ordering. |
+| [Evolutionary](/agent_optimization/algorithms/evolutionary_optimizer) | Exploring diverse prompts | Tweak mutation/crossover params | Multi-objective optimization (score vs. length). |
+| [GEPA](/agent_optimization/algorithms/gepa_optimizer) | Single-turn, reflection-heavy tasks | `gepa` dependency + reflection minibatches | Wraps the GEPA academic algorithm with Opik datasets. |
+| [Parameter](/agent_optimization/algorithms/parameter_optimizer) | Temperature / top_p tuning | Prompt + parameter search space | Leaves prompt untouched, focuses on sampling params. |
+
+## How to choose
+
+1. **Identify the constraint** (e.g., wording vs. tool usage vs. parameters).
+2. **Check dataset readiness** – reflective optimizers need detailed metric reasons.
+3. **Estimate budget** – evolutionary/GEPA runs consume more tokens than MetaPrompt.
+4. **Plan follow-up** – you can chain optimizers (MetaPrompt → Parameter) when needed.
+
+## Next steps
+
+- Follow the individual optimizer guides for configuration details.
+- Learn how to [chain optimizers](/agent_optimization/advanced/chaining_optimizers) for complex workflows.

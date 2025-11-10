@@ -1,0 +1,64 @@
+---
+title: "Define datasets"
+description: "Design, version, and validate datasets used for optimization runs."
+---
+
+The optimizer evaluates candidate prompts against datasets stored in Opik. This guide walks through creating datasets, importing rows, and keeping them stable so optimization results remain trustworthy.
+
+## When to use this guide
+
+Use it before running any optimizer when:
+- You need a reusable dataset shared across experiments.
+- You want to mix programmatic inserts with file uploads.
+- You plan to log metadata (context passages, tool outputs) for deeper analysis.
+
+## Dataset schema
+
+Every item is a JSON object. Required keys depend on your prompt template; optional keys help with analysis.
+
+| Field | Purpose |
+| --- | --- |
+| `inputs` (e.g., `question`, `context`) | Values substituted into your `ChatPrompt` placeholders. |
+| `answer` / `label` | Ground truth used by metrics. |
+| `metadata` | Arbitrary dict for tagging scenario, split, or difficulty. |
+
+## Create or load datasets
+
+<Steps>
+  <Step title="Create via SDK">
+    ```python
+    import opik
+
+    client = opik.Opik()
+    dataset = client.get_or_create_dataset(name="agent-opt-support")
+    dataset.upsert([
+        {"question": "Summarize Opik.", "answer": "Opik is an LLM observability platform."},
+        {"question": "List two optimizer types.", "answer": "MetaPrompt and Hierarchical Reflective."},
+    ])
+    ```
+  </Step>
+  <Step title="Upload from file">
+    - Prepare a CSV or Parquet file with column headers that match your prompt variables.
+    - Run `opik dataset upload agent-opt-support file.csv`.
+    - Verify in the UI that rows include `metadata` if you plan to filter by scenario.
+  </Step>
+  <Step title="Tag splits">
+    Use dataset tags (`dataset.add_tags(["train", "eval"])`) to separate baseline tuning from validation trials.
+  </Step>
+</Steps>
+
+## Best practices
+
+- **Keep datasets immutable** during an optimization run; create a new dataset version if you need to add rows.
+- **Log context** fields if you run RAG-style prompts so failure analyses can surface missing passages.
+- **Document ownership** using dataset descriptions so teams know who curates each collection.
+
+## Validation checklist
+
+- Run `dataset.count()` before and after uploads to confirm row totals.
+- Spot-check rows in the dashboard’s Dataset viewer.
+- If rows include tools or attachments, confirm they appear in the trace tree once you run an optimization.
+
+## Next steps
+
+Define how you will score results with [Define metrics](/agent_optimization/optimization/define_metrics), then follow [Optimize prompts](/agent_optimization/optimization/optimize_prompts) to launch experiments.

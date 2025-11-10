@@ -1,0 +1,15 @@
+---
+title: "Optimize OpenAI Agents"
+description: "Guidance for optimizing OpenAI Agents (coming soon)."
+---
+
+We are actively validating the Agent Optimizer with OpenAI’s Agents API. The workflow will mirror LangGraph/ADK guides:
+
+1. **Trace** agent runs through the OpenAI logging hooks or by proxying API calls via Opik’s tracing client.
+2. **Export** representative datasets (inputs, expected outputs, tool payloads) into Opik datasets.
+3. **Optimize** the agent’s system prompt, instructions, or tool policies using MetaPrompt or Hierarchical Reflective.
+4. **Deploy** the updated prompt back to OpenAI Agents and monitor the impact in Opik.
+
+<Info>
+  Want to participate in the preview? Reach out in [chat.comet.com](https://chat.comet.com) or vote on the roadmap so we can share sample repos and SDK helpers.
+</Info>

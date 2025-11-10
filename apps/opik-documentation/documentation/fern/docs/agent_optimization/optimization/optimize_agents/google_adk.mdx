@@ -1,0 +1,41 @@
+---
+title: "Optimize Google ADK agents"
+description: "Log Google AI Agent Builder runs to Opik and optimize their prompts."
+---
+
+Google’s Agent Developer Kit (ADK) exposes agent flows via REST and event hooks. Combine those hooks with Opik tracing to capture data for optimization.
+
+## Connect ADK to Opik
+
+1. Configure ADK to send execution webhooks to a lightweight service.
+2. In that service, call `opik.traces.log_trace(...)` to capture the conversation turns, tool calls, and metadata.
+3. Tag traces with the ADK agent version so you can compare runs over time.
+
+```python
+from opik import trace
+
+@trace(name="google-adk-run", metadata={"agent": "support-bot"})
+def handle_adk_webhook(payload):
+    # Map ADK fields into Opik spans
+    ...
+```
+
+## Build datasets
+
+- Export logged ADK runs as CSV/JSON and import them via `opik dataset upload`.
+- Include ADK-specific context (e.g., app locale, user intent) under `metadata` so optimizations respect those constraints.
+
+## Optimize
+
+- Start with MetaPrompt to refine the agent’s instruction prompt.
+- Switch to Hierarchical Reflective if you need root-cause reports for failed ADK sessions.
+- Use `ParameterOptimizer` when you want to tune sampling parameters enforced by ADK policies.
+
+## Deploy updates
+
+- Replace the ADK prompt definition with the optimized prompt.
+- Re-run ADK evaluation suites, then monitor traces in Opik to confirm real users see the improvements.
+
+<Info>
+  A full ADK reference implementation is on the roadmap. Watch the [changelog](/agent_optimization/getting_started/changelog) for sample apps.
+</Info>
