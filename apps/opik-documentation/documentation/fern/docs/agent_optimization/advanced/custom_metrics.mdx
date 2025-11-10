@@ -11,7 +11,7 @@ Use custom metrics when built-in metrics are not enough (domain-specific scoring
 
 ## Design principles
 
-- **Deterministic** – cache external model calls, set temperature to 0 and a seed value (in supported models) so repeated runs match.
+- **Deterministic** – cache external model calls. Where supported by the model, set temperature to 0 and a seed value to increase the likelihood of repeated runs matching. Note that not all models guarantee deterministic outputs even with these settings.
 - **Explainable** – always set `reason` on `ScoreResult` for better dashboards.
 - **Composable** – wrap helpers into utility modules so multiple optimizers share them.
 - **Layered** – start with single metrics, then combine them via `MultiMetricObjective` when you need trade-offs.
