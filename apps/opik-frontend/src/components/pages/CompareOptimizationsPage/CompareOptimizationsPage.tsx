@@ -208,11 +208,12 @@ const CompareOptimizationsPage: React.FC = () => {
     [experiments, search],
   );
 
-  const { scoreMap, bestExperiment } = useMemo(() => {
+  const { scoreMap, bestExperiment, baselineExperiment } = useMemo(() => {
     const retVal: {
       scoreMap: Record<string, { score: number; percentage?: number }>;
       baseScore: number;
       bestExperiment?: Experiment;
+      baselineExperiment?: Experiment;
     } = {
       scoreMap: {},
       baseScore: 0,
@@ -222,6 +223,8 @@ const CompareOptimizationsPage: React.FC = () => {
     const sortedRows = experiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
+
+    retVal.baselineExperiment = sortedRows[0];
 
     if (
       !optimization?.objective_name ||
@@ -397,19 +400,6 @@ const CompareOptimizationsPage: React.FC = () => {
 
   return (
     <>
-      <style>{`
-        .compare-optimizations-table thead[data-sticky-vertical] {
-          top: 0 !important;
-        }
-
-        .compare-optimizations-table thead:before {
-          height: 0px !important;
-        }
-
-        .compare-optimizations-table table {
-          border-bottom: 1px solid hsl(var(--border)) !important;
-        }
-      `}</style>
       <PageBodyScrollContainer>
         <PageBodyStickyContainer
           className="pb-4 pt-6"
@@ -510,7 +500,7 @@ const CompareOptimizationsPage: React.FC = () => {
                 experiment={bestExperiment}
                 optimization={optimization}
                 scoreMap={scoreMap}
-                experiments={experiments}
+                baselineExperiment={baselineExperiment}
               ></BestPrompt>
             ) : null}
           </div>

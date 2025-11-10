@@ -586,6 +586,20 @@
   }
 }
 
+.compare-optimizations-table {
+  thead[data-sticky-vertical] {
+    top: 0 !important;
+  }
+
+  thead:before {
+    height: 0 !important;
+  }
+
+  table {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+  }
+}
+
 .comet-table {
   /* resets padding for all nested cells wrappers */
   td [data-cell-wrapper="true"] [data-cell-wrapper="true"],
