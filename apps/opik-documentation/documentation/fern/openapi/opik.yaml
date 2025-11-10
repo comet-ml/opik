@@ -10693,9 +10693,11 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "template structure: 'string' (default) or 'chat'. This field\
-            \ is internal and maintained for backward compatibility. Use Prompt.templateStructure\
-            \ instead."
+          description: "Template structure: 'string' or 'chat'. Inherited from parent\
+            \ prompt."
+          enum:
+          - string
+          - chat
         change_description:
           type: string
         variables:
@@ -10786,9 +10788,11 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "template structure: 'string' (default) or 'chat'. This field\
-            \ is internal and maintained for backward compatibility. Use Prompt.templateStructure\
-            \ instead."
+          description: "Template structure: 'string' or 'chat'. Inherited from parent\
+            \ prompt."
+          enum:
+          - string
+          - chat
         change_description:
           type: string
         variables:
@@ -10826,6 +10830,11 @@ components:
           type: string
         version:
           $ref: "#/components/schemas/PromptVersion_Detail"
+        template_structure:
+          type: string
+          enum:
+          - string
+          - chat
     Prompt_Detail:
       required:
       - name
@@ -10921,6 +10930,13 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure: 'string' or 'chat'. Inherited from parent\
+            \ prompt."
+          enum:
+          - string
+          - chat
         change_description:
           type: string
         created_at:

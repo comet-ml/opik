@@ -10,6 +10,7 @@ from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from .raw_client import AsyncRawPromptsClient, RawPromptsClient
+from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
 from .types.prompt_version_retrieve_detail_template_structure import PromptVersionRetrieveDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
@@ -143,7 +144,12 @@ class PromptsClient:
         return _response.data
 
     def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Create prompt version
@@ -153,6 +159,8 @@ class PromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -169,7 +177,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.create_prompt_version(name='name', version=PromptVersionDetail(template='template', ), )
         """
-        _response = self._raw_client.create_prompt_version(name=name, version=version, request_options=request_options)
+        _response = self._raw_client.create_prompt_version(
+            name=name, version=version, template_structure=template_structure, request_options=request_options
+        )
         return _response.data
 
     def get_prompt_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> PromptDetail:
@@ -549,7 +559,12 @@ class AsyncPromptsClient:
         return _response.data
 
     async def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Create prompt version
@@ -559,6 +574,8 @@ class AsyncPromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -579,7 +596,7 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_prompt_version(
-            name=name, version=version, request_options=request_options
+            name=name, version=version, template_structure=template_structure, request_options=request_options
         )
         return _response.data
 

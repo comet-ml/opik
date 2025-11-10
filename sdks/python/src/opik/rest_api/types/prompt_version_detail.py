@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node_detail import JsonNodeDetail
+from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
 
 
@@ -24,9 +25,9 @@ class PromptVersionDetail(UniversalBaseModel):
     template: str
     metadata: typing.Optional[JsonNodeDetail] = None
     type: typing.Optional[PromptVersionDetailType] = None
-    template_structure: typing.Optional[str] = pydantic.Field(default=None)
+    template_structure: typing.Optional[PromptVersionDetailTemplateStructure] = pydantic.Field(default=None)
     """
-    template structure: 'string' (default) or 'chat'. This field is internal and maintained for backward compatibility. Use Prompt.templateStructure instead.
+    Template structure: 'string' or 'chat'. Inherited from parent prompt.
     """
 
     change_description: typing.Optional[str] = None

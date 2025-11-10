@@ -94,12 +94,12 @@ class PromptClient:
             template=prompt,
             metadata=metadata,
             type=type,
-            template_structure=template_structure,
         )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=new_prompt_version_detail_data,
+                template_structure=template_structure,
             )
         )
         return new_prompt_version_detail

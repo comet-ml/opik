@@ -19,6 +19,7 @@ from ..types.prompt_detail import PromptDetail
 from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
+from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
 from .types.prompt_version_retrieve_detail_template_structure import PromptVersionRetrieveDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
@@ -198,7 +199,12 @@ class RawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[PromptVersionDetail]:
         """
         Create prompt version
@@ -208,6 +214,8 @@ class RawPromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -225,6 +233,7 @@ class RawPromptsClient:
                 "version": convert_and_respect_annotation_metadata(
                     object_=version, annotation=PromptVersionDetail, direction="write"
                 ),
+                "template_structure": template_structure,
             },
             headers={
                 "content-type": "application/json",
@@ -912,7 +921,12 @@ class AsyncRawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[PromptVersionDetail]:
         """
         Create prompt version
@@ -922,6 +936,8 @@ class AsyncRawPromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -939,6 +955,7 @@ class AsyncRawPromptsClient:
                 "version": convert_and_respect_annotation_metadata(
                     object_=version, annotation=PromptVersionDetail, direction="write"
                 ),
+                "template_structure": template_structure,
             },
             headers={
                 "content-type": "application/json",

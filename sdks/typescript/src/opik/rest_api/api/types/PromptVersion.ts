@@ -13,8 +13,8 @@ export interface PromptVersion {
     template: string;
     metadata?: OpikApi.JsonNode;
     type?: OpikApi.PromptVersionType;
-    /** template structure: 'string' (default) or 'chat'. This field is internal and maintained for backward compatibility. Use Prompt.templateStructure instead. */
-    templateStructure?: string;
+    /** Template structure: 'string' or 'chat'. Inherited from parent prompt. */
+    templateStructure?: OpikApi.PromptVersionTemplateStructure;
     changeDescription?: string;
     variables?: string[];
     createdAt?: Date;
