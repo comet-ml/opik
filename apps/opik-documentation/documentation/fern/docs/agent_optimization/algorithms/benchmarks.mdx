@@ -1,0 +1,61 @@
+---
+title: "Optimizer benchmarks"
+description: "Compare algorithm performance across common datasets and learn how to run the benchmark suite locally."
+---
+
+We regularly evaluate every optimizer against shared datasets so you can make informed trade-offs. This page summarizes the latest results and explains how to reproduce them with the public benchmark scripts.
+
+## Datasets & metrics
+
+Each run uses Opik datasets backed by open-source corpuses commonly used in academia:
+
+| Dataset | Description | Primary metrics |
+| --- | --- | --- |
+| Arc ([ai2_arc](https://huggingface.co/datasets/allenai/ai2_arc)) | Multiple-choice science questions. | LevenshteinRatio, accuracy. |
+| GSM8K ([gsm8k](https://huggingface.co/datasets/openai/gsm8k)) | Grade-school math word problems. | Exact match, custom math verifier. |
+| MedHallu ([medhallu](https://huggingface.co/datasets/UTAustin-AIHealth/MedHallu)) | Medical Q&A with hallucination checks. | Hallucination, AnswerRelevance. |
+| RagBench ([ragbench](https://huggingface.co/datasets/wandb/ragbench-sentence-relevance-balanced/discussions)) | Retrieval-oriented questions. | AnswerRelevance, contextual grounding. |
+
+Results shown below use `gpt-4o-mini` for evaluation. Scores will change if you select different models, metrics, or prompt seeds.
+
+## Latest results
+
+| Rank | Algorithm/Optimizer         | Avg. Score | Arc    | GSM8K  | RagBench |
+|------|-----------------------------|------------|--------|--------|----------|
+| 1    | Hierarchical Reflective      | **67.83%** | 92.70% | 28.00% | 82.80%   |
+| 2    | Few-Shot Bayesian           | 59.17%     | 28.09% | 59.26% | 90.15%   |
+| 3    | Evolutionary                | 52.51%     | 40.00% | 25.53% | 92.00%   |
+| 4    | MetaPrompt                  | 38.75%     | 25.00% | 26.93% | 64.31%   |
+| 5    | GEPA                        | 32.27%     | 6.55%  | 26.08% | 64.17%   |
+| 6    | Baseline (no optimization)  | 11.85%     | 1.69%  | 24.06% | 9.81%    |
+
+<Info>
+  These are directional numbers. Some optimizers use more LLM/tool calls per trial than others (e.g., Hierarchical Reflective batches multiple analyses), so cost and runtime are not apples-to-apples even when the trial budget matches. Re-run the suite with your own datasets, models, and cost constraints before committing to a single optimizer.
+</Info>
+
+## Run benchmarks locally
+
+1. Install dependencies (ideally in a virtualenv):
+   ```bash
+   pip install -r sdks/opik_optimizer/benchmarks/requirements.txt
+   ```
+2. Configure provider keys (e.g., `OPENAI_API_KEY`).
+3. Execute the runner:
+   ```bash
+   python sdks/opik_optimizer/benchmarks/run_benchmark.py \
+     --model openai/gpt-4o-mini \
+     --output results.json
+   ```
+4. Inspect the JSON or load it into a notebook to compare against the published table.
+
+The script spins up datasets defined in `sdks/opik_optimizer/benchmarks/config.py`, runs each optimizer with consistent trial budgets, and logs runs to Opik so you can review traces.
+
+<Tip>
+  Looking for production-style examples beyond synthetic benchmarks? Check out the [agent optimizations demos](https://github.com/comet-ml/agent-optimizations-demos) repo. It contains end-to-end scenarios (LangGraph, RAG, support bots) and shows how different optimizers behave in real workloads.
+</Tip>
+
+## Next steps
+
+- Learn how each optimizer works in the [Algorithms overview](/agent_optimization/algorithms/overview).
+- Customize the benchmark configs (datasets, metrics, budgets) to mirror your production workload.
+- Share results or contribute improvements via [GitHub](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/benchmarks).

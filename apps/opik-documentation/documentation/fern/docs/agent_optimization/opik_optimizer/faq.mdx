@@ -192,6 +192,32 @@ description: "Find answers to common questions about Opik Agent Optimizer, inclu
   </Accordion>
 </AccordionGroup>
 
+## Open challenges & advanced topics
+
+<AccordionGroup>
+  <Accordion title="Why do some optimized prompts look like gibberish?">
+    Research has shown “evil twin” prompts and unusual delimiters can perform well despite being hard to interpret. Optimizers explore the search space indiscriminately, so high-performing instructions aren’t always human-readable. When interpretability matters, prefer algorithms like Hierarchical Reflective that include reasoning traces or enforce structure via custom metrics.
+  </Accordion>
+  <Accordion title="How expensive are optimizers in terms of API calls?">
+    Cost varies widely. Reflection-heavy optimizers (e.g., Hierarchical Reflective, GEPA) may call LLMs multiple times per trial, while MetaPrompt/Few-Shot Bayesian are lighter weight. Start with small `n_samples` and `max_trials`, monitor API usage, and review the [Benchmarks](/agent_optimization/algorithms/benchmarks) page for sample-efficiency notes.
+  </Accordion>
+  <Accordion title="Do optimized prompts generalize across tasks?">
+    Optimizers tune prompts for the dataset you provide. Prompts may overfit if the dataset lacks coverage. Use diverse datasets, consider chaining optimizers (e.g., Evolutionary → Few-Shot Bayesian) to encourage generalization, and re-evaluate on unseen samples before shipping.
+  </Accordion>
+  <Accordion title="Can I optimize for more than one objective (accuracy, cost, safety, etc.)?">
+    Yes—compose metrics using `MultiMetricObjective` or custom heuristics so optimizers weigh multiple goals. For complex trade-offs, capture human preferences in the metric reasons, or explore Pareto-aware optimizers like GEPA that surface trade-offs between accuracy and cost.
+  </Accordion>
+  <Accordion title="What about multimodal or agent workflows?">
+    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents/overview) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
+  </Accordion>
+  <Accordion title="How reliable are optimizer metrics?">
+    LLM-based metrics can be noisy. Always include deterministic checks when possible, and ensure your `ScoreResult.reason` is informative so reflective optimizers can identify true failure modes. See [Define metrics](/agent_optimization/optimization/define_metrics) and [Custom metrics](/agent_optimization/advanced/custom_metrics) for best practices.
+  </Accordion>
+  <Accordion title="Are there safety or ethical considerations?">
+    Yes. When optimizing prompts that handle sensitive content, bake alignment constraints into your dataset/metrics (e.g., moderation scores) and review outputs manually before deployment. Multi-objective setups help enforce safety alongside accuracy.
+  </Accordion>
+</AccordionGroup>
+
 ## Next Steps
 
 - Explore [API Reference](/agent_optimization/api-reference) for detailed technical documentation.

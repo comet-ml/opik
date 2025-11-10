@@ -1,0 +1,71 @@
+---
+title: "Optimize prompts"
+description: "Pick the right optimizer, run experiments, and ship better prompts."
+---
+
+Use this playbook whenever you need to improve a prompt (single-turn or agentic) and want a repeatable process rather than manual tweaks.
+
+## 1. Establish baselines
+
+- Record the current prompt and score using your production metric.
+- Log at least 10 representative dataset rows so the optimizer can generalize.
+- Capture latency and token costs—optimizations should not regress them unexpectedly.
+
+## 2. Choose an optimizer
+
+| Scenario | Recommended optimizer |
+| --- | --- |
+| General prompt copy edits | [MetaPrompt](/agent_optimization/algorithms/metaprompt_optimizer) |
+| Complex failure analysis | [Hierarchical Reflective](/agent_optimization/algorithms/hierarchical_reflective_optimizer) |
+| Need diverse candidates | [Evolutionary](/agent_optimization/algorithms/evolutionary_optimizer) |
+| Few-shot heavy prompts | [Few-Shot Bayesian](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
+| Tune sampling params | [Parameter optimizer](/agent_optimization/algorithms/parameter_optimizer) |
+
+## 3. Configure the run
+
+```python
+from opik_optimizer import HierarchicalReflectiveOptimizer
+
+optimizer = HierarchicalReflectiveOptimizer(
+    model="openai/gpt-4o",
+    max_parallel_batches=4,
+    seed=42,
+)
+result = optimizer.optimize_prompt(
+    prompt=my_prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+    max_trials=5,
+    n_samples=50,
+)
+```
+
+- Set `project_name` on the `ChatPrompt` to group runs by team or initiative.
+- Start with `max_trials` = 3–5. Increase once you confirm the metric is reliable.
+- Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
+
+## 4. Evaluate outcomes
+
+- Compare `result.score` vs. `result.initial_score` to ensure material improvement.
+- Review the `history` attribute for regression reasons.
+- Use [Dashboard results](/agent_optimization/optimization/dashboard_results) to visualize per-trial performance.
+
+## 5. Ship safely
+
+<Steps>
+  <Step title="Export the prompt">
+    `result.prompt` returns the best-performing `ChatPrompt`. Serialize it as JSON and check it into your repo.
+  </Step>
+  <Step title="Automate regression tests">
+    Wire the optimizer run into CI with a smaller dataset so future prompt edits have guardrails.
+  </Step>
+  <Step title="Monitor in production">
+    Trace the new prompt with Opik tracing to confirm real-world performance matches experiment results.
+  </Step>
+</Steps>
+
+## Related guides
+
+- [Define datasets](/agent_optimization/optimization/define_datasets)
+- [Define metrics](/agent_optimization/optimization/define_metrics)
+- [Chaining optimizers](/agent_optimization/advanced/chaining_optimizers)
