@@ -38,7 +38,6 @@ export enum LLM_JUDGE {
   moderation = "moderation",
   answer_relevance = "answer_relevance",
   context_precision = "context_precision",
-  syceval = "syceval",
   structure_compliance = "structure_compliance",
   conversational_coherence = "conversational_coherence",
   session_completeness = "session_completeness",
