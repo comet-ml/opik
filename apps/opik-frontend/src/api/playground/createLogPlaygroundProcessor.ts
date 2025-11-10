@@ -20,9 +20,9 @@ import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
+  COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
@@ -33,7 +33,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   datasetItemId?: string;
   datasetName: string | null;
   model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
