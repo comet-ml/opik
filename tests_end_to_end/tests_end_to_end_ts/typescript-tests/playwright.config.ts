@@ -38,7 +38,6 @@ export default defineConfig({
     navigationTimeout: 30000,
     actionTimeout: 10000,
     permissions: ['clipboard-read', 'clipboard-write'],
-    // Load saved auth state for non-local environments (cookies from API login)
     storageState: process.env.OPIK_BASE_URL && !process.env.OPIK_BASE_URL.startsWith('http://localhost')
       ? '.auth/user.json'
       : undefined,
@@ -54,9 +53,16 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
-      OPIK_URL_OVERRIDE: process.env.OPIK_URL_OVERRIDE || 'http://localhost:5173/api',
-      OPIK_WORKSPACE: process.env.OPIK_WORKSPACE || 'default',
-      OPIK_API_KEY: process.env.OPIK_API_KEY || '',
+      // Pass environment variables to Flask service
+      // Flask service will authenticate itself on startup for cloud environments
+      OPIK_BASE_URL: process.env.OPIK_BASE_URL,
+      OPIK_TEST_USER_EMAIL: process.env.OPIK_TEST_USER_EMAIL,
+      OPIK_TEST_USER_PASSWORD: process.env.OPIK_TEST_USER_PASSWORD,
+      // Workspace: 'default' for local, username for cloud (never 'default' on cloud)
+      OPIK_WORKSPACE: process.env.OPIK_BASE_URL?.startsWith('http://localhost')
+        ? 'default'
+        : (process.env.OPIK_TEST_USER_NAME || 'default'),
+      TEST_HELPER_PORT: process.env.TEST_HELPER_PORT || '5555',
     },
   },
 

@@ -86,9 +86,10 @@ async function globalSetup(config: FullConfig) {
     console.log('🏠 Local environment detected, skipping authentication');
   }
 
+  // Set environment variables for tests (not for webServer which already started)
   process.env.OPIK_BASE_URL = envData.baseUrl;
   process.env.OPIK_URL_OVERRIDE = envConfig.getApiUrl();
-  process.env.OPIK_WORKSPACE = envData.workspace;
+  process.env.OPIK_TEST_WORKSPACE = envData.workspace;
 
   console.log('✅ Global setup complete');
 }
