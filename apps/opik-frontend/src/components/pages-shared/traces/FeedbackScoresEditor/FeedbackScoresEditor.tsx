@@ -104,12 +104,14 @@ const FeedbackScoresEditor = ({
   const feedbackDefinitions: FeedbackDefinition[] = useMemo(() => {
     const allDefinitions = feedbackDefinitionsData?.content || [];
 
-    if (feedbackDefinitionNames && feedbackDefinitionNames.length > 0) {
+    // If feedbackDefinitionNames is explicitly provided (even if empty), use it
+    if (feedbackDefinitionNames !== undefined) {
       return allDefinitions.filter((definition) =>
         feedbackDefinitionNames.includes(definition.name),
       );
     }
 
+    // If feedbackDefinitionNames is undefined, show all definitions
     return allDefinitions;
   }, [feedbackDefinitionsData?.content, feedbackDefinitionNames]);
 

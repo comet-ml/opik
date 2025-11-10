@@ -680,9 +680,10 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> template.add("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> template.add("comments_enabled", true));
-        Optional.ofNullable(update.feedbackDefinitionNames())
-                .ifPresent(feedbackDefinitionNames -> template.add("feedback_definitions",
-                        update.feedbackDefinitionNames()));
+        // Always add feedback_definitions if present (including empty arrays)
+        if (update.feedbackDefinitionNames() != null) {
+            template.add("feedback_definitions", update.feedbackDefinitionNames());
+        }
 
         return template;
     }
@@ -697,14 +698,13 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> statement.bind("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> statement.bind("comments_enabled", update.commentsEnabled()));
-        Optional.ofNullable(update.feedbackDefinitionNames())
-                .ifPresent(feedbackDefinitionNames -> {
-                    // Handle empty list explicitly to avoid ClickHouse binding issues
-                    String[] array = feedbackDefinitionNames.isEmpty()
-                            ? new String[]{}
-                            : feedbackDefinitionNames.toArray(String[]::new);
-                    statement.bind("feedback_definitions", array);
-                });
+        // Always bind feedback_definitions if present (including empty arrays)
+        if (update.feedbackDefinitionNames() != null) {
+            String[] array = update.feedbackDefinitionNames().isEmpty()
+                    ? new String[]{}
+                    : update.feedbackDefinitionNames().toArray(String[]::new);
+            statement.bind("feedback_definitions", array);
+        }
     }
 
     private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {
