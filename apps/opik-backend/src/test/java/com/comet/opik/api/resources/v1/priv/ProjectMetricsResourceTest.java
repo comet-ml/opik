@@ -29,6 +29,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.UUIDTestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
@@ -44,8 +45,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
@@ -172,7 +171,6 @@ class ProjectMetricsResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private String baseURI;
     private ClientSupport client;
@@ -533,7 +531,7 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> {
                         Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
                         return factory.manufacturePojo(Trace.class).toBuilder()
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .projectName(projectName)
                                 .startTime(traceStartTime)
                                 .build();
@@ -588,7 +586,7 @@ class ProjectMetricsResourceTest {
             var traceForFilter = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .startTime(traceStartTime)
-                    .id(generateUUIDForTimestamp(traceStartTime))
+                    .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                     .build();
 
             var scoresMinus3ForFilter = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval),
@@ -685,7 +683,7 @@ class ProjectMetricsResourceTest {
                                 : factory.manufacturePojo(Trace.class).toBuilder()
                                         .projectName(projectName)
                                         .startTime(traceStartTime)
-                                        .id(generateUUIDForTimestamp(traceStartTime))
+                                        .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                         .build();
 
                         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -794,7 +792,7 @@ class ProjectMetricsResourceTest {
                     .projectName(projectName)
                     .threadId(threadForFilterId)
                     .startTime(traceStartTime)
-                    .id(generateUUIDForTimestamp(traceStartTime))
+                    .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                     .build();
 
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -894,7 +892,7 @@ class ProjectMetricsResourceTest {
                                 .projectName(projectName)
                                 .threadId(threadId)
                                 .startTime(traceStartTime)
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .build();
 
                         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1048,7 +1046,7 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> {
                         Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
                         return factory.manufacturePojo(Trace.class).toBuilder()
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .projectName(projectName)
                                 .startTime(traceStartTime)
                                 .build();
@@ -1221,7 +1219,7 @@ class ProjectMetricsResourceTest {
                         return factory.manufacturePojo(Trace.class).toBuilder()
                                 .projectName(projectName)
                                 .startTime(traceStartTime)
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .build();
                     })
                     .toList();
@@ -1429,7 +1427,7 @@ class ProjectMetricsResourceTest {
                                 ? startTime
                                 : marker.plusMillis(RANDOM.nextInt(50, 100));
                         return factory.manufacturePojo(Trace.class).toBuilder()
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .projectName(projectName)
                                 .startTime(traceStartTime)
                                 .endTime(endTime != null ? endTime : marker.plusMillis(RANDOM.nextInt(100, 1000)))
@@ -1440,10 +1438,6 @@ class ProjectMetricsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
             return traces;
-        }
-
-        private UUID generateUUIDForTimestamp(Instant timestamp) {
-            return generator.construct(timestamp.toEpochMilli());
         }
 
         private List<BigDecimal> calculateQuantiles(List<Trace> traces) {
@@ -1565,7 +1559,7 @@ class ProjectMetricsResourceTest {
                         return factory.manufacturePojo(Trace.class).toBuilder()
                                 .projectName(projectName)
                                 .startTime(traceStartTime)
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .build();
                     })
                     .toList();
@@ -1592,7 +1586,7 @@ class ProjectMetricsResourceTest {
                         return factory.manufacturePojo(Trace.class).toBuilder()
                                 .projectName(projectName)
                                 .startTime(traceStartTime)
-                                .id(generateUUIDForTimestamp(traceStartTime))
+                                .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                 .build();
                     })
                     .toList();
@@ -1764,7 +1758,7 @@ class ProjectMetricsResourceTest {
                         .mapToObj(i -> {
                             Instant traceStartTime = marker.plusSeconds((long) threadIdIdx * (i + 1));
                             return factory.manufacturePojo(Trace.class).toBuilder()
-                                    .id(generateUUIDForTimestamp(traceStartTime))
+                                    .id(UUIDTestUtils.generateUUIDForTimestamp(traceStartTime))
                                     .projectName(projectName)
                                     .threadId(threadIds.get(threadIdIdx))
                                     .startTime(traceStartTime)
@@ -1793,10 +1787,6 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
         }
-    }
-
-    private UUID generateUUIDForTimestamp(Instant traceStartTime) {
-        return generator.construct(traceStartTime.toEpochMilli());
     }
 
     @Nested
@@ -1988,7 +1978,7 @@ class ProjectMetricsResourceTest {
                             Instant traceEnd = j == (numTraces - 1) ? threadEndTime : traceStart.plusMillis(100);
 
                             return factory.manufacturePojo(Trace.class).toBuilder()
-                                    .id(generateUUIDForTimestamp(traceStart))
+                                    .id(UUIDTestUtils.generateUUIDForTimestamp(traceStart))
                                     .projectName(projectName)
                                     .threadId(threadId)
                                     .startTime(traceStart)

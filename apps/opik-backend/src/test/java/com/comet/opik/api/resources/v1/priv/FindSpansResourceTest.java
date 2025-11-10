@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TestWorkspace;
+import com.comet.opik.api.resources.utils.UUIDTestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
@@ -4163,7 +4164,7 @@ class FindSpansResourceTest {
 
         private Span createSpanWithTimestamp(String projectName, Instant timestamp) {
             return podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .id(generateUUIDForTimestamp(timestamp))
+                    .id(UUIDTestUtils.generateUUIDForTimestamp(timestamp))
                     .projectName(projectName)
                     .projectId(null)
                     .parentSpanId(null)
@@ -4297,9 +4298,6 @@ class FindSpansResourceTest {
             }
         }
 
-        private UUID generateUUIDForTimestamp(Instant timestamp) {
-            return generator.construct(timestamp.toEpochMilli());
-        }
     }
 
 }
