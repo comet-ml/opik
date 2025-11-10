@@ -22,6 +22,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         messages: List[Dict[str, prompt_types.MessageContent]],
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
+        validate_placeholders: bool = True,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -35,7 +36,9 @@ class ChatPrompt(base_prompt.BasePrompt):
         """
 
         self._chat_template = chat_prompt_template.ChatPromptTemplate(
-            messages=messages, template_type=type
+            messages=messages,
+            template_type=type,
+            validate_placeholders=validate_placeholders,
         )
         self._name = name
         self._metadata = metadata
@@ -99,11 +102,6 @@ class ChatPrompt(base_prompt.BasePrompt):
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
-
-    @property
-    def template_structure(self) -> str:
-        """The template structure of the prompt ('string' or 'chat'). Immutable after creation."""
-        return self._template_structure
 
     @override
     def format(

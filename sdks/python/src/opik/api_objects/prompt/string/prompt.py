@@ -19,6 +19,7 @@ class Prompt(base_prompt.BasePrompt):
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
+        validate_placeholders: bool = True,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -29,7 +30,9 @@ class Prompt(base_prompt.BasePrompt):
             prompt: The template for the prompt.
         """
 
-        self._template = prompt_template.PromptTemplate(template=prompt, type=type)
+        self._template = prompt_template.PromptTemplate(
+            template=prompt, type=type, validate_placeholders=validate_placeholders
+        )
         self._name = name
         self._metadata = metadata
         self._type = type
@@ -83,11 +86,6 @@ class Prompt(base_prompt.BasePrompt):
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
-
-    @property
-    def template_structure(self) -> str:
-        """The template structure of the prompt ('string' or 'chat'). Immutable after creation."""
-        return self._template_structure
 
     @override
     def format(self, **kwargs: Any) -> str:
