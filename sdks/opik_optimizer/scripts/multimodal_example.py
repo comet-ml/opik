@@ -52,7 +52,7 @@ prompt = ChatPrompt(
 )
 
 # Initialize the Hierarchical Reflective Optimizer
-optimizer = HierarchicalReflectiveOptimizer(model="openai/gpt-4o")
+optimizer = HierarchicalReflectiveOptimizer(model="openai/gpt-5-nano")
 
 # Run optimization
 optimization_result = optimizer.optimize_prompt(
