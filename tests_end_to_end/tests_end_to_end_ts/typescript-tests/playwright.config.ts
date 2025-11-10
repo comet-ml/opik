@@ -55,9 +55,9 @@ export default defineConfig({
     env: {
       // Pass environment variables to Flask service
       // Flask service will authenticate itself on startup for cloud environments
-      OPIK_BASE_URL: process.env.OPIK_BASE_URL,
-      OPIK_TEST_USER_EMAIL: process.env.OPIK_TEST_USER_EMAIL,
-      OPIK_TEST_USER_PASSWORD: process.env.OPIK_TEST_USER_PASSWORD,
+      OPIK_BASE_URL: process.env.OPIK_BASE_URL || 'http://localhost:5173',
+      OPIK_TEST_USER_EMAIL: process.env.OPIK_TEST_USER_EMAIL || '',
+      OPIK_TEST_USER_PASSWORD: process.env.OPIK_TEST_USER_PASSWORD || '',
       // Workspace: 'default' for local, username for cloud (never 'default' on cloud)
       OPIK_WORKSPACE: process.env.OPIK_BASE_URL?.startsWith('http://localhost')
         ? 'default'
