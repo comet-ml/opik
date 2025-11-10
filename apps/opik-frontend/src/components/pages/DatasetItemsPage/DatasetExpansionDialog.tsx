@@ -43,7 +43,7 @@ const DATASET_EXPANSION_PROGRESS_MESSAGES = [
   "Finalizing generated data...",
 ];
 import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 const DATASET_EXPANSION_LAST_PICKED_MODEL = "opik-dataset-expansion-model";
 const SAMPLE_COUNT_MIN = 1;
@@ -98,7 +98,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
   ]);
 
   const handleAddProvider = useCallback(
-    (provider: PROVIDER_TYPE) => {
+    (provider: COMPOSED_PROVIDER_TYPE) => {
       if (!model) {
         setLastPickedModel(calculateDefaultModel(model, [provider], provider));
       }
@@ -107,7 +107,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
   );
 
   const handleDeleteProvider = useCallback(
-    (provider: PROVIDER_TYPE) => {
+    (provider: COMPOSED_PROVIDER_TYPE) => {
       const currentProvider = calculateModelProvider(model);
       if (currentProvider === provider) {
         setLastPickedModel("");

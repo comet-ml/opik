@@ -12,6 +12,7 @@ import {
   LLMCustomConfigsType,
   PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
+  COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
 
 import {
@@ -29,9 +30,10 @@ import VertexAIModelConfigs from "@/components/pages-shared/llm/PromptModelSetti
 import CustomModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { parseComposedProviderType } from "@/lib/provider";
 
 interface PromptModelConfigsProps {
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE;
   model?: PROVIDER_MODEL_TYPE | "";
   size?: ButtonProps["size"];
   configs: Partial<LLMPromptConfigsType>;
@@ -39,12 +41,15 @@ interface PromptModelConfigsProps {
 }
 
 const PromptModelConfigs = ({
-  provider,
+  provider: composedProviderType,
   model,
   size = "icon-sm",
   configs,
   onChange,
 }: PromptModelConfigsProps) => {
+  const provider: PROVIDER_TYPE =
+    parseComposedProviderType(composedProviderType);
+
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
       return (
@@ -105,7 +110,7 @@ const PromptModelConfigs = ({
     return;
   };
 
-  const disabled = provider === "" || isEmpty(configs);
+  const disabled = !composedProviderType || isEmpty(configs);
 
   return (
     <DropdownMenu>

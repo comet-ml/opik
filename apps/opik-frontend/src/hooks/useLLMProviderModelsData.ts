@@ -1,22 +1,24 @@
 import { useCallback } from "react";
 import {
+  COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
   PROVIDER_MODELS_TYPE,
   PROVIDER_TYPE,
+  ProviderModelsMap,
 } from "@/types/providers";
 import useCustomProviderModels from "@/hooks/useCustomProviderModels";
-import { getDefaultProviderKey } from "@/lib/provider";
+import { parseComposedProviderType } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 import first from "lodash/first";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
-) => PROVIDER_TYPE | "";
+) => COMPOSED_PROVIDER_TYPE | "";
 
 export type ModelResolver = (
   lastPickedModel: PROVIDER_MODEL_TYPE | "",
-  setupProviders: PROVIDER_TYPE[],
-  preferredProvider?: PROVIDER_TYPE | "",
+  setupProviders: COMPOSED_PROVIDER_TYPE[],
+  preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => PROVIDER_MODEL_TYPE | "";
 
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
@@ -1604,11 +1606,11 @@ const useLLMProviderModelsData = () => {
   const customProviderModels = useCustomProviderModels();
 
   const getProviderModels = useCallback(() => {
-    return { ...PROVIDER_MODELS, ...customProviderModels };
+    return { ...PROVIDER_MODELS, ...customProviderModels } as ProviderModelsMap;
   }, [customProviderModels]);
 
-  const calculateModelProvider = useCallback(
-    (modelName?: PROVIDER_MODEL_TYPE | ""): PROVIDER_TYPE | "" => {
+  const calculateModelProvider: ProviderResolver = useCallback(
+    (modelName) => {
       if (!modelName) {
         return "";
       }
@@ -1627,19 +1629,13 @@ const useLLMProviderModelsData = () => {
         return "";
       }
 
-      const [providerName] = provider;
-
-      return providerName as PROVIDER_TYPE;
+      return provider[0] as COMPOSED_PROVIDER_TYPE;
     },
     [getProviderModels],
   );
 
-  const calculateDefaultModel = useCallback(
-    (
-      lastPickedModel: PROVIDER_MODEL_TYPE | "",
-      setupProviders: PROVIDER_TYPE[],
-      preferredProvider?: PROVIDER_TYPE | "",
-    ) => {
+  const calculateDefaultModel: ModelResolver = useCallback(
+    (lastPickedModel, setupProviders, preferredProvider?) => {
       const lastPickedModelProvider = calculateModelProvider(lastPickedModel);
 
       const isLastPickedModelValid =
@@ -1650,14 +1646,15 @@ const useLLMProviderModelsData = () => {
         return lastPickedModel;
       }
 
-      const provider =
-        preferredProvider ?? getDefaultProviderKey(setupProviders);
+      const composedProviderType =
+        preferredProvider ?? (first(setupProviders) || "");
+      const providerType = parseComposedProviderType(composedProviderType);
 
-      if (provider) {
-        if (PROVIDERS[provider].defaultModel) {
-          return PROVIDERS[provider].defaultModel;
+      if (composedProviderType && providerType) {
+        if (PROVIDERS[providerType]?.defaultModel) {
+          return PROVIDERS[providerType].defaultModel;
         } else {
-          return first(getProviderModels()[provider])?.value ?? "";
+          return first(getProviderModels()[composedProviderType])?.value ?? "";
         }
       }
 

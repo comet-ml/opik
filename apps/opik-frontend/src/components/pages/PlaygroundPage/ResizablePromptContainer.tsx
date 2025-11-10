@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Resizable, ResizeCallback } from "re-resizable";
 import useLocalStorageState from "use-local-storage-state";
 import PlaygroundPrompts from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 
 const PLAYGROUND_PROMPT_MIN_HEIGHT = 190;
 export const PLAYGROUND_PROMPT_HEIGHT_KEY = "playground-prompts-height";
@@ -13,7 +13,7 @@ const calculateDefaultHeight = () =>
 
 interface ResizableDivContainerProps {
   workspaceName: string;
-  providerKeys: PROVIDER_TYPE[];
+  providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
 }
 

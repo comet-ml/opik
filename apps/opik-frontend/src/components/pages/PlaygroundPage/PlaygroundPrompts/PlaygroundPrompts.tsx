@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Plus, RotateCcw } from "lucide-react";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
@@ -19,7 +19,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
-  providerKeys: PROVIDER_TYPE[];
+  providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
   onResetHeight: () => void;
 }

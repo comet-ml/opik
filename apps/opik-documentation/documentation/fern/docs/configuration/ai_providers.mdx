@@ -270,21 +270,32 @@ Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazona
 
 #### vLLM / Custom Provider
 
-Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc.
+Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc. **You can configure multiple custom providers**, each with their own unique name, URL, and models.
 
 <Frame>
   <img src="/img/configuration/vllm_configuration.png" alt="New Custom AI Provider Modal" />
 </Frame>
 
-For the URL section, enter your server URL, for example: `http://host.docker.internal:8000/v1`.
+##### Configuration Steps
+
+1. **Provider Name**: Enter a unique name to identify this custom provider (e.g., "vLLM Production", "Ollama Local", "Azure OpenAI Dev")
+2. **URL**: Enter your server URL, for example: `http://host.docker.internal:8000/v1`
+3. **API Key** (optional): If your model access requires authentication, enter the API key. Otherwise, leave this field blank.
+4. **Models**: List all models available on your server. You'll be able to select one of them for use later.
 
 <Tip>
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
 
-If your model access requires authentication via an API key, enter it in the API Key field. Otherwise, you can leave this field blank.
+##### Managing Multiple Custom Providers
 
-In the Models section, list all models available on your server. You’ll be able to select one of them for use later.
+Once you've configured multiple custom providers, you can:
+
+- **Edit** any custom provider by selecting it from the provider dropdown in the configuration dialog
+- **Delete** custom providers that are no longer needed
+- **Switch between** different custom providers in the Playground and Automation Rules
+
+Each custom provider appears as a separate option in the provider dropdown, making it easy to work with multiple self-hosted or custom LLM deployments.
 
 ## API Key Security
 

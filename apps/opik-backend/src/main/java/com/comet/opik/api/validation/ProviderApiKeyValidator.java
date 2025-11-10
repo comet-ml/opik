@@ -6,7 +6,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 public class ProviderApiKeyValidator
         implements
@@ -21,22 +21,33 @@ public class ProviderApiKeyValidator
 
     @Override
     public boolean isValid(ProviderApiKey providerApiKey, ConstraintValidatorContext context) {
-        // no validation for custom LLM
-        if (providerApiKey.provider() == LlmProvider.CUSTOM_LLM) {
-            return true;
-        }
-
-        // if the api key is not empty, return valid
-        if (providerApiKey.apiKey() != null && isNotBlank(EncryptionUtils.decrypt(providerApiKey.apiKey()))) {
-            return true;
-        }
-
-        // if the api key is empty, add custom error message
         context.disableDefaultConstraintViolation();
-        context.buildConstraintViolationWithTemplate(constraintAnnotation.message())
-                .addPropertyNode("apiKey")
-                .addConstraintViolation();
 
-        return false;
+        // Validate provider_name requirements
+        var provider = providerApiKey.provider();
+        var providerName = providerApiKey.providerName();
+
+        if (provider == LlmProvider.CUSTOM_LLM) {
+            if (isBlank(providerName)) {
+                // For custom providers, provider_name is required and must not be blank
+                context.buildConstraintViolationWithTemplate("provider_name is required for custom LLM providers")
+                        .addPropertyNode("providerName")
+                        .addConstraintViolation();
+                return false;
+            }
+
+            // If custom provider, no need to validate api key
+            return true;
+        }
+
+        // Validate API key for non-custom providers
+        if (providerApiKey.apiKey() == null || isBlank(EncryptionUtils.decrypt(providerApiKey.apiKey()))) {
+            context.buildConstraintViolationWithTemplate(constraintAnnotation.message())
+                    .addPropertyNode("apiKey")
+                    .addConstraintViolation();
+            return false;
+        }
+
+        return true;
     }
 }
