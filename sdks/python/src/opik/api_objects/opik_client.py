@@ -1536,11 +1536,13 @@ class Opik:
                 - `id`, `name`: String fields
                 - `tags`: List field (use "contains" operator only)
                 - `created_by`: String field
+                - `template_structure`: String field (automatically set to "string" for this method)
 
                 Supported operators by column:
                 - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
                 - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
                 - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `template_structure`: =, != (automatically filtered to "string")
                 - `tags`: contains (only)
 
                 Examples:
@@ -1555,22 +1557,25 @@ class Opik:
         Returns:
             List[Prompt]: A list of string Prompt instances found (excludes chat prompts).
         """
-        parsed_filters = None
+        # Add template_structure filter to only return string prompts
+        template_structure_filter = 'template_structure = "string"'
         if filter_string:
-            oql = opik_query_language.OpikQueryLanguage(filter_string)
-            parsed_filters = oql.get_filter_expressions()
+            combined_filter = f"{filter_string} AND {template_structure_filter}"
+        else:
+            combined_filter = template_structure_filter
+        
+        oql = opik_query_language.OpikQueryLanguage(combined_filter)
+        parsed_filters = oql.get_filter_expressions()
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
         
-        # Filter to only include string prompts
+        # Convert to Prompt objects (no need to filter - backend already filtered by template_structure)
         prompts: List[prompt_module.Prompt] = []
         for prompt_name, version in name_and_versions:
-            template_structure = getattr(version, "template_structure", "string") or "string"
-            if template_structure == "string":
-                prompts.append(
-                    prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
-                )
+            prompts.append(
+                prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
+            )
         
         return prompts
     
@@ -1588,11 +1593,13 @@ class Opik:
                 - `id`, `name`: String fields
                 - `tags`: List field (use "contains" operator only)
                 - `created_by`: String field
+                - `template_structure`: String field (automatically set to "chat" for this method)
 
                 Supported operators by column:
                 - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
                 - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
                 - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `template_structure`: =, != (automatically filtered to "chat")
                 - `tags`: contains (only)
 
                 Examples:
@@ -1607,22 +1614,25 @@ class Opik:
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances found (excludes string prompts).
         """
-        parsed_filters = None
+        # Add template_structure filter to only return chat prompts
+        template_structure_filter = 'template_structure = "chat"'
         if filter_string:
-            oql = opik_query_language.OpikQueryLanguage(filter_string)
-            parsed_filters = oql.get_filter_expressions()
+            combined_filter = f"{filter_string} AND {template_structure_filter}"
+        else:
+            combined_filter = template_structure_filter
+        
+        oql = opik_query_language.OpikQueryLanguage(combined_filter)
+        parsed_filters = oql.get_filter_expressions()
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
         
-        # Filter to only include chat prompts
+        # Convert to ChatPrompt objects (no need to filter - backend already filtered by template_structure)
         prompts: List[prompt_module.ChatPrompt] = []
         for prompt_name, version in name_and_versions:
-            template_structure = getattr(version, "template_structure", "string") or "string"
-            if template_structure == "chat":
-                prompts.append(
-                    prompt_module.ChatPrompt.from_fern_prompt_version(prompt_name, version)
-                )
+            prompts.append(
+                prompt_module.ChatPrompt.from_fern_prompt_version(prompt_name, version)
+            )
         
         return prompts
 
