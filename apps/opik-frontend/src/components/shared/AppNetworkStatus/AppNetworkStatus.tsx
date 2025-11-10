@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-import CometIcon from "@/icons/comet.svg?react";
+import OpikIcon from "@/icons/opik.svg?react";
 import { usePingBackend } from "@/api/debug/useIsAlive";
 import useIsNetworkOnline from "@/hooks/useIsNetworkOnline";
 import { WifiOffIcon, WifiIcon, SatelliteDishIcon } from "lucide-react";
@@ -11,15 +11,15 @@ const AppNetworkStatus = () => {
   const { data: pingResponse, isError } = usePingBackend(isNetworkOnline);
   const rtt = pingResponse?.rtt;
   const rttInSeconds = rtt ? (rtt / 1000).toFixed(2) : null;
-  const isConnectedToCometServer =
+  const isConnectedToBackend =
     isNetworkOnline && !isError && pingResponse?.healthy;
 
   return (
     <div className="flex items-center gap-2">
-      {isConnectedToCometServer && (
+      {isConnectedToBackend && (
         <div className="flex items-center gap-2">
           <SatelliteDishIcon className="size-5" />
-          <TooltipWrapper content="Round-trip time (RTT) to ping Comet server">
+          <TooltipWrapper content="Round-trip time (RTT) to ping backend server">
             <span className="comet-body-s-accented">RTT: {rttInSeconds}s</span>
           </TooltipWrapper>
         </div>
@@ -29,18 +29,18 @@ const AppNetworkStatus = () => {
           <div
             className={cn(
               "absolute -top-2.5 left-1.75 size-2 rounded-full",
-              isConnectedToCometServer ? "bg-green-500" : "bg-red-500",
+              isConnectedToBackend ? "bg-green-500" : "bg-red-500",
             )}
           />
           <TooltipWrapper
             content={
-              isConnectedToCometServer
-                ? "Connected to Comet server"
-                : "Not connected to Comet server"
+              isConnectedToBackend
+                ? "Connected to backend server"
+                : "Not connected to backend server"
             }
           >
             <span>
-              <CometIcon className="size-5" />
+              <OpikIcon className="size-5" />
             </span>
           </TooltipWrapper>
         </div>
