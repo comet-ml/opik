@@ -1,10 +1,10 @@
 import React, { useCallback, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -22,6 +22,7 @@ import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
+import { convertCustomProviderModels } from "@/lib/provider";
 
 interface SetupProviderDialogProps {
   open: boolean;
@@ -39,18 +40,17 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   );
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
-  const form: UseFormReturn<AIProviderFormType> = useForm<
-    z.infer<typeof AIProviderFormSchema>
-  >({
+  const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
       provider: PROVIDER_TYPE.OPEN_AI,
+      composedProviderType: "",
       apiKey: "",
-      // @ts-expect-error - union type compatibility
+      location: "",
       url: "",
       models: "",
-      location: "",
-    },
+      providerName: "",
+    } as AIProviderFormType,
   });
 
   const handleProviderSelect = useCallback(
@@ -65,8 +65,12 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
 
   const handleSubmit = useCallback(
     (data: AIProviderFormType) => {
+      const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
+      const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
+
       const providerKeyData: Partial<{
         provider: PROVIDER_TYPE;
+        provider_name: string;
         apiKey: string;
         base_url: string;
         configuration: Record<string, string>;
@@ -75,20 +79,24 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         ...(data.apiKey && { apiKey: data.apiKey }),
       };
 
-      // Handle custom provider
       if (
-        data.provider === PROVIDER_TYPE.CUSTOM &&
+        isCustom &&
         "url" in data &&
-        "models" in data
+        "models" in data &&
+        "providerName" in data
       ) {
         providerKeyData.base_url = data.url;
+        providerKeyData.provider_name = data.providerName;
         providerKeyData.configuration = {
-          models: data.models,
+          models: convertCustomProviderModels(
+            data.models ?? "",
+            data.providerName ?? "",
+            true,
+          ),
         };
       }
 
-      // Handle Vertex AI
-      if (data.provider === PROVIDER_TYPE.VERTEX_AI && "location" in data) {
+      if (isVertex && "location" in data) {
         providerKeyData.configuration = {
           location: data.location,
         };
@@ -104,7 +112,6 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             form.reset();
             setSelectedProvider("");
 
-            // Notify parent that provider was added
             onProviderAdded?.();
           },
         },
@@ -125,8 +132,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 pb-4">
-          <p className="comet-body-s text-muted-foreground">
+        <DialogAutoScrollBody className="flex flex-col">
+          <p className="comet-body-s mb-4 text-muted-foreground">
             To use the Playground, select an AI provider and enter your API key
           </p>
 
@@ -154,18 +161,21 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
                   )}
                 </>
               )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={handleCancel} type="button">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={!selectedProvider}>
-                  Done
-                </Button>
-              </DialogFooter>
             </form>
           </Form>
-        </div>
+        </DialogAutoScrollBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleCancel} type="button">
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={!selectedProvider}
+            onClick={form.handleSubmit(handleSubmit)}
+          >
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

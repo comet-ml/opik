@@ -1,0 +1,78 @@
+---
+title: "Define metrics"
+description: "Create reliable metrics and composite objectives for Agent Optimizer runs."
+---
+
+Metrics drive optimizer decisions. This guide highlights the fastest way to pick proven presets from Opik’s evaluation catalog, then shows how to extend them when your use case demands it. If you need the full theory, see [Evaluation concepts](/evaluation/concepts) and the [metrics overview](/evaluation/metrics/overview).
+
+## Metric anatomy
+
+A metric is a callable with the signature `(dataset_item, llm_output) -> ScoreResult | float`. Use `ScoreResult` to attach names and reasons.
+
+```python
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def short_answer(item, output):
+    is_short = len(output) <= 200
+    return ScoreResult(
+        name="short_answer",
+        value=1.0 if is_short else 0.0,
+        reason="Answer under 200 chars" if is_short else "Answer too long"
+    )
+```
+
+## Compose metrics
+
+Use `MultiMetricObjective` to balance multiple goals (accuracy, style, safety).
+
+```python
+from opik_optimizer import MultiMetricObjective
+from opik.evaluation.metrics import LevenshteinRatio, AnswerRelevance
+
+objective = MultiMetricObjective(
+    weights=[0.6, 0.4],
+    metrics=[
+        lambda item, output: LevenshteinRatio().score(reference=item["answer"], output=output),
+        lambda item, output: AnswerRelevance().score(
+            context=[item["answer"]], output=output, input=item["question"]
+        ),
+    ],
+    name="accuracy_and_relevance",
+)
+```
+
+<Tip>
+  Weights do not need to sum to 1; choose numbers that highlight the most critical metric to your use case.
+</Tip>
+
+## Recommended presets
+
+| Scenario | Metric | Notes |
+| --- | --- | --- |
+| Factual QA | `LevenshteinRatio` or `ExactMatch` | Works with text-only datasets; deterministic and low cost. |
+| Retrieval / grounding | `AnswerRelevance` | Pass reference context via `context=[item["answer"]]` or retrieved docs. |
+| Safety | `Moderation` or custom LLM-as-a-judge | Combine with `MultiMetricObjective` to gate unsafe answers. |
+| Multi-turn trajectories | [Agent trajectory evaluator](/evaluation/evaluate_agent_trajectory) | Scores complete conversations, not just final outputs. |
+
+Reuse these heuristics before writing custom metrics—most are already imported in `opik.evaluation.metrics`.
+
+## Checklist for great metrics
+
+- **Return explanations** – populate `reason` so reflective optimizers can group failure modes.
+- **Avoid randomness** – deterministic metrics keep optimizers from chasing noise.
+- **Bound runtime** – use cached references or lightweight models where possible; heavy metrics slow down trials.
+- **Log metadata** – include `details` in the `ScoreResult` if you want to visualize per-sample attributes later.
+
+When you outgrow presets, move to [Custom metrics](/agent_optimization/advanced/custom_metrics) for LLM-as-a-judge flows or domain-specific scoring.
+
+## Testing metrics
+
+1. Dry-run against a handful of dataset rows before launching an optimization.
+2. Use `optimizer.task_evaluator.evaluate_prompt` to evaluate a single prompt with your metric.
+3. Inspect the per-sample reasons in the Opik dashboard to ensure they match expectations.
+
+## Related resources
+
+- Deep dive: [Multi-metric optimization guide](/agent_optimization/best_practices/multi_metric_optimization)
+- API reference: [`ScoreResult`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/ScoreResult.html)
+- Advanced topic: [Custom metrics](/agent_optimization/advanced/custom_metrics)
