@@ -122,6 +122,12 @@ class DatasetsResourceCreateFromSpansTest {
         return datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
     }
 
+    private void assertMapKeysPresence(Map<String, JsonNode> data, Set<String> expectedKeys,
+            Set<String> unexpectedKeys) {
+        expectedKeys.forEach(key -> assertThat(data).containsKey(key));
+        unexpectedKeys.forEach(key -> assertThat(data).doesNotContainKey(key));
+    }
+
     @Test
     @DisplayName("Success - create dataset items from spans with all enrichment options")
     void createDatasetItemsFromSpans__success() {
@@ -226,13 +232,9 @@ class DatasetsResourceCreateFromSpansTest {
                 .orElseThrow();
 
         assertThat(item1.source()).isEqualTo(DatasetItemSource.SPAN);
-        assertThat(item1.data()).containsKey("input");
-        assertThat(item1.data()).containsKey("expected_output");
-        assertThat(item1.data()).containsKey("tags");
-        assertThat(item1.data()).containsKey("metadata");
-        assertThat(item1.data()).containsKey("feedback_scores");
-        assertThat(item1.data()).containsKey("comments");
-        assertThat(item1.data()).containsKey("usage");
+        assertMapKeysPresence(item1.data(),
+                Set.of("input", "expected_output", "tags", "metadata", "feedback_scores", "comments", "usage"),
+                Set.of());
 
         // Verify feedback scores are included and properly serialized (without timestamps)
         JsonNode feedbackScoresNode = item1.data().get("feedback_scores");
@@ -332,15 +334,11 @@ class DatasetsResourceCreateFromSpansTest {
         assertThat(actualEntity.content()).hasSize(1);
 
         var item = actualEntity.content().getFirst();
-        assertThat(item.data()).containsKey("input");
-        assertThat(item.data()).containsKey("expected_output");
 
         // Verify enrichment fields are NOT included even though they exist on the span
-        assertThat(item.data()).doesNotContainKey("tags");
-        assertThat(item.data()).doesNotContainKey("metadata");
-        assertThat(item.data()).doesNotContainKey("feedback_scores");
-        assertThat(item.data()).doesNotContainKey("comments");
-        assertThat(item.data()).doesNotContainKey("usage");
+        assertMapKeysPresence(item.data(),
+                Set.of("input", "expected_output"),
+                Set.of("tags", "metadata", "feedback_scores", "comments", "usage"));
     }
 
     @Test
@@ -449,14 +447,10 @@ class DatasetsResourceCreateFromSpansTest {
 
         var item = actualEntity.content().getFirst();
         assertThat(item.source()).isEqualTo(DatasetItemSource.SPAN);
-        assertThat(item.data()).containsKey("input");
-        assertThat(item.data()).containsKey("expected_output");
 
         // Verify enrichment fields are NOT included when span has no data for them
-        assertThat(item.data()).doesNotContainKey("tags");
-        assertThat(item.data()).doesNotContainKey("metadata");
-        assertThat(item.data()).doesNotContainKey("feedback_scores");
-        assertThat(item.data()).doesNotContainKey("comments");
-        assertThat(item.data()).doesNotContainKey("usage");
+        assertMapKeysPresence(item.data(),
+                Set.of("input", "expected_output"),
+                Set.of("tags", "metadata", "feedback_scores", "comments", "usage"));
     }
 }

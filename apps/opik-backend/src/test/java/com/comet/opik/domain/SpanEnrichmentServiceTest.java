@@ -42,6 +42,12 @@ class SpanEnrichmentServiceTest {
         spanEnrichmentService = new SpanEnrichmentService(spanService);
     }
 
+    private void assertMapKeysPresence(Map<String, JsonNode> data, Set<String> expectedKeys,
+            Set<String> unexpectedKeys) {
+        expectedKeys.forEach(key -> assertThat(data).containsKey(key));
+        unexpectedKeys.forEach(key -> assertThat(data).doesNotContainKey(key));
+    }
+
     @Nested
     @DisplayName("Enrich Spans:")
     class EnrichSpans {
@@ -85,13 +91,9 @@ class SpanEnrichmentServiceTest {
             assertThat(result).containsKey(spanId);
 
             Map<String, JsonNode> enrichedData = result.get(spanId);
-            assertThat(enrichedData).containsKey("input");
-            assertThat(enrichedData).containsKey("expected_output");
-            assertThat(enrichedData).doesNotContainKey("tags");
-            assertThat(enrichedData).doesNotContainKey("feedback_scores");
-            assertThat(enrichedData).doesNotContainKey("comments");
-            assertThat(enrichedData).doesNotContainKey("usage");
-            assertThat(enrichedData).doesNotContainKey("metadata");
+            assertMapKeysPresence(enrichedData,
+                    Set.of("input", "expected_output"),
+                    Set.of("tags", "feedback_scores", "comments", "usage", "metadata"));
         }
 
         @Test
@@ -131,13 +133,9 @@ class SpanEnrichmentServiceTest {
             assertThat(result).hasSize(1);
             Map<String, JsonNode> enrichedData = result.get(spanId);
 
-            assertThat(enrichedData).containsKey("input");
-            assertThat(enrichedData).containsKey("expected_output");
-            assertThat(enrichedData).containsKey("tags");
-            assertThat(enrichedData).containsKey("feedback_scores");
-            assertThat(enrichedData).containsKey("comments");
-            assertThat(enrichedData).containsKey("usage");
-            assertThat(enrichedData).containsKey("metadata");
+            assertMapKeysPresence(enrichedData,
+                    Set.of("input", "expected_output", "tags", "feedback_scores", "comments", "usage", "metadata"),
+                    Set.of());
         }
 
         @Test
@@ -201,11 +199,9 @@ class SpanEnrichmentServiceTest {
             assertThat(result).hasSize(1);
             Map<String, JsonNode> enrichedData = result.get(spanId);
 
-            assertThat(enrichedData).containsKey("input");
-            assertThat(enrichedData).containsKey("expected_output");
-            assertThat(enrichedData).containsKey("tags");
-            assertThat(enrichedData).doesNotContainKey("feedback_scores");
-            assertThat(enrichedData).doesNotContainKey("metadata");
+            assertMapKeysPresence(enrichedData,
+                    Set.of("input", "expected_output", "tags"),
+                    Set.of("feedback_scores", "metadata"));
         }
 
         @Test
@@ -244,13 +240,9 @@ class SpanEnrichmentServiceTest {
             Map<String, JsonNode> enrichedData = result.get(spanId);
 
             // Only input and output should be present
-            assertThat(enrichedData).containsKey("input");
-            assertThat(enrichedData).containsKey("expected_output");
-            assertThat(enrichedData).doesNotContainKey("tags");
-            assertThat(enrichedData).doesNotContainKey("feedback_scores");
-            assertThat(enrichedData).doesNotContainKey("comments");
-            assertThat(enrichedData).doesNotContainKey("usage");
-            assertThat(enrichedData).doesNotContainKey("metadata");
+            assertMapKeysPresence(enrichedData,
+                    Set.of("input", "expected_output"),
+                    Set.of("tags", "feedback_scores", "comments", "usage", "metadata"));
         }
     }
 }
