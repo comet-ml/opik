@@ -79,13 +79,13 @@ const PlaygroundPrompt = ({
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
-  const [selectedChatPromptId, setSelectedChatPromptId] = useState<
-    string | undefined
-  >();
   const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
     useState(false);
   const [lastImportedPromptName, setLastImportedPromptName] =
     useState<string>("");
+
+  // Get the loaded chat prompt ID from the prompt data
+  const selectedChatPromptId = prompt?.loadedChatPromptId;
 
   // Fetch chat prompt data when selected
   const { data: chatPromptData } = usePromptByIdApi(
@@ -236,11 +236,14 @@ const PlaygroundPrompt = ({
   ]);
 
   // Handler for importing chat prompt
-  const handleImportChatPrompt = useCallback((promptId?: string) => {
-    if (promptId) {
-      setSelectedChatPromptId(promptId);
-    }
-  }, []);
+  const handleImportChatPrompt = useCallback(
+    (loadedPromptId?: string) => {
+      if (loadedPromptId) {
+        updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
+      }
+    },
+    [promptId, updatePrompt],
+  );
 
   // Effect to populate messages when chat prompt data is loaded
   useEffect(() => {
