@@ -10,6 +10,7 @@ import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_SELECTED_DATASET_KEY,
 } from "@/constants/llm";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
