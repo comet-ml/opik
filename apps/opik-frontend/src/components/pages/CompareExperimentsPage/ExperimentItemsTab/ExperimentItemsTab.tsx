@@ -48,8 +48,6 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
 import CompareExperimentsFeedbackScoreCell from "@/components/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
-import CompareExperimentsCostCell from "@/components/pages-shared/experiments/CompareExperimentsCostCell/CompareExperimentsCostCell";
-import CompareExperimentsTokensCell from "@/components/pages-shared/experiments/CompareExperimentsTokensCell/CompareExperimentsTokensCell";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
@@ -105,10 +103,6 @@ const columnHelper = createColumnHelper<ExperimentsCompare>();
 
 const REFETCH_INTERVAL = 30000;
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
-const COLUMN_TOTAL_TOKENS_ID = "total_tokens";
-const COLUMN_PROMPT_TOKENS_ID = "prompt_tokens";
-const COLUMN_COMPLETION_TOKENS_ID = "completion_tokens";
-const COLUMN_COST_ID = "total_estimated_cost";
 
 const SELECTED_COLUMNS_KEY = "compare-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "compare-experiments-columns-width";
@@ -140,26 +134,6 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
     id: "output",
     label: "Evaluation task",
     type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_TOTAL_TOKENS_ID,
-    label: "Total tokens",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: COLUMN_PROMPT_TOKENS_ID,
-    label: "Input tokens",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: COLUMN_COMPLETION_TOKENS_ID,
-    label: "Output tokens",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: COLUMN_COST_ID,
-    label: "Estimated cost",
-    type: COLUMN_TYPE.cost,
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
@@ -470,46 +444,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
           }) as ColumnData<ExperimentsCompare>,
       ),
-      {
-        id: COLUMN_TOTAL_TOKENS_ID,
-        label: "Total tokens",
-        type: COLUMN_TYPE.number,
-        cell: CompareExperimentsTokensCell as never,
-        customMeta: {
-          experimentsIds,
-          tokenType: "total",
-        },
-      },
-      {
-        id: COLUMN_PROMPT_TOKENS_ID,
-        label: "Input tokens",
-        type: COLUMN_TYPE.number,
-        cell: CompareExperimentsTokensCell as never,
-        customMeta: {
-          experimentsIds,
-          tokenType: "prompt",
-        },
-      },
-      {
-        id: COLUMN_COMPLETION_TOKENS_ID,
-        label: "Output tokens",
-        type: COLUMN_TYPE.number,
-        cell: CompareExperimentsTokensCell as never,
-        customMeta: {
-          experimentsIds,
-          tokenType: "completion",
-        },
-      },
-      {
-        id: COLUMN_COST_ID,
-        label: "Estimated cost",
-        type: COLUMN_TYPE.cost,
-        cell: CompareExperimentsCostCell as never,
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
-        customMeta: {
-          experimentsIds,
-        },
-      },
       {
         id: COLUMN_DURATION_ID,
         label: "Duration",
