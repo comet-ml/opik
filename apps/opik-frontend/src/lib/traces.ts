@@ -547,7 +547,7 @@ export const prettifyMessage = (
       processedMessage = prettifyGenericLogic(message, config);
     }
 
-    // atempt to improve JSON string if  the message is serialised JSON string
+    // attempt to improve JSON string if the message is serialised JSON string
     if (isString(processedMessage)) {
       const json = safelyParseJSON(processedMessage);
 
