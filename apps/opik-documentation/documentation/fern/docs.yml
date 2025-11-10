@@ -675,10 +675,7 @@ navigation:
             icon: fa-regular fa-diagram-project
             path: docs/agent_optimization/optimization/optimize_agents/overview.mdx
             slug: optimize_agents
-          - section: Agent integrations
-            skip-slug: true
-            collapsed: true
-            contents:
+            children:
               - page: LangGraph
                 path: docs/agent_optimization/optimization/optimize_agents/langgraph.mdx
                 slug: optimize_langgraph
@@ -707,6 +704,10 @@ navigation:
             icon: fa-regular fa-list
             path: docs/agent_optimization/algorithms/overview.mdx
             slug: overview
+          - page: Benchmarks
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/algorithms/benchmarks.mdx
+            slug: benchmarks
           - page: MetaPrompt
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
