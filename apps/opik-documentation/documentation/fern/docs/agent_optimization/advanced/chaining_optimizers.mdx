@@ -9,7 +9,7 @@ Some projects benefit from running two or more optimizers back-to-back. For exam
 
 | Pipeline | Why run it | Pros | Cons | Complexity |
 | --- | --- | --- | --- | --- |
-| Hierarchical Reflective → Parameter | Existing long/complex prompt senario: Reflective analysis finds failure modes; Parameter optimizer then tightens parameters on the improved prompt. | Excellent for legacy prompts with lots of existing complexity. Helps produce explainable changelog. | Requires metrics with rich `reason` strings; two stages increase cost. | Medium |
+| Hierarchical Reflective → Parameter | Existing long/complex prompt scenario: Reflective analysis finds failure modes; Parameter optimizer then tightens parameters on the improved prompt. | Excellent for legacy prompts with lots of existing complexity. Helps produce explainable changelog. | Requires metrics with rich `reason` strings; two stages increase cost. | Medium |
 | Evolutionary → Few-Shot Bayesian | Cold-start scenario: explore many prompt architectures first, then let Few-Shot Bayesian pick the best example combination for the winning structure. | High diversity followed by precise example selection. | Evolutionary runs are expensive; Bayesian stage relies on curated datasets. | High |
 | MetaPrompt → Parameter | Baseline prompts need polish plus sampling tweaks. | Quick wins with minimal configuration; can run in under an hour. | Less insight into failure modes than reflective pipelines. | Low. |
 | Evolutionary → Parameter | Hunt for novel prompts, then squeeze out cost/latency by tuning temperature/top_p. | Balances creativity with production readiness. | Two heavy optimization loops; ensure budget headroom. | High. |

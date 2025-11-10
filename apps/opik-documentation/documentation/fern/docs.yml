@@ -684,9 +684,6 @@ navigation:
               - page: Google ADK
                 path: docs/agent_optimization/optimization/optimize_agents/google_adk.mdx
                 slug: optimize_google_adk
-              - page: OpenAI Agents (coming soon)
-                path: docs/agent_optimization/optimization/optimize_agents/openai_agents.mdx
-                slug: optimize_openai_agents
           - page: Optimize MCP
             icon: fa-regular fa-diagram-cells
             path: docs/agent_optimization/optimization/optimize_mcp.mdx

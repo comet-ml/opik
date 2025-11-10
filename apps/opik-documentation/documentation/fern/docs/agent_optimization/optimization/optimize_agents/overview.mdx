@@ -1,15 +1,15 @@
 ---
 title: "Optimize agents"
-description: "Connect the Agent Optimizer to LangGraph, Google ADK, and OpenAI Agents."
+description: "Connect the Agent Optimizer to Agent Frameworks."
 ---
 
 Agent frameworks orchestrate complex chains of prompts and tools. The Agent Optimizer treats any agent as an `OptimizableAgent`, a thin wrapper with a predictable interface so optimizers can call it repeatedly during a run. This means the optimizer SDK is able to work with most agentic workflows and multi-agent systems out of the box or with minimal changes.
 
-## Existing Examples
-Use the sub-guides for framework-specific guides:
+## Existing examples
+Use the sub-guides for framework-specific guidance. Each mirrors the sample code shipped under `sdks/opik_optimizer/scripts/llm_frameworks/`.
 
-- [LangGraph](/agent_optimization/optimization/optimize_agents/langgraph)
-- [Google ADK](/agent_optimization/optimization/optimize_agents/google_adk)
+- [LangGraph](/agent_optimization/optimization/optimize_agents/langgraph) (`scripts/llm_frameworks/langgraph/`)
+- [Google ADK](/agent_optimization/optimization/optimize_agents/google_adk) (`scripts/llm_frameworks/adk/`)
 
 ## Understanding OptimizableAgent
 
