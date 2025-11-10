@@ -74,7 +74,7 @@ def fresh_start_system_prompt(
     base_prompt = (
         "You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch "
         "based on a task description, specifically aiming for prompts that elicit answers in the style: "
-        f"'{style}'. Output ONLY a raw JSON list of message objects (with 'role' and 'content' fields)."
+        f"'{style}'. Output ONLY a raw JSON list of prompt candidates, where each candidate is a list of message objects (with 'role' and 'content' fields)."
     )
     if is_multimodal:
         return base_prompt + " " + get_multimodal_reasoning_guidance()

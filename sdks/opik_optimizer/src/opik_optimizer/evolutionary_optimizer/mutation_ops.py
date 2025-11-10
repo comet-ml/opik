@@ -240,7 +240,7 @@ class MutationOps:
         text_content = extract_text_from_content(msg_content)
 
         words = text_content.split()
-        if len(words) <= 1:
+        if len(words) == 0:
             return msg_content
 
         mutation_type = random.random()

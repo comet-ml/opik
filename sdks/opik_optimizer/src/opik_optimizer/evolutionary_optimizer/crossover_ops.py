@@ -72,16 +72,16 @@ class CrossoverOps:
             "      Recombining prompts by mixing and matching words and sentences.",
             verbose=self.verbose,
         )
-        messages_1_orig: list[dict[str, Any]] = ind1
-        messages_2_orig: list[dict[str, Any]] = ind2
+        messages_1: list[dict[str, Any]] = ind1
+        messages_2: list[dict[str, Any]] = ind2
 
-        for i, message_1 in enumerate(messages_1_orig):
+        for i, message_1 in enumerate(messages_1):
             role = str(message_1.get("role", "user"))
             message_1_content = cast(MessageContent, message_1.get("content", ""))
-            if (len(messages_2_orig) >= i + 1) and (
-                str(messages_2_orig[i].get("role", "")) == role
+            if (len(messages_2) >= i + 1) and (
+                str(messages_2[i].get("role", "")) == role
             ):
-                message_2 = messages_2_orig[i]
+                message_2 = messages_2[i]
                 message_2_content = cast(MessageContent, message_2.get("content", ""))
                 parent1_text = extract_text_from_content(message_1_content)
                 parent2_text = extract_text_from_content(message_2_content)
@@ -97,17 +97,17 @@ class CrossoverOps:
                     child1_str, child2_str = self._deap_crossover_word_level(
                         parent1_text, parent2_text
                     )
-                messages_1_orig[i]["content"] = rebuild_content_with_text(
+                messages_1[i]["content"] = rebuild_content_with_text(
                     message_1_content, child1_str
                 )
-                messages_2_orig[i]["content"] = rebuild_content_with_text(
+                messages_2[i]["content"] = rebuild_content_with_text(
                     message_2_content, child2_str
                 )
             else:
                 pass
 
-        child1 = creator.Individual(messages_1_orig)
-        child2 = creator.Individual(messages_2_orig)
+        child1 = creator.Individual(messages_1)
+        child2 = creator.Individual(messages_2)
 
         # Preserve tools and function_map from parents
         if hasattr(ind1, "tools"):
