@@ -1,6 +1,8 @@
 import uuid
+import pytest
 import opik
 from opik.api_objects.prompt import PromptType
+from opik.rest_api.core import ApiError
 from . import verifiers
 
 
@@ -313,9 +315,6 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
 
 def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
     """Test that template_structure is immutable after prompt creation."""
-    import pytest
-    from opik.rest_api.core import ApiError
-
     unique_identifier = str(uuid.uuid4())[-6:]
     prompt_name = f"test-immutable-structure-{unique_identifier}"
 
@@ -349,9 +348,6 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
 
 def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik):
     """Test that template_structure is immutable for chat prompts."""
-    import pytest
-    from opik.rest_api.core import ApiError
-
     unique_identifier = str(uuid.uuid4())[-6:]
     prompt_name = f"test-immutable-chat-structure-{unique_identifier}"
 
