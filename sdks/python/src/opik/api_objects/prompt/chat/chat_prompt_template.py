@@ -10,19 +10,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union, cast
 
-from .prompt_template import PromptTemplate
-from .types import (
-    PromptType,
-    MessageContent,
-    ContentPart,
-    SupportedModalities,
-    ModalitySet,
-)
-from .chat_content_renderer_registry import (
-    ChatContentRendererRegistry,
-    DEFAULT_CHAT_RENDERER_REGISTRY,
-    register_default_chat_part_renderer,
-)
+from ..string import prompt_template
+from .. import types as prompt_types
+from . import content_renderer_registry
 
 
 class ChatPromptTemplate:
@@ -32,36 +22,36 @@ class ChatPromptTemplate:
 
     def __init__(
         self,
-        messages: List[Dict[str, MessageContent]],
-        template_type: PromptType = PromptType.MUSTACHE,
+        messages: List[Dict[str, prompt_types.MessageContent]],
+        template_type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         *,
-        registry: Optional[ChatContentRendererRegistry] = None,
+        registry: Optional[content_renderer_registry.ChatContentRendererRegistry] = None,
     ) -> None:
         self._messages = messages
         self._template_type = template_type
-        self._registry = registry or DEFAULT_CHAT_RENDERER_REGISTRY
+        self._registry = registry or content_renderer_registry.DEFAULT_CHAT_RENDERER_REGISTRY
 
     @property
-    def messages(self) -> List[Dict[str, MessageContent]]:
+    def messages(self) -> List[Dict[str, prompt_types.MessageContent]]:
         return self._messages
 
-    def required_modalities(self) -> ModalitySet:
+    def required_modalities(self) -> prompt_types.ModalitySet:
         """
         Return the union of modalities referenced across all template messages.
         """
-        required: ModalitySet = set()
+        required: prompt_types.ModalitySet = set()
         for message in self._messages:
-            content = cast(MessageContent, message.get("content", ""))
+            content = cast(prompt_types.MessageContent, message.get("content", ""))
             required.update(self._registry.infer_modalities(content))
         return required
 
     def format(
         self,
         variables: Dict[str, Any],
-        supported_modalities: Optional[SupportedModalities] = None,
+        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
         *,
-        template_type: Optional[Union[str, PromptType]] = None,
-    ) -> List[Dict[str, MessageContent]]:
+        template_type: Optional[Union[str, prompt_types.PromptType]] = None,
+    ) -> List[Dict[str, prompt_types.MessageContent]]:
         """
         Render the template messages with the provided variables.
 
@@ -73,22 +63,22 @@ class ChatPromptTemplate:
         resolved_template_type = self._registry.normalize_template_type(
             template_type or self._template_type
         )
-        rendered_messages: List[Dict[str, MessageContent]] = []
+        rendered_messages: List[Dict[str, prompt_types.MessageContent]] = []
 
         for message in self._messages:
             role = message.get("role")
             if role is None:
                 continue
 
-            content = cast(MessageContent, message.get("content", ""))
-            rendered_content: MessageContent
+            content = cast(prompt_types.MessageContent, message.get("content", ""))
+            rendered_content: prompt_types.MessageContent
             if isinstance(content, str):
                 rendered_content = _render_template_string(
                     content, variables, resolved_template_type
                 )
             else:
                 rendered_content = self._registry.render_content(
-                    content=cast(MessageContent, content),
+                    content=cast(prompt_types.MessageContent, content),
                     variables=variables,
                     template_type=resolved_template_type,
                     supported_modalities=supported_modalities,
@@ -106,13 +96,13 @@ class ChatPromptTemplate:
 def _render_template_string(
     template: str,
     variables: Dict[str, Any],
-    template_type: PromptType,
+    template_type: prompt_types.PromptType,
 ) -> str:
     if not template:
         return ""
 
     try:
-        return PromptTemplate(
+        return prompt_template.PromptTemplate(
             template,
             validate_placeholders=False,
             type=template_type,
@@ -123,16 +113,16 @@ def _render_template_string(
 
 
 def render_text_part(
-    part: ContentPart, variables: Dict[str, Any], template_type: PromptType
-) -> Optional[ContentPart]:
+    part: prompt_types.ContentPart, variables: Dict[str, Any], template_type: prompt_types.PromptType
+) -> Optional[prompt_types.ContentPart]:
     text_template = part.get("text", "")
     rendered_text = _render_template_string(text_template, variables, template_type)
     return {"type": "text", "text": rendered_text}
 
 
 def render_image_url_part(
-    part: ContentPart, variables: Dict[str, Any], template_type: PromptType
-) -> Optional[ContentPart]:
+    part: prompt_types.ContentPart, variables: Dict[str, Any], template_type: prompt_types.PromptType
+) -> Optional[prompt_types.ContentPart]:
     image_dict = part.get("image_url", {})
     if not isinstance(image_dict, dict):
         return None
@@ -149,8 +139,8 @@ def render_image_url_part(
     return {"type": "image_url", "image_url": rendered_image}
 
 
-register_default_chat_part_renderer("text", render_text_part)
-register_default_chat_part_renderer(
+content_renderer_registry.register_default_chat_part_renderer("text", render_text_part)
+content_renderer_registry.register_default_chat_part_renderer(
     "image_url",
     render_image_url_part,
     modality="vision",
@@ -160,5 +150,4 @@ register_default_chat_part_renderer(
 
 __all__ = [
     "ChatPromptTemplate",
-    "register_default_chat_part_renderer",
 ]

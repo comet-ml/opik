@@ -19,8 +19,8 @@ from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
-from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
-from opik.api_objects.prompt.types import SupportedModalities
+from opik.api_objects.prompt.chat import chat_prompt_template
+from opik.api_objects.prompt import types as prompt_types
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
@@ -351,14 +351,14 @@ def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     supported_modalities = cast(
-        SupportedModalities,
+        prompt_types.SupportedModalities,
         {
             "vision": ModelCapabilities.supports_vision(
                 getattr(model, "model_name", None)
             )
         },
     )
-    chat_prompt_template = ChatPromptTemplate(messages=messages)
+    chat_prompt_template = chat_prompt_template.ChatPromptTemplate(messages=messages)
 
     required_modalities = chat_prompt_template.required_modalities()
     unsupported_modalities = {

@@ -3,7 +3,7 @@ from typing import Any, Set
 import jinja2
 
 import opik.exceptions as exceptions
-from .types import PromptType
+from .. import types as prompt_types
 
 
 class PromptTemplate:
@@ -11,7 +11,7 @@ class PromptTemplate:
         self,
         template: str,
         validate_placeholders: bool = True,
-        type: PromptType = PromptType.MUSTACHE,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
     ) -> None:
         self._template = template
         self._type = type
@@ -22,7 +22,7 @@ class PromptTemplate:
         return self._template
 
     def format(self, **kwargs: Any) -> str:
-        if self._type == PromptType.MUSTACHE:
+        if self._type == prompt_types.PromptType.MUSTACHE:
             template = self._template
             placeholders = _extract_mustache_placeholder_keys(self._template)
             kwargs_keys: Set[str] = set(kwargs.keys())
@@ -35,7 +35,7 @@ class PromptTemplate:
             for key, value in kwargs.items():
                 template = template.replace(f"{{{{{key}}}}}", str(value))
 
-        elif self._type == PromptType.JINJA2:
+        elif self._type == prompt_types.PromptType.JINJA2:
             template = jinja2.Template(self._template).render(**kwargs)
         else:
             template = self._template

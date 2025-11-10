@@ -5,7 +5,7 @@ from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail, PromptVersionDetailType
 
-from .prompt import PromptType
+from . import types as prompt_types
 
 
 class PromptClient:
@@ -17,7 +17,7 @@ class PromptClient:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]],
-        type: PromptType = PromptType.MUSTACHE,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         template_structure: str = "string",
     ) -> prompt_version_detail.PromptVersionDetail:
         """

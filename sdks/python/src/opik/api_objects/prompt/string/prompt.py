@@ -1,10 +1,10 @@
 import copy
 from typing import Any, Dict, Optional
 
-from opik.rest_api.types import PromptVersionDetail
-from .prompt_template import PromptTemplate
-from .types import PromptType
-from opik.api_objects.prompt import client as prompt_client
+from opik.rest_api import types as rest_api_types
+from . import prompt_template
+from .. import types as prompt_types
+from .. import client as prompt_client
 
 
 class Prompt:
@@ -17,7 +17,7 @@ class Prompt:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptType = PromptType.MUSTACHE,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -28,7 +28,7 @@ class Prompt:
             prompt: The template for the prompt.
         """
 
-        self._template = PromptTemplate(template=prompt, type=type)
+        self._template = prompt_template.PromptTemplate(template=prompt, type=type)
         self._name = name
         self._metadata = metadata
         self._type = type
@@ -75,7 +75,7 @@ class Prompt:
         return copy.deepcopy(self._metadata)
 
     @property
-    def type(self) -> PromptType:
+    def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
 
@@ -101,7 +101,7 @@ class Prompt:
     def from_fern_prompt_version(
         cls,
         name: str,
-        prompt_version: PromptVersionDetail,
+        prompt_version: rest_api_types.PromptVersionDetail,
     ) -> "Prompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
@@ -110,9 +110,9 @@ class Prompt:
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
 
         prompt._name = name
-        prompt._template = PromptTemplate(
+        prompt._template = prompt_template.PromptTemplate(
             template=prompt_version.template,
-            type=PromptType(prompt_version.type) or PromptType.MUSTACHE,
+            type=prompt_types.PromptType(prompt_version.type) or prompt_types.PromptType.MUSTACHE,
         )
         prompt._commit = prompt_version.commit
         prompt._metadata = prompt_version.metadata

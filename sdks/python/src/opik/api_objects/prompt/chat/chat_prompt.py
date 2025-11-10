@@ -2,10 +2,10 @@ import copy
 import json
 from typing import Any, Dict, List, Optional
 
-from opik.rest_api.types import PromptVersionDetail
-from .chat_prompt_template import ChatPromptTemplate
-from opik.api_objects.prompt import client as prompt_client
-from . import types as prompt_types
+from opik.rest_api import types as rest_api_types
+from . import chat_prompt_template
+from .. import client as prompt_client
+from .. import types as prompt_types
 
 
 class ChatPrompt:
@@ -32,7 +32,7 @@ class ChatPrompt:
             type: The template type (MUSTACHE or JINJA2).
         """
 
-        self._chat_template = ChatPromptTemplate(messages=messages, template_type=type)
+        self._chat_template = chat_prompt_template.ChatPromptTemplate(messages=messages, template_type=type)
         self._name = name
         self._metadata = metadata
         self._type = type
@@ -116,7 +116,7 @@ class ChatPrompt:
     def from_fern_prompt_version(
         cls,
         name: str,
-        prompt_version: PromptVersionDetail,
+        prompt_version: rest_api_types.PromptVersionDetail,
     ) -> "ChatPrompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         chat_prompt = cls.__new__(cls)
@@ -129,7 +129,7 @@ class ChatPrompt:
         # Parse messages from JSON string
         messages = json.loads(prompt_version.template)
         chat_prompt._messages = messages
-        chat_prompt._chat_template = ChatPromptTemplate(
+        chat_prompt._chat_template = chat_prompt_template.ChatPromptTemplate(
             messages=messages,
             template_type=prompt_types.PromptType(prompt_version.type)
             or prompt_types.PromptType.MUSTACHE,
