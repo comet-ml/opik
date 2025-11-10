@@ -25,7 +25,10 @@ const ScoresSection: React.FunctionComponent<ScoresSectionProps> = ({
   );
 
   const feedbackDefinitions = useMemo(() => {
-    if (!data?.content || !(annotationQueue.feedback_definition_names?.length ?? 0)) {
+    if (
+      !data?.content ||
+      !(annotationQueue.feedback_definition_names?.length ?? 0)
+    ) {
       return [];
     }
 
