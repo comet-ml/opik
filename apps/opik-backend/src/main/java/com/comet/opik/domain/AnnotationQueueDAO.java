@@ -698,8 +698,13 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> statement.bind("comments_enabled", update.commentsEnabled()));
         Optional.ofNullable(update.feedbackDefinitionNames())
-                .ifPresent(feedbackDefinitionNames -> statement.bind("feedback_definitions",
-                        update.feedbackDefinitionNames().toArray(String[]::new)));
+                .ifPresent(feedbackDefinitionNames -> {
+                    // Handle empty list explicitly to avoid ClickHouse binding issues
+                    String[] array = feedbackDefinitionNames.isEmpty()
+                            ? new String[]{}
+                            : feedbackDefinitionNames.toArray(String[]::new);
+                    statement.bind("feedback_definitions", array);
+                });
     }
 
     private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {
