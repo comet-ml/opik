@@ -20,14 +20,14 @@ Results shown below use `gpt-4o-mini` for evaluation. Scores will change if you 
 
 ## Latest results
 
-| Rank | Algorithm/Optimizer | Avg. Score | Arc | GSM8K | RagBench |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Hierarchical Reflective | **67.83%** | 92.70% | 28.00% | 82.80% |
-| 2 | Few-Shot Bayesian | 59.17% | 28.09% | 59.26% | 90.15% |
-| 3 | Evolutionary | 52.51% | 40.00% | 25.53% | 92.00% |
-| 4 | MetaPrompt | 38.75% | 25.00% | 26.93% | 64.31% |
-| 5 | GEPA | 32.27% | 6.55% | 26.08% | 64.17% |
-| 6 | Baseline (no optimization) | 11.85% | 1.69% | 24.06% | 9.81% |
+| Rank | Algorithm/Optimizer         | Avg. Score | Arc    | GSM8K  | RagBench |
+|------|-----------------------------|------------|--------|--------|----------|
+| 1    | Hierarchical Reflective      | **67.83%** | 92.70% | 28.00% | 82.80%   |
+| 2    | Few-Shot Bayesian           | 59.17%     | 28.09% | 59.26% | 90.15%   |
+| 3    | Evolutionary                | 52.51%     | 40.00% | 25.53% | 92.00%   |
+| 4    | MetaPrompt                  | 38.75%     | 25.00% | 26.93% | 64.31%   |
+| 5    | GEPA                        | 32.27%     | 6.55%  | 26.08% | 64.17%   |
+| 6    | Baseline (no optimization)  | 11.85%     | 1.69%  | 24.06% | 9.81%    |
 
 <Info>
   These are directional numbers. Some optimizers use more LLM/tool calls per trial than others (e.g., Hierarchical Reflective batches multiple analyses), so cost and runtime are not apples-to-apples even when the trial budget matches. Re-run the suite with your own datasets, models, and cost constraints before committing to a single optimizer.
