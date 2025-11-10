@@ -52,6 +52,12 @@ public class ModelCapabilities {
         return find(modelName).map(ModelCapability::supportsVision).orElse(false);
     }
 
+    public boolean supportsVideo(String modelName) {
+        // TODO: the cost metadata currently treats video + image inputs the same.
+        // Keep a dedicated method so we can split behavior once the pricing file exposes video flags.
+        return supportsVision(modelName);
+    }
+
     private Optional<ModelCapability> find(String modelName) {
         if (StringUtils.isBlank(modelName)) {
             return Optional.empty();
@@ -88,6 +94,7 @@ public class ModelCapabilities {
                         .name(canonicalName)
                         .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
                         .supportsVision(modelData.supportsVision())
+                        .supportsVideo(modelData.supportsVideoInput())
                         .build());
             });
 
