@@ -200,7 +200,7 @@ def temp_file_15mb():
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
     if not environment.has_openai_api_key():
-        raise Exception("OpenAI not configured!")
+        raise Exception("OpenAI not configured! Ensure you have set the OPENAI_API_KEY and OPENAI_ORG_ID environment variables.")
 
 
 @pytest.fixture(scope="session")
