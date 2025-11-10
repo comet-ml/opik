@@ -44,20 +44,98 @@ public interface DatasetVersionService {
     String ERROR_TAG_NOT_FOUND = "Tag '%s' not found for dataset '%s'";
     String ERROR_VERSION_NOT_FOUND = "Version not found for dataset '%s' with hash or tag '%s'";
 
+    /**
+     * Commits a new version for the specified dataset with metadata and optional tag.
+     * <p>
+     * This operation:
+     * <ul>
+     *   <li>Generates a content-based hash for the version (placeholder until OPIK-3015)</li>
+     *   <li>Stores version metadata including change statistics</li>
+     *   <li>Automatically assigns the 'latest' tag to the new version</li>
+     *   <li>Removes the 'latest' tag from the previous version if exists</li>
+     *   <li>Optionally adds a custom tag if provided in the request</li>
+     * </ul>
+     *
+     * @param datasetId the unique identifier of the dataset to version
+     * @param request version creation details including optional tag, change description, and metadata
+     * @return the created dataset version with generated hash, statistics, and assigned tags
+     * @throws ConflictException if the custom tag already exists for this dataset
+     * @throws ConflictException if the version hash already exists (deduplication)
+     */
     DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate request);
 
+    /**
+     * Retrieves a paginated list of versions for the specified dataset, ordered by creation time (newest first).
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param page the page number (1-indexed, must be >= 1)
+     * @param size the number of versions per page (must be >= 1)
+     * @return a page containing dataset versions with their associated tags and metadata
+     * @throws IllegalArgumentException if page or size are less than 1
+     */
     DatasetVersionPage getVersions(UUID datasetId, int page, int size);
 
+    /**
+     * Retrieves a specific dataset version by its content hash.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param versionHash the SHA-256 hash of the version content
+     * @return an Optional containing the version if found, empty otherwise
+     */
     Optional<DatasetVersion> getVersionByHash(UUID datasetId, String versionHash);
 
+    /**
+     * Retrieves a dataset version by its tag name.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param tag the tag name (e.g., "baseline", "v1.0", "latest")
+     * @return an Optional containing the version if found, empty otherwise
+     */
     Optional<DatasetVersion> getVersionByTag(UUID datasetId, String tag);
 
+    /**
+     * Retrieves the most recently created version for the specified dataset.
+     * This is equivalent to getting the version tagged with 'latest'.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @return an Optional containing the latest version if any versions exist, empty otherwise
+     */
     Optional<DatasetVersion> getLatestVersion(UUID datasetId);
 
+    /**
+     * Adds a tag to an existing dataset version for easy reference.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param versionHash the hash of the version to tag
+     * @param tag the tag to create (e.g., "baseline", "production")
+     * @throws NotFoundException if the version with the specified hash is not found
+     * @throws ConflictException if the tag already exists for this dataset
+     */
     void createTag(UUID datasetId, String versionHash, DatasetVersionTag tag);
 
+    /**
+     * Deletes a tag from a dataset version.
+     * <p>
+     * Note: The 'latest' tag cannot be deleted as it is automatically managed by the system.
+     * Attempting to delete it will result in a BadRequestException.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param tag the tag name to delete
+     * @throws NotFoundException if the tag does not exist
+     * @throws ClientErrorException if attempting to delete the 'latest' tag
+     */
     void deleteTag(UUID datasetId, String tag);
 
+    /**
+     * Resolves a version identifier (hash or tag) to a version ID.
+     * <p>
+     * This method tries to find a version by hash first, then by tag if not found by hash.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param hashOrTag either a version hash or a tag name
+     * @return the UUID of the matching version
+     * @throws NotFoundException if no version is found with the given hash or tag
+     */
     UUID resolveVersionId(UUID datasetId, String hashOrTag);
 }
 
