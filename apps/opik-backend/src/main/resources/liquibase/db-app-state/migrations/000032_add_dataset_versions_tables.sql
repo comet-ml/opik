@@ -50,5 +50,3 @@ CREATE INDEX idx_dataset_version_tags_workspace ON dataset_version_tags(workspac
 
 --rollback DROP TABLE IF EXISTS dataset_version_tags;
 --rollback DROP TABLE IF EXISTS dataset_versions;
-
-
