@@ -984,11 +984,18 @@ class MetaPromptOptimizer(BaseOptimizer):
                     ],
                     optimization_id=optimization_id,
                     metadata=metadata_for_call,
-                    response_model=CandidatePromptsResponse,
                 )
 
+                parsed_candidates: CandidatePromptsResponse
+                if isinstance(response, str):
+                    parsed_candidates = CandidatePromptsResponse.model_validate_json(
+                        response
+                    )
+                else:
+                    parsed_candidates = CandidatePromptsResponse.model_validate(response)  # type: ignore[arg-type]
+
                 valid_prompts: list[chat_prompt.ChatPrompt] = []
-                for candidate in response.prompts:
+                for candidate in parsed_candidates.prompts:
                     if not candidate.prompt:
                         logger.warning(
                             "Skipping prompt candidate with empty prompt list"
@@ -1078,16 +1085,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             for how the tool output must be used in the final response.
             Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
 
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
+            Return JSON format (no markdown fences, no additional keys):
+            ```{{"prompts":[{{"tool_description": "<string>","improvement_focus": "<string>","reasoning": "<string>"}}]}}```
             """
         ).strip()
 
@@ -1113,13 +1112,20 @@ class MetaPromptOptimizer(BaseOptimizer):
                     ],
                     optimization_id=optimization_id,
                     metadata=metadata_for_call_tools,
-                    response_model=ToolDescriptionsResponse,
                 )
 
                 candidate_generation_report.set_generated_prompts()
 
+                parsed_response: ToolDescriptionsResponse
+                if isinstance(response, str):
+                    parsed_response = ToolDescriptionsResponse.model_validate_json(
+                        response
+                    )
+                else:
+                    parsed_response = ToolDescriptionsResponse.model_validate(response)  # type: ignore[arg-type]
+
                 candidates: list[chat_prompt.ChatPrompt] = []
-                for candidate in response.prompts:
+                for candidate in parsed_response.prompts:
                     description = candidate.tool_description.strip()
                     if not description:
                         continue
