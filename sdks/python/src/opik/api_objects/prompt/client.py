@@ -233,7 +233,7 @@ class PromptClient:
 
             # Page through all prompt containers
             page = 1
-            size = 100
+            size = 1000
             all_prompt_names: List[str] = []
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
