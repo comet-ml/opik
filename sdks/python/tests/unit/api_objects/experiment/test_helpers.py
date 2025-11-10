@@ -9,10 +9,19 @@ from tests.conftest import random_chars
 def fake_prompt(with_postfix: bool = False):
     postfix = random_chars()
 
+    def to_info_dict():
+        return {
+            "name": fake_prompt_obj.name,
+            "version": {
+                "template": fake_prompt_obj.prompt,
+            },
+        }
+
     fake_prompt_obj = types.SimpleNamespace(
         __internal_api__version_id__="some-prompt-version-id",
         prompt="some-prompt-value",
         name="some-prompt-name",
+        to_info_dict=to_info_dict,
     )
 
     if with_postfix:
