@@ -40,6 +40,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.Metered;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -120,6 +121,7 @@ public class TracesResource {
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
             @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = TracePage.class)))})
     @JsonView(Trace.View.Public.class)
+    @Metered(operation = "trace.list", entity = "trace")
     public Response getTracesByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -193,6 +195,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @JsonView(Trace.View.Public.class)
+    @Metered(operation = "trace.search", entity = "trace")
     public ChunkedOutput<JsonNode> searchTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceSearchStreamRequest.class))) @NotNull @Valid TraceSearchStreamRequest request) {
 
@@ -238,6 +241,7 @@ public class TracesResource {
     @Operation(operationId = "getTraceById", summary = "Get trace by id", description = "Get trace by id", responses = {
             @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = Trace.class)))})
     @JsonView(Trace.View.Public.class)
+    @Metered(operation = "trace.get", entity = "trace")
     public Response getById(
             @PathParam("id") UUID id,
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
@@ -267,6 +271,7 @@ public class TracesResource {
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @UsageLimited
+    @Metered(operation = "trace.create", entity = "trace", recordAttachments = true)
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Trace.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid Trace trace,
             @Context UriInfo uriInfo) {
@@ -294,6 +299,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     @UsageLimited
+    @Metered(operation = "trace.batch.create", entity = "trace", recordBatchSize = true, recordAttachments = true)
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -311,6 +317,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @Metered(operation = "trace.update", entity = "trace", recordAttachments = true)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceUpdate.class))) @Valid @NonNull TraceUpdate trace) {
 
@@ -331,6 +338,7 @@ public class TracesResource {
     @Path("{id}")
     @Operation(operationId = "deleteTraceById", summary = "Delete trace by id", description = "Delete trace by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @Metered(operation = "trace.delete", entity = "trace")
     public Response deleteById(@PathParam("id") UUID id) {
 
         log.info("Deleting trace with id '{}'", id);
@@ -348,6 +356,7 @@ public class TracesResource {
     @Path("/delete")
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @Metered(operation = "trace.batch.delete", entity = "trace", recordBatchSize = true)
     public Response deleteTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDeleteByProject request) {
         log.info("Deleting traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
@@ -364,6 +373,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "200", description = "Trace stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    @Metered(operation = "trace.stats", entity = "trace")
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
