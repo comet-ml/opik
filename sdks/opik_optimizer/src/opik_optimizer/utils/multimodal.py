@@ -199,14 +199,16 @@ def get_multimodal_reasoning_guidance() -> str:
     """
     return textwrap.dedent(
         """
-        IMPORTANT - MULTIMODAL/VISION TASK GUIDANCE:
-        - This task can include images, video frames, or other attachments alongside text.
-        - Structured content is provided via placeholders (e.g., {image_content}) or OpenAI-style message parts.
-        - DO NOT modify or remove attachment placeholders — they are data, not instructions.
-        - Focus your improvements on HOW to analyze the visual content and how to reference it in the answer.
-        - Consider: What aspects of the media should be examined? How should hazards/features be identified?
-        - Example additions: "Examine the entire frame for...", "Pay attention to movement/position/distance..."
-        - Example mistakes: Removing {image_content}, rewriting attachments as plain text, or injecting fake media.
+        IMPORTANT - MULTIMODAL / ATTACHMENT GUIDANCE:
+        - This task can include images, video frames, audio clips, transcripts, PDFs, or other files alongside text.
+        - Attachments arrive via placeholders (e.g., {image_content}, {audio_clip}) or structured message parts such as
+          {"type": "image_url"|"video_url"|"audio_url"|"file_url", ...}.
+        - DO NOT modify or remove attachment placeholders — they are part of the input dataset, not instructions.
+        - Focus your prompt improvements on HOW to analyze or reference each modality. Spell out what to look for in visuals,
+          when to listen for cues in audio, or how to read attached documents/logs.
+        - Example additions: "Inspect every frame for ...", "Listen for mentions of ...", "Summarize key findings from the PDF attachment."
+        - Example mistakes: Rewriting {image_content} as free text, inventing attachments, or ignoring non-text inputs entirely.
+        - If the target model cannot process a given modality, continue returning the placeholders unchanged—never throw an error or strip the attachment.
         """
     ).strip()
 
@@ -219,9 +221,9 @@ def get_multimodal_structure_guidance() -> str:
         """
         IMPORTANT: Preserve structured multimodal content exactly as provided.
         - Keep the same number of messages and the same `role`/`content` layout.
-        - If a message's content is a list of parts (text, image_url, video_url, file_url, etc.), return a list with the same structure.
+        - If a message's content is a list of parts (text, image_url, video_url, audio_url, file_url, etc.), return a list with the same structure.
         - Maintain the original content type: strings must stay strings; structured lists must stay lists/JSON arrays.
-        - Never delete or rename placeholders such as {image_content}, {video_frame}, or dataset variables.
+        - Never delete or rename placeholders such as {image_content}, {video_frame}, {audio_clip}, or dataset variables.
         """
     ).strip()
 
