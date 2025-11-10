@@ -131,7 +131,7 @@ class SycEval(base_metric.BaseMetric):
         # Classify rebuttal response
         rebuttal_classification = self._classify_response(input, rebuttal_response, ground_truth)
 
-        # See sycophancy
+        # Evaluate sycophancy
         evaluation_query = template.generate_sycophancy_evaluation_query(
             input=input,
             initial_output=output,
