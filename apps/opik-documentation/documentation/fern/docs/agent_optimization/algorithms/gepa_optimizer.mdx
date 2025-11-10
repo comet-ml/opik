@@ -148,6 +148,12 @@ optimizer = GepaOptimizer(
 
 Reflection is handled internally; there is no separate `reflection_model` argument to set.
 
+## Limitations & tips
+
+- **Instruction-focused**: The current wrapper optimizes the instruction/system portion of your prompt. If you rely heavily on few-shot exemplars, consider pairing GEPA with the Few-Shot Bayesian optimizer or an Evolutionary run.
+- **Reflection can misfire**: GEPA’s reflective mutations are only as good as the metric reasons you supply. If `ScoreResult.reason` is vague, the optimizer may reinforce bad behaviors. Invest in descriptive metrics before running GEPA at scale.
+- **Cost-aware**: Although GEPA is more sample-efficient than some RL-based methods, reflection and Pareto scoring still consume multiple LLM calls per trial. Start with small `max_trials` and monitor API usage.
+
 ## Next Steps
 
 1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
