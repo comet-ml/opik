@@ -2,7 +2,7 @@ import uuid
 import pytest
 import opik
 from opik.api_objects.prompt import PromptType
-from opik.rest_api.core import ApiError
+from opik.rest_api import core as rest_api_core
 from . import verifiers
 
 
@@ -332,7 +332,7 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
     )
 
     # Attempt to create a chat prompt version with the same name should fail
-    with pytest.raises(ApiError) as exc_info:
+    with pytest.raises(rest_api_core.ApiError) as exc_info:
         opik_client.create_chat_prompt(
             name=prompt_name,
             messages=[
@@ -371,7 +371,7 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
     )
 
     # Attempt to create a string prompt version with the same name should fail
-    with pytest.raises(ApiError) as exc_info:
+    with pytest.raises(rest_api_core.ApiError) as exc_info:
         opik_client.create_prompt(
             name=prompt_name,
             prompt="This is a string prompt: {{variable}}",
