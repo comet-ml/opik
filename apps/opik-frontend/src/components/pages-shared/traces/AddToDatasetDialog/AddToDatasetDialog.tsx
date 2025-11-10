@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useState } from "react";
-import get from "lodash/get";
 import isUndefined from "lodash/isUndefined";
 import { Database, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -24,10 +23,9 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAddTracesToDatasetMutation from "@/api/datasets/useAddTracesToDatasetMutation";
 import useAddSpansToDatasetMutation from "@/api/datasets/useAddSpansToDatasetMutation";
-import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { Dataset } from "@/types/datasets";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,14 +51,12 @@ type EnrichmentOptions = {
 };
 
 type AddToDatasetDialogProps = {
-  getDataForExport: () => Promise<Array<Trace | Span>>;
   selectedRows: Array<Trace | Span>;
   open: boolean;
   setOpen: (open: boolean) => void;
 };
 
 const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
-  getDataForExport,
   selectedRows,
   open,
   setOpen,
@@ -85,7 +81,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     includeMetadata: true,
   });
 
-  const { mutate } = useDatasetItemBatchMutation();
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
   const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
 
@@ -157,114 +152,76 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   );
 
   const addToDatasetHandler = useCallback(
-    async (dataset: Dataset) => {
+    (dataset: Dataset) => {
       setFetching(true);
       setOpen(false);
-      try {
-        const rows = await getDataForExport();
-        const validRowsFromFetch = rows.filter((r) => !isUndefined(r.input));
 
-        const traces = validRowsFromFetch.filter((r) => !isObjectSpan(r));
-        const spans = validRowsFromFetch.filter((r) => isObjectSpan(r));
-
-        // If we have only traces, use the new enriched endpoint
-        if (hasOnlyTraces) {
-          addTracesToDataset(
-            {
-              workspaceName,
-              datasetId: dataset.id,
-              traceIds: traces.map((t) => t.id),
-              enrichmentOptions: {
-                include_spans: enrichmentOptions.includeSpans,
-                include_tags: enrichmentOptions.includeTags,
-                include_feedback_scores:
-                  enrichmentOptions.includeFeedbackScores,
-                include_comments: enrichmentOptions.includeComments,
-                include_usage: enrichmentOptions.includeUsage,
-                include_metadata: enrichmentOptions.includeMetadata,
-              },
+      // If we have only traces, use the enriched endpoint for traces
+      if (hasOnlyTraces) {
+        addTracesToDataset(
+          {
+            workspaceName,
+            datasetId: dataset.id,
+            traceIds: validTraces.map((t) => t.id),
+            enrichmentOptions: {
+              include_spans: enrichmentOptions.includeSpans,
+              include_tags: enrichmentOptions.includeTags,
+              include_feedback_scores:
+                enrichmentOptions.includeFeedbackScores,
+              include_comments: enrichmentOptions.includeComments,
+              include_usage: enrichmentOptions.includeUsage,
+              include_metadata: enrichmentOptions.includeMetadata,
             },
-            {
-              onSuccess: () => onItemsAdded(dataset, true, false),
+          },
+          {
+            onSuccess: () => {
+              onItemsAdded(dataset, true, false);
+              setFetching(false);
             },
-          );
-        } else if (hasOnlySpans) {
-          // If we have only spans, use the new enriched endpoint for spans
-          addSpansToDataset(
-            {
-              workspaceName,
-              datasetId: dataset.id,
-              spanIds: spans.map((s) => s.id),
-              enrichmentOptions: {
-                include_tags: enrichmentOptions.includeTags,
-                include_feedback_scores:
-                  enrichmentOptions.includeFeedbackScores,
-                include_comments: enrichmentOptions.includeComments,
-                include_usage: enrichmentOptions.includeUsage,
-                include_metadata: enrichmentOptions.includeMetadata,
-              },
+            onError: () => {
+              setFetching(false);
             },
-            {
-              onSuccess: () => onItemsAdded(dataset, false, true),
-            },
-          );
-        } else {
-          // For mixed content, use the old endpoint
-          mutate(
-            {
-              workspaceName,
-              datasetId: dataset.id,
-              datasetItems: validRowsFromFetch.map((r) => {
-                const isSpan = isObjectSpan(r);
-                const spanId = isSpan ? r.id : "";
-                const traceId = isSpan ? get(r, "trace_id", "") : r.id;
-
-                return {
-                  data: {
-                    input: r.input,
-                    ...(r.output && { expected_output: r.output }),
-                  },
-                  source: isSpan
-                    ? DATASET_ITEM_SOURCE.span
-                    : DATASET_ITEM_SOURCE.trace,
-                  trace_id: traceId,
-                  ...(isSpan ? { span_id: spanId } : {}),
-                };
-              }),
-            },
-            {
-              onSuccess: () =>
-                onItemsAdded(dataset, traces.length > 0, spans.length > 0),
-            },
-          );
-        }
-      } catch (error) {
-        const message = get(
-          error,
-          ["response", "data", "message"],
-          get(error, "message", "Failed to fetch data for adding to dataset"),
+          },
         );
-        toast({
-          title: "Failed to fetch data",
-          description: message,
-          variant: "destructive",
-        });
-      } finally {
-        setFetching(false);
+      } else if (hasOnlySpans) {
+        // If we have only spans, use the enriched endpoint for spans
+        addSpansToDataset(
+          {
+            workspaceName,
+            datasetId: dataset.id,
+            spanIds: validSpans.map((s) => s.id),
+            enrichmentOptions: {
+              include_tags: enrichmentOptions.includeTags,
+              include_feedback_scores:
+                enrichmentOptions.includeFeedbackScores,
+              include_comments: enrichmentOptions.includeComments,
+              include_usage: enrichmentOptions.includeUsage,
+              include_metadata: enrichmentOptions.includeMetadata,
+            },
+          },
+          {
+            onSuccess: () => {
+              onItemsAdded(dataset, false, true);
+              setFetching(false);
+            },
+            onError: () => {
+              setFetching(false);
+            },
+          },
+        );
       }
     },
     [
-      getDataForExport,
       setOpen,
-      mutate,
       addTracesToDataset,
       addSpansToDataset,
       workspaceName,
       onItemsAdded,
-      toast,
       enrichmentOptions,
       hasOnlyTraces,
       hasOnlySpans,
+      validTraces,
+      validSpans,
     ],
   );
 

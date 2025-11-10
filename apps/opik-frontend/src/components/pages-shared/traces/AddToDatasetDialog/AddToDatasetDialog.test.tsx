@@ -6,7 +6,6 @@ import { Trace, Span, SPAN_TYPE } from "@/types/traces";
 import { ReactNode } from "react";
 
 // Create mock functions that can be accessed in tests
-const mockBatchMutate = vi.fn();
 const mockAddTracesToDataset = vi.fn();
 const mockAddSpansToDataset = vi.fn();
 
@@ -30,12 +29,6 @@ vi.mock("@/api/datasets/useDatasetsList", () => ({
     },
     isPending: false,
   })),
-}));
-
-vi.mock("@/api/datasets/useDatasetItemBatchMutation", () => ({
-  default: () => ({
-    mutate: mockBatchMutate,
-  }),
 }));
 
 vi.mock("@/api/datasets/useAddTracesToDatasetMutation", () => ({
@@ -133,7 +126,6 @@ describe("AddToDatasetDialog", () => {
   };
 
   const defaultProps = {
-    getDataForExport: vi.fn(async () => [mockTrace]),
     selectedRows: [mockTrace],
     open: true,
     setOpen: vi.fn(),
@@ -200,7 +192,6 @@ describe("AddToDatasetDialog", () => {
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
-      getDataForExport: vi.fn(async () => [mockSpan]),
     };
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
@@ -223,7 +214,6 @@ describe("AddToDatasetDialog", () => {
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
-      getDataForExport: vi.fn(async () => [mockSpan]),
     };
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
@@ -244,7 +234,6 @@ describe("AddToDatasetDialog", () => {
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
-      getDataForExport: vi.fn(async () => [mockSpan]),
     };
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
@@ -266,20 +255,6 @@ describe("AddToDatasetDialog", () => {
     expect(screen.getByLabelText("Feedback scores")).toBeChecked();
   });
 
-  it("should not display enrichment checkboxes when mixed traces and spans are selected", () => {
-    const propsWithMixed = {
-      ...defaultProps,
-      selectedRows: [mockTrace, mockSpan],
-      getDataForExport: vi.fn(async () => [mockTrace, mockSpan]),
-    };
-
-    render(<AddToDatasetDialog {...propsWithMixed} />, { wrapper });
-
-    // Accordion should not be present when mixed selection
-    expect(
-      screen.queryByText("Trace metadata configuration"),
-    ).not.toBeInTheDocument();
-  });
 
   it("should display available datasets", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
@@ -380,11 +355,9 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should call addSpansToDataset mutation when clicking on dataset with only spans", async () => {
-    const getDataForExportMock = vi.fn(async () => [mockSpan]);
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
-      getDataForExport: getDataForExportMock,
     };
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
@@ -397,12 +370,6 @@ describe("AddToDatasetDialog", () => {
     const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
     fireEvent.click(addButton);
 
-    // Wait for getDataForExport to be called first
-    await waitFor(() => {
-      expect(getDataForExportMock).toHaveBeenCalled();
-    });
-
-    // Then wait for the addSpansToDataset mutation
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -463,7 +430,6 @@ describe("AddToDatasetDialog", () => {
     const propsWithSpan = {
       ...defaultProps,
       selectedRows: [mockSpan],
-      getDataForExport: vi.fn(async () => [mockSpan]),
     };
 
     render(<AddToDatasetDialog {...propsWithSpan} />, { wrapper });
@@ -501,51 +467,4 @@ describe("AddToDatasetDialog", () => {
     });
   });
 
-  it("should call batch mutation when clicking on dataset with mixed traces and spans", async () => {
-    const getDataForExportMock = vi.fn(async () => [mockTrace, mockSpan]);
-    const propsWithMixed = {
-      ...defaultProps,
-      selectedRows: [mockTrace, mockSpan],
-      getDataForExport: getDataForExportMock,
-    };
-
-    render(<AddToDatasetDialog {...propsWithMixed} />, { wrapper });
-
-    // Select the dataset
-    const dataset = screen.getByText("Test Dataset 1");
-    fireEvent.click(dataset);
-
-    // Click the "Add to dataset" button
-    const addButton = screen.getAllByText("Add to dataset")[1]; // Get the button, not the dialog title
-    fireEvent.click(addButton);
-
-    // Wait for getDataForExport to be called first
-    await waitFor(() => {
-      expect(getDataForExportMock).toHaveBeenCalled();
-    });
-
-    // Then wait for the batch mutation (fallback for mixed content)
-    await waitFor(() => {
-      expect(mockBatchMutate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          datasetId: "dataset-1",
-          workspaceName: "test-workspace",
-          datasetItems: expect.arrayContaining([
-            expect.objectContaining({
-              source: "trace",
-              trace_id: "trace-1",
-              data: expect.any(Object),
-            }),
-            expect.objectContaining({
-              source: "span",
-              span_id: "span-1",
-              trace_id: "trace-1",
-              data: expect.any(Object),
-            }),
-          ]),
-        }),
-        expect.any(Object),
-      );
-    });
-  });
 });

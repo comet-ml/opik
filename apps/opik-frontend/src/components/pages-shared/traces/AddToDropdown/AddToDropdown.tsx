@@ -38,9 +38,6 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
       {showAddToDataset && (
         <AddToDatasetDialog
           key={`dataset-${resetKeyRef.current}`}
-          getDataForExport={
-            getDataForExport as () => Promise<Array<Trace | Span>>
-          }
           selectedRows={selectedRows as Array<Trace | Span>}
           open={open === 1}
           setOpen={() => setOpen(0)}
