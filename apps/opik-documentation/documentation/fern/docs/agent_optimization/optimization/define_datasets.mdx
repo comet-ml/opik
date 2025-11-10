@@ -26,7 +26,7 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
 
     client = opik.Opik()
     dataset = client.get_or_create_dataset(name="agent-opt-support")
-    dataset.upsert([
+    dataset.insert([
         {"question": "Summarize Opik.", "answer": "Opik is an LLM observability platform."},
         {"question": "List two optimizer types.", "answer": "MetaPrompt and Hierarchical Reflective."},
     ])
@@ -60,9 +60,10 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
 
 ## Validation checklist
 
+- Confirm row counts in the Opik **Datasets** tab (or by running `len(dataset.get_items())` in Python) before and after uploads.
 - Spot-check rows in the dashboard’s Dataset viewer.
-- If rows include multimodal data, confirm they appear in the trace tree once you run an optimization.
-- Run an initial small batch optimization with a few rows of data to validate.
+- If rows include multimodal assets or tool payloads, confirm they appear in the trace tree once you run an optimization.
+- Run an initial small-batch optimization with a few rows of data to validate everything end to end.
 
 ## Next steps
 
