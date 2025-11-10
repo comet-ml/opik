@@ -912,8 +912,8 @@ class Opik:
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
-        prompt: Optional[prompt_module.Prompt] = None,
-        prompts: Optional[List[prompt_module.Prompt]] = None,
+        prompt: Optional[prompt_module.base_prompt.BasePrompt] = None,
+        prompts: Optional[List[prompt_module.base_prompt.BasePrompt]] = None,
         type: Literal["regular", "trial", "mini-batch"] = "regular",
         optimization_id: Optional[str] = None,
     ) -> experiment.Experiment:
