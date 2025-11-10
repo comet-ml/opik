@@ -166,8 +166,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             enrichmentOptions: {
               include_spans: enrichmentOptions.includeSpans,
               include_tags: enrichmentOptions.includeTags,
-              include_feedback_scores:
-                enrichmentOptions.includeFeedbackScores,
+              include_feedback_scores: enrichmentOptions.includeFeedbackScores,
               include_comments: enrichmentOptions.includeComments,
               include_usage: enrichmentOptions.includeUsage,
               include_metadata: enrichmentOptions.includeMetadata,
@@ -192,8 +191,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             spanIds: validSpans.map((s) => s.id),
             enrichmentOptions: {
               include_tags: enrichmentOptions.includeTags,
-              include_feedback_scores:
-                enrichmentOptions.includeFeedbackScores,
+              include_feedback_scores: enrichmentOptions.includeFeedbackScores,
               include_comments: enrichmentOptions.includeComments,
               include_usage: enrichmentOptions.includeUsage,
               include_metadata: enrichmentOptions.includeMetadata,

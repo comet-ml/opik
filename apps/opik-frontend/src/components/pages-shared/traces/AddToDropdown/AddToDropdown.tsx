@@ -19,12 +19,9 @@ export type AddToDropdownProps = {
   dataType?: "traces" | "spans" | "threads";
 };
 
-const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
-  getDataForExport,
-  selectedRows,
-  disabled = false,
-  dataType = "traces",
-}) => {
+const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
+  const { selectedRows, disabled = false, dataType = "traces" } = props;
+  // getDataForExport is accepted for backwards compatibility but no longer used
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
 

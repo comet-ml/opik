@@ -255,7 +255,6 @@ describe("AddToDatasetDialog", () => {
     expect(screen.getByLabelText("Feedback scores")).toBeChecked();
   });
 
-
   it("should display available datasets", () => {
     render(<AddToDatasetDialog {...defaultProps} />, { wrapper });
 
@@ -466,5 +465,4 @@ describe("AddToDatasetDialog", () => {
       );
     });
   });
-
 });
