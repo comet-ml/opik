@@ -577,6 +577,112 @@ class AnnotationQueuesResourceTest {
             assertThat(retrievedQueue.feedbackScores()).isNull();
             assertThat(retrievedQueue.reviewers()).isNull();
         }
+
+        @Test
+        @DisplayName("should get annotation queue with reviewers for comment-only annotations (no feedback scores)")
+        void getAnnotationQueueWithCommentOnlyReviewers() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue for traces with NO feedback definitions (comment-only workflow)
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of()) // Empty list - no feedback definitions required
+                    .commentsEnabled(true)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create traces and add them to the queue
+            var trace1 = createTrace(project.name());
+            var trace2 = createTrace(project.name());
+            var itemIds = Set.of(trace1, trace2);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Add comments to traces (without any feedback scores)
+            traceResourceClient.generateAndCreateComment(trace1, API_KEY, TEST_WORKSPACE, 201);
+            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, 201);
+
+            // When
+            var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(retrievedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(annotationQueue);
+
+            assertThat(retrievedQueue.itemsCount()).isEqualTo(2L);
+            assertThat(retrievedQueue.feedbackScores()).isNull(); // No feedback scores
+
+            // Verify reviewers are tracked based on comments only
+            verifyReviewers(retrievedQueue, 2L);
+        }
+
+        @Test
+        @DisplayName("should get annotation queue with reviewers for mixed feedback and comment annotations")
+        void getAnnotationQueueWithMixedFeedbackAndCommentReviewers() {
+            // Given - Create a project first
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Create annotation queue with feedback definitions
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of("quality"))
+                    .commentsEnabled(true)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Create traces and add them to the queue
+            var trace1 = createTrace(project.name()); // Will have feedback score
+            var trace2 = createTrace(project.name()); // Will have comment only
+            var trace3 = createTrace(project.name()); // Will have both feedback and comment
+            var itemIds = Set.of(trace1, trace2, trace3);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Add feedback score to trace1
+            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
+
+            // Add comment to trace2 (no feedback)
+            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, 201);
+
+            // Add both feedback and comment to trace3
+            createFeedbackScoreForTrace(trace3, "quality", 0.9, project.name());
+            traceResourceClient.generateAndCreateComment(trace3, API_KEY, TEST_WORKSPACE, 201);
+
+            // When
+            var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            // Then
+            assertThat(retrievedQueue.itemsCount()).isEqualTo(3L);
+
+            // Verify feedback scores include only traces with feedback (trace1 and trace3)
+            assertThat(retrievedQueue.feedbackScores()).hasSize(1);
+            var qualityScore = retrievedQueue.feedbackScores().stream()
+                    .filter(score -> score.name().equals("quality"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(qualityScore.value()).isEqualByComparingTo(new BigDecimal("0.85")); // (0.8 + 0.9) / 2
+
+            // Verify reviewers count all three traces (feedback + comments)
+            verifyReviewers(retrievedQueue, 3L);
+        }
     }
 
     @Nested
