@@ -343,11 +343,18 @@ def create_litellm_agent_class(
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
     def _derive_class_name(name: str) -> str:
-        # Strip non-alphanumeric characters and leading digits so the generated class
-        # name is a valid Python identifier.
-        cleaned = re.sub(r"\W|^(?=\d)", "", name)
-        cleaned = cleaned.title()
-        return f"{cleaned}LiteLLMAgent" if cleaned else "LiteLLMAgent"
+        # Split on non-word characters to preserve original capitalization boundaries.
+        segments = [segment for segment in re.split(r"\W+", name) if segment]
+        if not segments:
+            return "LiteLLMAgent"
+
+        camel = "".join(
+            segment[0].upper() + segment[1:] if segment else "" for segment in segments
+        )
+
+        # Remove any leading digits so the identifier remains valid.
+        camel = camel.lstrip(string.digits)
+        return f"{camel}LiteLLMAgent" if camel else "LiteLLMAgent"
 
     class LiteLLMAgent(OptimizableAgent):
         optimizer = optimizer_ref
