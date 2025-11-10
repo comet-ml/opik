@@ -9,7 +9,7 @@ modalities can be plugged in without changing the core implementation.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, List, Optional, Set, Union, cast, override
 
 import opik.exceptions as exceptions
 
@@ -55,9 +55,7 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
             required.update(self._registry.infer_modalities(content))
         return required
 
-    def _extract_placeholders(
-        self, template_type: prompt_types.PromptType
-    ) -> Set[str]:
+    def _extract_placeholders(self, template_type: prompt_types.PromptType) -> Set[str]:
         """
         Extract all placeholders from all messages.
         """
@@ -65,7 +63,9 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
         for message in self._messages:
             content = cast(prompt_types.MessageContent, message.get("content", ""))
             if isinstance(content, str):
-                placeholders.update(_extract_placeholders_from_string(content, template_type))
+                placeholders.update(
+                    _extract_placeholders_from_string(content, template_type)
+                )
             elif isinstance(content, list):
                 for part in content:
                     if not isinstance(part, dict):
@@ -73,13 +73,18 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
                     # Extract from text parts
                     if "text" in part:
                         text = str(part["text"])
-                        placeholders.update(_extract_placeholders_from_string(text, template_type))
+                        placeholders.update(
+                            _extract_placeholders_from_string(text, template_type)
+                        )
                     # Extract from image_url parts
                     if "image_url" in part and isinstance(part["image_url"], dict):
                         url = str(part["image_url"].get("url", ""))
-                        placeholders.update(_extract_placeholders_from_string(url, template_type))
+                        placeholders.update(
+                            _extract_placeholders_from_string(url, template_type)
+                        )
         return placeholders
 
+    @override
     def format(
         self,
         variables: Dict[str, Any],
@@ -98,17 +103,20 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
         resolved_template_type = self._registry.normalize_template_type(
             template_type or self._template_type
         )
-        
+
         # Validate placeholders if enabled and using Mustache templates
-        if self._validate_placeholders and resolved_template_type == prompt_types.PromptType.MUSTACHE:
+        if (
+            self._validate_placeholders
+            and resolved_template_type == prompt_types.PromptType.MUSTACHE
+        ):
             placeholders = self._extract_placeholders(resolved_template_type)
             variables_keys: Set[str] = set(variables.keys())
-            
+
             if variables_keys != placeholders:
                 raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
                     prompt_placeholders=placeholders, format_arguments=variables_keys
                 )
-        
+
         rendered_messages: List[Dict[str, prompt_types.MessageContent]] = []
 
         for message in self._messages:

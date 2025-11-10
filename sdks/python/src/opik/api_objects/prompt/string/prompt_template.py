@@ -1,5 +1,5 @@
 import re
-from typing import Any, Set
+from typing import Any, Set, override
 import jinja2
 
 import opik.exceptions as exceptions
@@ -22,6 +22,7 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
     def text(self) -> str:
         return self._template
 
+    @override
     def format(self, **kwargs: Any) -> str:
         if self._type == prompt_types.PromptType.MUSTACHE:
             template = self._template

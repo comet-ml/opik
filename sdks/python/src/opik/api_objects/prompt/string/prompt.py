@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, override
 
 from opik.rest_api import types as rest_api_types
 from . import prompt_template
@@ -56,6 +56,7 @@ class Prompt(base_prompt.BasePrompt):
         self.__internal_api__version_id__ = prompt_version.id
 
     @property
+    @override
     def name(self) -> str:
         """The name of the prompt."""
         return self._name
@@ -66,16 +67,19 @@ class Prompt(base_prompt.BasePrompt):
         return str(self._template)
 
     @property
+    @override
     def commit(self) -> Optional[str]:
         """The commit hash of the prompt."""
         return self._commit
 
     @property
+    @override
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
 
     @property
+    @override
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
@@ -85,6 +89,7 @@ class Prompt(base_prompt.BasePrompt):
         """The template structure of the prompt ('string' or 'chat'). Immutable after creation."""
         return self._template_structure
 
+    @override
     def format(self, **kwargs: Any) -> str:
         """
         Replaces placeholders in the template with provided keyword arguments.
@@ -98,10 +103,11 @@ class Prompt(base_prompt.BasePrompt):
         """
         return self._template.format(**kwargs)
 
+    @override
     def to_info_dict(self) -> Dict[str, Any]:
         """
         Convert the prompt to an info dictionary for serialization.
-        
+
         Returns:
             Dictionary containing prompt metadata and version information.
         """

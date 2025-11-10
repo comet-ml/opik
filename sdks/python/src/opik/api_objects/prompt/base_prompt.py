@@ -15,7 +15,7 @@ from . import types as prompt_types
 class BasePrompt(ABC):
     """
     Abstract base class for prompts (string and chat).
-    
+
     All prompt implementations must provide common properties and methods
     for interacting with the backend API.
     """
@@ -52,7 +52,7 @@ class BasePrompt(ABC):
     def format(self, **kwargs: Any) -> Any:
         """
         Format the prompt with the provided variables.
-        
+
         Returns:
             Formatted output. Type depends on the implementation:
             - Prompt returns str
@@ -64,9 +64,8 @@ class BasePrompt(ABC):
     def to_info_dict(self) -> Dict[str, Any]:
         """
         Convert the prompt to an info dictionary for serialization.
-        
+
         Returns:
             Dictionary containing prompt metadata and version information.
         """
         pass
-
