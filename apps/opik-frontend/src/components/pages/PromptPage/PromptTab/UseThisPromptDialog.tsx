@@ -69,7 +69,7 @@ const getGettingChatPrompt = (promptName: string) => `import opik
 client = opik.Opik()
 
 # Get the most recent version of a chat prompt
-chat_prompt = client.get_prompt(name="${promptName}")
+chat_prompt = client.get_chat_prompt(name="${promptName}")
 
 # Read metadata from the most recent version of a chat prompt
 print(chat_prompt.metadata)

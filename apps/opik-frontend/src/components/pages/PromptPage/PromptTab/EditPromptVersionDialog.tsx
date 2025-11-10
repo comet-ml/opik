@@ -142,6 +142,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
       template: finalTemplate,
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
+      ...(templateStructure && { templateStructure }),
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
       },
