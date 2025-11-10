@@ -73,6 +73,7 @@ from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
 from .llm_judges.llm_juries.metric import LLMJuriesJudge
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
+from .llm_judges.syc_eval.metric import SycEval
 from .llm_judges.usefulness.metric import Usefulness
 from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
 from .base_metric import BaseMetric
@@ -137,6 +138,7 @@ __all__ = [
     "SentenceBLEU",
     "Sentiment",
     "SessionCompletenessQuality",
+    "SycEval",
     "Usefulness",
     "UserFrustrationMetric",
     "TrajectoryAccuracy",
