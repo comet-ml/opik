@@ -358,7 +358,10 @@ def _build_prompt_evaluation_task(
             )
         },
     )
-    chat_prompt_template_ = chat_prompt_template.ChatPromptTemplate(messages=messages)
+    # Disable placeholder validation since we pass all dataset item fields to format()
+    chat_prompt_template_ = chat_prompt_template.ChatPromptTemplate(
+        messages=messages, validate_placeholders=False
+    )
 
     required_modalities = chat_prompt_template_.required_modalities()
     unsupported_modalities = {

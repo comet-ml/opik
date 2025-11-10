@@ -44,9 +44,13 @@ def build_metadata_and_prompt_versions(
             # Extract the template/messages from the version dict
             if "version" in prompt_info:
                 if "template" in prompt_info["version"]:
-                    experiment_config["prompts"][prompt_obj.name] = prompt_info["version"]["template"]
+                    experiment_config["prompts"][prompt_obj.name] = prompt_info[
+                        "version"
+                    ]["template"]
                 elif "messages" in prompt_info["version"]:
-                    experiment_config["prompts"][prompt_obj.name] = prompt_info["version"]["messages"]
+                    experiment_config["prompts"][prompt_obj.name] = prompt_info[
+                        "version"
+                    ]["messages"]
 
     if experiment_config == {}:
         return None, None
