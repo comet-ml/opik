@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { toast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
-import AppNetworkStatus from "@/components/shared/AppNetworkStatus/AppNetworkStatus";
+import AppNetworkStatus from "@/components/layout/AppNetworkStatus/AppNetworkStatus";
 import OpikIcon from "@/icons/opik.svg?react";
 import copy from "clipboard-copy";
 import { Copy } from "lucide-react";
