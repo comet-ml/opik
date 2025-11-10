@@ -1,4 +1,6 @@
+import pytest
 from opik.api_objects.prompt import ChatPromptTemplate, PromptType
+from opik import exceptions
 
 
 def test_chat_prompt_template__format__simple_text_message__happyflow():
@@ -148,7 +150,7 @@ def test_chat_prompt_template__format__empty_content():
     
     tested = ChatPromptTemplate(messages)
     
-    result = tested.format({"name": "Harry"})
+    result = tested.format({})
     
     assert result == [{"role": "user", "content": ""}]
 
@@ -397,7 +399,7 @@ def test_chat_prompt_template__format__empty_messages_list():
     
     tested = ChatPromptTemplate(messages)
     
-    result = tested.format({"name": "Harry"})
+    result = tested.format({})
     
     assert result == []
 
@@ -410,7 +412,130 @@ def test_chat_prompt_template__format__message_with_missing_content():
     
     tested = ChatPromptTemplate(messages)
     
-    result = tested.format({"name": "Harry"})
+    result = tested.format({})
     
     assert result == [{"role": "user", "content": ""}]
+
+
+def test_chat_prompt_template__format__passed_arguments_not_in_template__error_raised():
+    """Test that extra format arguments not in template raise an error."""
+    messages = [
+        {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
+    ]
+    
+    tested = ChatPromptTemplate(messages)
+    
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+        tested.format({"name": "Harry", "city": "London", "nemesis_name": "Voldemort"})
+    
+    assert exc_info.value.format_arguments == set(["name", "city", "nemesis_name"])
+    assert exc_info.value.prompt_placeholders == set(["name", "city"])
+    assert exc_info.value.symmetric_difference == set(["nemesis_name"])
+
+
+def test_chat_prompt_template__format__some_placeholders_missing__error_raised():
+    """Test that missing required placeholders raise an error."""
+    messages = [
+        {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
+    ]
+    
+    tested = ChatPromptTemplate(messages)
+    
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+        tested.format({"name": "Harry"})
+    
+    assert exc_info.value.format_arguments == set(["name"])
+    assert exc_info.value.prompt_placeholders == set(["name", "city"])
+    assert exc_info.value.symmetric_difference == set(["city"])
+
+
+def test_chat_prompt_template__format__placeholders_mismatch_both_ways__error_raised():
+    """Test error when some placeholders are missing AND extra arguments provided."""
+    messages = [
+        {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
+    ]
+    
+    tested = ChatPromptTemplate(messages)
+    
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+        tested.format({"name": "Harry", "nemesis_name": "Voldemort"})
+    
+    assert exc_info.value.format_arguments == set(["name", "nemesis_name"])
+    assert exc_info.value.prompt_placeholders == set(["name", "city"])
+    assert exc_info.value.symmetric_difference == set(["city", "nemesis_name"])
+
+
+def test_chat_prompt_template__format__multimodal_placeholders__validates_all():
+    """Test that placeholders in multimodal content are validated."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this {{object}}:"},
+                {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
+            ],
+        }
+    ]
+    
+    tested = ChatPromptTemplate(messages)
+    
+    # Missing image_url placeholder
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+        tested.format({"object": "painting"})
+    
+    assert exc_info.value.format_arguments == set(["object"])
+    assert exc_info.value.prompt_placeholders == set(["object", "image_url"])
+    assert exc_info.value.symmetric_difference == set(["image_url"])
+
+
+def test_chat_prompt_template__format__multiple_messages_placeholders__validates_all():
+    """Test that placeholders across multiple messages are validated."""
+    messages = [
+        {"role": "system", "content": "You are an assistant in {{location}}."},
+        {"role": "user", "content": "What is the capital of {{country}}?"},
+    ]
+    
+    tested = ChatPromptTemplate(messages)
+    
+    # Missing country placeholder
+    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+        tested.format({"location": "London"})
+    
+    assert exc_info.value.format_arguments == set(["location"])
+    assert exc_info.value.prompt_placeholders == set(["location", "country"])
+    assert exc_info.value.symmetric_difference == set(["country"])
+
+
+def test_chat_prompt_template__format__validation_disabled__no_error():
+    """Test that validation can be disabled."""
+    messages = [
+        {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
+    ]
+    
+    tested = ChatPromptTemplate(messages, validate_placeholders=False)
+    
+    # Should not raise an error even though city is missing
+    result = tested.format({"name": "Harry"})
+    
+    # The template will leave unformatted placeholders
+    assert result == [
+        {"role": "user", "content": "Hi, my name is Harry, I live in {{city}}."}
+    ]
+
+
+def test_chat_prompt_template__format__jinja2_no_validation():
+    """Test that Jinja2 templates don't validate placeholders."""
+    messages = [
+        {"role": "user", "content": "Hi, my name is {{ name }}, I live in {{ city }}."}
+    ]
+    
+    tested = ChatPromptTemplate(messages, template_type=PromptType.JINJA2)
+    
+    # Jinja2 templates don't validate, so this should not raise an error
+    # Jinja2 will just render missing variables as empty
+    result = tested.format({"name": "Harry"})
+    
+    # Should render successfully (Jinja2 handles missing variables gracefully)
+    assert len(result) == 1
+    assert result[0]["role"] == "user"
 

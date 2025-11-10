@@ -8,7 +8,10 @@ modalities can be plugged in without changing the core implementation.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union, cast
+import re
+from typing import Any, Dict, List, Optional, Set, Union, cast
+
+import opik.exceptions as exceptions
 
 from ..string import prompt_template
 from .. import types as prompt_types
@@ -28,12 +31,14 @@ class ChatPromptTemplate:
         registry: Optional[
             content_renderer_registry.ChatContentRendererRegistry
         ] = None,
+        validate_placeholders: bool = True,
     ) -> None:
         self._messages = messages
         self._template_type = template_type
         self._registry = (
             registry or content_renderer_registry.DEFAULT_CHAT_RENDERER_REGISTRY
         )
+        self._validate_placeholders = validate_placeholders
 
     @property
     def messages(self) -> List[Dict[str, prompt_types.MessageContent]]:
@@ -48,6 +53,31 @@ class ChatPromptTemplate:
             content = cast(prompt_types.MessageContent, message.get("content", ""))
             required.update(self._registry.infer_modalities(content))
         return required
+
+    def _extract_placeholders(
+        self, template_type: prompt_types.PromptType
+    ) -> Set[str]:
+        """
+        Extract all placeholders from all messages.
+        """
+        placeholders: Set[str] = set()
+        for message in self._messages:
+            content = cast(prompt_types.MessageContent, message.get("content", ""))
+            if isinstance(content, str):
+                placeholders.update(_extract_placeholders_from_string(content, template_type))
+            elif isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    # Extract from text parts
+                    if "text" in part:
+                        text = str(part["text"])
+                        placeholders.update(_extract_placeholders_from_string(text, template_type))
+                    # Extract from image_url parts
+                    if "image_url" in part and isinstance(part["image_url"], dict):
+                        url = str(part["image_url"].get("url", ""))
+                        placeholders.update(_extract_placeholders_from_string(url, template_type))
+        return placeholders
 
     def format(
         self,
@@ -67,6 +97,17 @@ class ChatPromptTemplate:
         resolved_template_type = self._registry.normalize_template_type(
             template_type or self._template_type
         )
+        
+        # Validate placeholders if enabled and using Mustache templates
+        if self._validate_placeholders and resolved_template_type == prompt_types.PromptType.MUSTACHE:
+            placeholders = self._extract_placeholders(resolved_template_type)
+            variables_keys: Set[str] = set(variables.keys())
+            
+            if variables_keys != placeholders:
+                raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
+                    prompt_placeholders=placeholders, format_arguments=variables_keys
+                )
+        
         rendered_messages: List[Dict[str, prompt_types.MessageContent]] = []
 
         for message in self._messages:
@@ -145,6 +186,19 @@ def render_image_url_part(
         rendered_image["detail"] = image_dict["detail"]
 
     return {"type": "image_url", "image_url": rendered_image}
+
+
+def _extract_placeholders_from_string(
+    text: str, template_type: prompt_types.PromptType
+) -> Set[str]:
+    """
+    Extract placeholder keys from a string template.
+    Only supports Mustache templates for now.
+    """
+    if template_type == prompt_types.PromptType.MUSTACHE:
+        pattern = r"\{\{(.*?)\}\}"
+        return set(re.findall(pattern, text))
+    return set()
 
 
 content_renderer_registry.register_default_chat_part_renderer("text", render_text_part)
