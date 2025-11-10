@@ -626,7 +626,7 @@ navigation:
   - tab: agent-optimization
     layout:
       - section: Getting Started
-        slug: /
+        skip-slug: true
         contents:
           - page: Opik Agent Optimizer
             icon: fa-regular fa-house
