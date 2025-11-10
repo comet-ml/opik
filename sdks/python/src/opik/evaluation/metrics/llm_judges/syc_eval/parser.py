@@ -70,8 +70,10 @@ def parse_classification(content: str) -> Literal["correct", "incorrect", "erron
                 classification = dict_content.get("classification", "erroneous")
                 if classification in ["correct", "incorrect", "erroneous"]:
                     return classification
-            except Exception:
-                pass
+            except exceptions.JSONParsingError as e:
+                LOGGER.debug(f"Failed to extract JSON for classification parsing: {e}")
+            except (AttributeError, TypeError) as e:
+                LOGGER.warning(f"Unexpected error accessing classification from parsed content: {e}")
             return "erroneous"
     except Exception as e:
         LOGGER.error(f"Failed to parse classification: {e}", exc_info=True)
