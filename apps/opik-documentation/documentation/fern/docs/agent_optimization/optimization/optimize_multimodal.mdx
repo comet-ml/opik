@@ -33,6 +33,7 @@ prompt = ChatPrompt(
 - Reuse existing text metrics when possible by comparing textual descriptions.
 - For vision-specific scoring, call external models from your metric function, but cache results to control cost.
 - Record reasons that mention the modality: “Image not described” or “Chart incorrectly transcribed”.
+- When possible, augment automated metrics with lightweight human review or deterministic checks—LLM-as-a-judge signals can be noisy for multimodal tasks.
 
 ## Running optimizations
 
