@@ -223,6 +223,16 @@ class PromptServiceImpl implements PromptService {
         Prompt prompt = findByName(workspaceId, name);
 
         if (prompt != null) {
+            // Validate that the template structure matches if the prompt already exists
+            if (!prompt.templateStructure().equals(templateStructure)) {
+                var errorMessage = String.format(
+                        "Template structure mismatch: prompt '%s' has template_structure '%s' but new version has '%s'. "
+                                +
+                                "Template structure is immutable and cannot be changed after prompt creation.",
+                        name, prompt.templateStructure().getValue(), templateStructure.getValue());
+                log.warn(errorMessage);
+                throw new BadRequestException(errorMessage);
+            }
             return prompt;
         }
 

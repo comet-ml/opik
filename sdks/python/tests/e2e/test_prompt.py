@@ -309,3 +309,78 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     names = set(p.name for p in results)
     assert len(results) == 2
     assert names == set([prompt_name_1, prompt_name_2])
+
+
+def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
+    """Test that template_structure is immutable after prompt creation."""
+    import pytest
+    from opik.rest_api.core import ApiError
+
+    unique_identifier = str(uuid.uuid4())[-6:]
+    prompt_name = f"test-immutable-structure-{unique_identifier}"
+
+    # Create initial string prompt
+    string_prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt="This is a string prompt: {{variable}}",
+    )
+
+    # Verify string prompt was created
+    verifiers.verify_prompt_version(
+        string_prompt,
+        name=prompt_name,
+        template="This is a string prompt: {{variable}}",
+    )
+
+    # Attempt to create a chat prompt version with the same name should fail
+    with pytest.raises(ApiError) as exc_info:
+        opik_client.create_chat_prompt(
+            name=prompt_name,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello!"},
+            ],
+        )
+
+    # Verify the error message contains relevant information
+    assert exc_info.value.status_code == 400
+    assert "template structure mismatch" in str(exc_info.value).lower() or "template_structure" in str(exc_info.value).lower()
+
+
+def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik):
+    """Test that template_structure is immutable for chat prompts."""
+    import pytest
+    from opik.rest_api.core import ApiError
+
+    unique_identifier = str(uuid.uuid4())[-6:]
+    prompt_name = f"test-immutable-chat-structure-{unique_identifier}"
+
+    # Create initial chat prompt
+    chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
+    )
+
+    # Verify chat prompt was created
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
+    )
+
+    # Attempt to create a string prompt version with the same name should fail
+    with pytest.raises(ApiError) as exc_info:
+        opik_client.create_prompt(
+            name=prompt_name,
+            prompt="This is a string prompt: {{variable}}",
+        )
+
+    # Verify the error message contains relevant information
+    assert exc_info.value.status_code == 400
+    assert "template structure mismatch" in str(exc_info.value).lower() or "template_structure" in str(exc_info.value).lower()
