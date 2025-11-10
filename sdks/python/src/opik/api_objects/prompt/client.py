@@ -33,7 +33,9 @@ class PromptClient:
         Returns:
         - A Prompt object for the provided prompt name and template.
         """
-        prompt_version = self._get_latest_version(name, template_structure=template_structure)
+        prompt_version = self._get_latest_version(
+            name, template_structure=template_structure
+        )
 
         # For chat prompts, compare parsed JSON to avoid formatting differences
         templates_equal = False

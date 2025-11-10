@@ -513,7 +513,7 @@ def test_get_prompt__with_commit__string_prompt(opik_client: opik.Opik):
 
     # Create multiple versions
     v1 = opik_client.create_prompt(name=prompt_name, prompt="Version 1")
-    v2 = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
+    _ = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
 
     # Retrieve specific version by commit
     retrieved_v1 = opik_client.get_prompt(name=prompt_name, commit=v1.commit)

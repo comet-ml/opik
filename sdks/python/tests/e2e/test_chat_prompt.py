@@ -439,7 +439,9 @@ def test_search_chat_prompts__only_returns_chat_prompts(opik_client: opik.Opik):
     )
 
     # Search for all chat prompts with the unique_id
-    results = opik_client.search_chat_prompts(filter_string=f'name contains "{unique_id}"')
+    results = opik_client.search_chat_prompts(
+        filter_string=f'name contains "{unique_id}"'
+    )
 
     # Should only return chat prompts
     assert len(results) == 2
@@ -462,7 +464,7 @@ def test_get_chat_prompt__with_commit__chat_prompt(opik_client: opik.Opik):
         name=prompt_name,
         messages=[{"role": "user", "content": "Version 1"}],
     )
-    v2 = opik_client.create_chat_prompt(
+    _ = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Version 2"}],
     )

@@ -1405,7 +1405,7 @@ class Opik:
     ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve a string prompt by name and optional commit version.
-        
+
         This method only returns string prompts. If the prompt is a chat prompt,
         None will be returned (the backend validates the template_structure).
 
@@ -1424,7 +1424,7 @@ class Opik:
             return None
 
         return prompt_module.Prompt.from_fern_prompt_version(name, fern_prompt_version)
-    
+
     def get_chat_prompt(
         self,
         name: str,
@@ -1432,7 +1432,7 @@ class Opik:
     ) -> Optional[prompt_module.ChatPrompt]:
         """
         Retrieve a chat prompt by name and optional commit version.
-        
+
         This method only returns chat prompts. If the prompt is a string prompt,
         None will be returned (the backend validates the template_structure).
 
@@ -1450,7 +1450,9 @@ class Opik:
         if fern_prompt_version is None:
             return None
 
-        return prompt_module.ChatPrompt.from_fern_prompt_version(name, fern_prompt_version)
+        return prompt_module.ChatPrompt.from_fern_prompt_version(
+            name, fern_prompt_version
+        )
 
     def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
         """
@@ -1463,22 +1465,24 @@ class Opik:
             List[Prompt]: A list of string Prompt instances for the given name.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        
+
         # First, validate that this is a string prompt by trying to get the latest version
         # This will return None if it's a chat prompt (backend validates template_structure)
-        latest_version = prompt_client_.get_prompt(name=name, template_structure="string")
+        latest_version = prompt_client_.get_prompt(
+            name=name, template_structure="string"
+        )
         if latest_version is None:
             return []
-        
+
         # Now get all versions (we know it's a string prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
-        
+
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
-    
+
     def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
@@ -1490,16 +1494,16 @@ class Opik:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        
+
         # First, validate that this is a chat prompt by trying to get the latest version
         # This will return None if it's a string prompt (backend validates template_structure)
         latest_version = prompt_client_.get_prompt(name=name, template_structure="chat")
         if latest_version is None:
             return []
-        
+
         # Now get all versions (we know it's a chat prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
-        
+
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
@@ -1563,22 +1567,22 @@ class Opik:
             combined_filter = f"{filter_string} AND {template_structure_filter}"
         else:
             combined_filter = template_structure_filter
-        
+
         oql = opik_query_language.OpikQueryLanguage(combined_filter)
         parsed_filters = oql.get_filter_expressions()
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
-        
+
         # Convert to Prompt objects (no need to filter - backend already filtered by template_structure)
         prompts: List[prompt_module.Prompt] = []
         for prompt_name, version in name_and_versions:
             prompts.append(
                 prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
             )
-        
+
         return prompts
-    
+
     def search_chat_prompts(
         self, filter_string: Optional[str] = None
     ) -> List[prompt_module.ChatPrompt]:
@@ -1620,20 +1624,20 @@ class Opik:
             combined_filter = f"{filter_string} AND {template_structure_filter}"
         else:
             combined_filter = template_structure_filter
-        
+
         oql = opik_query_language.OpikQueryLanguage(combined_filter)
         parsed_filters = oql.get_filter_expressions()
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
-        
+
         # Convert to ChatPrompt objects (no need to filter - backend already filtered by template_structure)
         prompts: List[prompt_module.ChatPrompt] = []
         for prompt_name, version in name_and_versions:
             prompts.append(
                 prompt_module.ChatPrompt.from_fern_prompt_version(prompt_name, version)
             )
-        
+
         return prompts
 
     def create_optimization(
