@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from .. import Prompt
+from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
@@ -52,8 +52,8 @@ def evaluate(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
-    prompts: Optional[List[Prompt]] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
@@ -408,7 +408,7 @@ def evaluate_prompt(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
@@ -558,8 +558,8 @@ def evaluate_optimization_trial(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
-    prompts: Optional[List[Prompt]] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
