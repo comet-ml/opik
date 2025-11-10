@@ -13,6 +13,7 @@ export const ExperimentItemBulkUploadExperimentItemBulkWriteView: core.serializa
 > = core.serialization.object({
     experimentName: core.serialization.property("experiment_name", core.serialization.string()),
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+    experimentId: core.serialization.property("experiment_id", core.serialization.string().optional()),
     items: core.serialization.list(ExperimentItemBulkRecordExperimentItemBulkWriteView),
 });
 
@@ -20,6 +21,7 @@ export declare namespace ExperimentItemBulkUploadExperimentItemBulkWriteView {
     export interface Raw {
         experiment_name: string;
         dataset_name: string;
+        experiment_id?: string | null;
         items: ExperimentItemBulkRecordExperimentItemBulkWriteView.Raw[];
     }
 }

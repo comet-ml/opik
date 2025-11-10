@@ -9,6 +9,7 @@ jobs:
   assign_pr_creator_or_pusher:
     name: Assign PR Creator or Pusher
     runs-on: ubuntu-latest
+    timeout-minutes: 1
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
@@ -54,5 +55,7 @@ jobs:
 
           echo "Attempting to assign PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"
           # Note: If the user is already assigned, this command will succeed without error.
-          gh pr edit "$PR_NUMBER" --add-assignee "$ASSIGN_USER_LOGIN" --repo "${{ github.repository }}"
+          gh pr edit "$PR_NUMBER" --add-assignee "$ASSIGN_USER_LOGIN" --repo "${{ github.repository }}" || {
+            echo "❌ Failed to assign PR #$PR_NUMBER to $ASSIGN_USER_LOGIN, likely an external collaborator"
+          }
           echo "Successfully assigned PR #$PR_NUMBER to $ASSIGN_USER_LOGIN"

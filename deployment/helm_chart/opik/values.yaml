@@ -2,6 +2,12 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+global:
+  argocd: false
+  useHelmHooks: true
+  security:
+    allowInsecureImages: true
+
 nameOverride: "opik"
 fullnameOverride: ""
 
@@ -18,7 +24,9 @@ serviceAccount:
   name: ""
   annotations: {}
 
-demoDataJob: true
+demoDataJob: 
+  enabled: true
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
@@ -50,6 +58,15 @@ component:
         registry: docker.io
         repository: curlimages/curl
         tag: 8.12.1
+    waitForMysql:
+      enabled: true
+      mysql:
+        host: opik-mysql
+        port: 3306
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: 1.36
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
@@ -219,6 +236,34 @@ component:
         enabled: false
         hosts: []
         secretName: ""
+    logFormats:
+      logger-json: |-
+        escape=json '{'
+                '  "body_bytes_sent": $body_bytes_sent'
+                ', "comet_workspace": "$http_comet_workspace"'
+                ', "host": "$host"'
+                ', "http_referer": "$http_referer"'
+                ', "http_user_agent": "$http_user_agent"'
+                ', "limit_req_status": "$limit_req_status"'
+                ', "method": "$request_method"'
+                ', "remote_addr": "$remote_addr"'
+                ', "remote_user": "$remote_user"'
+                ', "request_length": $request_length'
+                ', "request_time": $request_time'
+                ', "request": "$request"'
+                ', "response": $status'
+                ', "resp_body_size": $body_bytes_sent'
+                ', "source": "nginx"'
+                ', "status": $status'
+                ', "time_local": "$time_local"'
+                ', "time": $msec'
+                ', "uri": "$request_uri"'
+                ', "user_agent": "$http_user_agent"'
+                ', "x_forwarded_for": "$http_x_forwarded_for"'
+                ', "x_sdk_version": "$http_x_opik_debug_sdk_version"'
+                ', "upstream_connect_time": "$upstream_connect_time", "upstream_header_time": "$upstream_header_time", "upstream_response_time": "$upstream_response_time"'
+                ', "upstream_addr": "$upstream_addr", "upstream_status": "$upstream_status", "host": "$host"'
+            '}'
     # throttled locations
     throttling: {}
     # map variables for use with throttling and other places
@@ -248,6 +293,8 @@ component:
 
 mysql:
   enabled: true
+  image:
+    repository: bitnamilegacy/mysql
   fullnameOverride: opik-mysql
   auth:
     rootPassword: "opik"
@@ -260,6 +307,11 @@ mysql:
 
 minio:
   enabled: true
+  image:
+    repository: bitnamilegacy/minio
+  volumePermissions:
+    image:
+      repository: bitnamilegacy/os-shell
   mode: standalone
   disableWebUI: true
   persistence:
@@ -341,10 +393,95 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:24.3.5.47.altinitystable
+  image: altinity/clickhouse-server:25.3.6.10034.altinitystable
   storage: 50Gi
   logsLevel: information
-  # deprecated: use templates instead
+  # Custom health checks with longer timeouts for major version upgrades
+  livenessProbe:
+    httpGet:
+      path: /ping
+      port: 8123
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 10
+  readinessProbe:
+    httpGet:
+      path: /ping
+      port: 8123
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  configuration:
+    files:
+      conf.d/memory.xml: |
+        <yandex>
+          <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
+        </yandex>
+      conf.d/profiles.xml: |
+        <clickhouse>
+          <profiles>
+            <default>
+                <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>
+                <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
+            </default>
+          </profiles>
+        </clickhouse>
+      # Remove or add TTL to system tables that are not needed
+      conf.d/system_tables.xml: |
+        <clickhouse>
+          <opentelemetry_span_log remove="1"/>
+          <asynchronous_metric_log remove="1"/>
+          <processors_profile_log remove="1"/>
+          <text_log remove="1"/>
+          <trace_log remove="1"/>
+          <blob_storage_log remove="1"/>
+          <error_log>
+              <engine>
+                  ENGINE MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>error_log</table>
+          </error_log>
+          <latency_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>latency_log</table>
+          </latency_log>
+          <metric_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>metric_log</table>
+          </metric_log>
+          <query_metric_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>query_metric_log</table>
+          </query_metric_log>
+        </clickhouse>
   service:
     serviceTemplate: clickhouse-cluster-svc-template
   templates:
@@ -450,6 +587,9 @@ clickhouse:
 zookeeper:
     enabled: true
     fullnameOverride: opik-zookeeper
+    image:
+      repository: bitnamilegacy/zookeeper
+      tag: 3.9.3-debian-12-r16
     replicaCount: 1
     # podAntiAffinityPreset: hard
     podDisruptionBudget:

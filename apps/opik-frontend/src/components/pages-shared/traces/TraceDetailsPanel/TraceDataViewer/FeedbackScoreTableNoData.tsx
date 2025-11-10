@@ -6,11 +6,13 @@ import { buildDocsUrl } from "@/lib/utils";
 const entityCopy = {
   thread: "threads",
   trace: "traces/LLM calls",
+  experiment: "experiments",
+  span: "traces/LLM calls",
 };
 
 type FeedbackScoreTableNoDataProps = {
   onAddHumanReview: () => void;
-  entityType: "trace" | "thread";
+  entityType: "trace" | "thread" | "span" | "experiment";
 };
 const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
   onAddHumanReview,
@@ -18,7 +20,7 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
 }) => {
   const evaluationDocsLink = buildDocsUrl("/production/rules");
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center gap-2 bg-white p-6">
+    <div className="flex min-h-48 flex-col items-center justify-center gap-2 bg-background p-6">
       <div>No feedback scores yet</div>
       <span className="max-w-[500px] whitespace-pre-wrap break-words text-center text-muted-slate">
         Use the SDK or Online evaluation rules to automatically score your{" "}

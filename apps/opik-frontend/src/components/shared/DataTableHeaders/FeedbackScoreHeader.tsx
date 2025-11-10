@@ -4,13 +4,20 @@ import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import useSortableHeader from "@/components/shared/DataTableHeaders/useSortableHeader";
+import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 
 const FeedbackScoreHeader = <TData,>(
   context: HeaderContext<TData, unknown>,
 ) => {
   const { column } = context;
-  const { header } = column.columnDef.meta ?? {};
-  const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(header ?? "")!];
+  const { header, custom } = column.columnDef.meta ?? {};
+  const { colorMap, feedbackKey } = (custom ?? {}) as FeedbackScoreCustomMeta;
+
+  // Use color from colorMap if available, otherwise fall back to default
+  const color =
+    feedbackKey && colorMap?.[feedbackKey]
+      ? colorMap[feedbackKey]
+      : TAG_VARIANTS_COLOR_MAP[generateTagVariant(header ?? "")!];
 
   const { className, onClickHandler, renderSort } = useSortableHeader({
     column,

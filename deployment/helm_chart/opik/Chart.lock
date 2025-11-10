@@ -13,9 +13,9 @@ dependencies:
   version: 15.0.7
 - name: altinity-clickhouse-operator
   repository: https://docs.altinity.com/clickhouse-operator/
-  version: 0.25.0
+  version: 0.25.4
 - name: common
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 2.31.3
-digest: sha256:7d575a9269fa80bafbfd701b522c7477d144b266572bb0f41b16e81eeb07354e
-generated: "2025-06-25T13:12:46.083951584+02:00"
+  version: 2.31.4
+digest: sha256:7052bd5e933f7a6e5f7f23ca138c1af61918f94b59c19537b4a2502f65204745
+generated: "2025-10-05T18:13:42.961122+03:00"

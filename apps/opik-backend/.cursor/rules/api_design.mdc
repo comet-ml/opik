@@ -1,7 +1,7 @@
 ---
 description: API Design Guidelines
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 
 # API Design Guidelines

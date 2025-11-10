@@ -1,0 +1,148 @@
+---
+globs: sdks/typescript/src/**/*.ts
+description: Authoritative architecture rules for the TypeScript SDK. Keep these aligned with real code.
+alwaysApply: false
+---
+
+## Architecture overview
+
+The SDK is layered and non-blocking by default. Data is buffered and flushed asynchronously to the backend.
+
+## Layer responsibilities
+
+1) Public API (index)
+- Re-export a minimal, curated surface (e.g., `Opik`, `track`, `flushAll`, essential types).
+- Avoid leaking `rest_api` internals. Consumers should not call generated clients directly.
+
+2) Client (composition root)
+- Loads config, instantiates `OpikApiClientTemp`, wires batch queues, and exposes high-level operations.
+- Single source of truth for batching behavior, flush orchestration, and non-blocking writes.
+- File: [client/Client.ts](mdc:sdks/typescript/src/opik/client/Client.ts)
+
+3) Domain objects
+- Encapsulate behavior around persisted entities: `Trace` and `Span` own `update`, `end`, `score`, and child creation.
+- Domain objects must not perform HTTP directly; they enqueue via batch queues owned by the client.
+- Files: [Trace.ts](mdc:sdks/typescript/src/opik/tracer/Trace.ts) and [Span.ts](mdc:sdks/typescript/src/opik/tracer/Span.ts)
+
+4) Batching
+- `BatchQueue` provides debounced create/update/delete with ordering guarantees: updates await creates; deletes await both.
+- Specialized queues translate domain data into REST API calls.
+- File: [BatchQueue.ts](mdc:sdks/typescript/src/opik/client/BatchQueue.ts)
+
+5) REST layer (generated)
+- Strongly-typed resource clients and serializers; the only place where HTTP and schema translation happen.
+- All write-paths go through batch queues → resource clients. Read/list may call resource clients directly from `OpikClient`.
+
+6) Integrations
+- Thin adapters over the public API (e.g., LangChain, OpenAI, Vercel). Do not bypass `OpikClient` or queues.
+
+## Data flow & lifecycle
+
+User code → `Opik` (public API) → `OpikClient` → Domain (`Trace`/`Span`, Datasets, Experiments) → BatchQueues → REST client → Opik backend.
+
+- `OpikClient.trace()` constructs a `Trace`, enqueues create, logs target project URL, and returns the object immediately.
+- `Trace.span()` and `Span.span()` construct child spans and enqueue create.
+- `end()` and `update()` calls on domain objects enqueue updates.
+- Feedback scores enqueue via dedicated queues.
+
+## Batching & flush semantics
+
+- Debounce window is configured by `OpikConfig`. If `holdUntilFlush` is true, delay becomes 24h; otherwise `batchDelayMs`.
+- Queues batch by count (not payload size yet). Updates wait for pending creates; deletes wait for both.
+- `flush()` on client flushes all queues in order. `flushAll()` flushes all instantiated clients.
+- Do not block on each write; only `flush()`/`flushAll()` should be awaited when needed (e.g., process shutdown tests, CLI).
+
+Key files:
+- [client/Client.ts: flush](mdc:sdks/typescript/src/opik/client/Client.ts)
+- [client/BatchQueue.ts](mdc:sdks/typescript/src/opik/client/BatchQueue.ts)
+- [utils/flushAll.ts](mdc:sdks/typescript/src/opik/utils/flushAll.ts)
+
+## Error handling policy
+
+- For REST failures, the HTTP layer throws `OpikApiError`/`OpikApiTimeoutError` with status and details.
+- `OpikClient` translates 404s into domain-specific errors (e.g., `DatasetNotFoundError`, `ExperimentNotFoundError`).
+- Catch specific errors where we can recover (e.g., `getOrCreateDataset`), rethrow otherwise; never swallow errors.
+- Include context in logs but avoid sensitive data.
+
+Refs:
+- [rest errors](mdc:sdks/typescript/src/opik/rest_api/errors/index.ts)
+- [dataset errors](mdc:sdks/typescript/src/opik/errors/dataset/index.ts)
+- [experiment errors](mdc:sdks/typescript/src/opik/errors/experiment/index.ts)
+
+## REST API and serialization
+
+- Generated resource clients live under [rest_api/api/resources](mdc:sdks/typescript/src/opik/rest_api/api/resources/index.ts).
+- Serialization schemas under [rest_api/serialization](mdc:sdks/typescript/src/opik/rest_api/serialization/index.ts) provide `toRaw/fromRaw` mapping.
+- HTTP runtime utilities under [rest_api/core](mdc:sdks/typescript/src/opik/rest_api/core/index.ts) handle fetch, headers, retries, signals.
+- When adding a new endpoint, wire:
+  - schema(s) in `serialization/types`
+  - resource client methods in `api/resources/<resource>/client`
+  - exports in the local `index.ts` files
+  - usage via `OpikClient` or a new domain abstraction (avoid exposing raw clients publicly)
+
+## Streaming
+
+- For NDJSON streams, use `parseNdjsonStreamToArray` with the correct serializer to maintain types.
+- Example: `getExperimentsByName` reads a stream and maps to domain objects.
+
+Refs:
+- [utils/stream.ts](mdc:sdks/typescript/src/opik/utils/stream.ts)
+- [client/Client.ts#getExperimentsByName](mdc:sdks/typescript/src/opik/client/Client.ts)
+
+## Config & environments
+
+- Load configuration via [config/Config.ts](mdc:sdks/typescript/src/opik/config/Config.ts); never read env directly in domain/queues.
+- `OpikApiClientTemp` is configured with `apiKey`, `environment` (base URL), `workspaceName`, and optional extra headers.
+- The public package exports both ESM and CJS builds; Node >= 18 is required.
+
+## IDs & URL helpers
+
+- Use [utils/generateId.ts](mdc:sdks/typescript/src/opik/utils/generateId.ts) for SDK-generated IDs.
+- Use [utils/url.ts](mdc:sdks/typescript/src/opik/utils/url.ts) to construct UI links; do not hardcode routes.
+
+## Concurrency & ordering rules
+
+- Writes are ordered by queue design: updates flush pending creates; deletes flush pending creates/updates first.
+- Avoid parallel calls that bypass queues for the same entity. If you must read-after-write, `await flush()`.
+- Do not mutate domain object state outside `.update()`; always go through queue-aware methods.
+
+## Integrations guidelines
+
+- Integrations (OpenAI, LangChain, Vercel exporter) wrap the public API surface; they should not import `rest_api` directly.
+- Keep adapters thin and default to non-blocking behavior. Provide an escape hatch to `flush()` if the host requires it.
+
+Refs:
+- [integrations/opik-openai](mdc:sdks/typescript/src/opik/integrations/opik-openai/src/index.ts)
+- [integrations/opik-langchain](mdc:sdks/typescript/src/opik/integrations/opik-langchain/src/index.ts)
+- [integrations/vercel](mdc:sdks/typescript/src/opik/integrations/vercel/index.ts)
+
+## Extending the SDK (playbooks)
+
+1) New write-capable domain feature
+- Prefer adding methods on `OpikClient` or a new domain class.
+- Add a specialized `*BatchQueue` if batching semantics differ; otherwise reuse existing queues.
+- Translate domain DTOs to REST shapes in the queue implementation.
+- Expose only via the public API (`opik/index.ts`).
+
+2) New REST resource coverage (read-only)
+- Add generated resource client usage inside `OpikClient` methods.
+- Map responses to domain objects or typed DTOs; do not leak raw generated types to public API unless stable and intentional.
+
+3) New serialization type
+- Add schema under `rest_api/serialization/types`, ensure round-trip tests, and wire exports.
+
+## Backward compatibility
+
+- The public API is versioned by package; avoid breaking changes. Add overloads or new methods rather than mutating signatures.
+- Keep existing names and re-export paths stable. If deprecating, provide shims and document migration.
+
+## Performance & reliability
+
+- Batching by size is the current strategy; prefer small, frequent updates over per-item HTTP.
+- Retries are handled centrally; do not implement ad-hoc retries.
+- Keep queue actions narrowly focused on IO; avoid heavy CPU work inside action handlers.
+
+## Do/Don’t summary
+
+- Do: enqueue writes, use `flush()` when needed, keep public API minimal, map errors precisely.
+- Don’t: make HTTP calls from domain objects, leak `rest_api` to consumers, or log sensitive data.

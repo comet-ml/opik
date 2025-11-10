@@ -76,7 +76,7 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
           aria-label="Select all"
         />
       )}
-      {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-slate-300" />}
+      {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-light-slate" />}
       <span className="truncate">{header}</span>
       {explainer && <ExplainerIcon {...explainer} />}
       {renderSort()}

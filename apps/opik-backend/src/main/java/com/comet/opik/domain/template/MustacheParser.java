@@ -42,7 +42,7 @@ public class MustacheParser implements TemplateParser {
             collectVariables(codes, variables);
 
             return variables;
-        } catch (MustacheException ex) {
+        } catch (MustacheException | IllegalArgumentException ex) {
             log.warn("Failed to parse Mustache template for variable extraction", ex);
             return variables; // Return empty set when parsing fails
         }

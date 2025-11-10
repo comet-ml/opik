@@ -1,0 +1,389 @@
+---
+title: Observability for Hugging Face Datasets with Opik
+description: Start here to integrate Opik with Hugging Face Datasets for end-to-end LLM observability, unit testing, and optimization.
+---
+
+[Hugging Face Datasets](https://huggingface.co/docs/datasets/) is a library that provides easy access to thousands of datasets for machine learning and natural language processing tasks.
+
+This guide explains how to integrate Opik with Hugging Face Datasets to convert and import datasets into Opik for model evaluation and optimization.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=huggingface-datasets&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=huggingface-datasets&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=huggingface-datasets&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+To use Hugging Face Datasets with Opik, you'll need to have both the `datasets` and `opik` packages installed:
+
+```bash
+pip install opik datasets transformers pandas tqdm huggingface_hub
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Hugging Face
+
+In order to access private datasets on Hugging Face, you will need to have your Hugging Face token. You can create and manage your Hugging Face tokens on [this page](https://huggingface.co/settings/tokens).
+
+You can set it as an environment variable:
+
+```bash
+export HUGGINGFACE_HUB_TOKEN="YOUR_TOKEN"
+```
+
+Or set it programmatically:
+
+```python
+import os
+import getpass
+
+if "HUGGINGFACE_HUB_TOKEN" not in os.environ:
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = getpass.getpass("Enter your Hugging Face token: ")
+
+# Set project name for organization
+os.environ["OPIK_PROJECT_NAME"] = "huggingface-datasets-integration-demo"
+```
+
+## HuggingFaceToOpikConverter
+
+The integration provides a utility class to convert Hugging Face datasets to Opik format:
+
+```python
+from datasets import load_dataset, Dataset as HFDataset
+from opik import Opik
+from typing import Optional, Dict, Any, List
+import json
+from tqdm import tqdm
+import warnings
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings('ignore')
+
+class HuggingFaceToOpikConverter:
+    """Utility class to convert Hugging Face datasets to Opik format."""
+
+    def __init__(self, opik_client: Opik):
+        self.opik_client = opik_client
+
+    def load_hf_dataset(
+        self,
+        dataset_name: str,
+        split: Optional[str] = None,
+        config: Optional[str] = None,
+        subset_size: Optional[int] = None,
+        **kwargs
+    ) -> HFDataset:
+        """
+        Load a dataset from Hugging Face Hub.
+
+        Args:
+            dataset_name: Name of the dataset on HF Hub
+            split: Specific split to load (train, validation, test)
+            config: Configuration/subset of the dataset
+            subset_size: Limit the number of samples
+            **kwargs: Additional arguments for load_dataset
+
+        Returns:
+            Loaded Hugging Face dataset
+        """
+        print(f"📥 Loading dataset: {dataset_name}")
+        if config:
+            print(f"   Config: {config}")
+        if split:
+            print(f"   Split: {split}")
+
+        # Load the dataset
+        dataset = load_dataset(
+            dataset_name,
+            name=config,
+            split=split,
+            **kwargs
+        )
+
+        # Limit dataset size if specified
+        if subset_size and len(dataset) > subset_size:
+            dataset = dataset.select(range(subset_size))
+            print(f"   Limited to {subset_size} samples")
+
+        print(f"   ✅ Loaded {len(dataset)} samples")
+        print(f"   Features: {list(dataset.features.keys())}")
+
+        return dataset
+```
+
+## Basic Usage
+
+### Convert and Upload a Dataset
+
+Here's how to convert a Hugging Face dataset to Opik format and upload it:
+
+```python
+# Initialize the converter
+opik_client = Opik()
+converter = HuggingFaceToOpikConverter(opik_client)
+
+# Load a dataset from Hugging Face
+dataset = converter.load_hf_dataset(
+    dataset_name="squad",
+    split="validation",
+    subset_size=100  # Limit for demo
+)
+
+# Convert to Opik format
+opik_data = converter.convert_to_opik_format(
+    dataset=dataset,
+    input_columns=["question"],
+    output_columns=["answers"],
+    metadata_columns=["id", "title"],
+    dataset_name="squad-qa-dataset",
+    description="SQuAD question answering dataset converted from Hugging Face"
+)
+
+print(f"✅ Converted {len(opik_data)} items to Opik format!")
+```
+
+### Convert to Opik Format
+
+The converter provides a method to transform Hugging Face datasets into Opik's expected format:
+
+```python
+def convert_to_opik_format(
+    self,
+    dataset: HFDataset,
+    input_columns: List[str],
+    output_columns: List[str],
+    metadata_columns: Optional[List[str]] = None,
+    dataset_name: str = "huggingface-dataset",
+    description: str = "Dataset converted from Hugging Face"
+) -> List[Dict[str, Any]]:
+    """
+    Convert a Hugging Face dataset to Opik format.
+
+    Args:
+        dataset: Hugging Face dataset
+        input_columns: List of column names to use as input
+        output_columns: List of column names to use as expected output
+        metadata_columns: Optional list of columns to include as metadata
+        dataset_name: Name for the Opik dataset
+        description: Description for the Opik dataset
+
+    Returns:
+        List of Opik dataset items
+    """
+    opik_items = []
+
+    for row in tqdm(dataset, desc="Converting to Opik format"):
+        # Extract input data
+        input_data = {}
+        for col in input_columns:
+            if col in dataset.features:
+                input_data[col] = self._extract_field_value(row, col)
+
+        # Extract expected output
+        expected_output = {}
+        for col in output_columns:
+            if col in dataset.features:
+                expected_output[col] = self._extract_field_value(row, col)
+
+        # Extract metadata
+        metadata = {}
+        if metadata_columns:
+            for col in metadata_columns:
+                if col in dataset.features:
+                    metadata[col] = self._extract_field_value(row, col)
+
+        # Create Opik dataset item
+        item = {
+            "input": input_data,
+            "expected_output": expected_output,
+            "metadata": metadata
+        }
+        opik_items.append(item)
+
+    return opik_items
+```
+
+## Using with @track decorator
+
+Use the `@track` decorator to create comprehensive traces when working with your converted datasets:
+
+```python
+from opik import track
+
+@track
+def evaluate_qa_model(dataset_item):
+    """Evaluate a Q&A model using Hugging Face dataset."""
+    question = dataset_item["input"]["question"]
+
+    # Your model logic here (replace with actual model)
+    if 'what' in question.lower():
+        response = "This is a question asking for information."
+    elif 'how' in question.lower():
+        response = "This is a question asking for a process or method."
+    else:
+        response = "This is a general question that requires analysis."
+
+    return {
+        "question": question,
+        "response": response,
+        "expected": dataset_item["expected_output"],
+        "metadata": dataset_item["metadata"]
+    }
+
+# Evaluate on your dataset
+for item in opik_data[:5]:  # Evaluate first 5 items
+    result = evaluate_qa_model(item)
+    print(f"Question: {result['question'][:50]}...")
+```
+
+## Popular Dataset Examples
+
+### SQuAD (Question Answering)
+
+```python
+# Load SQuAD dataset
+squad_dataset = converter.load_hf_dataset(
+    dataset_name="squad",
+    split="validation",
+    subset_size=50
+)
+
+# Convert to Opik format
+squad_opik = converter.convert_to_opik_format(
+    dataset=squad_dataset,
+    input_columns=["question"],
+    output_columns=["answers"],
+    metadata_columns=["id", "title"],
+    dataset_name="squad-qa-dataset",
+    description="SQuAD question answering dataset"
+)
+```
+
+### GLUE (General Language Understanding)
+
+```python
+# Load GLUE SST-2 dataset
+sst2_dataset = converter.load_hf_dataset(
+    dataset_name="glue",
+    config_name="sst2",
+    split="validation",
+    subset_size=100
+)
+
+# Convert to Opik format
+sst2_opik = converter.convert_to_opik_format(
+    dataset=sst2_dataset,
+    input_columns=["sentence"],
+    output_columns=["label"],
+    metadata_columns=["idx"],
+    dataset_name="sst2-sentiment-dataset",
+    description="SST-2 sentiment analysis dataset from GLUE"
+)
+```
+
+### Common Crawl (Text Classification)
+
+```python
+# Load Common Crawl dataset
+cc_dataset = converter.load_hf_dataset(
+    dataset_name="common_crawl",
+    subset_size=200
+)
+
+# Convert to Opik format
+cc_opik = converter.convert_to_opik_format(
+    dataset=cc_dataset,
+    input_columns=["text"],
+    output_columns=["language"],
+    metadata_columns=["url", "timestamp"],
+    dataset_name="common-crawl-dataset",
+    description="Common Crawl text classification dataset"
+)
+```
+
+## Results viewing
+
+Once your Hugging Face datasets are converted and uploaded to Opik, you can view them in the Opik UI. Each dataset will contain:
+
+- Input data from specified columns
+- Expected output from specified columns
+- Metadata from additional columns
+- Source information (Hugging Face dataset name and split)
+
+## Feedback Scores and Evaluation
+
+Once your Hugging Face datasets are in Opik, you can evaluate your LLM applications using Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Define your evaluation task
+def evaluation_task(x):
+    return {
+        "message": x["input"]["question"],
+        "output": x["response"],
+        "reference": x["expected_output"]["answers"]
+    }
+
+# Create the Hallucination metric
+hallucination_metric = Hallucination()
+
+# Run the evaluation
+evaluation_results = evaluate(
+    experiment_name="huggingface-datasets-evaluation",
+    dataset=squad_opik,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+```
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# Hugging Face Configuration (optional, for private datasets)
+export HUGGINGFACE_HUB_TOKEN="your-huggingface-token"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Ensure your Hugging Face token is correct for private datasets
+2. **Dataset Not Found**: Verify the dataset name and configuration are correct
+3. **Memory Issues**: Use `subset_size` parameter to limit large datasets
+4. **Data Type Conversion**: The converter handles most data types, but complex nested structures may need custom handling
+
+### Getting Help
+
+- Check the [Hugging Face Datasets Documentation](https://huggingface.co/docs/datasets/) for dataset loading
+- Review the [Hugging Face Hub Documentation](https://huggingface.co/docs/hub/) for authentication
+- Contact Hugging Face support for dataset-specific problems
+- Check Opik documentation for tracing and evaluation features
+
+## Next Steps
+
+Once you have Hugging Face Datasets integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/datasets/overview) to test and improve your models
+- [Set up feedback collection](/feedback/overview) to gather human evaluations
+- [Monitor performance](/tracing/overview) across different models and configurations

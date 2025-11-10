@@ -235,7 +235,7 @@ const PromptModelSelect = ({
                   <SelectItem
                     key={option.value}
                     value={option.value}
-                    className="flex h-10 justify-center pr-5"
+                    className="flex h-10 justify-center pr-5 focus:bg-primary-foreground focus:text-foreground"
                   >
                     {option.label}
                   </SelectItem>
@@ -259,7 +259,7 @@ const PromptModelSelect = ({
       return null;
     }
 
-    return <Icon className="min-w-3.5" />;
+    return <Icon className="min-w-3.5 text-foreground" />;
   };
 
   const renderSelectTrigger = () => {
@@ -300,30 +300,32 @@ const PromptModelSelect = ({
       >
         {renderSelectTrigger()}
         <SelectContent onKeyDown={handleKeyDown} className="p-0">
-          <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
-            <Search className="absolute left-2 size-4 text-light-slate" />
-            <Input
-              ref={inputRef}
-              className="outline-0"
-              placeholder="Search model"
-              value={filterValue}
-              variant="ghost"
-              onChange={(e) => setFilterValue(e.target.value)}
-            />
+          <div className="flex h-full flex-col">
+            <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
+              <Search className="absolute left-2 size-4 text-light-slate" />
+              <Input
+                ref={inputRef}
+                className="outline-0"
+                placeholder="Search model"
+                value={filterValue}
+                variant="ghost"
+                onChange={(e) => setFilterValue(e.target.value)}
+              />
+            </div>
+            <SelectSeparator />
+            <div className="flex-1 overflow-y-auto">{renderOptions()}</div>
+            <SelectSeparator />
+            <Button
+              variant="link"
+              className="h-10 w-full"
+              onClick={() => {
+                resetDialogKeyRef.current += 1;
+                setOpenConfigDialog(true);
+              }}
+            >
+              Manage AI providers
+            </Button>
           </div>
-          <SelectSeparator />
-          {renderOptions()}
-          <SelectSeparator />
-          <Button
-            variant="link"
-            className="size-full"
-            onClick={() => {
-              resetDialogKeyRef.current += 1;
-              setOpenConfigDialog(true);
-            }}
-          >
-            Manage AI providers
-          </Button>
         </SelectContent>
       </Select>
       <ManageAIProviderDialog

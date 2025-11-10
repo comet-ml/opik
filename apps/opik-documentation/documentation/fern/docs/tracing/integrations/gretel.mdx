@@ -1,0 +1,389 @@
+---
+title: Observability for Gretel with Opik
+description: Start here to integrate Opik into your Gretel-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+[Gretel (NVIDIA)](https://gretel.ai/) is a synthetic data platform that enables you to generate high-quality, privacy-safe datasets for AI model training and evaluation.
+
+This guide explains how to integrate Opik with Gretel to create synthetic Q&A datasets and import them into Opik for model evaluation and optimization.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=gretel&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=gretel&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=gretel&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+To use Gretel with Opik, you'll need to have both the `gretel-client` and `opik` packages installed:
+
+```bash
+pip install gretel-client opik pandas
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Gretel
+
+In order to configure Gretel, you will need to have your Gretel API Key. You can create and manage your Gretel API Keys on [this page](https://console.gretel.ai/account/api-keys).
+
+You can set it as an environment variable:
+
+```bash
+export GRETEL_API_KEY="YOUR_API_KEY"
+```
+
+Or set it programmatically:
+
+```python
+import os
+import getpass
+
+if "GRETEL_API_KEY" not in os.environ:
+    os.environ["GRETEL_API_KEY"] = getpass.getpass("Enter your Gretel API key: ")
+
+# Set project name for organization
+os.environ["OPIK_PROJECT_NAME"] = "gretel-integration-demo"
+```
+
+## Two Approaches Available
+
+This integration demonstrates **two methods** for generating synthetic data with Gretel:
+
+1. **Data Designer** (recommended for custom datasets): Create datasets from scratch with precise control
+2. **Safe Synthetics** (recommended for existing data): Generate synthetic versions of existing datasets
+
+## Method 1: Using Gretel Data Designer
+
+### Generate Q&A Dataset
+
+Use Gretel Data Designer to generate synthetic Q&A data with precise control over the structure:
+
+```python
+from gretel_client.navigator_client import Gretel
+from gretel_client.data_designer import columns as C
+from gretel_client.data_designer import params as P
+import opik
+
+# Initialize Data Designer
+gretel_navigator = Gretel()
+dd = gretel_navigator.data_designer.new(model_suite="apache-2.0")
+
+# Add topic column (categorical sampler)
+dd.add_column(
+    C.SamplerColumn(
+        name="topic",
+        type=P.SamplerType.CATEGORY,
+        params=P.CategorySamplerParams(
+            values=[
+                "neural networks", "deep learning", "machine learning", "NLP",
+                "computer vision", "reinforcement learning", "AI ethics", "data science"
+            ]
+        )
+    )
+)
+
+# Add difficulty column
+dd.add_column(
+    C.SamplerColumn(
+        name="difficulty",
+        type=P.SamplerType.CATEGORY,
+        params=P.CategorySamplerParams(
+            values=["beginner", "intermediate", "advanced"]
+        )
+    )
+)
+
+# Add question column (LLM-generated)
+dd.add_column(
+    C.LLMTextColumn(
+        name="question",
+        prompt=(
+            "Generate a challenging, specific question about {{ topic }} "
+            "at {{ difficulty }} level. The question should be clear, focused, "
+            "and something a student or practitioner might actually ask."
+        )
+    )
+)
+
+# Add answer column (LLM-generated)
+dd.add_column(
+    C.LLMTextColumn(
+        name="answer",
+        prompt=(
+            "Provide a clear, accurate, and comprehensive answer to this {{ difficulty }}-level "
+            "question about {{ topic }}: '{{ question }}'. The answer should be educational "
+            "and directly address all aspects of the question."
+        )
+    )
+)
+
+# Generate the dataset
+workflow_run = dd.create(num_records=20, wait_until_done=True)
+synthetic_df = workflow_run.dataset.df
+
+print(f"Generated {len(synthetic_df)} Q&A pairs!")
+```
+
+### Convert to Opik Format
+
+Convert the Gretel-generated data to Opik's expected format:
+
+```python
+def convert_to_opik_format(df):
+    """Convert Gretel Q&A data to Opik dataset format"""
+    opik_items = []
+
+    for _, row in df.iterrows():
+        # Create Opik dataset item
+        item = {
+            "input": {
+                "question": row["question"]
+            },
+            "expected_output": row["answer"],
+            "metadata": {
+                "topic": row.get("topic", "AI/ML"),
+                "difficulty": row.get("difficulty", "unknown"),
+                "source": "gretel_data_designer"
+            }
+        }
+        opik_items.append(item)
+
+    return opik_items
+
+# Convert to Opik format
+opik_data = convert_to_opik_format(synthetic_df)
+print(f"Converted {len(opik_data)} items to Opik format!")
+```
+
+### Upload to Opik
+
+Upload your dataset to Opik for model evaluation:
+
+```python
+# Initialize Opik client
+opik_client = opik.Opik()
+
+# Create the dataset
+dataset_name = "gretel-ai-qa-dataset"
+dataset = opik_client.get_or_create_dataset(
+    name=dataset_name,
+    description="Synthetic Q&A dataset generated using Gretel Data Designer for AI/ML evaluation"
+)
+
+# Insert the data
+dataset.insert(opik_data)
+
+print(f"Successfully created dataset: {dataset.name}")
+print(f"Dataset ID: {dataset.id}")
+print(f"Total items: {len(opik_data)}")
+```
+
+## Method 2: Using Gretel Safe Synthetics
+
+### Prepare Sample Data
+
+If you have an existing Q&A dataset, you can use Safe Synthetics to create a synthetic version:
+
+```python
+import pandas as pd
+
+# Create sample Q&A data (needs 200+ records for holdout)
+sample_questions = [
+    'What is machine learning?',
+    'How do neural networks work?',
+    'What is the difference between AI and ML?',
+    'Explain deep learning concepts',
+    'What are the applications of NLP?'
+] * 50  # Repeat to get 250 records
+
+sample_answers = [
+    'Machine learning is a subset of AI that enables systems to learn from data.',
+    'Neural networks are computational models inspired by biological neural networks.',
+    'AI is the broader concept while ML is a specific approach to achieve AI.',
+    'Deep learning uses multi-layer neural networks to model complex patterns.',
+    'NLP applications include chatbots, translation, sentiment analysis, and text generation.'
+] * 50  # Repeat to get 250 records
+
+sample_data = {
+    'question': sample_questions,
+    'answer': sample_answers,
+    'topic': (['ML', 'Neural Networks', 'AI/ML', 'Deep Learning', 'NLP'] * 50),
+    'difficulty': (['beginner', 'intermediate', 'beginner', 'advanced', 'intermediate'] * 50)
+}
+
+original_df = pd.DataFrame(sample_data)
+print(f"Original dataset: {len(original_df)} records")
+```
+
+### Generate Synthetic Version
+
+Use Safe Synthetics to create a privacy-safe version of your dataset:
+
+```python
+# Initialize Gretel client
+gretel = Gretel()
+
+# Generate synthetic version
+synthetic_dataset = gretel.safe_synthetic_dataset \
+    .from_data_source(original_df, holdout=0.1) \
+    .synthesize(num_records=100) \
+    .create()
+
+# Wait for completion and get results
+synthetic_dataset.wait_until_done()
+synthetic_df_safe = synthetic_dataset.dataset.df
+
+print(f"Generated {len(synthetic_df_safe)} synthetic Q&A pairs using Safe Synthetics!")
+```
+
+### Convert and Upload to Opik
+
+Convert the Safe Synthetics data to Opik format and upload:
+
+```python
+# Convert to Opik format
+opik_data_safe = convert_to_opik_format(synthetic_df_safe)
+
+# Create dataset in Opik
+dataset_safe = opik_client.get_or_create_dataset(
+    name="gretel-safe-synthetics-qa-dataset",
+    description="Synthetic Q&A dataset generated using Gretel Safe Synthetics"
+)
+
+dataset_safe.insert(opik_data_safe)
+print(f"Safe Synthetics dataset created: {dataset_safe.name}")
+```
+
+## Using with @track decorator
+
+Use the `@track` decorator to create comprehensive traces when working with your Gretel-generated datasets:
+
+```python
+from opik import track
+
+@track
+def evaluate_qa_model(dataset_item):
+    """Evaluate a Q&A model using Gretel-generated data."""
+    question = dataset_item["input"]["question"]
+
+    # Your model logic here (replace with actual model)
+    if 'neural network' in question.lower():
+        response = "A neural network is a computational model inspired by biological neural networks."
+    elif 'machine learning' in question.lower():
+        response = "Machine learning is a subset of AI that enables systems to learn from data."
+    else:
+        response = "This is a complex AI/ML topic that requires detailed explanation."
+
+    return {
+        "question": question,
+        "response": response,
+        "expected": dataset_item["expected_output"],
+        "topic": dataset_item["metadata"]["topic"],
+        "difficulty": dataset_item["metadata"]["difficulty"]
+    }
+
+# Evaluate on your dataset
+for item in opik_data[:5]:  # Evaluate first 5 items
+    result = evaluate_qa_model(item)
+    print(f"Topic: {result['topic']}, Difficulty: {result['difficulty']}")
+```
+
+## Results viewing
+
+Once your Gretel-generated datasets are uploaded to Opik, you can view them in the Opik UI. Each dataset will contain:
+
+- Input questions and expected answers
+- Metadata including topic and difficulty levels
+- Source information (Data Designer or Safe Synthetics)
+- Quality metrics and evaluation results
+
+## Feedback Scores and Evaluation
+
+Once your Gretel-generated datasets are in Opik, you can evaluate your LLM applications using Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Define your evaluation task
+def evaluation_task(x):
+    return {
+        "message": x["input"]["question"],
+        "output": x["response"],
+        "reference": x["expected_output"]
+    }
+
+# Create the Hallucination metric
+hallucination_metric = Hallucination()
+
+# Run the evaluation
+evaluation_results = evaluate(
+    experiment_name="gretel-qa-evaluation",
+    dataset=opik_data,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+```
+
+## Dataset Size Requirements
+
+| Dataset Size       | Holdout Setting         | Example                                                       |
+| ------------------ | ----------------------- | ------------------------------------------------------------- |
+| **< 200 records**  | `holdout=None`          | `from_data_source(df, holdout=None)`                          |
+| **200+ records**   | Default (5%) or custom  | `from_data_source(df)` or `from_data_source(df, holdout=0.1)` |
+| **Large datasets** | Custom percentage/count | `from_data_source(df, holdout=250)`                           |
+
+## When to Use Which Approach?
+
+| Use Case                               | Recommended Approach | Why                                                  |
+| -------------------------------------- | -------------------- | ---------------------------------------------------- |
+| **Creating new datasets from scratch** | **Data Designer**    | More control, custom column types, guided generation |
+| **Synthesizing existing datasets**     | **Safe Synthetics**  | Preserves statistical relationships, privacy-safe    |
+| **Custom data structures**             | **Data Designer**    | Flexible column definitions, template system         |
+| **Production data replication**        | **Safe Synthetics**  | Maintains data utility while ensuring privacy        |
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# Gretel Configuration
+export GRETEL_API_KEY="your-gretel-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Ensure your Gretel API key is correct and has the necessary permissions
+2. **Dataset Size**: Safe Synthetics requires at least 200 records for holdout validation
+3. **Model Suite**: Ensure you're using a compatible model suite (e.g., "apache-2.0")
+4. **Rate Limiting**: Gretel may have rate limits; implement appropriate retry logic
+
+### Getting Help
+
+- Contact Gretel support for API-specific problems
+- Check Opik documentation for tracing and evaluation features
+
+## Next Steps
+
+Once you have Gretel integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/datasets/overview) to test and improve your models
+- [Set up feedback collection](/feedback/overview) to gather human evaluations
+- [Monitor performance](/tracing/overview) across different models and configurations

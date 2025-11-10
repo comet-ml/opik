@@ -86,6 +86,10 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
+    Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
+
+    Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
+
     Mono<Project> getOrCreate(String projectName);
 
     Project retrieveByName(String projectName);
@@ -95,6 +99,8 @@ public interface ProjectService {
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
     Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
+
+    UUID validateProjectIdentifier(UUID projectId, String projectName, String workspaceId);
 
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
@@ -483,6 +489,33 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids) {
+        return findByIds(workspaceId, ids)
+                .stream()
+                .collect(Collectors.toMap(Project::id, Project::name));
+    }
+
+    public Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps() {
+        return Mono.fromCallable(() -> this.findByGlobalNames(DemoData.PROJECTS))
+                .map(projects -> projects.stream()
+                        .collect(Collectors.toMap(Project::id, Project::createdAt)))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private List<Project> findByGlobalNames(List<String> names) {
+        if (names.isEmpty()) {
+            return List.of();
+        }
+
+        return template.inTransaction(READ_ONLY, handle -> {
+
+            var repository = handle.attach(ProjectDAO.class);
+
+            return repository.findByGlobalNames(names);
+        });
+    }
+
+    @Override
     public Mono<Project> getOrCreate(@NonNull String projectName) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
@@ -687,5 +720,20 @@ class ProjectServiceImpl implements ProjectService {
                     .subscribeOn(Schedulers.boundedElastic());
             default -> Mono.error(exception);
         };
+    }
+
+    @Override
+    public UUID validateProjectIdentifier(UUID projectId, String projectName, String workspaceId) {
+        // Verify project visibility
+        if (projectId != null) {
+            return get(projectId).id();
+        }
+
+        // If the project name is provided, find the project by name
+        return findByNames(workspaceId, List.of(projectName))
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName))
+                .id();
     }
 }

@@ -9,7 +9,8 @@ import tenacity
 
 from opik.file_upload import file_upload_monitor
 from opik.file_upload.s3_multipart_upload import file_parts_strategy, s3_upload_error
-from opik.file_upload.s3_multipart_upload import s3_file_uploader, s3_httpx_client
+from opik.file_upload.s3_multipart_upload import s3_file_uploader
+from opik import s3_httpx_client
 from .. import conftest
 
 
@@ -95,7 +96,7 @@ class TestS3FileDataUploaderRetry:
         )
         # Now patch the decorator where the decorator is being imported from
         patch(
-            "opik.file_upload.s3_multipart_upload.s3_httpx_client.s3_retry",
+            "opik.s3_httpx_client.s3_retry",
             lambda x: s3_retry(x),
         ).start()
         # Reloads the module which applies our patched decorator

@@ -15,8 +15,10 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
@@ -49,6 +51,12 @@ public interface AttachmentService {
 
     void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName);
 
+    /**
+     * Internal method for backend async uploads - works for both MinIO and S3.
+     * Bypasses the frontend restriction that requires presigned URLs for S3.
+     */
+    void uploadAttachmentInternal(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName);
+
     InputStream downloadAttachment(AttachmentInfo attachmentInfo, String workspaceId);
 
     Mono<Attachment.AttachmentPage> list(int page, int size, AttachmentSearchCriteria criteria, String baseUrlEncoded);
@@ -56,6 +64,25 @@ public interface AttachmentService {
     Mono<Long> delete(DeleteAttachmentsRequest request);
 
     Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
+     * Get existing attachments for a specific entity as AttachmentInfo objects.
+     * This is a convenience method for services that need to work with AttachmentInfo.
+     */
+    Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType, UUID containerId);
+
+    /**
+     * Delete specific attachments by their filenames for a given entity.
+     * This method handles errors gracefully and continues processing other deletions.
+     */
+    Mono<Void> deleteSpecificAttachments(List<AttachmentInfo> attachments, UUID entityId, EntityType entityType,
+            UUID containerId);
+
+    /**
+     * Delete only auto-stripped attachments (those matching the pattern {context}-attachment-{num}-{timestamp}.{ext})
+     * for the given entity IDs. User-uploaded attachments are preserved.
+     */
+    Mono<Long> deleteAutoStrippedAttachments(EntityType entityType, Set<UUID> entityIds);
 }
 
 @Slf4j
@@ -127,6 +154,18 @@ class AttachmentServiceImpl implements AttachmentService {
                     "Direct attachment upload is forbidden for S3, please use multi-part upload with presigned urls",
                     Response.Status.FORBIDDEN);
         }
+
+        // Delegate to internal method for actual upload logic
+        uploadAttachmentInternal(attachmentInfo, data, workspaceId, userName);
+    }
+
+    /**
+     * Internal method for backend async uploads - works for both MinIO and S3
+     * Does not enforce the presigned URL restriction that applies to frontend uploads
+     */
+    @Override
+    public void uploadAttachmentInternal(@NonNull AttachmentInfo attachmentInfo, byte[] data,
+            @NonNull String workspaceId, @NonNull String userName) {
 
         attachmentInfo = attachmentInfo.toBuilder()
                 .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))
@@ -240,7 +279,7 @@ class AttachmentServiceImpl implements AttachmentService {
         String projectName = WorkspaceUtils.getProjectName(inputProjectName);
 
         var project = projectService.getOrCreate(projectName)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
 
         return project.id();
@@ -293,6 +332,103 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     private String decodeBaseUrl(String baseUrlEncoded) {
-        return new String(Base64.getUrlDecoder().decode(baseUrlEncoded), StandardCharsets.UTF_8);
+        try {
+            return new String(Base64.getUrlDecoder().decode(baseUrlEncoded), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            log.error("Failed to decode base URL: {}", baseUrlEncoded, e);
+            throw new BadRequestException("Invalid base URL format");
+        }
     }
+
+    /**
+     * Get existing attachments for a specific entity as AttachmentInfo objects.
+     * This is a convenience method for services that need to work with AttachmentInfo.
+     */
+    public Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType,
+            UUID containerId) {
+        AttachmentSearchCriteria criteria = AttachmentSearchCriteria.builder()
+                .entityId(entityId)
+                .entityType(entityType)
+                .containerId(containerId)
+                .build();
+
+        return list(1, Integer.MAX_VALUE, criteria, "")
+                .map(attachmentPage -> attachmentPage.content().stream()
+                        .map(attachment -> AttachmentInfo.builder()
+                                .fileName(attachment.fileName())
+                                .entityType(entityType)
+                                .entityId(entityId)
+                                .containerId(containerId)
+                                .mimeType(attachment.mimeType())
+                                .build())
+                        .toList());
+    }
+
+    /**
+     * Delete specific attachments by their filenames for a given entity.
+     * Makes a single delete call with all filenames.
+     */
+    public Mono<Void> deleteSpecificAttachments(List<AttachmentInfo> attachments, UUID entityId,
+            EntityType entityType, UUID containerId) {
+        if (attachments.isEmpty()) {
+            return Mono.empty();
+        }
+
+        Set<String> fileNames = attachments.stream()
+                .map(AttachmentInfo::fileName)
+                .collect(Collectors.toSet());
+
+        DeleteAttachmentsRequest deleteRequest = DeleteAttachmentsRequest.builder()
+                .entityId(entityId)
+                .entityType(entityType)
+                .containerId(containerId)
+                .fileNames(fileNames)
+                .build();
+
+        return delete(deleteRequest)
+                .onErrorResume(error -> {
+                    log.warn("Failed to delete old attachments for entity '{}' of type '{}', filenames: {}, error: {}",
+                            entityId, entityType, fileNames, error.getMessage());
+                    return Mono.empty(); // Continue processing
+                })
+                .then();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> deleteAutoStrippedAttachments(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+                .flatMap(attachments -> {
+                    // Filter to only auto-stripped attachments
+                    List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                            .filterAutoStrippedAttachments(attachments);
+
+                    if (autoStrippedAttachments.isEmpty()) {
+                        log.info("No auto-stripped attachments found for entityType '{}', entityIds count '{}'",
+                                entityType, entityIds.size());
+                        return Mono.just(0L);
+                    }
+
+                    log.info(
+                            "Deleting '{}' auto-stripped attachments (out of '{}' total) for entityType '{}', entityIds count '{}'",
+                            autoStrippedAttachments.size(), attachments.size(), entityType, entityIds.size());
+
+                    Set<String> fileNames = autoStrippedAttachments.stream()
+                            .map(AttachmentInfo::fileName)
+                            .collect(Collectors.toSet());
+
+                    // Delete files from storage
+                    return Mono.fromRunnable(() -> fileService.deleteObjects(fileNames))
+                            .onErrorResume(error -> {
+                                log.warn("Failed to delete files from storage: {}", error.getMessage());
+                                return Mono.empty(); // Continue with DB deletion even if file deletion fails
+                            })
+                            .then(attachmentDAO.deleteByFileNames(entityType, entityIds, fileNames));
+                });
+    }
+
 }

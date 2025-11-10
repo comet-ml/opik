@@ -53,7 +53,7 @@ Total time                             : 23.44 seconds
 
 ### Run the test
 
-At least, you should specify the `--start-date` as command line argument. When the `--end-date` is omitted, the traces 
+At least, you should specify the `--start-date` as command line argument. When the `--end-date` is omitted, the traces
 and spans from the `--start-date` until the end of that day will be retrieved.
 
 To run the test, you can use the following command:
@@ -62,9 +62,18 @@ To run the test, you can use the following command:
 python tests/test_trace_span_retrieval.py --project-name performance_test --start-date 2025-03-07
 ```
 
-Optionally, you can specify the `--end-date` as command line argument, to retrieve the traces and spans for multiple 
+Optionally, you can specify the `--end-date` as command line argument, to retrieve the traces and spans for multiple
 days.
 
 ```bash
 python tests/test_trace_span_retrieval.py --project-name performance_test --start-date 2025-03-07 --end-date 2025-03-09
 ```
+
+## Multimodal with CIFAR-10 sample dataset multi_modal tests
+
+These are sample scripts to help with multi-modal examples:
+
+- [test_image_inference.py](tests/test_image_inference.py): Runs a wide range of image generation inference to
+  test online evaluations.
+- [test_images_dataset_sample.py](tests/test_images_dataset_sample.py): Loads a sample image dataset for playground and
+  experiment testing.

@@ -18,7 +18,7 @@ const Loader: React.FunctionComponent<LoaderProps> = ({
         className,
       )}
     >
-      <Spinner className="mb-2" />
+      <Spinner className={cn(message && "mb-2")} />
       {message}
     </div>
   );

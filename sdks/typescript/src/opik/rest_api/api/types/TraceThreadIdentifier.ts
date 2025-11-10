@@ -6,4 +6,5 @@ export interface TraceThreadIdentifier {
     projectName?: string;
     projectId?: string;
     threadId: string;
+    truncate?: boolean;
 }

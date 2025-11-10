@@ -42,6 +42,7 @@ jobs:
 
   build-n-push-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
@@ -62,30 +63,36 @@ jobs:
             password: ${{ secrets.GITHUB_TOKEN }}
 
         - name: Set up Docker Buildx
-          uses: docker/setup-buildx-action@v2
+          uses: docker/setup-buildx-action@v3
 
         - name: Build and Push Docker Image
-          uses: docker/build-push-action@v4
+          uses: docker/build-push-action@v6
           with:
             context: apps/${{ inputs.image }}/
             platforms: ${{ (inputs.is_release && inputs.image != 'opik-guardrails-backend') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}:${{ inputs.is_release && 'latest' || 'main' }}
+            provenance: false
             push: true
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
               ${{ inputs.is_release && format('{0}/{1}:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
             build-args: |
               OPIK_VERSION=${{inputs.version}}
 
         - name: Build and Push Docker Image for Comet integration
           if: inputs.build_comet_image
-          uses: docker/build-push-action@v4
+          uses: docker/build-push-action@v6
           with:
             context: apps/${{ inputs.image }}/
             platforms: ${{ inputs.is_release && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}-comet:${{ inputs.is_release && 'latest' || 'main' }}
+            provenance: false
             push: true
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}
               ${{ inputs.is_release && format('{0}/{1}-comet:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
+              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}-comet:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
             build-args: |
               ${{inputs.comet_build_args}}
               OPIK_VERSION=${{inputs.version}}

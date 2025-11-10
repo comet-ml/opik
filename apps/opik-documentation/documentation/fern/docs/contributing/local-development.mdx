@@ -1,0 +1,620 @@
+---
+title: "Local Development Setup"
+description: "Comprehensive guide for setting up and running Opik locally for development"
+---
+
+This guide provides detailed instructions for setting up your local Opik development environment. We offer multiple development modes optimized for different workflows.
+
+## Quick Start
+
+Choose the approach that best fits your development needs:
+
+| Development Mode | Use Case | Command | Speed |
+|-----------------|----------|---------|-------|
+| **Docker Mode** | Testing full stack, closest to production | `./opik.sh --build` | Slow |
+| **Local Process Mode** | Fast BE + FE development | `scripts/dev-runner.sh` | Fast |
+| **BE-Only Mode** | Backend development only | `scripts/dev-runner.sh --be-only-restart` | Fast |
+| **Infrastructure** | Manual with IDE development | `./opik.sh --infra --port-mapping` | Medium |
+
+## Prerequisites
+
+### Required Tools
+
+- **Docker** and **Docker Compose** - For running infrastructure services
+- **Java 21** and **Maven** - For backend development
+- **Node.js 18+** and **npm** - For frontend development
+- **Python 3.8+** and **pip** - For SDK development
+
+### Verify Installation
+
+```bash
+# Check Docker
+docker --version
+docker compose version
+
+# Check Java and Maven
+java -version
+mvn -version
+
+# Check Node.js and npm
+node --version
+npm --version
+
+# Check Python
+python --version
+```
+
+## Development Modes
+
+### 1. Docker Mode (Full Stack)
+
+**Best for**: Testing complete system, integration testing, or when you need an environment closest to production.
+
+#### How It Works
+
+The `opik.sh` script manages Docker Compose profiles to start different combinations of services:
+- Infrastructure: MySQL, ClickHouse, Redis, MinIO, ZooKeeper
+- Backend: Java backend application
+- Frontend: React application
+- Optional: Guardrails service
+
+#### Starting Opik in Docker
+
+```bash
+# Build and start all services (recommended for first time)
+./opik.sh --build
+
+# Start without rebuilding (if no code changes)
+./opik.sh
+
+# Enable port mapping (useful for debugging)
+./opik.sh --build --port-mapping
+
+# Enable debug logging
+./opik.sh --build --debug
+```
+
+#### Available Profiles
+
+```bash
+# Infrastructure only (MySQL, Redis, ClickHouse, ZooKeeper, MinIO)
+./opik.sh --infra --port-mapping
+
+# Infrastructure + Backend services
+./opik.sh --backend --port-mapping
+
+# All services EXCEPT backend (for local backend development)
+./opik.sh --local-be --port-mapping
+
+# Add guardrails services
+./opik.sh --build --guardrails
+```
+
+#### Managing Docker Services
+
+```bash
+# Check service health
+./opik.sh --verify
+
+# View system status
+./opik.sh --info
+
+# Stop all services and clean up
+./opik.sh --stop
+
+# Rebuild specific service
+docker compose -f deployment/docker-compose/docker-compose.yaml build backend
+```
+
+#### Accessing Services
+
+- **UI**: http://localhost:5173
+- **Backend API**: http://localhost:8080
+- **MySQL**: localhost:3306
+- **ClickHouse**: localhost:8123
+- **Redis**: localhost:6379
+
+### 2. Local Process Mode (Fast Development)
+
+**Best for**: Rapid backend and frontend development with instant code reloading.
+
+#### How It Works
+
+The `dev-runner.sh` script:
+1. Starts infrastructure services in Docker (MySQL, Redis, ClickHouse, etc.)
+2. Builds backend and runs it as a local process
+3. Runs frontend with Vite dev server as a local process
+4. Runs database migrations automatically
+
+#### Starting Development Environment
+
+```bash
+# Full restart (stop, build, start) - DEFAULT
+scripts/dev-runner.sh
+
+# Or explicitly
+scripts/dev-runner.sh --restart
+
+# Start without rebuilding (faster if no dependency changes)
+scripts/dev-runner.sh --start
+
+# Stop all services
+scripts/dev-runner.sh --stop
+
+# Check status
+scripts/dev-runner.sh --verify
+
+# View logs
+scripts/dev-runner.sh --logs
+```
+
+#### Debug Mode
+
+```bash
+# Enable verbose logging
+scripts/dev-runner.sh --restart --debug
+
+# Or set environment variable
+DEBUG_MODE=true scripts/dev-runner.sh --restart
+```
+
+#### Service Details
+
+**Backend Process**:
+- Port: 8080
+- Logs: `/tmp/opik-backend.log`
+- PID file: `/tmp/opik-backend.pid`
+- CORS enabled for local frontend
+- Auto-built from `apps/opik-backend`
+
+**Frontend Process**:
+- Port: 5174
+- Logs: `/tmp/opik-frontend.log`
+- PID file: `/tmp/opik-frontend.pid`
+- Hot-reload enabled
+- Proxies API calls to backend at localhost:8080
+
+**Infrastructure (Docker)**:
+- Same services as Docker mode
+- Ports mapped for local access
+
+#### Accessing Services
+
+- **UI**: http://localhost:5174 (local Vite dev server)
+- **Backend API**: http://localhost:8080
+- **Infrastructure**: Same ports as Docker mode
+
+#### SDK Configuration
+
+After starting, configure the SDK to use your local instance:
+
+```bash
+opik configure --use_local
+```
+
+**IMPORTANT**: You must manually edit `~/.opik.config` to remove `/api` from the URL:
+
+```ini
+[opik]
+# Change from:
+url_override = http://localhost:8080/api/
+
+# To:
+url_override = http://localhost:8080
+workspace = default
+```
+
+Or use environment variables:
+```bash
+export OPIK_URL_OVERRIDE='http://localhost:8080'
+export OPIK_WORKSPACE='default'
+```
+
+### 3. BE-Only Mode (Backend Development)
+
+**Best for**: Backend-focused development when you don't need to modify frontend code.
+
+#### How It Works
+
+This mode:
+1. Starts infrastructure services in Docker
+2. Starts frontend in Docker (pre-built)
+3. Runs backend as a local process with hot-reload
+
+The frontend in Docker proxies API calls to your local backend process.
+
+#### Starting BE-Only Mode
+
+```bash
+# Full restart (stop, build backend, start)
+scripts/dev-runner.sh --be-only-restart
+
+# Start without rebuilding
+scripts/dev-runner.sh --be-only-start
+
+# Stop services
+scripts/dev-runner.sh --be-only-stop
+
+# Check status
+scripts/dev-runner.sh --be-only-verify
+```
+
+#### Service Details
+
+**Backend Process** (Local):
+- Port: 8080
+- Logs: `/tmp/opik-backend.log`
+- Auto-built and hot-reloadable
+
+**Frontend** (Docker):
+- Port: 5173 (Docker container)
+- Pre-built image
+- Proxies to localhost:8080
+
+**Infrastructure** (Docker):
+- All infrastructure services
+
+#### Accessing Services
+
+- **UI**: http://localhost:5173 (Docker frontend)
+- **Backend API**: http://localhost:8080 (local process)
+
+#### SDK Configuration
+
+Configure SDK without the manual edit requirement:
+
+```bash
+opik configure --use_local
+# Use URL: http://localhost:5173
+```
+
+Or with environment variables:
+```bash
+export OPIK_URL_OVERRIDE='http://localhost:5173/api'
+export OPIK_WORKSPACE='default'
+```
+
+### 4. Infrastructure Only Mode
+
+**Best for**: SDK development, integration testing, or when you need just the databases.
+
+```bash
+# Start only infrastructure services
+./opik.sh --infra --port-mapping
+
+# Verify infrastructure is running
+./opik.sh --infra --verify
+
+# Stop infrastructure
+./opik.sh --infra --stop
+```
+
+This gives you access to:
+- MySQL on port 3306
+- ClickHouse on port 8123
+- Redis on port 6379
+- MinIO on port 9000
+
+## Windows Development
+
+All scripts have PowerShell equivalents for Windows developers.
+
+### Docker Mode (Windows)
+
+```powershell
+# Build and start all services
+.\opik.ps1 --build
+
+# Different profiles
+.\opik.ps1 --infra --port-mapping
+.\opik.ps1 --backend --port-mapping
+.\opik.ps1 --local-be --port-mapping
+
+# Manage services
+.\opik.ps1 --verify
+.\opik.ps1 --stop
+```
+
+### Local Process Mode (Windows)
+
+```powershell
+# Full restart
+scripts\dev-runner.ps1
+
+# Specific commands
+scripts\dev-runner.ps1 --restart
+scripts\dev-runner.ps1 --start
+scripts\dev-runner.ps1 --stop
+scripts\dev-runner.ps1 --verify
+
+# BE-only mode
+scripts\dev-runner.ps1 --be-only-restart
+
+# Debug mode
+scripts\dev-runner.ps1 --restart --debug
+```
+
+#### Windows-Specific Notes
+
+- Logs location: `$env:TEMP` directory
+- PID files: `$env:TEMP` directory
+- Use `Get-Content -Wait` instead of `tail -f` for log following
+- Configuration file: `$env:USERPROFILE\.opik.config`
+
+## Common Development Tasks
+
+### Building Components
+
+```bash
+# Build backend only
+scripts/dev-runner.sh --build-be
+
+# Build frontend only
+scripts/dev-runner.sh --build-fe
+
+# Lint backend
+scripts/dev-runner.sh --lint-be
+
+# Lint frontend
+scripts/dev-runner.sh --lint-fe
+```
+
+### Database Migrations
+
+```bash
+# Run migrations only
+scripts/dev-runner.sh --migrate
+
+# This will:
+# 1. Start infrastructure if not running
+# 2. Build backend if needed
+# 3. Run MySQL migrations
+# 4. Run ClickHouse migrations
+```
+
+If migrations fail, you may need to clean up:
+
+```bash
+# Stop all services
+scripts/dev-runner.sh --stop  # or ./opik.sh --stop
+
+# Remove Opik Docker volumes (WARNING: DATA LOSS - removes Opik databases)
+./opik.sh --clean
+
+# Restart
+scripts/dev-runner.sh --restart
+```
+
+### Viewing Logs
+
+```bash
+# Show recent logs (last 20 lines)
+scripts/dev-runner.sh --logs
+
+# Follow logs in real-time
+tail -f /tmp/opik-backend.log
+tail -f /tmp/opik-frontend.log
+
+# On Windows
+Get-Content -Wait $env:TEMP\opik-backend.log
+Get-Content -Wait $env:TEMP\opik-frontend.log
+```
+
+### Working with Docker Services
+
+```bash
+# View all Opik containers
+docker ps --filter "name=opik-"
+
+# View logs from Docker services
+docker logs -f opik-backend-1
+docker logs -f opik-frontend-1
+docker logs -f opik-clickhouse-1
+
+# Execute commands in containers
+docker exec -it opik-mysql-1 mysql -u root -p
+docker exec -it opik-clickhouse-1 clickhouse-client
+
+# Restart a specific Docker service
+docker restart opik-backend-1
+```
+
+## Troubleshooting
+
+### Services Won't Start
+
+```bash
+# Check Docker is running
+docker info
+
+# Check port conflicts
+lsof -i :5173  # Frontend
+lsof -i :8080  # Backend
+lsof -i :3306  # MySQL
+lsof -i :8123  # ClickHouse
+
+# On Windows
+Get-NetTCPConnection -LocalPort 5173
+Get-NetTCPConnection -LocalPort 8080
+```
+
+### Build Failures
+
+```bash
+# Clean backend build
+cd apps/opik-backend
+mvn clean
+mvn spotless:apply  # Fix formatting issues
+mvn clean install
+
+# Clean frontend build
+cd apps/opik-frontend
+rm -rf node_modules
+npm install
+npm run lint
+```
+
+### Database Connection Issues
+
+```bash
+# Check MySQL is accessible
+docker exec -it opik-mysql-1 mysql -u root -p
+
+# Check ClickHouse is accessible
+docker exec -it opik-clickhouse-1 clickhouse-client
+
+# Or via HTTP
+echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-
+```
+
+### Process Management Issues
+
+```bash
+# Kill stuck backend process
+pkill -f "opik-backend.*jar"
+
+# Kill stuck frontend process
+pkill -f "vite.*opik-frontend"
+
+# On Windows
+Get-Process | Where-Object {$_.Path -like "*opik-backend*"} | Stop-Process -Force
+Get-Process | Where-Object {$_.Path -like "*opik-frontend*"} | Stop-Process -Force
+```
+
+### Clean Slate Restart
+
+```bash
+# Complete cleanup and restart
+scripts/dev-runner.sh --stop
+./opik.sh --clean  # WARNING: Deletes Opik data
+scripts/dev-runner.sh --restart
+```
+
+## Development Workflow Examples
+
+### Backend Feature Development
+
+```bash
+# 1. Start BE-only mode (fastest for backend work)
+scripts/dev-runner.sh --be-only-restart
+
+# 2. Make changes in apps/opik-backend
+
+# 3. Rebuild and restart backend
+scripts/dev-runner.sh --build-be
+scripts/dev-runner.sh --be-only-start
+
+# 4. Test changes via UI at http://localhost:5173
+```
+
+### Frontend Feature Development
+
+```bash
+# 1. Start local process mode
+scripts/dev-runner.sh --restart
+
+# 2. Make changes in apps/opik-frontend
+# Frontend hot-reloads automatically
+
+# 3. View changes at http://localhost:5174
+```
+
+### Full Stack Feature Development
+
+```bash
+# 1. Start local process mode
+scripts/dev-runner.sh --restart
+
+# 2. Make changes to backend and frontend
+# Frontend changes hot-reload
+# Backend changes require rebuild:
+
+scripts/dev-runner.sh --build-be
+# Backend automatically restarts
+
+# 3. Test at http://localhost:5174
+```
+
+### SDK Development
+
+```bash
+# 1. Start infrastructure only
+./opik.sh --infra --port-mapping
+
+# 2. Start backend separately if needed
+cd apps/opik-backend
+mvn clean install
+java -jar target/opik-backend-*.jar server config.yml
+
+# 3. Configure SDK
+opik configure --use_local
+
+# 4. Test SDK changes
+cd sdks/python
+pip install -e .
+pytest tests/e2e
+```
+
+### Integration Testing
+
+```bash
+# 1. Start full Docker stack
+./opik.sh --build
+
+# 2. Run tests against full environment
+cd tests_end_to_end
+pytest tests/
+
+# 3. Clean up
+./opik.sh --stop
+```
+
+## Performance Tips
+
+1. **Use local process mode** for fastest development cycle
+2. **Use BE-only mode** if you're not changing frontend
+3. **Use `--start` instead of `--restart`** when dependencies haven't changed
+4. **Enable debug mode only when needed** - it increases log verbosity
+5. **Keep Docker images up to date** - rebuild periodically with `--build`
+
+## Best Practices
+
+1. **Always run linters before committing**:
+   ```bash
+   scripts/dev-runner.sh --lint-be
+   scripts/dev-runner.sh --lint-fe
+   ```
+
+2. **Test migrations locally** before committing:
+   ```bash
+   scripts/dev-runner.sh --migrate
+   ```
+
+3. **Clean up regularly** to free disk space:
+   ```bash
+   # Clean up Opik Docker resources (WARNING: DATA LOSS - removes Opik databases)
+   ./opik.sh --clean  # Removes Opik containers and volumes
+   
+   # Or clean up dangling Docker containers, networks, images (affects all projects)
+   docker system prune
+   ```
+
+4. **Use debug mode for troubleshooting**:
+   ```bash
+   scripts/dev-runner.sh --restart --debug
+   ```
+
+5. **Check service status before reporting issues**:
+   ```bash
+   scripts/dev-runner.sh --verify
+   ./opik.sh --verify
+   ```
+
+## Next Steps
+
+- [Backend Development Guide](backend.mdx) - Deep dive into backend development
+- [Frontend Development Guide](frontend.mdx) - Deep dive into frontend development
+- [Python SDK Development Guide](python-sdk.mdx) - SDK contribution guidelines
+- [Testing Guide](overview.mdx#testing) - Running and writing tests
+
+

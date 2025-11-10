@@ -14,8 +14,19 @@ dayjs.extend(duration);
 const FORMATTED_DATE_STRING_REGEXP =
   /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
 
-export const formatDate = (value: string, utc: boolean = false) => {
-  const dateTimeFormat = "MM/DD/YY hh:mm A";
+type FormatDateConfig = {
+  utc?: boolean;
+  includeSeconds?: boolean;
+};
+
+export const formatDate = (
+  value: string,
+  { utc = false, includeSeconds = false }: FormatDateConfig = {},
+) => {
+  const dateTimeFormat = includeSeconds
+    ? "MM/DD/YY hh:mm:ss A"
+    : "MM/DD/YY hh:mm A";
+
   if (isString(value) && dayjs(value).isValid()) {
     if (utc) {
       return dayjs(value).utc().format(dateTimeFormat);

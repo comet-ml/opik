@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
@@ -101,11 +102,8 @@ interface LlmProviderAnthropicMapper {
     }
 
     default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {
-        if (rawContent instanceof String content) {
-            return new AnthropicTextContent(content);
-        }
-
-        throw new BadRequestException("only text content is supported");
+        var content = MessageContentNormalizer.flattenContent(rawContent);
+        return new AnthropicTextContent(content);
     }
 
     default AnthropicTextContent mapToSystemMessage(@NonNull Message message) {

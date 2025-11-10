@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkUpload;
@@ -8,6 +9,8 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -15,6 +18,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
@@ -24,7 +28,6 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
-import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -155,6 +158,21 @@ public class ExperimentResourceClient {
         }
     }
 
+    public List<ExperimentItem> streamExperimentItems(ExperimentItemStreamRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .accept(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return getStreamed(response, ITEM_TYPE_REFERENCE);
+        }
+    }
+
     public void bulkUploadExperimentItem(ExperimentItemBulkUpload bulkUpload, String apiKey, String workspaceName) {
         try (var response = callExperimentItemBulkUpload(bulkUpload, apiKey, workspaceName)) {
             assertThat(response.hasEntity()).isFalse();
@@ -202,6 +220,120 @@ public class ExperimentResourceClient {
                 return response.readEntity(ExperimentGroupResponse.class);
             }
             return null;
+        }
+    }
+
+    public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, String apiKey,
+            String workspaceName, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("groups")
+                .path("aggregations")
+                .queryParam("name", name);
+
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (CollectionUtils.isNotEmpty(groups)) {
+            webTarget = webTarget.queryParam("groups", toURLEncodedQueryParam(groups));
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(ExperimentGroupAggregationsResponse.class);
+            }
+            return null;
+        }
+    }
+
+    public Experiment.ExperimentPage findExperiments(
+            int page, int size, String name, String apiKey, String workspaceName) {
+        return findExperiments(page, size, null, null, null, name, false, null, null, null, apiKey, workspaceName,
+                HttpStatus.SC_OK);
+    }
+
+    public Experiment.ExperimentPage findExperiments(
+            int page, int size, UUID datasetId, UUID optimizationId, Set<ExperimentType> types, String name,
+            boolean datasetDeleted, UUID promptId, String sorting, List<? extends ExperimentFilter> filters,
+            String apiKey, String workspaceName, int expectedStatus) {
+
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("datasetId", datasetId);
+        }
+        if (optimizationId != null) {
+            webTarget = webTarget.queryParam("optimization_id", optimizationId);
+        }
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
+        }
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+        if (datasetDeleted) {
+            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+        }
+        if (promptId != null) {
+            webTarget = webTarget.queryParam("prompt_id", promptId);
+        }
+        if (sorting != null) {
+            webTarget = webTarget.queryParam("sorting", sorting);
+        }
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        try (Response response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Experiment.ExperimentPage.class);
+            }
+            return null;
+        }
+    }
+
+    public Response updateExperiment(UUID experimentId, ExperimentUpdate experimentUpdate, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(experimentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(experimentUpdate));
+    }
+
+    public void updateExperiment(UUID experimentId, ExperimentUpdate experimentUpdate, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (Response response = updateExperiment(experimentId, experimentUpdate, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void finishExperiments(Set<UUID> ids, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("finish")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new IdsHolder(ids)))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 }

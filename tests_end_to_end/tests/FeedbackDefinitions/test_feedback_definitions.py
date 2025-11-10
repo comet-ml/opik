@@ -114,7 +114,7 @@ class TestFeedbacksCrud:
             feedbacks_page.edit_feedback_by_name(
                 feedback_name=cat_name,
                 new_name=cat_new_name,
-                categories={"test1": 1, "test2": 2, "test3": 3},
+                categories={"test1": 1, "test2": 2},
             )
             logger.info("Successfully edited categorical definition")
         except Exception as e:
@@ -170,7 +170,7 @@ class TestFeedbacksCrud:
                 cat_new_name
             )
             categories = re.findall(r"\b\w+\b", categories_ui_values)
-            assert Counter(categories) == Counter(["test1", "test2", "test3"])
+            assert Counter(categories) == Counter(["test1", "test2"])
             logger.info("Successfully verified categorical values")
         except Exception as e:
             raise AssertionError(

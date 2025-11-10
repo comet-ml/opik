@@ -1,14 +1,21 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         files: ^sdks/opik_optimizer
       - id: end-of-file-fixer
         files: ^sdks/opik_optimizer
 
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py310-plus]
+        files: ^sdks/opik_optimizer
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.9
+    rev: v0.13.1
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes]
@@ -17,11 +24,12 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.18.2
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
         exclude: '(sdks/opik_optimizer/src/opik_optimizer/mipro_optimizer/)'
         # `exclude` option will work only from here.
         # The rest of mypy configuration can be moved to pyproject.toml
-        args: [--config-file, sdks/opik_optimizer/pyproject.toml]
+        args: [--config-file, sdks/opik_optimizer/pyproject.toml, --ignore-missing-imports]
+        additional_dependencies: [types-requests]

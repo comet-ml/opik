@@ -1,0 +1,265 @@
+---
+title: "Optimizer Parameters Guide"
+subtitle: "Complete reference for all optimizer-specific parameters and their use cases"
+description: "Comprehensive guide to all parameters available for each optimizer, including usage recommendations and best practices."
+---
+
+This guide provides a complete reference for all optimizer-specific parameters, their use cases, and best practices for tuning them effectively.
+
+## Base Optimizer Parameters
+
+All optimizers inherit from `BaseOptimizer` and support these common parameters:
+
+### Core Parameters
+
+- **`model`** (str): The LLM model to use (e.g., "openai/gpt-4", "anthropic/claude-3-sonnet")
+- **`project_name`** (str, optional): Opik project name for tracking experiments
+- **`seed`** (int, default: 42): Random seed for reproducibility
+
+### Model Parameters (via **kwargs)
+
+- **`temperature`** (float, default: 0.1): Sampling temperature for LLM calls
+- **`max_tokens`** (int, default: 5000): Maximum tokens per LLM response
+- **`top_p`** (float, optional): Top-p sampling parameter
+- **`frequency_penalty`** (float, optional): Frequency penalty for repetition
+- **`presence_penalty`** (float, optional): Presence penalty for repetition
+
+## Optimizer-Specific Parameters
+
+### EvolutionaryOptimizer
+
+**Purpose**: Uses genetic algorithms to evolve prompts through mutation and selection.
+
+**Specific Parameters:**
+- **`population_size`** (int, default: 20): Number of prompt variants in each generation
+- **`num_generations`** (int, default: 10): Number of evolutionary generations
+- **`mutation_rate`** (float, default: 0.1): Probability of mutating each prompt
+- **`crossover_rate`** (float, default: 0.8): Probability of combining two prompts
+- **`elite_size`** (int, default: 2): Number of best prompts preserved between generations
+- **`tournament_size`** (int, default: 3): Size of tournament for selection
+- **`mutation_strategies`** (list, default: ["word_substitution", "phrase_addition", "phrase_deletion"]): Available mutation strategies
+
+**Use Cases:**
+- When you want to explore diverse prompt variations
+- For tasks that benefit from creative prompt generation
+- When you have sufficient computational resources for multiple generations
+
+**Parameter Tuning:**
+- **Population Size**: Larger populations (50-100) for complex tasks, smaller (10-20) for simple tasks
+- **Generations**: More generations (20-50) for thorough exploration, fewer (5-10) for quick results
+- **Mutation Rate**: Higher rates (0.2-0.3) for more exploration, lower rates (0.05-0.1) for refinement
+
+### FewShotBayesianOptimizer
+
+**Purpose**: Optimizes few-shot examples using Bayesian optimization techniques.
+
+**Specific Parameters:**
+- **`min_examples`** (int, default: 2): Minimum number of few-shot examples
+- **`max_examples`** (int, default: 8): Maximum number of few-shot examples
+- **`n_trials`** (int, default: 10): Number of optimization trials (passed via kwargs in optimize_prompt)
+- **`n_threads`** (int, default: 8): Number of parallel evaluation threads
+
+**Use Cases:**
+- Tasks that benefit from few-shot learning
+- When you have a good dataset with clear examples
+- Quick optimization with limited resources
+
+**Parameter Tuning:**
+- **Min/Max Examples**: Start with 2-4 for simple tasks, 6-8 for complex tasks
+- **N-Threads**: Increase for faster evaluation (limited by API rate limits)
+- **N-Trials**: More trials (50-100) for thorough optimization, fewer (10-30) for quick results
+
+### MetaPromptOptimizer
+
+**Purpose**: Uses meta-prompting to iteratively refine prompts through LLM-driven analysis.
+
+**Specific Parameters:**
+- **`reasoning_model`** (str, optional): Separate model for generating prompt suggestions
+- **`max_rounds`** (int, default: 3): Number of optimization rounds
+- **`num_prompts_per_round`** (int, default: 4): Number of candidates generated per round
+- **`initial_trials_per_candidate`** (int, default: 1): Initial evaluations per candidate
+- **`max_trials_per_candidate`** (int, default: 3): Maximum evaluations per promising candidate
+- **`improvement_threshold`** (float, default: 0.01): Minimum improvement to continue optimization
+
+**Use Cases:**
+- General-purpose prompt improvement
+- When you want LLM-driven prompt refinement
+- Tasks where prompt wording and structure matter significantly
+
+**Parameter Tuning:**
+- **Reasoning Model**: Use more capable models (gpt-4, claude-3) for better suggestions
+- **Max Rounds**: More rounds (5-10) for thorough refinement, fewer (2-3) for quick improvement
+- **Prompts Per Round**: More candidates (6-8) for exploration, fewer (2-4) for focused refinement
+
+### HierarchicalReflectiveOptimizer
+
+**Purpose**: Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes.
+
+**Specific Parameters:**
+- **`reasoning_model`** (str): Model used for root cause analysis and prompt improvement (e.g., "openai/gpt-4o")
+- **`n_threads`** (int, default: 12): Number of parallel evaluation threads
+- **`max_parallel_batches`** (int, default: 5): Maximum number of batches analyzed in parallel
+- **`batch_size`** (int, default: 25): Number of test cases per batch for root cause analysis
+- **`seed`** (int, default: 42): Random seed for reproducibility
+- **`verbose`** (int, default: 1): Controls internal logging/progress bars (0=off, 1=on)
+
+**Optimization Parameters (via optimize_prompt kwargs):**
+- **`n_trials`** (int, default: 3): Number of optimization trials (iterations)
+- **`max_retries`** (int, default: 2): Maximum retries per failure mode if prompt improvement fails
+
+**Use Cases:**
+- Complex prompts requiring systematic refinement based on understanding failure patterns
+- Tasks where understanding why prompts fail is critical for improvement
+- Scenarios with diverse failure modes that need to be identified and addressed individually
+- When you have sufficient evaluation data to analyze in batches (recommended: 50+ test cases)
+
+**Parameter Tuning:**
+- **Reasoning Model**: Use more capable models (gpt-4o, claude-3.5-sonnet) for better root cause analysis
+- **Batch Size**: Larger batches (30-50) for diverse datasets, smaller (15-25) for focused analysis
+- **Max Parallel Batches**: Increase (8-10) for faster analysis with good API rate limits, decrease (2-3) for limited quotas
+- **N-Trials**: More trials (5-7) for thorough optimization, fewer (2-3) for quick improvement
+
+### MiproOptimizer
+
+**Purpose**: Implements MIPRO algorithm for complex agent and tool-using prompt optimization.
+
+**Specific Parameters:**
+- **`auto`** (Literal["light", "medium", "heavy"], default: "light"): Optimization intensity level
+  - `"light"`: Fast optimization with minimal exploration
+  - `"medium"`: Balanced optimization with moderate exploration
+  - `"heavy"`: Thorough optimization with extensive exploration
+- **`n_threads`** (int, default: 6): Number of parallel threads for evaluation
+- **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
+
+**Use Cases:**
+- Complex multi-step reasoning tasks
+- Agent workflows requiring tool usage
+- Tasks benefiting from programmatic prompt optimization
+- Multi-agent or interactive optimization scenarios
+
+**Parameter Tuning:**
+- **Auto Level**: Start with "light" for quick results, use "heavy" for maximum optimization
+- **Model Selection**: Use more capable models (gpt-4, claude-3) for complex reasoning tasks
+
+### GepaOptimizer
+
+**Purpose**: Wraps the GEPA package for single-turn system prompt optimization with reflection.
+
+**Specific Parameters:**
+- **`reflection_model`** (str, optional): Model for reflection (defaults to main model)
+- **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
+
+**Optimization Parameters (via optimize_prompt kwargs):**
+- **`max_metric_calls`** (int): Effective metric budget used by GEPA (`max_trials × evaluated_samples`). The Opik wrapper still runs its own baseline/final rescoring outside this budget, so plan for those extra evaluations when sizing API usage.
+- **`reflection_minibatch_size`** (int, default: 3): Minimum number of *unique* prompts GEPA must evaluate before it will run a reflection step. If the minibatch size is larger than the available candidates, reflection is skipped entirely.
+- **`candidate_selection_strategy`** (str, default: "pareto"): Strategy for selecting candidates ("pareto" or "best")
+- **Runtime warnings**: The optimizer emits a warning when `reflection_minibatch_size` exceeds the number of candidates that can be evaluated with the current metric budget (`max_trials`). Reduce the minibatch or increase the budget if you see this message.
+
+**Use Cases:**
+- Single-turn tasks with clear input-output pairs
+- When you want reflection-driven prompt improvement
+- Tasks where system prompt optimization is the primary goal
+
+**Parameter Tuning:**
+- **Max Metric Calls**: Higher budgets (100+) for better results, lower (20-50) for quick optimization
+- **Reflection Model**: Use stronger models (gpt-4, claude-3) for better reflection
+- **Minibatch Size**: Larger batches (5-10) for efficiency, smaller (2-3) for thorough reflection
+
+### ParameterOptimizer
+
+**Purpose**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization without changing the prompt.
+
+**Specific Parameters:**
+- **`default_n_trials`** (int, default: 20): Default number of optimization trials
+- **`n_threads`** (int, default: 4): Number of parallel evaluation threads
+- **`local_search_ratio`** (float, default: 0.3): Ratio of trials dedicated to local search around best parameters
+- **`local_search_scale`** (float, default: 0.2): Scale factor for local search range
+
+**Optimization Parameters (via optimize_parameter kwargs):**
+- **`parameter_space`** (ParameterSearchSpace | dict): Defines parameters to optimize and their ranges
+- **`n_trials`** (int, optional): Number of optimization trials (overrides default_n_trials)
+- **`sampler`** (optuna.samplers.BaseSampler, optional): Custom Optuna sampler
+- **`callbacks`** (list, optional): Optuna callbacks for custom logging/monitoring
+- **`timeout`** (float, optional): Maximum optimization time in seconds
+
+**Use Cases:**
+- Fine-tuning model behavior without changing the prompt
+- Optimizing temperature, top_p, frequency_penalty, and other sampling parameters
+- Finding optimal model parameters for specific tasks
+- A/B testing different parameter configurations
+
+**Parameter Tuning:**
+- **N-Trials**: More trials (50-100) for thorough optimization, fewer (10-30) for quick tuning
+- **Local Search Ratio**: Higher ratios (0.4-0.5) for refinement, lower (0.1-0.2) for exploration
+- **Local Search Scale**: Larger scale (0.3-0.5) for wider local search, smaller (0.1-0.2) for fine-tuning
+- **N-Threads**: Increase for faster evaluation (limited by API rate limits)
+
+## Parameter Selection Guidelines
+
+### Task Complexity Assessment
+
+**Simple Tasks** (single prompt, clear input-output):
+- Use `FewShotBayesianOptimizer` or `MetaPromptOptimizer`
+- Lower parameter values (fewer iterations, smaller populations)
+- Focus on prompt clarity and example selection
+
+**Parameter Tuning** (optimize model behavior without changing prompts):
+- Use `ParameterOptimizer` to tune temperature, top_p, and other sampling parameters
+- Quick optimization with focused parameter space
+- Best when prompt is already good but model behavior needs adjustment
+
+**Complex Tasks** (multi-step, tool usage, agent workflows):
+- Use `MiproOptimizer` or `EvolutionaryOptimizer`
+- Higher parameter values (more generations, extensive exploration)
+- Consider tool integration and multi-agent coordination
+
+### Resource Constraints
+
+**Limited Computational Resources:**
+- Use `FewShotBayesianOptimizer` with lower `n_iterations`
+- Use `MetaPromptOptimizer` with fewer `max_rounds`
+- Use `MiproOptimizer` with `auto="light"`
+
+**Abundant Computational Resources:**
+- Use `EvolutionaryOptimizer` with larger `population_size` and more `num_generations`
+- Use `MiproOptimizer` with `auto="heavy"`
+- Use `GepaOptimizer` with higher `max_metric_calls`
+
+### Model Selection Guidelines
+
+**For Evaluation Models:**
+- Use faster models (gpt-3.5-turbo, claude-3-haiku) for exploration
+- Use more capable models (gpt-4, claude-3-sonnet) for final optimization
+
+**For Reasoning/Reflection Models:**
+- Always use more capable models (gpt-4, claude-3-sonnet) for better suggestions
+- Consider using different models for reasoning vs. evaluation
+
+## Best Practices
+
+### Parameter Tuning Strategy
+
+1. **Start with Defaults**: Begin with default parameter values
+2. **Incremental Adjustment**: Make small adjustments based on results
+3. **Monitor Convergence**: Track optimization progress and adjust accordingly
+4. **Resource Management**: Balance optimization quality with computational cost
+
+### Common Pitfalls
+
+1. **Over-optimization**: Too many iterations may lead to overfitting
+2. **Under-exploration**: Too few iterations may miss optimal solutions
+3. **Model Mismatch**: Using inappropriate models for the task complexity
+4. **Parameter Conflicts**: Conflicting parameter values that work against each other
+
+### Performance Optimization
+
+1. **Parallel Processing**: Use `n_threads` effectively for faster evaluation
+2. **Caching**: Leverage built-in caching mechanisms where available
+3. **Early Stopping**: Use improvement thresholds to avoid unnecessary computation
+4. **Resource Monitoring**: Track memory and API usage during optimization
+
+## Next Steps
+
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

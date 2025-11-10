@@ -649,3 +649,80 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("openai-integration-test", "openai-integration-test"),
+    ],
+)
+def test_openai_client_responses_create__opik_args__happyflow(
+    fake_backend, project_name, expected_project_name
+):
+    # test that opik_args are passed to the logged traces and spans
+    client = openai.OpenAI()
+    wrapped_client = track_openai(
+        openai_client=client,
+        project_name=project_name,
+    )
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    _ = wrapped_client.responses.create(
+        model=MODEL_FOR_TESTS, input=messages, max_output_tokens=50, opik_args=args_dict
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="responses_create",
+        input={"input": messages},
+        output={"output": ANY_BUT_NONE, "reasoning": ANY},
+        tags=["openai", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="responses_create",
+                input={"input": messages},
+                output={"output": ANY_BUT_NONE, "reasoning": ANY},
+                tags=["openai", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[],
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                provider="openai",
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)

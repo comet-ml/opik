@@ -28,13 +28,8 @@ const CommitsActionsPanel: React.FunctionComponent<
         versions={versions}
       />
       <TooltipWrapper content="Compare commits">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-          disabled={disabled}
-        >
-          <Split className="mr-2 size-3.5" />
+        <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
+          <Split className="mr-1.5 size-3.5" />
           Compare
         </Button>
       </TooltipWrapper>

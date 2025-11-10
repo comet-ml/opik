@@ -17,19 +17,22 @@ env:
   OPIK_SENTRY_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+  OPIK_URL_OVERRIDE: http://localhost:5173/api
+  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
     run-e2e:
         name: SDK E2E Tests ${{matrix.python_version}}
-        runs-on: ubuntu-latest   
+        runs-on: ubuntu-latest
+        timeout-minutes: 30   
         strategy:
             fail-fast: false
             matrix:
                 python_version: [
-                  "3.8",
                   "3.9",
                   "3.10",
                   "3.11",
-                  "3.12"
+                  "3.12",
+                  "3.13",
                 ]
 
         steps:
@@ -45,9 +48,8 @@ jobs:
           env:
             OPIK_USAGE_REPORT_ENABLED: false
           run: |
-            cd deployment/docker-compose
-            export OPIK_FRONTEND_FLAVOR=guardrails
-            docker compose --profile guardrails up -d --build
+            cd ${{ github.workspace }}
+            ./opik.sh --build --guardrails
         
         - name: Check Opik server availability
           shell: bash
@@ -62,14 +64,22 @@ jobs:
         - name: Install opik SDK
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pip install -r tests/test_requirements.txt
             pip install .
+
+        - name: Run smoke tests
+          run: |
+            cd ${{ github.workspace }}/sdks/python/tests/e2e_smoke
+            ./smoke_tests_runner.sh
+
+        - name: Install test requirements
+          run: |
+            cd ${{ github.workspace }}/sdks/python
+            pip install -r tests/test_requirements.txt
+            pip list
 
         - name: Run tests
           run: |
             cd ${{ github.workspace }}/sdks/python
-            export OPIK_URL_OVERRIDE=http://localhost:5173/api
-            export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
             pytest tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
@@ -95,6 +105,6 @@ jobs:
         - name: Stop opik server
           if: always()
           run: |
-            cd ${{ github.workspace }}/deployment/docker-compose
-            docker compose down
+            cd ${{ github.workspace }}
+            ./opik.sh --stop --guardrails
 

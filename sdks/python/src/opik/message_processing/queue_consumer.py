@@ -50,7 +50,7 @@ class QueueConsumer(threading.Thread):
             if message is None:
                 return
             elif message.delivery_time <= now:
-                self._message_processor.process(message)
+                self._process_message(message)
             else:
                 # put a message back to keep an order in the queue
                 self._push_message_back(message)
@@ -87,4 +87,8 @@ class QueueConsumer(threading.Thread):
                 "The message queue size limit has been reached. The current message has been returned to the queue, and the newest message has been discarded.",
                 logger=LOGGER,
             )
+        message.delivery_attempts += 1
         self._message_queue.put_back(message)
+
+    def _process_message(self, message: messages.BaseMessage) -> None:
+        self._message_processor.process(message)

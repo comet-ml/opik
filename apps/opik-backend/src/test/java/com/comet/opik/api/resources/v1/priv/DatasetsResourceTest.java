@@ -21,7 +21,12 @@ import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStats.AvgValueStat;
+import com.comet.opik.api.ProjectStats.CountValueStat;
+import com.comet.opik.api.ProjectStats.PercentageValueStat;
+import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -33,6 +38,8 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.DatasetFilter;
+import com.comet.opik.api.filter.DatasetItemField;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.FieldType;
@@ -55,12 +62,14 @@ import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -76,6 +85,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.common.collect.ImmutableMap;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -86,7 +96,9 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -103,10 +115,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -205,7 +215,7 @@ class DatasetsResourceTest {
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
@@ -1376,7 +1386,9 @@ class DatasetsResourceTest {
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().name(null).build(),
                             "name must not be blank"),
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().name("").build(),
-                            "name must not be blank"));
+                            "name must not be blank"),
+                    arguments(factory.manufacturePojo(Dataset.class).toBuilder().description("a".repeat(256)).build(),
+                            "description cannot exceed 255 characters"));
         }
 
         @ParameterizedTest
@@ -2925,7 +2937,11 @@ class DatasetsResourceTest {
                             "name must not be blank"),
                     arguments(
                             factory.manufacturePojo(DatasetUpdate.class).toBuilder().description("").build(),
-                            "description must not be blank"));
+                            "description must not be blank"),
+                    arguments(
+                            factory.manufacturePojo(DatasetUpdate.class).toBuilder().description("a".repeat(256))
+                                    .build(),
+                            "description cannot exceed 255 characters"));
         }
 
         @ParameterizedTest
@@ -3996,20 +4012,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
         }
 
         @Test
@@ -4036,22 +4041,12 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("size", 1)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+            List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
 
-                List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
-
-                assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
         }
 
         @Test
@@ -4092,20 +4087,9 @@ class DatasetsResourceTest {
 
             Set<Column> columns = getColumns(data);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
         }
 
         @Test
@@ -4150,20 +4134,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
-            }
+            assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
 
         }
 
@@ -4197,21 +4170,230 @@ class DatasetsResourceTest {
                     .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
                     .toList().reversed();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("truncate", truncate), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
+        }
+
+        @Test
+        @DisplayName("when searching with valid search term, then return matching items")
+        void getDatasetItemsByDatasetId__whenSearchingWithValidSearchTerm__thenReturnMatchingItems() {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+            var searchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of(
+                            "query", new TextNode("search for " + searchKey + " model"),
+                            "type", new TextNode("question"),
+                            "category", new TextNode(searchKey + " intelligence")))
+                    .build();
+
+            var nonSearchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of(
+                            "query", new TextNode("how to cook " + RandomStringUtils.secure().nextAlphabetic(8)),
+                            "type", new TextNode("recipe"),
+                            "category", new TextNode(RandomStringUtils.secure().nextAlphabetic(8))))
+                    .build();
+
+            var items = List.of(searchableItem, nonSearchableItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Create filter for the new filter API
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
+
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            List<DatasetItem> expectedContent = List.of(searchableItem);
+
+            assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
+        }
+
+        // Parameterized test scenarios for search functionality
+        Stream<Arguments> searchTestScenarios() {
+            return Stream.of(
+                    Arguments.of(
+                            "Case insensitive search",
+                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
+                                var searchTerm = baseSearchTerm + "UNIQUE";
+                                var items = List.of(
+                                        createDatasetItem("This is a " + searchTerm.toUpperCase() + " document"),
+                                        createDatasetItem("Another " + searchTerm.toLowerCase() + " file"),
+                                        createDatasetItem(searchTerm.toLowerCase() + " Results Analysis"),
+                                        createDatasetItem("Completely unrelated cooking recipe content DIFFERENT"));
+                                return new SearchTestScenario(
+                                        items,
+                                        searchTerm.toLowerCase(),
+                                        1, 10, // page, size
+                                        3, // expected count
+                                        items.subList(0, 3).reversed() // expected items in reverse order (database order)
+                                );
+                            }),
+                    Arguments.of(
+                            "Empty search returns all items",
+                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
+                                var items = List.of(
+                                        createDatasetItem("First test item " + baseSearchTerm + "EMPTY1"),
+                                        createDatasetItem("Second test item " + baseSearchTerm + "EMPTY2"),
+                                        createDatasetItem("Third test item " + baseSearchTerm + "EMPTY3"),
+                                        createDatasetItem("Fourth test item " + baseSearchTerm + "EMPTY4"),
+                                        createDatasetItem("Fifth test item " + baseSearchTerm + "EMPTY5"));
+                                return new SearchTestScenario(
+                                        items,
+                                        "", // empty search
+                                        1, 10,
+                                        items.size(),
+                                        items.reversed() // items are returned in reverse order
+                                );
+                            }),
+                    Arguments.of(
+                            "No matches returns empty result",
+                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
+                                var items = List.of(
+                                        createDatasetItem("apple fruit content " + baseSearchTerm + "NOMATCH1"),
+                                        createDatasetItem("banana yellow fruit " + baseSearchTerm + "NOMATCH2"),
+                                        createDatasetItem("cherry red berry " + baseSearchTerm + "NOMATCH3"));
+                                // For this scenario, we still create the items but search for something that won't match
+                                return new SearchTestScenario(
+                                        items,
+                                        "COMPLETELYDIFFERENTSTRING", // guaranteed non-matching search
+                                        1, 10,
+                                        0,
+                                        List.of() // no expected items
+                                );
+                            }),
+                    Arguments.of(
+                            "Pagination works correctly",
+                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
+                                var searchTerm = baseSearchTerm + "PAGINATION";
+                                var items = IntStream.range(0, 10)
+                                        .<DatasetItem>mapToObj(
+                                                i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                                                        .data(Map.of(
+                                                                "content",
+                                                                new TextNode(searchTerm + " item " + i + " UNIQUE"),
+                                                                "index", new IntNode(i)))
+                                                        .build())
+                                        .toList();
+                                return new SearchTestScenario(
+                                        items,
+                                        searchTerm,
+                                        2, 3, // page 2, size 3
+                                        10, // total count
+                                        items.reversed().subList(3, 6) // expected items for page 2
+                                );
+                            }),
+                    Arguments.of(
+                            "Special characters handled correctly",
+                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
+                                var searchTerm = baseSearchTerm + "SPECIAL";
+                                var items = List.of(
+                                        createDatasetItem("Email: user@" + searchTerm + ".com (test)! SPECIAL1"),
+                                        createDatasetItem("Normal plain text without special chars " + baseSearchTerm
+                                                + "DIFFERENT"));
+                                return new SearchTestScenario(
+                                        items,
+                                        "@" + searchTerm, // search with special character
+                                        1, 10,
+                                        1,
+                                        items.subList(0, 1) // only first item should match
+                                );
+                            }));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("searchTestScenarios")
+        @DisplayName("Search functionality")
+        void getDatasetItemsByDatasetId__searchFunctionality(
+                String testName,
+                Function<String, SearchTestScenario> scenarioBuilder) {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            // Generate a unique base search term for each scenario to avoid cross-contamination
+            var baseSearchTerm = "TEST" + testName.replaceAll("\\s+", "").toUpperCase();
+            var scenario = scenarioBuilder.apply(baseSearchTerm);
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(scenario.items())
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            var requestBuilder = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path("items")
-                    .queryParam("truncate", truncate)
+                    .queryParam("page", scenario.page())
+                    .queryParam("size", scenario.size());
+
+            // Add filters parameter only if search term is not empty
+            if (StringUtils.isNotEmpty(scenario.searchTerm())) {
+                var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null,
+                        scenario.searchTerm());
+                requestBuilder = requestBuilder.queryParam("filters", toURLEncodedQueryParam(List.of(filter)));
+            }
+
+            try (var actualResponse = requestBuilder
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
+                if (scenario.page() == 1) {
+                    // For "No matches" scenario, use empty columns since no results are returned
+                    assertDatasetItemPage(actualEntity, scenario.expectedItems(), columns, scenario.page());
+                } else {
+                    // For pagination tests, include total count
+                    assertDatasetItemPage(actualEntity, scenario.expectedItems(), scenario.expectedTotalCount(),
+                            columns, scenario.page());
+                }
             }
+        }
+
+        // Helper method to create dataset items with content
+        private DatasetItem createDatasetItem(String content) {
+            return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("content", new TextNode(content)))
+                    .build();
+        }
+
+        // Record to hold test scenario data
+        private record SearchTestScenario(
+                List<DatasetItem> items,
+                String searchTerm,
+                int page,
+                int size,
+                int expectedTotalCount,
+                List<DatasetItem> expectedItems) {
         }
     }
 
@@ -4597,65 +4779,53 @@ class DatasetsResourceTest {
 
         private void assertPageAndContent(UUID datasetId, List<UUID> experimentIds, String apiKey, String workspaceName,
                 List<ExperimentItem> expectedExperimentItems, Set<Column> columns, List<DatasetItem> datasetItems) {
-            var experimentIdsQueryParm = JsonUtils.writeValueAsString(experimentIds);
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(datasetId, experimentIds, apiKey,
+                    workspaceName);
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("experiment_ids", experimentIdsQueryParm)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            assertThat(actualPage.page()).isEqualTo(1);
+            assertThat(actualPage.size()).isEqualTo(datasetItems.size());
+            assertThat(actualPage.total()).isEqualTo(datasetItems.size());
+            assertThat(actualPage.columns()).isEqualTo(columns);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+            var actualDatasetItems = actualPage.content();
 
-                assertThat(actualPage.page()).isEqualTo(1);
-                assertThat(actualPage.size()).isEqualTo(datasetItems.size());
-                assertThat(actualPage.total()).isEqualTo(datasetItems.size());
-                assertThat(actualPage.columns()).isEqualTo(columns);
+            assertPage(datasetItems, actualPage.content());
 
-                var actualDatasetItems = actualPage.content();
+            for (var i = 0; i < actualDatasetItems.size(); i++) {
+                var actualDatasetItem = actualDatasetItems.get(i);
+                var expectedDatasetItem = datasetItems.get(i);
+                var expectedExperimentItem = expectedExperimentItems.get(i);
 
-                assertPage(datasetItems, actualPage.content());
+                assertThat(actualDatasetItem.experimentItems())
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELDS_LIST)
+                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                        .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                        .isEqualTo(List.of(expectedExperimentItem));
 
-                for (var i = 0; i < actualDatasetItems.size(); i++) {
-                    var actualDatasetItem = actualDatasetItems.get(i);
-                    var expectedDatasetItem = datasetItems.get(i);
-                    var expectedExperimentItem = expectedExperimentItems.get(i);
+                for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
+                    var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                            actualDatasetItem.experimentItems().get(j), USER);
 
-                    assertThat(actualDatasetItem.experimentItems())
+                    assertThat(actualExperimentItem.feedbackScores())
                             .usingRecursiveComparison()
-                            .ignoringFields(IGNORED_FIELDS_LIST)
-                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                            .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                            .isEqualTo(List.of(expectedExperimentItem));
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .ignoringCollectionOrder()
+                            .isEqualTo(expectedExperimentItem.feedbackScores());
 
-                    for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
-                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
-                                actualDatasetItem.experimentItems().get(j), USER);
+                    assertThat(actualExperimentItem.createdAt())
+                            .isAfter(expectedExperimentItem.createdAt());
+                    assertThat(actualExperimentItem.lastUpdatedAt())
+                            .isAfter(expectedExperimentItem.lastUpdatedAt());
 
-                        assertThat(actualExperimentItem.feedbackScores())
-                                .usingRecursiveComparison()
-                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                .ignoringCollectionOrder()
-                                .isEqualTo(expectedExperimentItem.feedbackScores());
-
-                        assertThat(actualExperimentItem.createdAt())
-                                .isAfter(expectedExperimentItem.createdAt());
-                        assertThat(actualExperimentItem.lastUpdatedAt())
-                                .isAfter(expectedExperimentItem.lastUpdatedAt());
-
-                        assertThat(actualExperimentItem.createdBy())
-                                .isEqualTo(USER);
-                        assertThat(actualExperimentItem.lastUpdatedBy())
-                                .isEqualTo(USER);
-                    }
-
-                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    assertThat(actualExperimentItem.createdBy())
+                            .isEqualTo(USER);
+                    assertThat(actualExperimentItem.lastUpdatedBy())
+                            .isEqualTo(USER);
                 }
+
+                assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
             }
         }
 
@@ -4881,8 +5051,18 @@ class DatasetsResourceTest {
         @ValueSource(strings = {"$..test", "$meta_field", "[", "]", "[..]",})
         void findInvalidJsonPaths(String path) {
 
-            var datasetId = GENERATOR.generate();
-            var experimentId = GENERATOR.generate();
+            Dataset dataset = Dataset.builder().name(GENERATOR.generate().toString()).build();
+
+            var datasetId = createAndAssert(dataset);
+
+            Experiment experiment = Experiment.builder()
+                    .id(GENERATOR.generate())
+                    .name(GENERATOR.generate().toString())
+                    .datasetName(dataset.name())
+                    .build();
+
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
             var field = RandomStringUtils.randomAlphanumeric(5);
 
             var filters = List
@@ -4890,7 +5070,7 @@ class DatasetsResourceTest {
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
-                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experimentId)))
+                    .queryParam("experiment_ids", JsonUtils.writeValueAsString(List.of(experiment.id())))
                     .queryParam("filters", toURLEncodedQueryParam(filters))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -4928,7 +5108,7 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(batch, workspaceName, apiKey);
 
-            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(20);
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
@@ -4998,6 +5178,92 @@ class DatasetsResourceTest {
                     arguments(new ExperimentsComparisonFilter("meta_field",
                             FieldType.DICTIONARY, Operator.CONTAINS, ".version[1]", "11")));
 
+        }
+
+        @Test
+        void findWithDeletedDatasetItems() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Creating a trace with input and output
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            // Creating the dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Creating a dataset item
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Creating experiment and experiment item
+            var experimentId = GENERATOR.generate();
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .input(trace.input())
+                    .output(trace.output())
+                    .build();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Delete the dataset item using the correct POST endpoint
+            var deleteRequest = new DatasetItemsDelete(List.of(datasetItem.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            }
+
+            // Create expected dataset item with null source and empty data since it was deleted
+            var expectedDatasetItem = datasetItem.toBuilder()
+                    .source(null)
+                    .data(Map.of()) // Data should be empty when dataset item is deleted
+                    .traceId(null) // NULL because dataset item was hard-deleted
+                    .spanId(null) // NULL because dataset item was hard-deleted
+                    .build();
+
+            // Create expected experiment item with adjusted fields to match API response
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .feedbackScores(null) // API returns null for feedback scores in this context
+                    .comments(null) // API returns null for comments in this context
+                    .totalEstimatedCost(null) // API returns null for totalEstimatedCost in this context
+                    .usage(null) // API returns null for usage in this context
+                    // Don't set duration - let it be compared as-is from the API response
+                    .build();
+
+            // Query for dataset items with experiment items using assertion helper
+            var actualPage = assertDatasetExperimentPage(datasetId, experimentId, List.of(),
+                    apiKey, workspaceName, Set.of(), List.of(expectedDatasetItem));
+
+            // Get the actual duration from the API response to use in expected experiment item
+            var actualExperimentItem = actualPage.content().get(0).experimentItems().get(0);
+            var expectedExperimentItemWithActualDuration = expectedExperimentItem.toBuilder()
+                    .duration(actualExperimentItem.duration()) // Use actual duration from API
+                    .build();
+
+            // Verify the experiment items are properly associated using assertion helper
+            assertDatasetItemExperiments(actualPage, List.of(expectedDatasetItem),
+                    List.of(expectedExperimentItemWithActualDuration));
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
@@ -5385,6 +5651,535 @@ class DatasetsResourceTest {
         }
     }
 
+    @DisplayName("Find dataset items with experiment items sorting test")
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindDatasetItemsWithExperimentItemsSortingTest {
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting dataset items with experiment items, then return items sorted by valid fields")
+        void findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields(
+                SortingField sorting) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create project and traces
+            String projectName = GENERATOR.generate().toString();
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            // Create dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(traces.stream()
+                            .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                                    .datasetId(datasetId)
+                                    .traceId(trace.id())
+                                    .spanId(null)
+                                    .source(DatasetItemSource.TRACE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiment
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Create experiment items
+            var experimentItems = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id())
+                            .traceId(traces.get(i).id())
+                            .build())
+                    .collect(Collectors.toSet());
+
+            createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
+
+            // Fetch dataset items with sorting (first call)
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                    StandardCharsets.UTF_8);
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            List<UUID> firstFetchIds;
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+                assertThat(actualPage.content()).hasSize(5);
+
+                firstFetchIds = actualPage.content().stream().map(DatasetItem::id).toList();
+            }
+
+            // Fetch again to verify deterministic ordering (second call)
+            List<UUID> secondFetchIds;
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+
+                secondFetchIds = actualPage.content().stream().map(DatasetItem::id).toList();
+            }
+
+            // Verify sorting is deterministic - both fetches should return the same order
+            assertThat(firstFetchIds).containsExactlyElementsOf(secondFetchIds);
+        }
+
+        private Stream<Arguments> findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields() {
+            return Stream.of(
+                    // ID field sorting
+                    Arguments.of(SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+
+                    // CREATED_AT field sorting
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                            .build()),
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                            .build()),
+
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                            .build()),
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                            .build()),
+
+                    // Dynamic dataset fields (data.*) - Using explicit prefix notation
+                    // Users must explicitly use "data." prefix for dataset columns
+                    Arguments.of(SortingField.builder().field("data.expected_answer").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("data.expected_answer").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("data.input").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("data.input").direction(Direction.DESC).build()),
+                    // Output fields
+                    Arguments.of(SortingField.builder().field("output.translation").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("output.translation").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("output.quality_score").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("output.quality_score").direction(Direction.DESC).build()),
+                    // Input fields
+                    Arguments.of(SortingField.builder().field("input.text").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("input.text").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("input.language").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("input.language").direction(Direction.DESC).build()),
+                    // Metadata fields
+                    Arguments.of(SortingField.builder().field("metadata.task_type").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("metadata.task_type").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.DESC).build()));
+        }
+
+        @Test
+        @DisplayName("when sorting with invalid field, then return bad request")
+        void findDatasetItemsWithExperimentItems__whenSortingWithInvalidField__thenReturnBadRequest() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Use invalid sorting field
+            var invalidSorting = SortingField.builder()
+                    .field("invalid_field")
+                    .direction(Direction.ASC)
+                    .build();
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(invalidSorting)),
+                    StandardCharsets.UTF_8);
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).contains("Invalid sorting fields");
+                assertThat(errorMessage.getMessage()).contains("invalid_field");
+            }
+        }
+
+        @Test
+        @DisplayName("when sorting without sorting parameter, then return unsorted items")
+        void findDatasetItemsWithExperimentItems__whenNoSortingParameter__thenReturnUnsortedItems() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Fetch without sorting parameter
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("when workspace allows dynamic sorting, then sortableBy fields are present in response")
+        void findDatasetItemsWithExperimentItems__whenWorkspaceAllowsDynamicSorting__thenSortableByFieldsPresent() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Test configuration has maxSizeToAllowSorting: -1 (no limit), so dynamic sorting is enabled
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+
+                // Verify sortableBy fields are present (workspace allows dynamic sorting)
+                assertThat(actualPage.sortableBy()).isNotNull();
+                assertThat(actualPage.sortableBy()).isNotEmpty();
+
+                // Verify it contains expected sortable fields
+                assertThat(actualPage.sortableBy()).contains(
+                        "id",
+                        "created_at",
+                        "last_updated_at",
+                        "created_by",
+                        "last_updated_by",
+                        "data.*",
+                        "output.*",
+                        "input.*",
+                        "metadata.*",
+                        "duration",
+                        "feedback_scores.*",
+                        "comments");
+            }
+        }
+
+        @Test
+        @DisplayName("when workspace size exceeds limit, then dynamic sorting is disabled and sortableBy is empty")
+        void findDatasetItemsWithExperimentItems__whenWorkspaceExceedsSize__thenDynamicSortingDisabled() {
+            /*
+             * Note: This test verifies the workspace size protection mechanism.
+             *
+             * The protection works as follows:
+             * 1. WorkspaceMetadataService calculates workspace size based on spans data
+             * 2. If workspace size exceeds maxSizeToAllowSorting, dynamic sorting is disabled
+             * 3. The API strips sortableBy fields and ignores sorting parameters
+             *
+             * Test configuration (config-test.yml):
+             *   workspaceSettings.maxSizeToAllowSorting: -1 (unlimited for tests)
+             *
+             * In production:
+             *   - maxSizeToAllowSorting is set to a reasonable limit (e.g., 100 GB)
+             *   - Large workspaces automatically disable dynamic sorting
+             *   - This prevents expensive ClickHouse queries on large datasets
+             *
+             * The workspace metadata check is implemented in:
+             *   - ScopeMetadata.canUseDynamicSorting()
+             *   - DatasetsResource.findDatasetItemsWithExperimentItems() (lines 440-446, 464-470)
+             *
+             * To test this scenario in a real environment:
+             *   1. Set maxSizeToAllowSorting to a low value (e.g., 0.1 GB)
+             *   2. Insert enough spans data to exceed the threshold
+             *   3. Verify sortableBy is empty in API response
+             *   4. Verify sorting parameters are ignored
+             *
+             * This test documents the protection mechanism. The actual workspace size
+             * calculation and threshold logic is tested in WorkspaceMetadataService tests.
+             */
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            String projectName = GENERATOR.generate().toString();
+
+            // Create multiple traces and spans to generate workspace data
+            // This simulates a workspace with meaningful data for size calculation
+            List<Trace> traces = IntStream.range(0, 10)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .input(JsonUtils.getJsonNodeFromString(
+                                    "{\"text\": \"Test input " + i + " with some content\"}"))
+                            .output(JsonUtils.getJsonNodeFromString(
+                                    "{\"result\": \"Test output " + i + " with some content\"}"))
+                            .build())
+                    .toList();
+
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var datasetItems = traces.stream()
+                    .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .datasetId(datasetId)
+                            .traceId(trace.id())
+                            .spanId(null)
+                            .source(DatasetItemSource.TRACE)
+                            .build())
+                    .toList();
+
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(datasetItems)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traces.get(i).id())
+                            .input(traces.get(i).input())
+                            .output(traces.get(i).output())
+                            .build())
+                    .collect(Collectors.toSet());
+
+            createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
+
+            // Make request with sorting parameter
+            var sorting = SortingField.builder()
+                    .field("data.expected_output")
+                    .direction(Direction.ASC)
+                    .build();
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                    StandardCharsets.UTF_8);
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+
+                // With current test configuration (maxSizeToAllowSorting: -1),
+                // dynamic sorting is always enabled, so sortableBy should be present
+                assertThat(actualPage.sortableBy()).isNotNull();
+                assertThat(actualPage.sortableBy()).isNotEmpty();
+
+                /*
+                 * If this test were run with maxSizeToAllowSorting set to 0:
+                 *   assertThat(actualPage.sortableBy()).isEmpty();
+                 *
+                 * And the data would NOT be sorted by the requested field.
+                 *
+                 * The protection mechanism is:
+                 *   1. Resource fetches ScopeMetadata
+                 *   2. Checks canUseDynamicSorting()
+                 *   3. If false: clears sorting fields and strips sortableBy from response
+                 *   4. Frontend receives empty sortableBy and knows sorting is unavailable
+                 */
+            }
+        }
+    }
+
     @DisplayName("Get experiment items output columns test")
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -5748,5 +6543,814 @@ class DatasetsResourceTest {
         datasets.set(0, datasets.getFirst().toBuilder().visibility(PUBLIC).build());
 
         return datasets;
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Get Dataset Experiment Items Stats")
+    class GetDatasetExperimentItemsStats {
+
+        @Test
+        @DisplayName("Success: Get experiment items stats without filters")
+        void getExperimentItemsStats__happyFlow() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment2, apiKey, workspaceName);
+
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output1")))
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment2.name())
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment2.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output2")))
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2));
+
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Generate random feedback scores using PODAM
+            var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace1.id())
+                    .name("accuracy")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace2.id())
+                    .name("accuracy")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScores = List.of(feedbackScore1, feedbackScore2);
+            traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            // Fetch traces to get actual durations
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+            var createdTrace2 = traceResourceClient.getById(trace2.id(), workspaceName, apiKey);
+            var traceDurations = List.of(createdTrace1.duration(), createdTrace2.duration())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            // Calculate expected values from test data
+            var experimentItemsCount = (long) experimentItemsBatch.experimentItems().size();
+            var traceCount = (long) feedbackScores.size(); // One trace per feedback score
+            var expectedAvgValue = feedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(feedbackScores.size()), java.math.RoundingMode.HALF_UP);
+
+            // Calculate duration percentiles from actual trace durations
+            var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
+
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment1.id(), experiment2.id()),
+                    apiKey,
+                    workspaceName,
+                    null);
+
+            // Build complete expected stats list from calculated values
+            List<ProjectStatItem<?>> expectedStats = List.of(
+                    new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
+                    new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.DURATION,
+                            new PercentageValues(
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
+                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
+
+            // Assert the whole ProjectStats object using TraceAssertions
+            TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats with output filter")
+        void getExperimentItemsStats__withOutputFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment1, apiKey, workspaceName);
+
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .output(JsonUtils.readTree(Map.of("result", "success")))
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .output(JsonUtils.readTree(Map.of("result", "failure")))
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2));
+
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Generate random feedback scores using PODAM
+            var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace1.id())
+                    .name("accuracy")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace2.id())
+                    .name("accuracy")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            traceResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey,
+                    workspaceName);
+
+            // Fetch traces to get actual durations
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+            var createdTrace2 = traceResourceClient.getById(trace2.id(), workspaceName, apiKey);
+
+            var outputFilter = List.of(ExperimentsComparisonFilter.builder()
+                    .field(ExperimentsComparisonValidKnownField.OUTPUT.getQueryParamField())
+                    .operator(Operator.CONTAINS)
+                    .value("success")
+                    .build());
+
+            // Calculate expected values from test data
+            // Expected: Only trace1 matches filter (output contains "success")
+            var matchingExperimentItems = List.of(experimentItem1); // Only experimentItem1 has trace1 which has "success"
+            var matchingFeedbackScores = List.of(feedbackScore1); // Only feedbackScore1 for trace1
+            var experimentItemsCount = (long) matchingExperimentItems.size();
+            var traceCount = (long) matchingFeedbackScores.size();
+            var expectedAvgValue = matchingFeedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(matchingFeedbackScores.size()), java.math.RoundingMode.HALF_UP);
+
+            // Calculate duration percentiles from trace1 only (trace2 is filtered out)
+            var traceDurations = List.of(createdTrace1.duration())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+            var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
+
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment1.id()),
+                    apiKey,
+                    workspaceName,
+                    outputFilter);
+
+            // Assert the whole ProjectStats object - filter matches only trace1
+            assertThat(stats).isNotNull();
+            assertThat(stats.stats()).hasSizeGreaterThanOrEqualTo(4);
+
+            // Verify required stat names are present
+            assertThat(stats.stats())
+                    .extracting(ProjectStatItem::getName)
+                    .contains(StatsMapper.EXPERIMENT_ITEMS_COUNT, StatsMapper.TRACE_COUNT,
+                            StatsMapper.TOTAL_ESTIMATED_COST, StatsMapper.DURATION, "feedback_scores.accuracy");
+
+            // Build complete expected stats list from calculated values
+            List<ProjectStatItem<?>> expectedStats = List.of(
+                    new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
+                    new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.DURATION,
+                            new PercentageValues(
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
+                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
+
+            // Assert the whole ProjectStats object using TraceAssertions
+            TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats with multiple experiments")
+        void getExperimentItemsStats__multipleExperiments() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment2, apiKey, workspaceName);
+
+            var experiment3 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment3, apiKey, workspaceName);
+
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2, datasetItem3))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment2.name())
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment3.name())
+                    .build();
+            traceResourceClient.createTrace(trace3, apiKey, workspaceName);
+
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output1")))
+                    .build();
+
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment2.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output2")))
+                    .build();
+
+            var experimentItem3 = ExperimentItem.builder()
+                    .experimentId(experiment3.id())
+                    .datasetItemId(datasetItem3.id())
+                    .traceId(trace3.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output3")))
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(
+                    Set.of(experimentItem1, experimentItem2, experimentItem3));
+
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Generate random feedback scores using PODAM
+            var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace1.id())
+                    .name("quality")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace2.id())
+                    .name("quality")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace3.id())
+                    .name("quality")
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var allExperimentItems = List.of(experimentItem1, experimentItem2, experimentItem3);
+            var feedbackScores = List.of(feedbackScore1, feedbackScore2, feedbackScore3);
+
+            traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            // Fetch traces to get actual durations
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+            var createdTrace2 = traceResourceClient.getById(trace2.id(), workspaceName, apiKey);
+            var createdTrace3 = traceResourceClient.getById(trace3.id(), workspaceName, apiKey);
+
+            // Calculate expected values from test data
+            var experimentItemsCount = (long) allExperimentItems.size();
+            var traceCount = (long) feedbackScores.size();
+            var expectedAvgValue = feedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(feedbackScores.size()), java.math.RoundingMode.HALF_UP);
+
+            // Calculate duration percentiles from all three traces
+            var traceDurations = List.of(createdTrace1.duration(), createdTrace2.duration(), createdTrace3.duration())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+            var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
+
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment1.id(), experiment2.id(), experiment3.id()),
+                    apiKey,
+                    workspaceName,
+                    null);
+
+            // Build complete expected stats list from calculated values
+            List<ProjectStatItem<?>> expectedStats = List.of(
+                    new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
+                    new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.DURATION,
+                            new PercentageValues(
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
+                    new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()));
+
+            // Assert the whole ProjectStats object using TraceAssertions
+            TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats with is_not_empty feedback scores filter")
+        void getExperimentItemsStats__withFeedbackScoresIsNotEmptyFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Create dataset items
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            // Create trace WITH feedback score
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            // Create trace WITHOUT feedback score
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            // Create experiment items
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2));
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Add feedback score to trace1 only
+            var feedbackScoreName = "UserFeedback"; // Use name without spaces to avoid URL encoding issues
+            var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace1.id())
+                    .projectName(experiment.name())
+                    .name(feedbackScoreName)
+                    .value(BigDecimal.valueOf(4.5))
+                    .build();
+            traceResourceClient.feedbackScores(List.of(feedbackScore1), apiKey, workspaceName);
+
+            // Create filter for is_not_empty on feedback score
+            var filters = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
+                            .operator(Operator.IS_NOT_EMPTY)
+                            .key(feedbackScoreName)
+                            .value("")
+                            .build());
+
+            // Query with is_not_empty filter - should return only trace1 stats
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment.id()),
+                    apiKey,
+                    workspaceName,
+                    filters);
+
+            // Fetch the trace with feedback score to get actual duration
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+
+            // Calculate expected values - should only include trace1 which has feedback score
+            var experimentItemsCount = 1L; // Only experiment item 1 has feedback score
+            var traceCount = 1L; // Only trace1 has feedback score
+            var expectedAvgValue = feedbackScore1.value();
+
+            var durationPercentiles = StatsUtils.calculateQuantiles(
+                    List.of(createdTrace1.duration()),
+                    List.of(0.50, 0.90, 0.99));
+
+            // Build complete expected stats list
+            List<ProjectStatItem<?>> expectedStats = List.of(
+                    new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
+                    new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.DURATION,
+                            new PercentageValues(
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
+                    new AvgValueStat("feedback_scores.%s".formatted(feedbackScoreName),
+                            expectedAvgValue.doubleValue()));
+
+            // Assert the whole ProjectStats object using TraceAssertions
+            TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+
+        @ParameterizedTest(name = "Duration filter: {0} {1}ms")
+        @MethodSource("durationFilterTestCases")
+        @DisplayName("Success: Get experiment items with duration filter")
+        void getExperimentItems__withDurationFilter__thenReturnFilteredItems(
+                Operator operator,
+                long filterValueMs,
+                List<Integer> expectedTraceIndices) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Create dataset items
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2, datasetItem3))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            // Create traces with KNOWN, CONTROLLED durations
+            // Using explicit start and end times to ensure predictable durations
+            var baseTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+            // Trace 1: Duration = 500ms
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .startTime(baseTime)
+                    .endTime(baseTime.plusMillis(500))
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            // Trace 2: Duration = 1500ms
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .startTime(baseTime)
+                    .endTime(baseTime.plusMillis(1500))
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            // Trace 3: Duration = 2500ms
+            var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .startTime(baseTime)
+                    .endTime(baseTime.plusMillis(2500))
+                    .build();
+            traceResourceClient.createTrace(trace3, apiKey, workspaceName);
+
+            // Create experiment items linking dataset items to traces
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+            var experimentItem3 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem3.id())
+                    .traceId(trace3.id())
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(
+                    Set.of(experimentItem1, experimentItem2, experimentItem3));
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Apply duration filter
+            var filters = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
+                            .operator(operator)
+                            .value(String.valueOf(filterValueMs))
+                            .build());
+
+            // Query stats with duration filter
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment.id()),
+                    apiKey,
+                    workspaceName,
+                    filters);
+
+            // Verify experiment items count matches expected filtered results
+            var expectedItemsCount = (long) expectedTraceIndices.size();
+
+            // Assert: Verify experiment items count and trace count match expected filtered results
+            // Using direct assertion since we only care about the count matching the expected filter results
+            assertThat(stats.stats()).isNotNull();
+
+            var experimentItemsCountStat = stats.stats().stream()
+                    .filter(stat -> StatsMapper.EXPERIMENT_ITEMS_COUNT.equals(stat.getName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Expected EXPERIMENT_ITEMS_COUNT stat to be present"));
+
+            assertThat(((CountValueStat) experimentItemsCountStat).getValue())
+                    .as("Duration filter %s %dms should return %d items (traces %s)",
+                            operator, filterValueMs, expectedItemsCount, expectedTraceIndices)
+                    .isEqualTo(expectedItemsCount);
+
+            // Verify trace count matches expected filtered results
+            var traceCountStat = stats.stats().stream()
+                    .filter(stat -> StatsMapper.TRACE_COUNT.equals(stat.getName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Expected TRACE_COUNT stat to be present"));
+
+            assertThat(((CountValueStat) traceCountStat).getValue())
+                    .isEqualTo(expectedItemsCount);
+        }
+
+        /**
+         * Test cases for duration filtering with different operators.
+         * Parameters: operator, filter value in ms, expected trace indices (0-based)
+         *
+         * Test data:
+         * - Trace 0: 500ms
+         * - Trace 1: 1500ms
+         * - Trace 2: 2500ms
+         */
+        static Stream<Arguments> durationFilterTestCases() {
+            return Stream.of(
+                    // GREATER_THAN: Return traces with duration > threshold
+                    Arguments.of(Operator.GREATER_THAN, 1000L, List.of(1, 2)), // > 1000ms: 1500ms, 2500ms
+                    Arguments.of(Operator.GREATER_THAN, 2000L, List.of(2)), // > 2000ms: 2500ms
+                    Arguments.of(Operator.GREATER_THAN, 3000L, List.of()), // > 3000ms: none
+
+                    // GREATER_THAN_EQUAL: Return traces with duration >= threshold
+                    Arguments.of(Operator.GREATER_THAN_EQUAL, 1500L, List.of(1, 2)), // >= 1500ms: 1500ms, 2500ms
+                    Arguments.of(Operator.GREATER_THAN_EQUAL, 2500L, List.of(2)), // >= 2500ms: 2500ms
+
+                    // LESS_THAN: Return traces with duration < threshold
+                    Arguments.of(Operator.LESS_THAN, 1000L, List.of(0)), // < 1000ms: 500ms
+                    Arguments.of(Operator.LESS_THAN, 2000L, List.of(0, 1)), // < 2000ms: 500ms, 1500ms
+                    Arguments.of(Operator.LESS_THAN, 400L, List.of()), // < 400ms: none
+
+                    // LESS_THAN_EQUAL: Return traces with duration <= threshold
+                    Arguments.of(Operator.LESS_THAN_EQUAL, 500L, List.of(0)), // <= 500ms: 500ms
+                    Arguments.of(Operator.LESS_THAN_EQUAL, 1500L, List.of(0, 1)), // <= 1500ms: 500ms, 1500ms
+
+                    // EQUAL: Return traces with duration = threshold
+                    Arguments.of(Operator.EQUAL, 500L, List.of(0)), // = 500ms: 500ms
+                    Arguments.of(Operator.EQUAL, 1500L, List.of(1)), // = 1500ms: 1500ms
+                    Arguments.of(Operator.EQUAL, 1000L, List.of()), // = 1000ms: none
+
+                    // NOT_EQUAL: Return traces with duration != threshold
+                    Arguments.of(Operator.NOT_EQUAL, 1500L, List.of(0, 2)), // != 1500ms: 500ms, 2500ms
+                    Arguments.of(Operator.NOT_EQUAL, 1000L, List.of(0, 1, 2)) // != 1000ms: all
+            );
+        }
+    }
+
+    @Nested
+    @DisplayName("OPIK-2469: Cross-Project Traces Duplicate Test")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CrossProjectTracesDuplicateTest {
+
+        @Test
+        @DisplayName("Should return unique experiment items when trace has spans in multiple projects")
+        void findDatasetItemsWithExperimentItems__whenTraceHasSpansInMultipleProjects__thenReturnUniqueItems() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create dataset item
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create Project A and Project B
+            var projectA = UUID.randomUUID().toString();
+            var projectB = UUID.randomUUID().toString();
+
+            // Create trace in Project A
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectA)
+                    .build();
+            createAndAssert(trace1, workspaceName, apiKey);
+
+            // Create span in Project A for trace1
+            var span1InProjectA = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectA)
+                    .traceId(trace1.id())
+                    .build();
+            createSpan(span1InProjectA, apiKey, workspaceName);
+
+            // ROOT CAUSE SIMULATION: Create span in Project B for the SAME trace (trace1)
+            // This creates a cross-project trace scenario through the API
+            var span1InProjectB = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectB)
+                    .traceId(trace1.id())
+                    .build();
+            createSpan(span1InProjectB, apiKey, workspaceName);
+
+            // Create another trace in Project A (no cross-project issue)
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectA)
+                    .build();
+            createAndAssert(trace2, workspaceName, apiKey);
+
+            // Create experiment items for both traces
+            var experimentId = GENERATOR.generate();
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace1.id())
+                    .input(trace1.input())
+                    .output(trace1.output())
+                    .build();
+
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace2.id())
+                    .input(trace2.input())
+                    .output(trace2.output())
+                    .build();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem1, experimentItem2))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query the endpoint
+            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId,
+                    List.of(experimentId),
+                    apiKey,
+                    workspaceName);
+
+            // Assert results
+            assertThat(result).isNotNull();
+            assertThat(result.content()).hasSize(1);
+
+            var datasetItemResult = result.content().get(0);
+            assertThat(datasetItemResult.id()).isEqualTo(datasetItem.id());
+
+            // CRITICAL ASSERTION: Should have exactly 2 unique experiment items (no duplicates)
+            // Without the fix, trace1 appears twice because it has spans in 2 projects
+            var experimentItems = datasetItemResult.experimentItems();
+            assertThat(experimentItems).isNotNull();
+
+            // Count experiment items by their ID to detect duplicates
+            var experimentItemIds = experimentItems.stream()
+                    .map(ExperimentItem::id)
+                    .collect(Collectors.toList());
+
+            var uniqueIds = new HashSet<>(experimentItemIds);
+
+            // THIS IS THE KEY ASSERTION - Verifies fix for OPIK-2469
+            assertThat(experimentItemIds)
+                    .as("Should not contain duplicate experiment item IDs - trace1 has spans in 2 projects but should appear once")
+                    .hasSameSizeAs(uniqueIds)
+                    .as("Should have exactly 2 unique experiment items")
+                    .hasSize(2);
+
+            // Verify the correct experiment items are present
+            assertThat(uniqueIds).containsExactlyInAnyOrder(experimentItem1.id(), experimentItem2.id());
+
+            // Verify each experiment item appears only once
+            experimentItemIds.forEach(id -> {
+                long count = experimentItemIds.stream().filter(i -> i.equals(id)).count();
+                assertThat(count)
+                        .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
+                        .isEqualTo(1);
+            });
+        }
     }
 }

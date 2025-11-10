@@ -7,6 +7,7 @@ from json.decoder import JSONDecodeError
 
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
+from ..core.datetime_utils import serialize_datetime
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
@@ -23,8 +24,6 @@ from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThrea
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
-from ..types.json_node import JsonNode
-from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_page_public import TracePagePublic
@@ -33,6 +32,7 @@ from ..types.trace_thread import TraceThread
 from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_write import TraceWrite
+from ..types.value_entry import ValueEntry
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -181,6 +181,7 @@ class RawTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -208,6 +209,8 @@ class RawTracesClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -228,6 +231,9 @@ class RawTracesClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -246,21 +252,24 @@ class RawTracesClient:
     def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -276,6 +285,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "thread_ids": thread_ids,
             },
             headers={
                 "content-type": "application/json",
@@ -311,8 +321,11 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TracePagePublic]:
         """
@@ -332,9 +345,15 @@ class RawTracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -354,8 +373,11 @@ class RawTracesClient:
                 "project_id": project_id,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -384,7 +406,7 @@ class RawTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -411,7 +433,7 @@ class RawTracesClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -443,7 +465,9 @@ class RawTracesClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListStringWrite, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
@@ -505,7 +529,11 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TracePublic]:
         """
         Get trace by id
@@ -513,6 +541,8 @@ class RawTracesClient:
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -525,6 +555,9 @@ class RawTracesClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/traces/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "strip_attachments": strip_attachments,
+            },
             request_options=request_options,
         )
         try:
@@ -582,7 +615,7 @@ class RawTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
@@ -609,7 +642,7 @@ class RawTracesClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -638,7 +671,9 @@ class RawTracesClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListString, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListString, direction="write"
+                ),
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
@@ -702,6 +737,7 @@ class RawTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -714,6 +750,8 @@ class RawTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -729,6 +767,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "thread_id": thread_id,
                 "names": names,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -782,7 +821,12 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete trace feedback score
@@ -792,6 +836,8 @@ class RawTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -805,6 +851,7 @@ class RawTracesClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -995,6 +1042,8 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsPublic]:
         """
@@ -1007,6 +1056,10 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1023,6 +1076,8 @@ class RawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1149,6 +1204,7 @@ class RawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TraceThread]:
         """
@@ -1161,6 +1217,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1177,6 +1235,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -1218,8 +1277,11 @@ class RawTracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TraceThreadPage]:
         """
@@ -1237,9 +1299,15 @@ class RawTracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1258,8 +1326,11 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1284,6 +1355,7 @@ class RawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1296,6 +1368,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1311,6 +1385,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -1420,6 +1495,9 @@ class RawTracesClient:
         last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1439,7 +1517,16 @@ class RawTracesClient:
             Max number of trace thread to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1461,6 +1548,9 @@ class RawTracesClient:
                 "last_retrieved_thread_model_id": last_retrieved_thread_model_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -1507,6 +1597,9 @@ class RawTracesClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1526,7 +1619,16 @@ class RawTracesClient:
             Max number of traces to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1548,6 +1650,9 @@ class RawTracesClient:
                 "last_retrieved_id": last_retrieved_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -1599,12 +1704,7 @@ class RawTracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1614,17 +1714,7 @@ class RawTracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1637,12 +1727,7 @@ class RawTracesClient:
             f"v1/private/traces/threads/{jsonable_encoder(thread_model_id)}",
             method="PATCH",
             json={
-                "id": id,
-                "text": text,
-                "created_at": created_at,
-                "last_updated_at": last_updated_at,
-                "created_by": created_by,
-                "last_updated_by": last_updated_by,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",
@@ -1961,6 +2046,7 @@ class AsyncRawTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1988,6 +2074,8 @@ class AsyncRawTracesClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2008,6 +2096,9 @@ class AsyncRawTracesClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -2026,21 +2117,24 @@ class AsyncRawTracesClient:
     async def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2056,6 +2150,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "thread_ids": thread_ids,
             },
             headers={
                 "content-type": "application/json",
@@ -2091,8 +2186,11 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TracePagePublic]:
         """
@@ -2112,9 +2210,15 @@ class AsyncRawTracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2134,8 +2238,11 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -2164,7 +2271,7 @@ class AsyncRawTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -2191,7 +2298,7 @@ class AsyncRawTracesClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -2223,7 +2330,9 @@ class AsyncRawTracesClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListStringWrite, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
@@ -2285,7 +2394,11 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TracePublic]:
         """
         Get trace by id
@@ -2293,6 +2406,8 @@ class AsyncRawTracesClient:
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2305,6 +2420,9 @@ class AsyncRawTracesClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/traces/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "strip_attachments": strip_attachments,
+            },
             request_options=request_options,
         )
         try:
@@ -2362,7 +2480,7 @@ class AsyncRawTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
@@ -2389,7 +2507,7 @@ class AsyncRawTracesClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -2418,7 +2536,9 @@ class AsyncRawTracesClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListString, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListString, direction="write"
+                ),
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
@@ -2482,6 +2602,7 @@ class AsyncRawTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2494,6 +2615,8 @@ class AsyncRawTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2509,6 +2632,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "thread_id": thread_id,
                 "names": names,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -2562,7 +2686,12 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete trace feedback score
@@ -2572,6 +2701,8 @@ class AsyncRawTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2585,6 +2716,7 @@ class AsyncRawTracesClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -2775,6 +2907,8 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsPublic]:
         """
@@ -2787,6 +2921,10 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2803,6 +2941,8 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -2929,6 +3069,7 @@ class AsyncRawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TraceThread]:
         """
@@ -2941,6 +3082,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2957,6 +3100,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -2998,8 +3142,11 @@ class AsyncRawTracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TraceThreadPage]:
         """
@@ -3017,9 +3164,15 @@ class AsyncRawTracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3038,8 +3191,11 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -3064,6 +3220,7 @@ class AsyncRawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3076,6 +3233,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3091,6 +3250,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -3200,6 +3360,9 @@ class AsyncRawTracesClient:
         last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3219,7 +3382,16 @@ class AsyncRawTracesClient:
             Max number of trace thread to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3241,6 +3413,9 @@ class AsyncRawTracesClient:
                 "last_retrieved_thread_model_id": last_retrieved_thread_model_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -3288,6 +3463,9 @@ class AsyncRawTracesClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3307,7 +3485,16 @@ class AsyncRawTracesClient:
             Max number of traces to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3329,6 +3516,9 @@ class AsyncRawTracesClient:
                 "last_retrieved_id": last_retrieved_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -3381,12 +3571,7 @@ class AsyncRawTracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3396,17 +3581,7 @@ class AsyncRawTracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3419,12 +3594,7 @@ class AsyncRawTracesClient:
             f"v1/private/traces/threads/{jsonable_encoder(thread_model_id)}",
             method="PATCH",
             json={
-                "id": id,
-                "text": text,
-                "created_at": created_at,
-                "last_updated_at": last_updated_at,
-                "created_by": created_by,
-                "last_updated_by": last_updated_by,
+                "tags": tags,
             },
             headers={
                 "content-type": "application/json",

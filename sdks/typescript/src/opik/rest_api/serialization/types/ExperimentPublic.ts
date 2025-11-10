@@ -5,11 +5,12 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNodePublic } from "./JsonNodePublic";
+import { JsonListStringPublic } from "./JsonListStringPublic";
 import { ExperimentPublicType } from "./ExperimentPublicType";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
 import { CommentPublic } from "./CommentPublic";
 import { PercentageValuesPublic } from "./PercentageValuesPublic";
+import { ExperimentPublicStatus } from "./ExperimentPublicStatus";
 import { PromptVersionLinkPublic } from "./PromptVersionLinkPublic";
 
 export const ExperimentPublic: core.serialization.ObjectSchema<
@@ -20,7 +21,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
-    metadata: JsonNodePublic.optional(),
+    metadata: JsonListStringPublic.optional(),
     type: ExperimentPublicType.optional(),
     optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
     feedbackScores: core.serialization.property(
@@ -40,6 +41,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+    status: ExperimentPublicStatus.optional(),
     promptVersion: core.serialization.property("prompt_version", PromptVersionLinkPublic.optional()),
     promptVersions: core.serialization.property(
         "prompt_versions",
@@ -53,7 +55,7 @@ export declare namespace ExperimentPublic {
         dataset_name: string;
         dataset_id?: string | null;
         name?: string | null;
-        metadata?: JsonNodePublic.Raw | null;
+        metadata?: JsonListStringPublic.Raw | null;
         type?: ExperimentPublicType.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
@@ -67,6 +69,7 @@ export declare namespace ExperimentPublic {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        status?: ExperimentPublicStatus.Raw | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
     }

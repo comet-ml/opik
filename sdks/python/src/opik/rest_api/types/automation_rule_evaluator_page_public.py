@@ -12,6 +12,7 @@ class AutomationRuleEvaluatorPagePublic(UniversalBaseModel):
     size: typing.Optional[int] = None
     total: typing.Optional[int] = None
     content: typing.Optional[typing.List[AutomationRuleEvaluatorObjectPublic]] = None
+    sortable_by: typing.Optional[typing.List[str]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

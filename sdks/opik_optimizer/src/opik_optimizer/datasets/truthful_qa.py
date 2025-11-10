@@ -1,5 +1,5 @@
 import opik
-from typing import Any, Dict, List
+from typing import Any
 
 
 def truthful_qa(test_mode: bool = False) -> opik.Dataset:
@@ -33,7 +33,7 @@ def truthful_qa(test_mode: bool = False) -> opik.Dataset:
             "truthful_qa", "multiple_choice", download_config=download_config
         )
 
-        data: List[Dict[str, Any]] = []
+        data: list[dict[str, Any]] = []
         for gen_item, mc_item in zip(
             gen_dataset["validation"], mc_dataset["validation"]
         ):

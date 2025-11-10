@@ -13,14 +13,39 @@ const createButton = (href, text, icon = "") => {
 
 const injectGitHubLink = () => {
   const path = window.location.pathname;
-  const isValidCookbookPage = path.includes("docs/opik/cookbook/") && !path.endsWith("docs/opik/cookbook/overview");
+  
+  // Define specific cookbook pages that should have Colab buttons
+  const cookbookPages = [
+    "quickstart_notebook",
+    "evaluate_hallucination_metric", 
+    "evaluate_moderation_metric",
+    "dynamic_tracing_control",
+  ];
+  
+  // Check if current page is one of the specified cookbook pages
+  const isValidCookbookPage = cookbookPages.some(page => 
+    path.includes(`/${page}`) || path.endsWith(`/${page}`)
+  );
+  
   if (!isValidCookbookPage) return;
 
   const header = document.querySelector(".fern-layout-guide header");
   if (!header) return;
 
-  const notebookPath =
-    path.replace("/docs/opik/cookbook/", "/apps/opik-documentation/documentation/docs/cookbook/") + ".ipynb";
+  // Construct notebook path based on the page slug
+  let notebookPath;
+  if (path.includes("quickstart_notebook")) {
+    notebookPath = "/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb";
+  } else if (path.includes("evaluate_hallucination_metric")) {
+    notebookPath = "/apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb";
+  } else if (path.includes("evaluate_moderation_metric")) {
+    notebookPath = "/apps/opik-documentation/documentation/docs/cookbook/evaluate_moderation_metric.ipynb";
+  } else if (path.includes("dynamic_tracing_control")) {
+    notebookPath = "/apps/opik-documentation/documentation/docs/cookbook/dynamic_tracing_cookbook.ipynb";
+  } else {
+    return; // No notebook available for this page
+  }
+  
   const githubUrl = "https://github.com/comet-ml/opik/blob/main" + notebookPath;
   const colabUrl = "https://colab.research.google.com/github/comet-ml/opik/blob/main" + notebookPath;
 

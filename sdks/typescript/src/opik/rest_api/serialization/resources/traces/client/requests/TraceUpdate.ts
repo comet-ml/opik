@@ -6,7 +6,6 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonListString } from "../../../../types/JsonListString";
-import { JsonNode } from "../../../../types/JsonNode";
 import { ErrorInfo } from "../../../../types/ErrorInfo";
 
 export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw, OpikApi.TraceUpdate> =
@@ -17,7 +16,7 @@ export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw,
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListString.optional(),
         output: JsonListString.optional(),
-        metadata: JsonNode.optional(),
+        metadata: JsonListString.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
@@ -31,7 +30,7 @@ export declare namespace TraceUpdate {
         end_time?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
-        metadata?: JsonNode.Raw | null;
+        metadata?: JsonListString.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfo.Raw | null;
         thread_id?: string | null;

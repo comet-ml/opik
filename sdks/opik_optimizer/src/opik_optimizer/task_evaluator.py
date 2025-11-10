@@ -1,9 +1,11 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 import opik
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics import base_metric, score_result
+from . import multi_metric_objective
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +15,20 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
         def __init__(self) -> None:
             self.name = metric.__name__
 
-        def score(self, llm_output: str, **kwargs: Any) -> score_result.ScoreResult:
+        def score(
+            self, llm_output: str, **kwargs: Any
+        ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
             try:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
+
+                if isinstance(metric, multi_metric_objective.MultiMetricObjective):
+                    if (
+                        hasattr(metric_val, "metadata")
+                        and "raw_score_results" in metric_val.metadata
+                    ):
+                        return [metric_val, *metric_val.metadata["raw_score_results"]]
+                    else:
+                        return [metric_val]
                 if isinstance(metric_val, score_result.ScoreResult):
                     return score_result.ScoreResult(
                         name=self.name,
@@ -38,14 +51,14 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
 
 def evaluate(
     dataset: opik.Dataset,
-    evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
     metric: Callable,
     num_threads: int,
-    optimization_id: Optional[str] = None,
-    dataset_item_ids: Optional[List[str]] = None,
-    project_name: Optional[str] = None,
-    n_samples: Optional[int] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
 ) -> float:
     """
@@ -106,15 +119,20 @@ def evaluate(
     if not result.test_results:
         return 0.0
 
-    # We may allow score aggregation customization.
-    score_results: List[score_result.ScoreResult] = [
-        test_result.score_results[0] for test_result in result.test_results
-    ]
-    if not score_results:
+    # Filter score results to only include the objective metric
+    objective_metric_name = metric.__name__
+    objective_score_results: list[score_result.ScoreResult] = []
+    for test_result in result.test_results:
+        for score_result_ in test_result.score_results:
+            if score_result_.name == objective_metric_name:
+                objective_score_results.append(score_result_)
+                break
+
+    if not objective_score_results:
         return 0.0
 
-    avg_score = sum([score_result_.value for score_result_ in score_results]) / len(
-        score_results
-    )
+    avg_score = sum(
+        [score_result_.value for score_result_ in objective_score_results]
+    ) / len(objective_score_results)
 
     return avg_score

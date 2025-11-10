@@ -32,6 +32,7 @@ import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -43,9 +44,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -79,7 +79,7 @@ class AttachmentResourceMinIOTest {
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 
     @RegisterApp
@@ -179,6 +179,14 @@ class AttachmentResourceMinIOTest {
         attachmentResourceClient.downloadFile(downloadLink, API_KEY, 404);
     }
 
+    @Test
+    @DisplayName("Invalid base URL format returns error for MinIO attachment upload")
+    void invalidBaseUrlFormatReturnsError() {
+        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest("https://www.comet.com/");
+        attachmentResourceClient
+                .startMultiPartUpload(startUploadRequest, API_KEY, TEST_WORKSPACE, 400);
+    }
+
     @ParameterizedTest
     @MethodSource
     void deleteTraceDeletesTraceAndSpanAttachments(Consumer<UUID> deleteTrace) throws IOException {
@@ -249,7 +257,7 @@ class AttachmentResourceMinIOTest {
     Pair<StartMultipartUploadRequest, byte[]> uploadFile(String projectName, EntityType type, UUID entityId)
             throws IOException {
         // Initiate upload
-        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest();
+        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest(baseURIEncoded);
         if (projectName != null) {
             startUploadRequest = startUploadRequest.toBuilder()
                     .projectName(projectName)
@@ -278,7 +286,7 @@ class AttachmentResourceMinIOTest {
         return Pair.of(startUploadRequest, fileData);
     }
 
-    private StartMultipartUploadRequest prepareStartUploadRequest() {
+    private StartMultipartUploadRequest prepareStartUploadRequest(String baseURIEncoded) {
         return factory.manufacturePojo(StartMultipartUploadRequest.class)
                 .toBuilder()
                 .path(baseURIEncoded)

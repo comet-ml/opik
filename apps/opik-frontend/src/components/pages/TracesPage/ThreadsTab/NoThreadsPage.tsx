@@ -1,13 +1,13 @@
-import React, { useState } from "react";
+import React from "react";
 import { Book, GraduationCap } from "lucide-react";
 import noDataThreadsImageUrl from "/images/no-data-threads.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 
 const NoThreadsPage = () => {
-  const [openQuickstart, setOpenQuickstart] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
 
   return (
     <NoDataPage
@@ -20,7 +20,7 @@ const NoThreadsPage = () => {
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/tracing/log_traces")}
+              href={buildDocsUrl("/tracing/log_chat_conversations")}
               target="_blank"
               rel="noreferrer"
             >
@@ -28,11 +28,10 @@ const NoThreadsPage = () => {
               Read documentation
             </a>
           </Button>
-          <Button onClick={() => setOpenQuickstart(true)}>
+          <Button onClick={openQuickstart}>
             <GraduationCap className="mr-2 size-4" />
             Explore Quickstart guide
           </Button>
-          <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
         </>
       }
     ></NoDataPage>

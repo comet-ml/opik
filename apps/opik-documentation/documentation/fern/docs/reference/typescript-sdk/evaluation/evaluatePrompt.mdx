@@ -1,0 +1,559 @@
+---
+title: evaluatePrompt Function
+---
+
+The `evaluatePrompt` function provides a streamlined way to evaluate prompt templates against a dataset. It automatically formats message templates with dataset variables, generates LLM responses, and evaluates the results using specified metrics.
+
+## Overview
+
+`evaluatePrompt` is a convenience wrapper around the [`evaluate`](/reference/typescript-sdk/evaluation/evaluate) function that handles:
+
+- **Template formatting**: Automatically formats message templates with dataset item variables
+- **Model invocation**: Generates LLM responses using your specified model
+- **Experiment tracking**: Creates experiments linked to specific prompt versions
+- **Metric evaluation**: Scores outputs using the specified metrics
+
+This is particularly useful for prompt engineering workflows where you want to quickly test different prompt templates against a dataset.
+
+## Function Signature
+
+```typescript
+function evaluatePrompt(
+  options: EvaluatePromptOptions
+): Promise<EvaluationResult>;
+```
+
+### EvaluatePromptOptions
+
+```typescript
+interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
+  // Required parameters
+  dataset: Dataset;
+  messages: OpikMessage[];
+
+  // Optional parameters
+  model?: SupportedModelId | LanguageModel | OpikBaseModel;
+  templateType?: "mustache" | "jinja2";
+  scoringMetrics?: BaseMetric[];
+  experimentName?: string;
+  experimentConfig?: Record<string, unknown>;
+  prompts?: Prompt[];
+  projectName?: string;
+  nbSamples?: number;
+  scoringKeyMapping?: Record<string, string>;
+}
+```
+
+## Parameters
+
+### Required Parameters
+
+#### dataset
+
+- **Type**: `Dataset`
+- **Description**: The dataset to evaluate prompts against. Each dataset item will be used to format the message templates and generate responses.
+
+```typescript
+const dataset = await client.getOrCreateDataset({
+  name: "my-dataset",
+});
+```
+
+#### messages
+
+- **Type**: `OpikMessage[]`
+- **Description**: Array of message templates with `{{placeholders}}` that will be formatted with dataset variables.
+
+```typescript
+messages: [
+  { role: "system", content: "You are a helpful assistant" },
+  { role: "user", content: "Translate to {{language}}: {{text}}" },
+];
+```
+
+### Optional Parameters
+
+#### model
+
+- **Type**: `SupportedModelId | LanguageModel | OpikBaseModel`
+- **Default**: `"gpt-4o"`
+- **Description**: The language model to use for generation. Can be:
+  - Model ID string (e.g., `"gpt-4o"`, `"claude-3-5-sonnet-latest"`, `"gemini-2.0-flash"`)
+  - Pre-configured `LanguageModel` instance from Vercel AI SDK
+  - Custom `OpikBaseModel` implementation
+
+```typescript
+// Using model ID string
+model: "gpt-4o";
+
+// Using LanguageModel instance
+import { openai } from "@ai-sdk/openai";
+const customModel = openai("gpt-4o");
+model: customModel;
+```
+
+#### templateType
+
+- **Type**: `"mustache" | "jinja2"`
+- **Default**: `"mustache"`
+- **Description**: Template engine to use for variable substitution in message content.
+
+```typescript
+// Mustache syntax (default)
+templateType: "mustache";
+messages: [{ role: "user", content: "Hello {{name}}" }];
+
+// Jinja2 syntax
+templateType: "jinja2";
+messages: [{ role: "user", content: "Hello {{ name }}" }];
+```
+
+#### scoringMetrics
+
+- **Type**: `BaseMetric[]`
+- **Description**: Array of metrics to evaluate the generated outputs. Can include both heuristic and LLM Judge metrics.
+
+```typescript
+import { ExactMatch, Hallucination } from "opik";
+
+scoringMetrics: [new ExactMatch(), new Hallucination()];
+```
+
+#### experimentName
+
+- **Type**: `string`
+- **Description**: Name for the experiment. If not provided, a name will be auto-generated.
+
+```typescript
+experimentName: "Prompt Evaluation - Translation Task";
+```
+
+#### experimentConfig
+
+- **Type**: `Record<string, unknown>`
+- **Description**: Additional metadata to store with the experiment. The function automatically adds `prompt_template` and `model` to this configuration.
+
+```typescript
+experimentConfig: {
+  temperature: 0.7,
+  max_tokens: 1000,
+  version: "v2",
+};
+```
+
+#### prompts
+
+- **Type**: `Prompt[]`
+- **Description**: Array of Opik Prompt objects to link to this experiment. Useful for tracking which prompt versions were used.
+
+```typescript
+const prompt = await client.createPrompt({
+  name: "translation-prompt",
+  prompt: "Translate to {{language}}: {{text}}",
+});
+
+prompts: [prompt];
+```
+
+#### projectName
+
+- **Type**: `string`
+- **Description**: Name of the Opik project to log traces to.
+
+```typescript
+projectName: "prompt-engineering";
+```
+
+#### nbSamples
+
+- **Type**: `number`
+- **Description**: Maximum number of dataset items to evaluate. Useful for quick testing.
+
+```typescript
+nbSamples: 10; // Only evaluate first 10 items
+```
+
+#### scoringKeyMapping
+
+- **Type**: `Record<string, string>`
+- **Description**: Maps metric parameter names to dataset/output field names when they don't match.
+
+```typescript
+scoringKeyMapping: {
+  input: "question", // Map 'input' param to 'question' field
+  expected: "reference_answer", // Map 'expected' param to 'reference_answer' field
+};
+```
+
+## Return Value
+
+Returns a `Promise<EvaluationResult>` containing:
+
+```typescript
+interface EvaluationResult {
+  experimentId: string; // ID of created experiment
+  experimentName: string; // Name of experiment
+  testResults: TestResult[]; // Results for each dataset item
+}
+```
+
+## Examples
+
+### Basic Usage
+
+Simple prompt evaluation with default settings:
+
+```typescript
+import { Opik, evaluatePrompt } from "opik";
+
+const client = new Opik();
+const dataset = await client.getOrCreateDataset({ name: "qa-dataset" });
+
+await dataset.insert([
+  {
+    question: "What is the capital of France?",
+    expected_answer: "Paris",
+  },
+  {
+    question: "How do you calculate the area of a circle?",
+    expected_answer: "π × radius²",
+  },
+]);
+
+const result = await evaluatePrompt({
+  dataset,
+  messages: [
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant. Answer questions accurately and concisely.",
+    },
+    { role: "user", content: "{{question}}" },
+  ],
+  model: "gpt-4o",
+});
+
+console.log(`Experiment ID: ${result.experimentId}`);
+console.log(`Evaluated ${result.testResults.length} items`);
+```
+
+### With Scoring Metrics
+
+Evaluate prompts with automatic scoring:
+
+```typescript
+import { evaluatePrompt } from "opik";
+import { Hallucination, ExactMatch } from "opik";
+
+// Create dataset with expected answers
+const dataset = await client.getOrCreateDataset({ name: "geography-qa" });
+await dataset.insert([
+  {
+    country: "France",
+    expected_answer: "Paris",
+  },
+  {
+    country: "Japan",
+    expected_answer: "Tokyo",
+  },
+]);
+
+await evaluatePrompt({
+  dataset,
+  messages: [
+    {
+      role: "user",
+      content: "What is the capital of {{country}}?",
+    },
+  ],
+  model: "gpt-4o",
+  scoringMetrics: [
+    new ExactMatch(), // Check exact match with expected output
+    new Hallucination(), // Check for hallucinations
+  ],
+  experimentName: "Geography Quiz Evaluation",
+});
+```
+
+### Using LanguageModel Instances
+
+Use LanguageModel instances for provider-specific features:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { evaluatePrompt } from "opik";
+
+// Create model instance
+const customModel = openai("gpt-4o");
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "Summarize: {{text}}" }],
+  model: customModel,
+  experimentConfig: {
+    model_provider: "openai",
+    model_name: "gpt-4o",
+  },
+});
+```
+
+### Multi-Provider Model Support
+
+The function supports models from multiple providers:
+
+```typescript
+// OpenAI
+model: "gpt-4o";
+
+// Anthropic
+model: "claude-3-5-sonnet-latest";
+
+// Google Gemini
+model: "gemini-2.0-flash";
+
+// Or use provider-specific LanguageModel instances
+import { anthropic } from "@ai-sdk/anthropic";
+const claude = anthropic("claude-3-5-sonnet-latest");
+model: claude;
+```
+
+### Linking to Prompt Versions
+
+Track which prompt versions are used in evaluations:
+
+```typescript
+import { Opik, evaluatePrompt } from "opik";
+
+const client = new Opik();
+
+// Create or get a prompt
+const prompt = await client.createPrompt({
+  name: "customer-support-prompt",
+  prompt: "{{system_message}}\n\nUser: {{user_query}}",
+});
+
+// Link the prompt to the evaluation
+await evaluatePrompt({
+  dataset,
+  messages: [
+    { role: "system", content: "{{system_message}}" },
+    { role: "user", content: "{{user_query}}" },
+  ],
+  model: "gpt-4o",
+  prompts: [prompt], // Link to prompt
+  experimentName: "Customer Support - v2.1",
+});
+```
+
+### Template Types
+
+#### Mustache Templates (Default)
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [
+    {
+      role: "user",
+      content: "Hello {{name}}, your order #{{order_id}} is ready.",
+    },
+  ],
+  templateType: "mustache", // This is the default
+});
+```
+
+#### Jinja2 Templates
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [
+    {
+      role: "user",
+      content: "Hello {{ name }}, your order #{{ order_id }} is ready.",
+    },
+  ],
+  templateType: "jinja2",
+});
+```
+
+### Scoring Key Mapping
+
+Map dataset fields to metric parameter names:
+
+```typescript
+// Dataset has: { question: "...", reference_answer: "..." }
+// Metric expects: { input: "...", expected: "..." }
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{question}}" }],
+  scoringMetrics: [new ExactMatch()],
+  scoringKeyMapping: {
+    input: "question",
+    expected: "reference_answer",
+  },
+});
+```
+
+### Subset Evaluation
+
+Evaluate only a subset of the dataset for quick iteration:
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{prompt}}" }],
+  nbSamples: 5, // Only evaluate first 5 items
+  experimentName: "Quick Test",
+});
+```
+
+## How It Works
+
+When you call `evaluatePrompt`, the following happens:
+
+1. **Template Formatting**: For each dataset item, message templates are formatted with item variables
+2. **Model Invocation**: The formatted messages are sent to the specified model to generate a response
+3. **Experiment Creation**: An experiment is created (or updated) with metadata
+4. **Metric Scoring**: If metrics are provided, each output is scored
+5. **Result Aggregation**: Results are collected and returned
+
+## Experiment Configuration
+
+The function automatically enriches experiment configuration with:
+
+- `prompt_template`: The message templates used
+- `model`: The model identifier (name or type)
+
+You can add additional metadata via `experimentConfig`:
+
+```typescript
+experimentConfig: {
+  // Auto-added by evaluatePrompt:
+  // prompt_template: [{ role: 'user', content: '...' }]
+  // model: 'gpt-4o'
+
+  // Your custom metadata:
+  temperature: 0.7,
+  version: "v2.0",
+  author: "team-ai",
+  description: "Testing improved prompt structure",
+};
+```
+
+## Best Practices
+
+### 1. Start Simple, Then Add Metrics
+
+Begin with basic prompt evaluation, then add metrics as needed:
+
+```typescript
+// Step 1: Basic evaluation to see outputs
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+});
+
+// Step 2: Add metrics after reviewing outputs
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  scoringMetrics: [new Hallucination()],
+});
+```
+
+### 2. Use Descriptive Experiment Names
+
+Make it easy to find and compare experiments:
+
+```typescript
+experimentName: "Translation - GPT-4o - v2.3 - 2025-01-15";
+```
+
+### 3. Version Your Prompts
+
+Link evaluations to prompt versions for better tracking:
+
+```typescript
+const prompt = await client.createPrompt({
+  name: "qa-prompt",
+  prompt: "Answer: {{question}}",
+  version: "v2.3",
+});
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "Answer: {{question}}" }],
+  prompts: [prompt],
+});
+```
+
+### 4. Start with Small Samples
+
+Use `nbSamples` for quick iteration before full evaluation:
+
+```typescript
+// Quick test with 10 samples
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  nbSamples: 10,
+});
+
+// Full evaluation once satisfied
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  // Evaluate entire dataset
+});
+```
+
+### 5. Include Context in System Messages
+
+Structure your prompts with clear system messages:
+
+```typescript
+messages: [
+  {
+    role: "system",
+    content:
+      "You are an expert {{domain}} assistant. Provide accurate, concise answers.",
+  },
+  {
+    role: "user",
+    content: "{{question}}",
+  },
+];
+```
+
+## Error Handling
+
+The function validates inputs and throws errors for common issues:
+
+```typescript
+try {
+  await evaluatePrompt({
+    dataset,
+    messages: [],
+  });
+} catch (error) {
+  console.error(error.message);
+  // Error: Messages array is required and cannot be empty
+}
+```
+
+Common validation errors:
+
+- Missing required `dataset` parameter
+- Empty `messages` array
+- Invalid `experimentConfig` (must be plain object)
+- Invalid `templateType` (must be 'mustache' or 'jinja2')
+
+## See Also
+
+- [evaluate Function](/reference/typescript-sdk/evaluation/evaluate) - For evaluating custom tasks
+- [Datasets](/reference/typescript-sdk/evaluation/datasets) - Working with evaluation datasets
+- [Metrics](/reference/typescript-sdk/evaluation/metrics) - Available evaluation metrics
+- [Models](/reference/typescript-sdk/evaluation/models) - Model configuration and usage
+- [Prompts](/reference/typescript-sdk/prompts) - Managing prompt templates

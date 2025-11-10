@@ -18,7 +18,10 @@ public record SpanSearchCriteria(
         SpanType type,
         List<? extends Filter> filters,
         boolean truncate,
+        boolean stripAttachments,
         UUID lastReceivedSpanId,
         List<SortingField> sortingFields,
-        Set<SpanField> exclude) {
+        Set<SpanField> exclude,
+        UUID uuidFromTime,
+        UUID uuidToTime) {
 }

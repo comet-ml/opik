@@ -39,8 +39,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -91,7 +91,7 @@ class FeedbackDefinitionResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
@@ -1098,7 +1098,6 @@ class FeedbackDefinitionResourceTest {
                         .containsExactly("details.min has to be smaller than details.max");
             }
         }
-
     }
 
     @Nested
@@ -1138,18 +1137,16 @@ class FeedbackDefinitionResourceTest {
         @Test
         void update() {
 
-            String name = UUID.randomUUID().toString();
-            String name2 = UUID.randomUUID().toString();
+            String nameUpdated = UUID.randomUUID().toString();
+            String descriptionUpdated = UUID.randomUUID().toString();
 
-            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.CategoricalFeedbackDefinition.class)
-                    .toBuilder()
-                    .name(name)
-                    .build();
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.CategoricalFeedbackDefinition.class);
 
             UUID id = create(feedbackDefinition, API_KEY, TEST_WORKSPACE);
 
             var feedbackDefinition1 = feedbackDefinition.toBuilder()
-                    .name(name2)
+                    .name(nameUpdated)
+                    .description(descriptionUpdated)
                     .build();
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -1174,7 +1171,8 @@ class FeedbackDefinitionResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
             var actualEntity = actualResponse.readEntity(FeedbackDefinition.CategoricalFeedbackDefinition.class);
 
-            assertThat(actualEntity.getName()).isEqualTo(name2);
+            assertThat(actualEntity.getName()).isEqualTo(nameUpdated);
+            assertThat(actualEntity.getDescription()).isEqualTo(descriptionUpdated);
             assertThat(actualEntity.getDetails().getCategories())
                     .isEqualTo(feedbackDefinition.getDetails().getCategories());
         }

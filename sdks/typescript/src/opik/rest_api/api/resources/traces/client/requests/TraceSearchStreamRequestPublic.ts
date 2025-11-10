@@ -11,6 +11,12 @@ export interface TraceSearchStreamRequestPublic {
     lastRetrievedId?: string;
     /** Max number of traces to be streamed */
     limit?: number;
-    /** Truncate image included in either input, output or metadata */
+    /** Truncate input, output and metadata to slim payloads */
     truncate?: boolean;
+    /** If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments */
+    stripAttachments?: boolean;
+    /** Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'. */
+    fromTime?: Date;
+    /** Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'. */
+    toTime?: Date;
 }

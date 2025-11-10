@@ -29,6 +29,7 @@ import {
   usePromptById,
   useUpdateOutput,
   useUpdatePrompt,
+  useProviderValidationTrigger,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import {
@@ -61,6 +62,7 @@ const PlaygroundPrompt = ({
 
   const prompt = usePromptById(promptId);
   const datasetVariables = useDatasetVariables();
+  const providerValidationTrigger = useProviderValidationTrigger();
 
   const [, setLastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -131,7 +133,7 @@ const PlaygroundPrompt = ({
         model: newModel,
         provider: newProvider,
         ...(newProvider !== provider && {
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         }),
       });
       setLastPickedModel(newModel);
@@ -148,7 +150,7 @@ const PlaygroundPrompt = ({
         updatePrompt(promptId, {
           model: newModel,
           provider: newProvider,
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         });
       }
     },
@@ -168,6 +170,11 @@ const PlaygroundPrompt = ({
   }, []);
 
   useEffect(() => {
+    // initialize a model validation process described in the next useEffect hook, as soon as trigger is triggered
+    checkedIfModelIsValidRef.current = false;
+  }, [providerValidationTrigger]);
+
+  useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
     if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
       checkedIfModelIsValidRef.current = true;
@@ -179,7 +186,7 @@ const PlaygroundPrompt = ({
         updatePrompt(promptId, {
           model: newModel,
           provider: newProvider,
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
         updateOutput(promptId, "", { value: "" });
@@ -237,6 +244,7 @@ const PlaygroundPrompt = ({
           </div>
           <PromptModelConfigs
             provider={provider}
+            model={model}
             configs={configs}
             onChange={handleUpdateConfig}
           />
@@ -269,6 +277,18 @@ const PlaygroundPrompt = ({
         onAddMessage={handleAddMessage}
         hint={hintMessage}
         hidePromptActions={false}
+        improvePromptConfig={{
+          model,
+          provider,
+          configs,
+          workspaceName,
+          onAccept: (messageId, improvedContent) => {
+            const updatedMessages = messages.map((msg) =>
+              msg.id === messageId ? { ...msg, content: improvedContent } : msg,
+            );
+            updatePrompt(promptId, { messages: updatedMessages });
+          },
+        }}
       />
     </div>
   );

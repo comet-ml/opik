@@ -1,30 +1,18 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TraceDetails;
-import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
-
-import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_ID;
-import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
-import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
-import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 
 @ImplementedBy(RedirectServiceImpl.class)
 public interface RedirectService {
@@ -48,7 +36,7 @@ class RedirectServiceImpl implements RedirectService {
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
     private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
 
-    private final @NonNull Client client;
+    private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull TraceService traceService;
     private final @NonNull DatasetService datasetService;
 
@@ -57,7 +45,8 @@ class RedirectServiceImpl implements RedirectService {
 
         TraceDetails traceDetails = traceService.getTraceDetailsById(traceId).block();
         String resolvedWorkspaceName = Optional.ofNullable(workspaceName)
-                .orElseGet(() -> getWorkspaceName(traceDetails.workspaceId(), opikBEPath));
+                .orElseGet(() -> workspaceNameService.getWorkspaceName(
+                        traceDetails.workspaceId(), getReactBaseUrl(opikBEPath)));
 
         return PROJECT_REDIRECT_URL.formatted(feBaseUrl(opikBEPath), resolvedWorkspaceName,
                 traceDetails.projectId());
@@ -96,43 +85,8 @@ class RedirectServiceImpl implements RedirectService {
         return Optional.ofNullable(workspaceName)
                 .orElseGet(() -> {
                     String workspaceId = datasetService.findWorkspaceIdByDatasetId(datasetId);
-                    return getWorkspaceName(workspaceId, OpikBEBaseUrl);
+                    return workspaceNameService.getWorkspaceName(workspaceId, getReactBaseUrl(OpikBEBaseUrl));
                 });
-    }
-
-    private String getWorkspaceName(String workspaceId, String opikBEPath) {
-        if (DEFAULT_WORKSPACE_ID.equals(workspaceId)) {
-            return DEFAULT_WORKSPACE_NAME;
-        }
-
-        log.info("Request react service for workspace name by id: {}, opikBEPath {}", workspaceId, opikBEPath);
-        InstrumentAsyncUtils.Segment segment = startSegment("redirect", "React", "getWorkspaceNameById");
-        try (var response = client.target(URI.create(getReactBaseUrl(opikBEPath)))
-                .path("workspaces")
-                .path("workspace-name")
-                .queryParam("id", workspaceId)
-                .request()
-                .get()) {
-
-            log.info("Request react service for workspace name by id: {}, opikBEPath {} completed", workspaceId,
-                    opikBEPath);
-            return getWorkspaceNameFromResponse(response);
-        } finally {
-            endSegment(segment);
-        }
-    }
-
-    private String getWorkspaceNameFromResponse(Response response) {
-        if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
-            return response.readEntity(String.class);
-        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            log.error("Not found workspace by Id : {}", errorResponse.msg());
-            throw new NotFoundException(errorResponse.msg());
-        }
-
-        log.error("Unexpected error while getting workspace name: {}", response.getStatus());
-        throw new InternalServerErrorException();
     }
 
     private String feBaseUrl(String opikBEBaseUrl) {

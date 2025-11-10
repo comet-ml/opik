@@ -8,14 +8,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ValueType } from "recharts/types/component/DefaultTooltipContent";
+import dayjs from "dayjs";
+import snakeCase from "lodash/snakeCase";
+
 import {
   ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartTooltip,
 } from "@/components/ui/chart";
-import dayjs from "dayjs";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import { Spinner } from "@/components/ui/spinner";
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import ChartTooltipContent, {
@@ -23,7 +29,6 @@ import ChartTooltipContent, {
   ChartTooltipRenderValueArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
-import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
 import { ProjectMetricValue, TransformedData } from "@/types/projects";
@@ -70,7 +75,7 @@ const MetricLineChart = ({
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
         <div className="comet-body-xs mb-1 text-light-slate">
-          {formatDate(payload?.[0]?.payload?.time, true)} UTC
+          {formatDate(payload?.[0]?.payload?.time, { utc: true })} UTC
         </div>
       );
     },
@@ -116,7 +121,7 @@ const MetricLineChart = ({
           bottom: 5,
         }}
       >
-        <CartesianGrid vertical={false} />
+        <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
         <XAxis
           dataKey="time"
           axisLine={false}
@@ -158,7 +163,7 @@ const MetricLineChart = ({
           <>
             <defs>
               <linearGradient
-                id={`chart-area-gradient-${firstLine}`}
+                id={`chart-area-gradient-${snakeCase(firstLine)}`}
                 x1="0"
                 y1="0"
                 x2="0"
@@ -180,7 +185,7 @@ const MetricLineChart = ({
               type="monotone"
               dataKey={firstLine}
               stroke={config[firstLine].color}
-              fill={`url(#chart-area-gradient-${firstLine})`}
+              fill={`url(#chart-area-gradient-${snakeCase(firstLine)})`}
               connectNulls
               strokeWidth={1.5}
               activeDot={activeDot}

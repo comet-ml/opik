@@ -22,6 +22,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Role;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
@@ -35,9 +36,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -72,7 +72,7 @@ class ChatCompletionsResourceTest {
     private static final String USER = RandomStringUtils.randomAlphanumeric(20);
 
     private final RedisContainer REDIS_CONTAINER = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
@@ -166,8 +166,8 @@ class ChatCompletionsResourceTest {
 
             assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessage.getMessage())
-                    .containsIgnoringCase("API key not configured for LLM provider '%s'"
-                            .formatted(llmProvider.getValue()));
+                    .containsIgnoringCase("API key not configured for LLM. provider='%s', model='%s'"
+                            .formatted(llmProvider.getValue(), expectedModel));
         }
 
         @ParameterizedTest
@@ -235,11 +235,11 @@ class ChatCompletionsResourceTest {
             return Stream.of(
                     arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
                             UUID.randomUUID().toString(), actualContainsExpectedEval),
-                    arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
+                    arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20241022.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY"), actualContainsExpectedEval),
                     arguments(GeminiModelName.GEMINI_1_5_PRO.toString(), LlmProvider.GEMINI,
                             System.getenv("GEMINI_API_KEY"), actualContainsExpectedEval),
-                    arguments(OpenRouterModelName.GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE.toString(),
+                    arguments(OpenRouterModelName.GOOGLE_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17.toString(),
                             LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
                             expectedContainsActualEval));
         }
@@ -311,12 +311,12 @@ class ChatCompletionsResourceTest {
         return Stream.of(
                 arguments(named("no messages", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
-                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString())
+                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20241022.toString())
                         .maxCompletionTokens(100).build()),
                         ERROR_EMPTY_MESSAGES),
                 arguments(named("no max tokens", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
-                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString())
+                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20241022.toString())
                         .addUserMessage("Say 'Hello World'").build()),
                         ERROR_NO_COMPLETION_TOKENS));
     }

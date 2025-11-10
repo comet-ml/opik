@@ -4,6 +4,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from ..types.experiment_group_response import ExperimentGroupResponse
 from ..types.experiment_item import ExperimentItem
 from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -12,9 +13,13 @@ from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import 
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
-from ..types.json_node_write import JsonNodeWrite
+from ..types.json_list_string_write import JsonListStringWrite
+from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from .raw_client import AsyncRawExperimentsClient, RawExperimentsClient
+from .types.experiment_update_status import ExperimentUpdateStatus
+from .types.experiment_update_type import ExperimentUpdateType
+from .types.experiment_write_status import ExperimentWriteStatus
 from .types.experiment_write_type import ExperimentWriteType
 
 # this is used as the default value for optional parameters
@@ -111,9 +116,10 @@ class ExperimentsClient:
         dataset_name: str,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
+        status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -129,11 +135,13 @@ class ExperimentsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         type : typing.Optional[ExperimentWriteType]
 
         optimization_id : typing.Optional[str]
+
+        status : typing.Optional[ExperimentWriteStatus]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -159,6 +167,7 @@ class ExperimentsClient:
             metadata=metadata,
             type=type,
             optimization_id=optimization_id,
+            status=status,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
             request_options=request_options,
@@ -255,6 +264,7 @@ class ExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -267,6 +277,9 @@ class ExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -283,7 +296,11 @@ class ExperimentsClient:
         client.experiments.experiment_items_bulk(experiment_name='experiment_name', dataset_name='dataset_name', items=[ExperimentItemBulkRecordExperimentItemBulkWriteView(dataset_item_id='dataset_item_id', )], )
         """
         _response = self._raw_client.experiment_items_bulk(
-            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            items=items,
+            experiment_id=experiment_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -357,6 +374,73 @@ class ExperimentsClient:
         )
         return _response.data
 
+    def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentGroupAggregationsResponse:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentGroupAggregationsResponse
+            Experiment groups with aggregations
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.find_experiment_groups_aggregations()
+        """
+        _response = self._raw_client.find_experiment_groups_aggregations(
+            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+        )
+        return _response.data
+
+    def finish_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Finish experiments and trigger alert events
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.finish_experiments(ids=['ids'], )
+        """
+        _response = self._raw_client.finish_experiments(ids=ids, request_options=request_options)
+        return _response.data
+
     def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentPublic:
@@ -382,6 +466,50 @@ class ExperimentsClient:
         client.experiments.get_experiment_by_id(id='id', )
         """
         _response = self._raw_client.get_experiment_by_id(id, request_options=request_options)
+        return _response.data
+
+    def update_experiment(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNode] = OMIT,
+        type: typing.Optional[ExperimentUpdateType] = OMIT,
+        status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update experiment by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNode]
+
+        type : typing.Optional[ExperimentUpdateType]
+
+        status : typing.Optional[ExperimentUpdateStatus]
+            The status of the experiment
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.update_experiment(id='id', )
+        """
+        _response = self._raw_client.update_experiment(
+            id, name=name, metadata=metadata, type=type, status=status, request_options=request_options
+        )
         return _response.data
 
     def get_experiment_item_by_id(
@@ -577,9 +705,10 @@ class AsyncExperimentsClient:
         dataset_name: str,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
+        status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -595,11 +724,13 @@ class AsyncExperimentsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         type : typing.Optional[ExperimentWriteType]
 
         optimization_id : typing.Optional[str]
+
+        status : typing.Optional[ExperimentWriteStatus]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -628,6 +759,7 @@ class AsyncExperimentsClient:
             metadata=metadata,
             type=type,
             optimization_id=optimization_id,
+            status=status,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
             request_options=request_options,
@@ -733,6 +865,7 @@ class AsyncExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -745,6 +878,9 @@ class AsyncExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -764,7 +900,11 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.experiment_items_bulk(
-            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            items=items,
+            experiment_id=experiment_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -844,6 +984,79 @@ class AsyncExperimentsClient:
         )
         return _response.data
 
+    async def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExperimentGroupAggregationsResponse:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExperimentGroupAggregationsResponse
+            Experiment groups with aggregations
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.find_experiment_groups_aggregations()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_experiment_groups_aggregations(
+            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+        )
+        return _response.data
+
+    async def finish_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Finish experiments and trigger alert events
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.finish_experiments(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.finish_experiments(ids=ids, request_options=request_options)
+        return _response.data
+
     async def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentPublic:
@@ -872,6 +1085,53 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_experiment_by_id(id, request_options=request_options)
+        return _response.data
+
+    async def update_experiment(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNode] = OMIT,
+        type: typing.Optional[ExperimentUpdateType] = OMIT,
+        status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update experiment by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNode]
+
+        type : typing.Optional[ExperimentUpdateType]
+
+        status : typing.Optional[ExperimentUpdateStatus]
+            The status of the experiment
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.update_experiment(id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_experiment(
+            id, name=name, metadata=metadata, type=type, status=status, request_options=request_options
+        )
         return _response.data
 
     async def get_experiment_item_by_id(

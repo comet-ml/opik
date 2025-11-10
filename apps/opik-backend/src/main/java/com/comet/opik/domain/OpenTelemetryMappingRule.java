@@ -16,13 +16,16 @@ public enum OpenTelemetryMappingRule {
 
     CODE("code.", true, "Pydantic", Outcome.METADATA),
 
-    GEN_AI_USAGE("gen_ai.usage.", true, "GenAI", Outcome.USAGE, SpanType.llm),
-    GEN_AI_REQUEST("gen_ai.request.", true, "GenAI", Outcome.INPUT),
     GEN_AI_PROMPT("gen_ai.prompt", false, "GenAI", Outcome.INPUT, SpanType.llm),
     GEN_AI_COMPLETION("gen_ai.completion", false, "GenAI", Outcome.OUTPUT),
-    GEN_AI_RESPONSE("gen_ai.response", true, "GenAI", Outcome.OUTPUT),
     GEN_AI_REQUEST_MODEL("gen_ai.request_model", false, "GenAI", Outcome.MODEL, SpanType.llm),
     GEN_AI_RESPONSE_MODEL("gen_ai.response_model", false, "GenAI", Outcome.MODEL, SpanType.llm),
+    GEN_AI_REQUEST_MODEL_2("gen_ai.request.model", false, "GenAI", Outcome.MODEL, SpanType.llm),
+    GEN_AI_RESPONSE_MODEL_2("gen_ai.response.model", false, "GenAI", Outcome.MODEL, SpanType.llm),
+    GEN_AI_PROVIDER("gen_ai.system", false, "GenAI", Outcome.PROVIDER, SpanType.llm),
+    GEN_AI_USAGE("gen_ai.usage.", true, "GenAI", Outcome.USAGE, SpanType.llm),
+    GEN_AI_REQUEST("gen_ai.request.", true, "GenAI", Outcome.INPUT),
+    GEN_AI_RESPONSE("gen_ai.response", true, "GenAI", Outcome.OUTPUT),
 
     LLM_INVOCATION_PARAMETERS("llm.invocation_parameters.*", true, "OpenInference", Outcome.INPUT, SpanType.llm),
     LLM_MODEL_NAME("llm.model_name", false, "OpenInference", Outcome.MODEL, SpanType.llm),
@@ -48,6 +51,8 @@ public enum OpenTelemetryMappingRule {
     TOOL_RESPONSES("tool_responses", false, "Logfire", Outcome.OUTPUT),
 
     USAGE("usage", false, "Logfire", Outcome.USAGE, SpanType.llm),
+
+    THREAD_ID("thread_id", false, "General", Outcome.METADATA),
 
     SMOLAGENTS("smolagents.", true, "Smolagents", Outcome.METADATA);
 
@@ -84,6 +89,7 @@ public enum OpenTelemetryMappingRule {
         OUTPUT,
         METADATA,
         MODEL,
+        PROVIDER,
         USAGE,
         DROP;
     }

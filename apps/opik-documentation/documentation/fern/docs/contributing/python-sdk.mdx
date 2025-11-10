@@ -11,13 +11,13 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
 
 <Steps>
   ### 1. Set up Opik Locally
-  To develop and test Python SDK features, you'll need a local Opik instance running. You can set this up by following the instructions in the [Docker Compose README](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) or by using the helper scripts provided in the root of the repository:
+  To develop and test Python SDK features, you'll need a local Opik instance running:
 
   <Tabs>
     <Tab title="Linux/Mac">
     ```bash
     # From the root of the repository
-    ./opik.sh
+    ./opik.sh --port-mapping
 
     # Configure the Python SDK to point to the local Opik deployment
     opik configure --use_local
@@ -26,14 +26,16 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
     <Tab title="Windows">
     ```powershell
     # From the root of the repository
-    powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+    .\opik.ps1 --port-mapping
 
     # Configure the Python SDK to point to the local Opik deployment
     opik configure --use_local
     ```
     </Tab>
-
   </Tabs>
+
+  **Note:** The `--port-mapping` flag exposes all service ports (including MySQL on 3306, ClickHouse on 8123, Redis on 6379) which is useful for debugging. The Python SDK routes traffic through the API gateway (nginx) in the frontend service.
+
   Your local Opik server will be accessible at `http://localhost:5173`.
 
   <Tip title="Windows Users">
@@ -72,7 +74,7 @@ Make your desired code changes, additions, or bug fixes within the `sdks/python`
 
 ### 5. Test Your Changes
 
-Testing is crucial. For most SDK contributions, you should run the end-to-end (e2e) tests:
+Testing is crucial. For most SDK contributions, you should run the unit and the end-to-end (e2e) tests:
 
 ```bash
 cd sdks/python # Ensure you are in this directory
@@ -83,15 +85,18 @@ pip install -r tests/test_requirements.txt
 # Install pre-commit for linting checks (optional but good practice)
 pip install pre-commit
 
+# Run unit tests
+python3 -m pytest -vv tests/unit/
+
 # Run e2e tests
-pytest tests/e2e
+python3 -m pytest -vv tests/e2e/
 ```
 
 If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
 
 1. Install the integration-specific requirements: `pip install -r tests/integrations/openai/requirements.txt` (example for OpenAI).
 2. Configure any necessary API keys for the integration as environment variables or per your test setup.
-3. Run the specific integration tests: `pytest tests/integrations/openai` (example for OpenAI).
+3. Run the specific integration tests: `python3 -m pytest tests/integrations/openai/` (example for OpenAI).
 
 ### 6. Run Linters
 

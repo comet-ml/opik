@@ -1,23 +1,24 @@
 import React, { useCallback, useRef } from "react";
-import isFunction from "lodash/isFunction";
 
-const CLICK_RESET_TIMEOUT = 200;
+const DEFAULT_CLICK_DELAY_MS = 200;
 
-type UseCustomRowClickParams<TData> = {
-  onRowClick?: (row: TData) => void;
+type UseCustomRowClickResponse = (
+  event: React.MouseEvent<HTMLElement>,
+  onClick: () => void,
+) => void;
+
+type UseCustomRowClickOptions = {
+  delayMs?: number;
 };
 
-type UseCustomRowClickResponse<TData> = {
-  onClick?: (event: React.MouseEvent<HTMLElement>, data: TData) => void;
-};
+const useCustomRowClick = (
+  options: UseCustomRowClickOptions = {},
+): UseCustomRowClickResponse => {
+  const { delayMs = DEFAULT_CLICK_DELAY_MS } = options;
+  const callbackTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-const useCustomRowClick = <TData>({
-  onRowClick,
-}: UseCustomRowClickParams<TData>): UseCustomRowClickResponse<TData> => {
-  const callbackTimeout = useRef<NodeJS.Timeout>();
-
-  const onClickHandler = useCallback(
-    (event: React.MouseEvent<HTMLElement>, data: TData) => {
+  return useCallback(
+    (event: React.MouseEvent<HTMLElement>, onClick: () => void) => {
       if (callbackTimeout.current) {
         clearTimeout(callbackTimeout.current);
       }
@@ -28,20 +29,14 @@ const useCustomRowClick = <TData>({
         selection.toString().length > 0 &&
         selection.containsNode(event.target as Node, true);
 
-      if (isFunction(onRowClick) && data && !hasSelection) {
+      if (!hasSelection) {
         callbackTimeout.current = setTimeout(() => {
-          onRowClick(data);
-        }, CLICK_RESET_TIMEOUT);
+          onClick();
+        }, delayMs);
       }
     },
-    [onRowClick],
+    [delayMs],
   );
-
-  return isFunction(onRowClick)
-    ? {
-        onClick: onClickHandler,
-      }
-    : {};
 };
 
 export default useCustomRowClick;

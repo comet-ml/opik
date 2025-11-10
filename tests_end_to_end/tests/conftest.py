@@ -561,14 +561,21 @@ def log_threads_with_decorator():
 
     thread_configs = [thread1_config, thread2_config, thread3_config]
 
+    response_map = {}
+    for thread in thread_configs:
+        response_map[thread["thread_id"]] = {}
+        for input_msg, output_msg in zip(thread["inputs"], thread["outputs"]):
+            response_map[thread["thread_id"]][input_msg] = output_msg
+
     @opik.track
-    def chat_message(input, output, thread_id):
+    def chat_message(input, thread_id):
         opik_context.update_current_trace(thread_id=thread_id)
+        output = response_map[thread_id][input]
         return output
 
     for thread in thread_configs:
         for input, output in zip(thread["inputs"], thread["outputs"]):
-            chat_message(input, output, thread["thread_id"])
+            chat_message(input, thread["thread_id"])
     yield thread_configs
 
 
@@ -781,8 +788,8 @@ def create_moderation_rule_fixture(
     rule_name = "Test Moderation Rule"
     traces_page.page.get_by_role("button", name="Create your first rule").click()
     traces_page.page.get_by_placeholder("Rule name").fill(rule_name)
-    sampling_value = traces_page.page.locator("#sampling_rate-input")
-    sampling_value.fill("1")
+    # sampling_value = traces_page.page.locator("#sampling_rate-input")
+    # sampling_value.fill("1")
 
     traces_page.page.get_by_role("combobox").filter(
         has_text="Select an LLM model"

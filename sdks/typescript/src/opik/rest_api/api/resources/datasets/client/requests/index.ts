@@ -1,11 +1,14 @@
 export { type FindDatasetsRequest } from "./FindDatasetsRequest";
 export { type DatasetWrite } from "./DatasetWrite";
 export { type DatasetItemBatchWrite } from "./DatasetItemBatchWrite";
+export { type CreateDatasetItemsFromTracesRequest } from "./CreateDatasetItemsFromTracesRequest";
 export { type DatasetUpdate } from "./DatasetUpdate";
 export { type DatasetIdentifier } from "./DatasetIdentifier";
 export { type DatasetItemsDelete } from "./DatasetItemsDelete";
+export { type DatasetExpansionWrite } from "./DatasetExpansionWrite";
 export { type FindDatasetItemsWithExperimentItemsRequest } from "./FindDatasetItemsWithExperimentItemsRequest";
 export { type DatasetIdentifierPublic } from "./DatasetIdentifierPublic";
+export { type GetDatasetExperimentItemsStatsRequest } from "./GetDatasetExperimentItemsStatsRequest";
 export { type GetDatasetItemsRequest } from "./GetDatasetItemsRequest";
 export { type GetDatasetItemsOutputColumnsRequest } from "./GetDatasetItemsOutputColumnsRequest";
 export { type DatasetItemStreamRequest } from "./DatasetItemStreamRequest";

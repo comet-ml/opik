@@ -17,7 +17,6 @@ from ..types import FeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
 
-
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
     bound=Union[

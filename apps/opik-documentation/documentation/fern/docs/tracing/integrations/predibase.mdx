@@ -1,56 +1,72 @@
+---
+title: Observability for Predibase with Opik
+description: Start here to integrate Opik into your Predibase-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 Predibase is a platform for fine-tuning and serving open-source Large Language Models (LLMs). It's built on top of open-source [LoRAX](https://loraexchange.ai/).
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/predibase.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=predibase&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=predibase&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=predibase&utm_campaign=opik) for more information.
 
 ## Tracking your LLM calls
 
 Predibase can be used to serve open-source LLMs and is available as a model provider in LangChain. We will leverage the Opik integration with LangChain to track the LLM calls made using Predibase models.
 
-### Getting started
+## Getting Started
+
+### Installation
 
 To use the Opik integration with Predibase, you'll need to have both the `opik`, `predibase` and `langchain` packages installed. You can install them using pip:
 
 ```bash
-pip install --upgrade --quiet opik predibase langchain
+pip install opik predibase langchain
 ```
 
-You can then configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
 
-```bash
-opik configure
-```
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
 
-You will also need to set the `PREDIBASE_API_TOKEN` environment variable to your Predibase API token:
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Predibase
+
+You will also need to set the `PREDIBASE_API_TOKEN` environment variable to your Predibase API token. You can set it as an environment variable:
 
 ```bash
 export PREDIBASE_API_TOKEN=<your-predibase-api-token>
 ```
 
-### Tracing your Predibase LLM calls
+Or set it programmatically:
 
-In order to use Predibase through the LangChain interface, we will start by creating a Predibase model. We will then invoke the model with the Opik tracing callback:
+```python
+import os
+import getpass
+
+if "PREDIBASE_API_TOKEN" not in os.environ:
+    os.environ["PREDIBASE_API_TOKEN"] = getpass.getpass("Enter your Predibase API token: ")
+```
+
+## Logging LLM calls
+
+In order to log the LLM calls to Opik, you will need to wrap the Predibase model with the `OpikTracer` from the LangChain integration. When making calls with that wrapped model, all calls will be logged to Opik:
 
 ```python
 import os
 from langchain_community.llms import Predibase
 from opik.integrations.langchain import OpikTracer
 
+os.environ["OPIK_PROJECT_NAME"] = "predibase-integration-demo"
+
+# Create the Opik tracer
+opik_tracer = OpikTracer(tags=["predibase", "langchain"])
+
+# Create Predibase model
 model = Predibase(
     model="mistral-7b",
     predibase_api_key=os.environ.get("PREDIBASE_API_TOKEN"),
@@ -62,15 +78,24 @@ response = model.invoke(
     config={
         "temperature": 0.5,
         "max_new_tokens": 1024,
-        "callbacks": [OpikTracer(tags=["predibase", "mistral-7b"])]
+        "callbacks": [opik_tracer]
     }
 )
 print(response)
 ```
 
+In addition to passing the OpikTracer to the invoke method, you can also define it during the creation of the `Predibase` object:
+
+```python
+model = Predibase(
+    model="mistral-7b",
+    predibase_api_key=os.environ.get("PREDIBASE_API_TOKEN"),
+).with_config({"callbacks": [opik_tracer]})
+```
+
 <Tip>
   You can learn more about the Opik integration with LangChain in our [LangChain integration
-  guide](/tracing/integrations/langchain) or in the [Predibase cookbook](/cookbook/predibase).
+  guide](/tracing/langchain).
 </Tip>
 
 The trace will now be available in the Opik UI for further analysis.
@@ -78,6 +103,88 @@ The trace will now be available in the Opik UI for further analysis.
 <Frame>
   <img src="/img/tracing/predibase_opik_trace.png" />
 </Frame>
+
+## Advanced Usage
+
+### SequentialChain Example
+
+Now, let's create a more complex chain and run it with Opik tracing:
+
+```python
+from langchain.chains import LLMChain, SimpleSequentialChain
+from langchain_core.prompts import PromptTemplate
+
+# Synopsis chain
+template = """You are a playwright. Given the title of play, it is your job to write a synopsis for that title.
+
+Title: {title}
+Playwright: This is a synopsis for the above play:"""
+prompt_template = PromptTemplate(input_variables=["title"], template=template)
+synopsis_chain = LLMChain(llm=model, prompt=prompt_template)
+
+# Review chain
+template = """You are a play critic from the New York Times. Given the synopsis of play, it is your job to write a review for that play.
+
+Play Synopsis:
+{synopsis}
+Review from a New York Times play critic of the above play:"""
+prompt_template = PromptTemplate(input_variables=["synopsis"], template=template)
+review_chain = LLMChain(llm=model, prompt=prompt_template)
+
+# Overall chain
+overall_chain = SimpleSequentialChain(
+    chains=[synopsis_chain, review_chain], verbose=True
+)
+
+# Run the chain with Opik tracing
+review = overall_chain.run("Tragedy at sunset on the beach", callbacks=[opik_tracer])
+print(review)
+```
+
+### Accessing Logged Traces
+
+We can access the trace IDs collected by the Opik tracer:
+
+```python
+traces = opik_tracer.created_traces()
+print("Collected trace IDs:", [trace.id for trace in traces])
+
+# Flush traces to ensure all data is logged
+opik_tracer.flush()
+```
+
+### Fine-tuned LLM Example
+
+Finally, let's use a fine-tuned model with Opik tracing:
+
+**Note:** In order to use a fine-tuned model, you will need to have access to the model and the correct model ID. The code below will return a `NotFoundError` unless the `model` and `adapter_id` are updated.
+
+```python
+fine_tuned_model = Predibase(
+    model="my-base-LLM",
+    predibase_api_key=os.environ.get("PREDIBASE_API_TOKEN"),
+    predibase_sdk_version=None,
+    adapter_id="my-finetuned-adapter-id",
+    adapter_version=1,
+    **{
+        "api_token": os.environ.get("HUGGING_FACE_HUB_TOKEN"),
+        "max_new_tokens": 5,
+    },
+)
+
+# Configure the Opik tracer
+fine_tuned_model = fine_tuned_model.with_config({"callbacks": [opik_tracer]})
+
+# Invoke the fine-tuned model
+response = fine_tuned_model.invoke(
+    "Can you help categorize the following emails into positive, negative, and neutral?",
+    **{"temperature": 0.5, "max_new_tokens": 1024},
+)
+print(response)
+
+# Final flush to ensure all traces are logged
+opik_tracer.flush()
+```
 
 ## Tracking your fine-tuning training runs
 

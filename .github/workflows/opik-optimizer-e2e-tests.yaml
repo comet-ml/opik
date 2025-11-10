@@ -17,6 +17,7 @@ jobs:
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         
         defaults:
           run:
@@ -26,9 +27,12 @@ jobs:
             fail-fast: false
             matrix:
                 python_version: [
-                  "3.12"
+                  "3.10",
+                  "3.11",
+                  "3.12",
+                  "3.13"
                 ]
-
+                
         steps:
         - name: Check out code
           uses: actions/checkout@v4
@@ -46,8 +50,16 @@ jobs:
             restore-keys: |
               hf-datasets-
 
+        - name: Cache LiteLLM cache
+          uses: actions/cache@v4
+          with:
+            path: ~/.litellm_cache
+            key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
+            restore-keys: |
+              litellm-cache-
+
         - name: Install opik_optimizer
-          run: pip install .
+          run: pip install .[dev]
 
         - name: Install test requirements
           run: |

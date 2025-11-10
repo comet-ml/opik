@@ -4,12 +4,16 @@ import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
 from . import provider_usage_extractor_protocol, langchain_run_helpers
+from .langchain_run_helpers import langchain_usage
 
 if TYPE_CHECKING:
     pass
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+OPENAI_CANDIDATE_USAGE_KEYS = {"prompt_tokens", "completion_tokens", "total_tokens"}
 
 
 class OpenAIUsageExtractor(
@@ -63,31 +67,38 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
     token usage info might be in different places, different formats, or completely missing.
     """
     try:
-        if run_dict["outputs"]["llm_output"] is not None:
-            token_usage_dict = run_dict["outputs"]["llm_output"]["token_usage"]
-            if not isinstance(token_usage_dict, dict):
-                return None
-            return llm_usage.OpikUsage.from_openai_completions_dict(token_usage_dict)
-
-        if langchain_usage := langchain_run_helpers.try_get_streaming_token_usage(
-            run_dict
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
+            run_dict, OPENAI_CANDIDATE_USAGE_KEYS
         ):
-            openai_usage_dict = langchain_usage.map_to_openai_completions_usage()
-            return llm_usage.OpikUsage.from_openai_completions_dict(openai_usage_dict)
+            if isinstance(token_usage, dict):
+                return llm_usage.OpikUsage.from_openai_completions_dict(token_usage)
+            elif isinstance(token_usage, langchain_usage.LangChainUsage):
+                openai_usage_dict = token_usage.map_to_openai_completions_usage()
+                return llm_usage.OpikUsage.from_openai_completions_dict(
+                    openai_usage_dict
+                )
+
+        opik_logging.log_once_at_level(
+            logging.WARNING,
+            logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN,
+            LOGGER,
+            run_dict,
+        )
 
         opik_logging.log_once_at_level(
             logging_level=logging.WARNING,
             message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
             logger=LOGGER,
         )
-        return None
 
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN,
+            run_dict,
             exc_info=True,
         )
-        return None
+
+    return None
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:

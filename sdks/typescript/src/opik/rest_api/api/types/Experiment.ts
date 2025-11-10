@@ -9,7 +9,7 @@ export interface Experiment {
     datasetName: string;
     datasetId?: string;
     name?: string;
-    metadata?: OpikApi.JsonNode;
+    metadata?: OpikApi.JsonListString;
     type?: OpikApi.ExperimentType;
     optimizationId?: string;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
@@ -23,6 +23,7 @@ export interface Experiment {
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
+    status?: OpikApi.ExperimentStatus;
     promptVersion?: OpikApi.PromptVersionLink;
     promptVersions?: OpikApi.PromptVersionLink[];
 }

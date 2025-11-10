@@ -77,10 +77,114 @@ In addition, Opik relies on:
 2. MySQL: Used to store metadata associated with projects, datasets, experiments, etc.
 3. Redis: Used for caching
 
-#### Setting up the environment
+## Local Development Setup
 
-The local development environment is based on `docker-compose`. 
-Please see instructions in `deployment/docker-compose/README.md`
+We provide multiple development modes optimized for different workflows:
+
+### Quick Start Guide
+
+| Mode | Use Case | Command | Speed |
+|------|----------|---------|-------|
+| **Docker Mode** | Full stack testing, closest to production | `./opik.sh --build` | Slow |
+| **Local Process** | Fast BE + FE development with hot reload | `scripts/dev-runner.sh` | Fast |
+| **BE-Only** | Backend development only | `scripts/dev-runner.sh --be-only-restart` | Fast |
+| **Infrastructure** | Manual with IDE development | `./opik.sh --infra --port-mapping` | Medium |
+
+### Docker Mode (Full Stack)
+
+Best for testing the complete system or when you need an environment closest to production.
+
+```bash
+# Build and start all services (first time setup)
+./opik.sh --build
+
+# On Windows
+.\opik.ps1 --build
+
+# Start without rebuilding (faster for subsequent runs)
+./opik.sh
+
+# Check service health
+./opik.sh --verify
+
+# Stop all services
+./opik.sh --stop
+```
+
+Access the UI at http://localhost:5173
+
+### Local Process Mode (Recommended for Development)
+
+Best for rapid development with instant code reloading. Runs backend and frontend as local processes.
+
+```bash
+# Full restart (stop, build, start) - use this for first time or after major changes
+scripts/dev-runner.sh
+
+# On Windows
+scripts\dev-runner.ps1
+
+# Start without rebuilding (faster when no dependency changes)
+scripts/dev-runner.sh --start
+
+# Check status
+scripts/dev-runner.sh --verify
+
+# View logs
+scripts/dev-runner.sh --logs
+```
+
+Access the UI at http://localhost:5174 (Vite dev server with hot reload)
+
+### BE-Only Mode (Backend Development)
+
+Best for backend-focused work. Frontend runs in Docker, backend as a local process.
+
+```bash
+# Start BE-only mode
+scripts/dev-runner.sh --be-only-restart
+
+# On Windows
+scripts\dev-runner.ps1 --be-only-restart
+```
+
+Access the UI at http://localhost:5173
+
+### Additional Commands
+
+```bash
+# Build backend only
+scripts/dev-runner.sh --build-be
+
+# Build frontend only
+scripts/dev-runner.sh --build-fe
+
+# Run database migrations
+scripts/dev-runner.sh --migrate
+
+# Lint code
+scripts/dev-runner.sh --lint-be
+scripts/dev-runner.sh --lint-fe
+
+# Enable debug logging
+scripts/dev-runner.sh --restart --debug
+```
+
+### Getting Help
+
+For a complete list of available commands and options, use the `--help` flag:
+
+```bash
+# Linux/Mac
+./opik.sh --help
+scripts/dev-runner.sh --help
+
+# Windows
+.\opik.ps1 --help
+scripts\dev-runner.ps1 --help
+```
+
+For comprehensive documentation on local development, including troubleshooting, advanced usage, and workflow examples, see our [Local Development Guide](apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx).
 
 ### Contributing to the documentation
 
@@ -136,7 +240,7 @@ The Python SDK reference documentation will be built and available at `http://12
 
 **Setting up your development environment:**
 
-In order to develop features in the Python SDK, you will need to have Opik running locally. You can follow the instructions in the [Docker Compose README](deployment/docker-compose/README.md) or use the provided script to start Opik:
+In order to develop features in the Python SDK, you will need to have Opik running locally. Use the provided scripts to start the appropriate services:
 
 On Linux or Mac:
 ```bash
@@ -190,6 +294,7 @@ cd sdks/python
 
 # Install the test requirements
 pip install -r tests/test_requirements.txt
+pip install -r tests/unit/test_requirements.txt
 
 # Install pre-commit for linting
 pip install pre-commit
@@ -223,214 +328,136 @@ pre-commit run --all-files
 
 ### Contributing to the frontend
 
-The Opik frontend is a React application that is located in `apps/opik-frontend`.
-
-If you want to run the front-end locally and see your changes instantly on saving files, follow this guide:
+The Opik frontend is a React application located in `apps/opik-frontend`.
 
 #### Prerequisites
 
 1. Ensure you have **Node.js** installed.
 
-#### Steps
+#### Quick Start
 
-#### 1. Configure the Environment Variables
+For rapid development with hot reload, use the local process mode:
 
-- Navigate to `apps/opik-frontend/.env.development` and update it with the following values:
+```bash
+# Linux/Mac - restart everything
+scripts/dev-runner.sh
 
-  ```ini
-  VITE_BASE_URL=/
-  VITE_BASE_API_URL=http://localhost:8080
-  ```
+# Or just start (faster if already built)
+scripts/dev-runner.sh --start
 
-#### 2. Enable CORS in the Back-End
+# Windows
+scripts\dev-runner.ps1
+```
 
-- Open `deployment/docker-compose/docker-compose.yaml` and in the `services.backend.environment` section,
-  add `CORS: true` to allow cross-origin requests.
+Access the UI at http://localhost:5174 (Vite dev server with hot reload)
 
-  It should look like this:
+#### Alternative Setup Methods
 
-  ```yaml
-  ...
-  OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
-  CORS: true
-  ...
-  ```
+You can also use:
+- **Docker Mode**: `./opik.sh --build` for a complete Docker-based environment
+- **Manual Setup**: `./opik.sh --backend --port-mapping` then manually start the frontend
 
-#### 3. Start the Services
+For detailed setup instructions for each mode, see our [Frontend Contribution Guide](apps/opik-documentation/documentation/fern/docs/contributing/frontend.mdx).
 
-- Run the following command to start the necessary services and expose the required ports:
+#### Code Formatting
 
-  ```bash
-  # Optionally, you can force a pull of the latest images
-  docker compose pull
-  
-  docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
-  ```
+Before submitting a PR, ensure your code passes all checks:
 
-#### 4. Verify the Back-End is Running
+```bash
+# Linting (recommended)
+scripts/dev-runner.sh --lint-fe  # Linux/Mac
+scripts\dev-runner.ps1 --lint-fe  # Windows
 
-- Wait for the images to build and containers to start.
-- To confirm that the back-end is running, open the following URL in your browser:
+# Or manually
+cd apps/opik-frontend
+npm run lint
+npm run typecheck # TypeScript type checking
+````
 
-  ```
-  http://localhost:8080/is-alive/ver
-  ```
+#### Testing
 
-    - If you see a version number displayed, the back-end is running successfully.
-
-#### 5. Install Front-End Dependencies
-
-- Navigate to the front-end project directory:
-
-  ```bash
-  cd opik/apps/opik-frontend
-  ```
-
-- Install the necessary dependencies:
-
-  ```bash
-  npm install
-  ```
-
-#### 6. Start the Front-End
-
-- Run the following command to start the front-end:
-
-  ```bash
-  npm run start
-  ```
-
-- Once the script completes, open your browser and go to:
-
-  ```
-  http://localhost:5174/
-  ```
-
-  You should see the app running! 🎉
-
-### Notes:
-
-- Another built front-end version will be available at `http://localhost:5173/`.  
-  This version is used for checking builds, but you can also use it for the same purposes if needed.
-
-
-- Before submitting a PR, please ensure that your code passes the test suite, the linter and the type checker:
-
-  ```bash
-  cd apps/opik-frontend
-  
-  npm run e2e
-  npm run lint
-  npm run typecheck
-  ```
+```bash
+cd apps/opik-frontend
+npm run test # Unit tests for utilities and helpers
+```
 
 ### Contributing to the backend
 
-In order to run the external services (Clickhouse, MySQL, Redis), you can use `docker-compose`:
+The Opik backend is a Java application located in `apps/opik-backend`.
+
+#### Prerequisites
+
+1. Ensure you have **Java** and **Maven** installed.
+
+#### Quick Start
+
+For rapid backend development with a local process:
 
 ```bash
-cd deployment/docker-compose
+# Linux/Mac - restart everything
+scripts/dev-runner.sh --be-only-restart
 
-# Optionally, you can force a pull of the latest images
-docker compose pull
+# Or just start (faster if already built)
+scripts/dev-runner.sh --be-only-start
 
-docker compose up clickhouse redis mysql -d
+# Windows
+scripts\dev-runner.ps1 --be-only-restart
 ```
 
-#### Running the backend
+Access the backend API at http://localhost:8080
 
-The Opik backend is a Java application that is located in `apps/opik-backend`.
+#### Alternative Setup Methods
 
-In order to run the backend locally, you need to have `java` and `maven` installed. Once installed, you can run the backend locally using the following command:
+You can also use:
+- **Docker Mode**: `./opik.sh --build` for a complete Docker-based environment
+- **Manual Setup**: `./opik.sh --infra --port-mapping` then manually build and start the backend
+
+For detailed setup instructions for each mode, see our [Backend Contribution Guide](apps/opik-documentation/documentation/fern/docs/contributing/backend.mdx).
+
+#### Code Formatting and Testing
+
+Before submitting a PR, ensure your code is formatted. Our CI will check and fail if it is not formatted. Use the following command:
 
 ```bash
+# Code formatting (recommended)
+scripts/dev-runner.sh --lint-be  # Linux/Mac
+scripts\dev-runner.ps1 --lint-be  # Windows
+
+# Or manually
 cd apps/opik-backend
-
-# Build the Opik application
-mvn clean install
-
-# Start the Opik application
-java -jar target/opik-backend-{project.pom.version}.jar server config.yml
-```
-Replace `{project.pom.version}` with the version of the project in the pom file.
-
-Once the backend is running, you can access the Opik API at `http://localhost:8080`.
-
-#### Formatting the code
-
-Before submitting a PR, please ensure that your code is formatted correctly.
-Run the following command to automatically format your code:
-
-```bash
 mvn spotless:apply
 ```
 
-Our CI will check that the code is formatted correctly and will fail if it is not by running the following command:
+#### Testing
 
-```bash
-mvn spotless:check
 ```
-
-#### Testing the backend
-
-Before submitting a PR, please ensure that your code passes the test suite:
-
-```bash
-cd apps/opik-backend
-
+# Run tests
 mvn test
 ```
 
 Tests leverage the `testcontainers` library to run integration tests against a real instances of the external services. Ports are randomly assigned by the library to avoid conflicts.
 
-#### Advanced usage
-
-*Health Check*
+#### Health checks
 To see your applications health enter url `http://localhost:8080/healthcheck`
 
-**Run migrations**
+#### Database Migrations
 
-*DDL migrations*
+To run database migrations:
 
-The project handles it using [liquibase](https://www.liquibase.com/). Such migrations are located at `apps/opik-backend/src/main/resources/liquibase/{{DB}}/migrations` and executed via `apps/opik-backend/run_db_migrations.sh`. This process is automated via Docker image and helm chart.
+```bash
+# Using dev-runner (recommended)
+scripts/dev-runner.sh --migrate  # Linux/Mac
+scripts\dev-runner.ps1 --migrate  # Windows
 
-In order to run DB DDL migrations manually, you will need to run:
-* Check pending migrations `java -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
-* Run migrations `java -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
-* Create schema tag `java -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
-* Rollback migrations `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1` OR `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --tag {tag_name}`
+# Or manually
+cd apps/opik-backend
+java -jar target/opik-backend-*.jar db migrate config.yml          # MySQL
+java -jar target/opik-backend-*.jar dbAnalytics migrate config.yml # ClickHouse
+```
 
-Replace `{project.pom.version}` with the version of the project in the pom file. Replace `{database}` with db for MySQL migrations and with `dbAnalytics` for ClickHouse migrations.
+For detailed information on migrations, health checks, and advanced topics, see our [Backend Contribution Guide](apps/opik-documentation/documentation/fern/docs/contributing/backend.mdx).
 
-Requirements:
-* Such migrations have to be backward compatible, which means:
-    - New fields must be optional or have default values
-    - In order to remove a column, all references to it must be removed at least one release before the column is dropped at the DB level.
-    - Renaming the column is forbidden unless the table is not currently being used.
-    - Renaming the table is forbidden unless the table is not currently being used.
-    - For more complex migration, apply the transition phase. Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html)
-* It has to be independent of the code. 
-* It must not cause downtime
-* It must have a unique name
-* It must contain a rollback statement or, in the case of Liquibase, the word `empty` is not possible. Refer to [link](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html)
-
-*DML migrations*
-
-In such cases, migrations will not run automatically. They have to be run manually by the system admin via the database client. These migrations are documented via `CHANGELOG.md` and placed at `apps/opik-backend/data-migrations` together with all instructions required to run them.
-
-Requirements:
-* Such migrations have to be backward compatible, which means:
-    - Data shouldn't be deleted unless 100% safe
-    - It must not prevent rollback to the previous version
-    - It must not degrade performance after running
-    - For more complex migration, apply the transition phase. Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html)
-* It must contain detailed instructions on how to run it
-* It must be batched appropriately to avoid disrupting operations 
-* It must not cause downtime
-* It must have a unique name
-* It must contain a rollback statement or, in the case of Liquibase, the word `empty` is not possible. Refer to [link](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html).
-
-*Accessing Clickhouse*
+#### Accessing Clickhouse
 
 You can curl the ClickHouse REST endpoint with `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-`.
 

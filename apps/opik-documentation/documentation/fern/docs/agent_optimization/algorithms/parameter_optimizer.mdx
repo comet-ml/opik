@@ -1,0 +1,340 @@
+---
+title: "Parameter Optimizer: Bayesian Parameter Tuning"
+subtitle: "Optimize LLM parameters like temperature and top_p with Bayesian techniques."
+description: "Learn how to use the Parameter Optimizer to find optimal LLM call parameters (temperature, top_p, etc.) using Bayesian optimization without changing your prompt."
+---
+
+The `ParameterOptimizer` uses Bayesian optimization to tune LLM call parameters such as temperature, top_p, frequency_penalty, and other sampling parameters. Unlike other optimizers that modify the prompt itself, this optimizer keeps your prompt unchanged and focuses solely on finding the best parameter configuration for your specific task.
+
+<Note>
+  **When to Use:** Optimize LLM parameters (temperature, top_p) without changing your prompt. Best when you have a good prompt but need to tune model behavior.
+
+  **Key Trade-offs:** Requires defining parameter search space; doesn't modify prompt text; uses two-phase Bayesian search.
+</Note>
+
+<Info>
+  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/faq)
+  answers common questions, including when to use this optimizer, how parameters like `default_n_trials` and `local_search_ratio`
+  work, and how to define custom parameter search spaces.
+</Info>
+
+## How It Works
+
+This optimizer uses [Optuna](https://optuna.org/), a hyperparameter optimization framework, to search for the best LLM parameters:
+
+1.  **Baseline Evaluation**: First evaluates your prompt with its current parameters (or default parameters) to establish a baseline score.
+
+2.  **Parameter Space Definition**: You define which parameters to optimize and their valid ranges using a `ParameterSearchSpace`. For example:
+    - `temperature`: float between 0.0 and 2.0
+    - `top_p`: float between 0.0 and 1.0
+    - `frequency_penalty`: float between -2.0 and 2.0
+
+3.  **Global Search Phase**:
+    - Optuna explores the full parameter space using Bayesian optimization (TPESampler by default).
+    - Tries various parameter combinations to find promising regions.
+    - Evaluates each combination against your dataset using the specified metric.
+
+4.  **Local Search Phase** (optional):
+    - After global search, focuses on the best parameter region found.
+    - Performs fine-grained optimization around the best parameters.
+    - Controlled by `local_search_ratio` and `local_search_scale`.
+
+5.  **Parameter Importance Analysis**:
+    - Calculates which parameters had the most impact on performance.
+    - Uses FANOVA importance (requires scikit-learn) or falls back to correlation-based sensitivity analysis.
+
+6.  **Result**: Returns the best parameter configuration found, along with detailed optimization history and parameter importance rankings.
+
+The optimizer intelligently balances exploration (trying diverse parameters) with exploitation (refining promising configurations) to efficiently find optimal settings.
+
+<Tip>
+  The core of this optimizer relies on robust evaluation where each parameter configuration is assessed using your `metric` against the `dataset`. Understanding Opik's evaluation platform is key to effective use:
+  - [Evaluation Overview](/evaluation/overview)
+  - [Evaluate Prompts](/evaluation/evaluate_prompt)
+  - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
+
+## Configuration Options
+
+### Basic Configuration
+
+```python
+from opik_optimizer import ParameterOptimizer
+from opik_optimizer.parameter_optimizer import ParameterSearchSpace
+
+optimizer = ParameterOptimizer(
+    model="openai/gpt-4",
+    default_n_trials=20,    # Number of optimization trials
+    n_threads=4,            # Parallel evaluation threads
+    seed=42
+)
+```
+
+### Advanced Configuration
+
+```python
+optimizer = ParameterOptimizer(
+    model="openai/gpt-4",
+    default_n_trials=50,        # More trials for thorough optimization
+    n_threads=8,                # More parallel threads
+    local_search_ratio=0.3,     # 30% of trials for local refinement
+    local_search_scale=0.2,     # Scale of local search range
+    seed=42,
+    verbose=1                   # Verbosity level (0=off, 1=info, 2=debug)
+)
+```
+
+The key parameters are:
+
+- `model`: The LLM used for evaluation with different parameter configurations.
+- `default_n_trials`: Default number of optimization trials (can be overridden in `optimize_parameter`).
+- `n_threads`: Number of parallel threads for evaluation (balance with API rate limits).
+- `local_search_ratio`: Ratio of trials dedicated to local search around best parameters (0.0-1.0).
+- `local_search_scale`: Scale factor for local search range (0.0 = no local search, higher = wider range).
+- `seed`: Random seed for reproducibility.
+- `verbose`: Logging level (0=warnings only, 1=info, 2=debug).
+
+## Example Usage
+
+### Basic Example
+
+```python
+from opik_optimizer import ParameterOptimizer, ChatPrompt
+from opik_optimizer.parameter_optimizer import ParameterSearchSpace
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer import datasets
+
+# Initialize optimizer
+optimizer = ParameterOptimizer(
+    model="openai/gpt-4o-mini",
+    default_n_trials=30,
+    n_threads=8,
+    seed=42
+)
+
+# Prepare dataset
+dataset = datasets.hotpot_300()
+
+# Define metric
+def levenshtein_ratio(dataset_item, llm_output):
+    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+
+# Define prompt (this stays unchanged)
+prompt = ChatPrompt(
+    project_name="parameter-optimization",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "{question}"}
+    ]
+)
+
+# Define parameter search space
+parameter_space = ParameterSearchSpace(
+    parameters=[
+        {
+            "name": "temperature",
+            "distribution": "float",
+            "low": 0.0,
+            "high": 2.0
+        },
+        {
+            "name": "top_p",
+            "distribution": "float",
+            "low": 0.1,
+            "high": 1.0
+        }
+    ]
+)
+
+# Run optimization
+results = optimizer.optimize_parameter(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    parameter_space=parameter_space,
+    n_samples=100
+)
+
+# Access results
+results.display()
+print(f"Best temperature: {results.details['optimized_parameters']['temperature']}")
+print(f"Best top_p: {results.details['optimized_parameters']['top_p']}")
+print(f"Parameter importance: {results.details['parameter_importance']}")
+```
+
+### Advanced Example with Custom Parameters
+
+```python
+# Optimize more parameters including model selection
+parameter_space = ParameterSearchSpace(
+    parameters=[
+        {
+            "name": "temperature",
+            "distribution": "float",
+            "low": 0.0,
+            "high": 1.5,
+            "step": 0.05  # Optional: quantize values
+        },
+        {
+            "name": "top_p",
+            "distribution": "float",
+            "low": 0.5,
+            "high": 1.0
+        },
+        {
+            "name": "frequency_penalty",
+            "distribution": "float",
+            "low": -1.0,
+            "high": 1.0
+        },
+        {
+            "name": "presence_penalty",
+            "distribution": "float",
+            "low": -1.0,
+            "high": 1.0
+        },
+        {
+            "name": "model",
+            "distribution": "categorical",
+            "choices": ["openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-4-turbo"]
+        }
+    ]
+)
+
+# Run with more trials and custom Optuna sampler
+import optuna
+
+results = optimizer.optimize_parameter(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    parameter_space=parameter_space,
+    n_trials=100,  # Override default_n_trials
+    n_samples=150,
+    sampler=optuna.samplers.TPESampler(seed=42, n_startup_trials=20)
+)
+```
+
+## Parameter Search Space
+
+The `ParameterSearchSpace` defines which parameters to optimize and their valid ranges. It supports:
+
+### Float Parameters
+
+```python
+{
+    "name": "temperature",
+    "distribution": "float",
+    "low": 0.0,
+    "high": 2.0,
+    "step": 0.1,      # Optional: quantize to 0.1 increments
+    "log": False      # Optional: use log scale for sampling
+}
+```
+
+### Integer Parameters
+
+```python
+{
+    "name": "max_tokens",
+    "distribution": "int",
+    "low": 100,
+    "high": 4000,
+    "step": 100,      # Optional: sample in steps of 100
+    "log": False      # Optional: use log scale
+}
+```
+
+### Categorical Parameters
+
+```python
+{
+    "name": "model",
+    "distribution": "categorical",
+    "choices": ["gpt-4o-mini", "gpt-4o", "claude-3-haiku"]
+}
+```
+
+### Boolean Parameters
+
+```python
+{
+    "name": "stream",
+    "distribution": "bool"
+}
+```
+
+### Targeting Nested Parameters
+
+You can optimize nested parameters in `model_kwargs`:
+
+```python
+{
+    "name": "model_kwargs.response_format.type",
+    "distribution": "categorical",
+    "choices": ["text", "json_object"]
+}
+```
+
+## Model Support
+
+The ParameterOptimizer supports all models available through LiteLLM. This provides broad
+compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others,
+including locally hosted models.
+
+### Configuration Example using LiteLLM model string
+
+```python
+optimizer = ParameterOptimizer(
+    model="openai/gpt-4o-mini",  # Using OpenAI via LiteLLM
+    default_n_trials=30,
+    n_threads=8
+)
+```
+
+## Best Practices
+
+1. **Start Simple**
+   - Begin with 1-2 key parameters (e.g., temperature, top_p)
+   - Add more parameters once you understand their impact
+   - Too many parameters increases search space and trial requirements
+
+2. **Define Reasonable Ranges**
+   - Use tighter ranges based on domain knowledge
+   - For temperature: 0.0-1.0 for factual tasks, 0.5-1.5 for creative tasks
+   - For top_p: 0.8-1.0 for most tasks
+
+3. **Trial Budget**
+   - Start with 20-30 trials for 2-3 parameters
+   - Increase to 50-100 trials for 4+ parameters
+   - Monitor convergence - stop if improvements plateau
+
+4. **Local Search**
+   - Use `local_search_ratio=0.3` (default) for refinement
+   - Increase to 0.4-0.5 if global search found good region quickly
+   - Decrease to 0.1-0.2 for more exploration
+
+5. **Parallel Evaluation**
+   - Set `n_threads` based on API rate limits
+   - More threads = faster optimization but may hit limits
+   - Balance speed with cost and rate limit constraints
+
+6. **Parameter Importance**
+   - Check `parameter_importance` in results
+   - Focus future optimization on high-impact parameters
+   - Consider fixing low-impact parameters to reduce search space
+
+7. **Validation**
+   - Test final parameters on held-out validation set
+   - Verify improvements generalize beyond training data
+   - Consider parameter stability across different datasets
+
+## Research and References
+
+- [Optuna: A hyperparameter optimization framework](https://optuna.org/)
+
+## Next Steps
+
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

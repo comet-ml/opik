@@ -17,7 +17,7 @@ if version is None:
 setup(
     author="Comet ML Inc.",
     author_email="mail@comet.com",
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Developers",
@@ -25,11 +25,12 @@ setup(
         "Natural Language :: English",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
     description="Comet tool for logging and evaluating LLM traces",
     long_description=open(
@@ -41,15 +42,20 @@ setup(
         "click",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "rapidfuzz>=3.0.0,<4.0.0",
-        "litellm",
-        "openai<2.0.0",
+        # LiteLLM dependency comments:
+        # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
+        # - Cap at 1.77.4: version 1.77.5+ removes trace_id/parent_span_id passthrough
+        #   Can be removed after this PR is released: https://github.com/BerriAI/litellm/pull/15529
+        # - Cap at 1.77.1: version 1.77.2+ introduces C++ compiler dependency. It's already fixed in litellm
+        #   but we can't remove the cap because we still have to cap at 1.77.4.
+        "litellm<=1.77.1,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5",
+        "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
         "rich",
         "sentry_sdk>=2.0.0",
         "tenacity",
-        "tokenizers<0.21.0 ; python_version<'3.9.0'",  # no 3.8 support starting from 0.21.0
         "tqdm",
         "uuid6",
         "jinja2",

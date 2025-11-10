@@ -323,6 +323,94 @@ export class Datasets {
     }
 
     /**
+     * Create dataset items from traces with enriched metadata
+     *
+     * @param {string} datasetId
+     * @param {OpikApi.CreateDatasetItemsFromTracesRequest} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.createDatasetItemsFromTraces("dataset_id", {
+     *         traceIds: ["trace_ids"],
+     *         enrichmentOptions: {}
+     *     })
+     */
+    public createDatasetItemsFromTraces(
+        datasetId: string,
+        request: OpikApi.CreateDatasetItemsFromTracesRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__createDatasetItemsFromTraces(datasetId, request, requestOptions),
+        );
+    }
+
+    private async __createDatasetItemsFromTraces(
+        datasetId: string,
+        request: OpikApi.CreateDatasetItemsFromTracesRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(datasetId)}/items/from-traces`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.CreateDatasetItemsFromTracesRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+            }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/datasets/{dataset_id}/items/from-traces.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get dataset by id
      *
      * @param {string} id
@@ -797,6 +885,97 @@ export class Datasets {
     }
 
     /**
+     * Generate synthetic dataset samples using LLM based on existing data patterns
+     *
+     * @param {string} id
+     * @param {OpikApi.DatasetExpansionWrite} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.expandDataset("id", {
+     *         model: "gpt-4"
+     *     })
+     */
+    public expandDataset(
+        id: string,
+        request: OpikApi.DatasetExpansionWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetExpansionResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__expandDataset(id, request, requestOptions));
+    }
+
+    private async __expandDataset(
+        id: string,
+        request: OpikApi.DatasetExpansionWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetExpansionResponse>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(id)}/expansions`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.DatasetExpansionWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetExpansionResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/datasets/{id}/expansions.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Find dataset items with experiment items
      *
      * @param {string} id
@@ -823,7 +1002,7 @@ export class Datasets {
         request: OpikApi.FindDatasetItemsWithExperimentItemsRequest,
         requestOptions?: Datasets.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetItemPageCompare>> {
-        const { page, size, experimentIds, filters, truncate } = request;
+        const { page, size, experimentIds, filters, sorting, search, truncate } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -836,6 +1015,14 @@ export class Datasets {
         _queryParams["experiment_ids"] = experimentIds;
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
+        }
+
+        if (search != null) {
+            _queryParams["search"] = search;
         }
 
         if (truncate != null) {
@@ -997,6 +1184,104 @@ export class Datasets {
     }
 
     /**
+     * Get experiment items stats for dataset
+     *
+     * @param {string} id
+     * @param {OpikApi.GetDatasetExperimentItemsStatsRequest} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.getDatasetExperimentItemsStats("id", {
+     *         experimentIds: "experiment_ids"
+     *     })
+     */
+    public getDatasetExperimentItemsStats(
+        id: string,
+        request: OpikApi.GetDatasetExperimentItemsStatsRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ProjectStatsPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetExperimentItemsStats(id, request, requestOptions));
+    }
+
+    private async __getDatasetExperimentItemsStats(
+        id: string,
+        request: OpikApi.GetDatasetExperimentItemsStatsRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
+        const { experimentIds, filters } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        _queryParams["experiment_ids"] = experimentIds;
+        if (filters != null) {
+            _queryParams["filters"] = filters;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(id)}/items/experiments/items/stats`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ProjectStatsPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/datasets/{id}/items/experiments/items/stats.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get dataset item by id
      *
      * @param {string} itemId
@@ -1104,7 +1389,7 @@ export class Datasets {
         request: OpikApi.GetDatasetItemsRequest = {},
         requestOptions?: Datasets.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetItemPagePublic>> {
-        const { page, size, truncate } = request;
+        const { page, size, filters, truncate } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -1112,6 +1397,10 @@ export class Datasets {
 
         if (size != null) {
             _queryParams["size"] = size.toString();
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
         }
 
         if (truncate != null) {

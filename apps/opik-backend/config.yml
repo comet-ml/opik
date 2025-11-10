@@ -82,7 +82,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1}
 
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
@@ -127,6 +127,29 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
+  # AWS IAM authentication configuration (optional)
+  # When enabled, takes precedence over singleNodeUrl authentication
+  awsIamAuth:
+    # Default: false
+    # Description: Enable AWS IAM authentication for ElasticCache Redis
+    enabled: ${OPIK_REDIS_AWS_IAM_AUTH_ENABLED:-false}
+    # Description: AWS User ID for IAM authentication
+    awsUserId: ${OPIK_REDIS_AWS_USER_ID:-''}
+    # Default: us-east-1
+    # Description: AWS region where ElastiCache is deployed
+    awsRegion: ${AWS_REGION:-us-east-1}
+    # Default: opik-redis
+    # Description: ElasticCache resource name (replication group/cluster/serverless name)
+    awsResourceName: ${OPIK_REDIS_AWS_RESOURCE_NAME:-''}
+    # Default: 13m
+    # Description: How often to refresh the AWS authentication token
+    tokenCacheRefreshAfter: ${OPIK_REDIS_AWS_TOKEN_CACHE_REFRESH_AFTER:-13m}
+    # Default: 14m
+    # Description: How long the AWS authentication token will be cached locally
+    tokenCacheExpireAfter: ${OPIK_REDIS_AWS_TOKEN_CACHE_EXPIRE_AFTER:-14m}
+    # Default: 15m
+    # Description: How long the AWS authentication token is valid
+    tokenExpiryDuration: ${OPIK_REDIS_AWS_TOKEN_EXPIRY_DURATION:-15m}
 
 openTelemetry:
   # Default: 3h
@@ -149,7 +172,7 @@ authentication:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
-  # Description: Whether to enable virtual threads for Jetty’s thread pool.
+  # Description: Whether to enable virtual threads for Jetty's thread pool.
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
@@ -157,6 +180,30 @@ server:
     # Description: If true, all requests with gzip in the Accept-Encoding header will have their response entities
     # compressed and requests with gzip in the Content-Encoding header will have their request entities decompressed.
     enabled: true
+  # HTTP connector configuration for handling large request headers
+  # Default: 16KB (16000 bytes) - matches ALB/Nginx request line limit
+  # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
+  applicationConnectors:
+    - type: http
+      # Default: 8080
+      # Description: The port on which the application HTTP connector listens
+      port: ${SERVER_APPLICATION_PORT:-8080}
+      maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
+  adminConnectors:
+    - type: http
+      # Default: 8081
+      # Description: The port on which the admin HTTP connector listens
+      port: ${SERVER_ADMIN_PORT:-8081}
+
+# Jackson JSON processing configuration
+# Controls limits for JSON deserialization to prevent memory exhaustion
+jacksonConfig:
+  # Default: 104857600 (100MB)
+  # Description: Maximum size for individual string values during JSON deserialization. 
+  #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
+  #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
+  maxStringLength: ${JACKSON_MAX_STRING_LENGTH:-104857600}
 
 # Configuration for batch operations
 batchOperations:
@@ -245,6 +292,9 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Description: Configuration for anonymous ID used to identify the installation
+  # Default: empty
+  anonymousId: ${OPIK_ANONYMOUS_ID:-}
 
 # Configuration for application metadata
 metadata:
@@ -268,29 +318,78 @@ encryption:
 onlineScoring:
   # Default: 500 ms
   # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
+  # This is the global default value, can be overridden per stream
   poolingInterval: ${REDIS_SCORING_CONSUMER_POOL_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  # This is the global default value, can be overridden per stream
+  longPollingDuration: ${REDIS_SCORING_LONG_POLLING_DURATION:-5s}
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
   # Default: 5
   # Description: Maximum number of messages returned within a Redis Stream get
+  # This is the global default value, can be overridden per stream
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals (global default)
+  claimIntervalRatio: ${REDIS_SCORING_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming (global default)
+  pendingMessageDuration: ${REDIS_SCORING_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10, global default)
+  maxRetries: ${REDIS_SCORING_MAX_RETRIES:-3}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
+  ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
+  ## longPollingDuration: (optional, but highly recommended) per stream long polling duration, overrides global value
+  ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
+  ## claimIntervalRatio: (optional) per stream claim interval ratio, overrides global value
+  ## pendingMessageDuration: (optional) per stream pending message duration, overrides global value
+  ## maxRetries: (optional) per stream max retries, overrides global value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_LLM_AS_JUDGE_MAX_RETRIES:-}
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
     - scorer: trace_thread_llm_as_judge
       streamName: stream_scoring_trace_thread_llm_as_judge
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_MAX_RETRIES:-}
     - scorer: trace_thread_user_defined_metric_python
       streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -372,8 +471,15 @@ clickHouseLogAppender:
 
 workspaceSettings:
   # Default: 50
-  # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
-    maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all workspace sizes).
+  # This value is calculated via estimated size based on spans table
+  maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Default: 100
+  # Description: Maximum size of a project in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all project sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-100}
 
 # Configuration AWS S3
 s3Config:
@@ -383,15 +489,31 @@ s3Config:
   # Description: AWS S3 presign url timeout
   preSignUrlTimeoutSec: ${S3_PRESIGN_URL_TIMEOUT:-3600}
   # Description: Url for local MinIO or Aws
-  s3Url: ${S3_URL:-http://minio:9000}
+  s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+
+# Attachments configuration
+attachmentsConfig:
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # Default: 256000 (256KB)
+  stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+  # Default: 4
+  # Description: Maximum number of retry attempts to reach the Python evaluator before giving up
+  maxRetryAttempts: ${PYTHON_EVALUATOR_MAX_RETRY_ATTEMPTS:-4}
+  # Default: 1s
+  # Description: Max delay between retry attempts, will be increased exponentially based on backoffExp
+  maxRetryDelay: ${PYTHON_EVALUATOR_MAX_RETRY_DELAY:-1s}
+  # Default: 500ms
+  # Description: Min delay between retry attempts
+  minRetryDelay: ${PYTHON_EVALUATOR_MIN_RETRY_DELAY:-500ms}
+
 
 serviceToggles:
   # Default: true
@@ -402,10 +524,22 @@ serviceToggles:
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
-  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"false"}
+  traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not OpikAI feature is enabled
+  opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Alert feature is enabled
+  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not Welcome Wizard is enabled
+  welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: true
+  # Description: Whether the trace thread closing job is enabled
+  enabled: ${OPIK_TRACE_THREAD_CLOSING_JOB_ENABLED:-true}
   # Default: 15min
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE:-15m}
@@ -415,9 +549,12 @@ traceThreadConfig:
   # Default: 100
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_BATCH_SIZE:-100}
-  # Default: 200 milliseconds
+  # Default: 500ms
   # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
-  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-200 milliseconds}
+  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: ${OPIK_REDIS_TRACE_THREAD_LONG_POLLING_DURATION:-5s}
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
@@ -430,9 +567,18 @@ traceThreadConfig:
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1000
+  # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${OPIK_REDIS_TRACE_THREAD_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${OPIK_REDIS_TRACE_THREAD_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10)
+  maxRetries: ${OPIK_REDIS_TRACE_THREAD_MAX_RETRIES:-3}
 
 # Job timeout configuration
 jobTimeout:
@@ -443,11 +589,81 @@ jobTimeout:
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
 
-# Configuration for ClickHouse async insert functionality
-asyncInsert:
+# Response formatting configuration
+responseFormatting:
+  # Default: 10001
+  # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
+  truncationSize: ${OPIK_RESPONSE_TRUNCATION_CHAR_LIMIT:-10001}
+
+# Queue configuration for Python RQ workers
+queues:
+  # Default: true
+  # Description: Whether queue functionality is enabled
+  enabled: ${OPIK_QUEUES_ENABLED:-true}
+    # Default: 14 days
+  # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
+  defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-14 days}
+  # Per-queue specific configurations
+  queues:
+    # Optimizer cloud queue configuration
+    opik:optimizer-cloud:
+      # Job TTL for optimizer jobs
+      jobTTl: ${OPIK_OPTIMIZER_QUEUE_JOB_TTL:-1 day}
+
+# Webhook configuration
+webhook:
   # Default: false
-  # Description: Enable async insert for individual write operations to ClickHouse.
-  # When enabled, individual inserts (not batch operations) will use async_insert=1,
-  # wait_for_async_insert=1, and async_insert_use_adaptive_busy_timeout=1 settings
-  # to reduce IO overhead for concurrent requests.
-  enabled: ${OPIK_CLICKHOUSE_ASYNC_INSERT_ENABLED:-false}
+  # Description: Whether or not webhook functionality is enabled
+  enabled: ${WEBHOOK_ENABLED:-true}
+  # Default: webhook-events
+  # Description: Redis stream name for webhook events
+  streamName: ${WEBHOOK_STREAM_NAME:-webhook-events}
+  # Default: webhook-consumers
+  # Description: Consumer group name for webhook event processing
+  consumerGroupName: ${WEBHOOK_CONSUMER_GROUP_NAME:-webhook-consumers}
+  # Default: 10
+  # Description: Maximum number of messages to consume in a single batch (1-100)
+  consumerBatchSize: ${WEBHOOK_CONSUMER_BATCH_SIZE:-10}
+  # Default: 1s
+  # Description: How often webhook consumer will check Redis for new messages
+  poolingInterval: ${WEBHOOK_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: ${WEBHOOK_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed webhooks (1-10)
+  maxRetries: ${WEBHOOK_MAX_RETRIES:-3}
+  # Default: 500ms
+  # Description: Initial delay between retry attempts
+  initialRetryDelay: ${WEBHOOK_INITIAL_RETRY_DELAY:-500ms}
+  # Default: 30s
+  # Description: Maximum delay between retry attempts
+  maxRetryDelay: ${WEBHOOK_MAX_RETRY_DELAY:-30s}
+  # Default: 10s
+  # Description: HTTP request timeout for webhook calls
+  requestTimeout: ${WEBHOOK_REQUEST_TIMEOUT:-10s}
+  # Default: 5s
+  # Description: HTTP connection timeout for webhook calls
+  connectionTimeout: ${WEBHOOK_CONNECTION_TIMEOUT:-5s}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${WEBHOOK_PENDING_MESSAGE_DURATION:-10m}
+  debouncing:
+    # Default: true
+    # Description: Whether or not webhook event debouncing is enabled
+    enabled: ${WEBHOOK_DEBOUNCING_ENABLED:-true}
+    # Default: 60s
+    # Description: Period for events aggregation before sending to webhook endpoint
+    windowSize: ${WEBHOOK_DEBOUNCING_WINDOW_SIZE:-60s}
+    # Default: 3m
+    # Description: Time-to-live for debouncing buckets in Redis
+    bucketTtl: ${WEBHOOK_DEBOUNCING_BUCKET_TTL:-3m}
+    # Default: 4s
+    # Description: Timeout for alert job execution
+    alertJobTimeout: ${WEBHOOK_DEBOUNCING_ALERT_JOB_TIMEOUT:-4s}
+    # Default: 100ms
+    # Description: Maximum time to wait for acquiring alert job lock
+    alertJobLockWaitTimeout: ${WEBHOOK_DEBOUNCING_ALERT_JOB_LOCK_WAIT_TIMEOUT:-100ms}

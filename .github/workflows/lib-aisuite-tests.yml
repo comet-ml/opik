@@ -4,6 +4,8 @@
 #
 name: SDK Lib AISuite Tests
 run-name: "SDK Lib AISuite Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
@@ -17,6 +19,7 @@ jobs:
   tests:
     name: AISuite Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: sdks/python
@@ -24,7 +27,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.10", "3.11", "3.12"]
+        python_version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code

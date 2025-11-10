@@ -1,7 +1,7 @@
 package com.comet.opik.api;
 
 import com.comet.opik.api.validation.ProviderApiKeyValidation;
-import com.comet.opik.utils.ProviderApiKeyDeserializer;
+import com.comet.opik.utils.EncryptionDeserializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -29,8 +29,12 @@ public record ProviderApiKey(
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class, View.Write.class}) @NotNull LlmProvider provider,
         @JsonView({View.Public.class,
-                View.Write.class}) @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey,
+                View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). "
+                        +
+                        "Should not be set for standard providers (OpenAI, Anthropic, etc.).", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> headers,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
         @JsonView({View.Public.class,
@@ -47,6 +51,7 @@ public record ProviderApiKey(
                 ", provider=" + provider +
                 ", apiKey='*******'" +
                 ", name='" + name + '\'' +
+                ", providerName='" + providerName + '\'' +
                 ", headers=" + headers +
                 ", baseUrl='" + baseUrl + '\'' +
                 ", createdAt=" + createdAt +

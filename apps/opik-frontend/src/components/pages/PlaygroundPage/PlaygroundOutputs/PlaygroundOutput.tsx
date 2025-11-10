@@ -1,6 +1,6 @@
 import React from "react";
 
-import { cn, getAlphabetLetter } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import {
@@ -11,10 +11,13 @@ import {
 
 interface PlaygroundOutputProps {
   promptId: string;
-  index: number;
+  totalOutputs: number;
 }
 
-const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
+const PlaygroundOutput = ({
+  promptId,
+  totalOutputs,
+}: PlaygroundOutputProps) => {
   const value = useOutputValueByPromptDatasetItemId(promptId);
   const isLoading = useOutputLoadingByPromptDatasetItemId(promptId);
   const stale = useOutputStaleStatusByPromptDatasetItemId(promptId);
@@ -27,7 +30,7 @@ const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
     return (
       <MarkdownPreview
         className={cn({
-          "text-muted-gray": stale,
+          "text-muted-gray dark:text-foreground": stale,
         })}
       >
         {value}
@@ -35,12 +38,12 @@ const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
     );
   };
 
+  const outputLabel = totalOutputs === 1 ? "Output" : "Outputs";
+
   return (
     <div className="size-full min-w-[var(--min-prompt-width)]">
-      <p className="comet-body-s-accented my-3">
-        Output {getAlphabetLetter(index)}
-      </p>
-      <div className="comet-body-s min-h-52 rounded-lg border bg-white p-3">
+      <p className="comet-body-s-accented my-3">{outputLabel}</p>
+      <div className="comet-body-s min-h-52 rounded-lg border bg-background p-3">
         {renderContent()}
       </div>
     </div>

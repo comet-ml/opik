@@ -1,5 +1,4 @@
-import React, { MouseEventHandler, useState } from "react";
-import isNumber from "lodash/isNumber";
+import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
 
 import {
@@ -8,7 +7,6 @@ import {
   FlaskConical,
   GraduationCap,
   LayoutGrid,
-  LucideIcon,
   MessageCircleQuestion,
   FileTerminal,
   LucideHome,
@@ -18,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  UserPen,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -30,36 +29,19 @@ import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { buildDocsUrl, cn } from "@/lib/utils";
 import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
-
-enum MENU_ITEM_TYPE {
-  link = "link",
-  router = "router",
-  button = "button",
-}
-
-type MenuItem = {
-  id: string;
-  path?: string;
-  type: MENU_ITEM_TYPE;
-  icon: LucideIcon;
-  label: string;
-  count?: string;
-  onClick?: MouseEventHandler<HTMLButtonElement>;
-};
-
-type MenuItemGroup = {
-  id: string;
-  label?: string;
-  items: MenuItem[];
-};
+import SidebarMenuItem, {
+  MENU_ITEM_TYPE,
+  MenuItem,
+  MenuItemGroup,
+} from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -118,6 +100,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         label: "Datasets",
         count: "datasets",
       },
+      {
+        id: "annotation_queues",
+        path: "/$workspaceName/annotation-queues",
+        type: MENU_ITEM_TYPE.router,
+        icon: UserPen,
+        label: "Annotation queues",
+        count: "annotation_queues",
+      },
     ],
   },
   {
@@ -175,69 +165,18 @@ type SideBarProps = {
   setExpanded: OnChangeFn<boolean | undefined>;
 };
 
-interface GetItemElement {
-  item: MenuItem;
-  content: React.ReactElement;
-  workspaceName: string;
-  linkClasses: string;
-}
-
-const getItemElementByType = ({
-  item,
-  content,
-  workspaceName,
-  linkClasses,
-}: GetItemElement) => {
-  if (item.type === MENU_ITEM_TYPE.router) {
-    return (
-      <li key={item.id} className="flex">
-        <Link to={item.path} params={{ workspaceName }} className={linkClasses}>
-          {content}
-        </Link>
-      </li>
-    );
-  }
-
-  if (item.type === MENU_ITEM_TYPE.link) {
-    return (
-      <li key={item.id} className="flex">
-        <a
-          href={item.path}
-          target="_blank"
-          rel="noreferrer"
-          className={linkClasses}
-        >
-          {content}
-        </a>
-      </li>
-    );
-  }
-
-  if (item.type === MENU_ITEM_TYPE.button) {
-    return (
-      <li key={item.id} className="flex">
-        <button onClick={item.onClick} className={cn(linkClasses, "text-left")}>
-          {content}
-        </button>
-      </li>
-    );
-  }
-
-  return null;
-};
-
 const SideBar: React.FunctionComponent<SideBarProps> = ({
   expanded,
   setExpanded,
 }) => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
 
-  const {
-    activeWorkspaceName: workspaceName,
-    quickstartOpened,
-    setQuickstartOpened,
-  } = useAppStore();
+  const { activeWorkspaceName: workspaceName } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
+  const SidebarInviteDevButton = usePluginsStore(
+    (state) => state.SidebarInviteDevButton,
+  );
 
   const { data: projectData } = useProjectsList(
     {
@@ -311,6 +250,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: annotationQueuesData } = useAnnotationQueuesList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -318,31 +269,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     prompts: promptsData?.total,
     rules: rulesData?.total,
     optimizations: optimizationsData?.total,
+    annotation_queues: annotationQueuesData?.total,
   };
-
-  const bottomMenuItems: MenuItem[] = [
-    {
-      id: "documentation",
-      path: buildDocsUrl(),
-      type: MENU_ITEM_TYPE.link,
-      icon: Book,
-      label: "Documentation",
-    },
-    {
-      id: "quickstart",
-      type: MENU_ITEM_TYPE.button,
-      icon: GraduationCap,
-      label: "Quickstart guide",
-      onClick: () => setQuickstartOpened(true),
-    },
-    {
-      id: "provideFeedback",
-      type: MENU_ITEM_TYPE.button,
-      icon: MessageCircleQuestion,
-      label: "Provide feedback",
-      onClick: () => setOpenProvideFeedback(true),
-    },
-  ];
 
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
@@ -351,46 +279,50 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   );
 
   const renderItems = (items: MenuItem[]) => {
-    return items.map((item) => {
-      const hasCount = item.count && isNumber(countDataMap[item.count]);
-      const count = hasCount ? countDataMap[item.count!] : "";
+    return items.map((item) => (
+      <SidebarMenuItem
+        key={item.id}
+        item={item}
+        expanded={expanded}
+        count={countDataMap[item.count!]}
+      />
+    ));
+  };
 
-      const content = (
-        <>
-          <item.icon className="size-4 shrink-0" />
-          {expanded && (
-            <>
-              <div className="ml-1 grow truncate">{item.label}</div>
-              {hasCount && (
-                <div className="h-6 shrink-0 leading-6">{count}</div>
-              )}
-            </>
-          )}
-        </>
+  const renderBottomItems = () => {
+    const bottomItems = renderItems([
+      {
+        id: "documentation",
+        path: buildDocsUrl(),
+        type: MENU_ITEM_TYPE.link,
+        icon: Book,
+        label: "Documentation",
+      },
+      {
+        id: "quickstart",
+        type: MENU_ITEM_TYPE.button,
+        icon: GraduationCap,
+        label: "Quickstart guide",
+        onClick: openQuickstart,
+      },
+      {
+        id: "provideFeedback",
+        type: MENU_ITEM_TYPE.button,
+        icon: MessageCircleQuestion,
+        label: "Provide feedback",
+        onClick: () => setOpenProvideFeedback(true),
+      },
+    ]);
+
+    if (SidebarInviteDevButton) {
+      bottomItems.splice(
+        2,
+        0,
+        <SidebarInviteDevButton key="inviteDevButton" expanded={expanded} />,
       );
+    }
 
-      const linkClasses = cn(
-        "comet-body-s flex h-9 w-full items-center gap-2 text-foreground rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
-        expanded ? "pl-[10px] pr-3" : "w-9 justify-center",
-      );
-
-      const itemElement = getItemElementByType({
-        item,
-        content,
-        workspaceName,
-        linkClasses,
-      });
-
-      if (expanded) {
-        return itemElement;
-      }
-
-      return (
-        <TooltipWrapper key={item.id} content={item.label} side="right">
-          {itemElement}
-        </TooltipWrapper>
-      );
-    });
+    return bottomItems;
   };
 
   const renderGroups = (groups: MenuItemGroup[]) => {
@@ -418,7 +350,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         size="icon-2xs"
         onClick={() => setExpanded((s) => !s)}
         className={cn(
-          "absolute -right-3 top-2 hidden rounded-full z-50 group-hover:flex",
+          "absolute -right-3 top-2 hidden rounded-full z-50 lg:group-hover:flex",
         )}
       >
         {expanded ? <ChevronLeft /> : <ChevronRight />}
@@ -448,7 +380,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
               <Separator />
               <ul className="flex flex-col gap-1">
                 <GitHubStarListItem expanded={expanded} />
-                {renderItems(bottomMenuItems)}
+                {renderBottomItems()}
               </ul>
             </div>
           </div>
@@ -459,8 +391,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         open={openProvideFeedback}
         setOpen={setOpenProvideFeedback}
       />
-
-      <QuickstartDialog open={quickstartOpened} setOpen={setQuickstartOpened} />
     </>
   );
 };

@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ExperimentTestAssertions {
 
     public static final String[] EXPERIMENT_ITEMS_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt",
-            "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt", "comments.createdAt", "comments.lastUpdatedAt"
+            "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt", "comments.createdAt", "comments.lastUpdatedAt",
+            "feedbackScores.valueByAuthor"
     };
 
     public static void assertExperimentResultsIgnoringFields(List<ExperimentItem> actual, List<ExperimentItem> expected,

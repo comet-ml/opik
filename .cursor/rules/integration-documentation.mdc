@@ -1,0 +1,888 @@
+---
+description: Guidelines for creating and maintaining integration documentation for Opik, including templates, quality standards, and consistency requirements
+globs: apps/opik-documentation/**/*
+alwaysApply: false
+---
+
+# Integration Documentation Guidelines
+
+This document provides comprehensive guidelines for creating and maintaining integration documentation for Opik. It covers both code integrations (requiring Python SDK) and OpenTelemetry configuration-only integrations.
+
+## 📋 Integration Type Decision Matrix
+
+Use this matrix to determine which template to use:
+
+| Integration Type | Requirements | Template to Use | Examples |
+|------------------|--------------|-----------------|----------|
+| **Code Integration** | • Users install Opik Python SDK<br>• Users modify their code<br>• Uses `track_*()` wrapper functions<br>• Direct Python integration | `integration_template_code.md` | LangChain, CrewAI, DSPy, Haystack |
+| **LiteLLM Integration** | • LLM provider supported by LiteLLM<br>• Uses OpikLogger callback<br>• Unified LiteLLM interface<br>• API key configuration required | `integration_template_litellm.md` | OpenAI, Anthropic, Groq, Fireworks AI, Cohere, Mistral AI, xAI Grok |
+| **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md` | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python |
+
+## ⚠️ Integration Type Compatibility Rules
+
+### **CRITICAL: OpenTelemetry vs SDK Incompatibility**
+
+**OpenTelemetry integrations and Opik SDK features are fundamentally incompatible.** OpenTelemetry integrations send traces directly through OTEL exporters to Opik's OTEL endpoint, while SDK integrations use Opik's Python SDK to create traces through Opik's REST API.
+
+### **OpenTelemetry Integrations - NEVER Include:**
+- ❌ **"Using with @track decorator"** sections
+- ❌ **"Feedback Scores and Evaluation"** sections  
+- ❌ **Any code importing** `from opik import track`
+- ❌ **Any code using** `opik.evaluation` module
+- ❌ **Any code using** `opik_context` module
+- ❌ **SDK configuration** (`opik configure`, `opik.configure()`)
+- ❌ **"Next Steps" mentioning evaluation** framework
+
+### **OpenTelemetry Integrations - ONLY Include:**
+- ✅ **Environment variable configuration** (OTEL endpoints)
+- ✅ **Framework-specific OTEL instrumentation**
+- ✅ **Direct OTEL span creation** (when showing custom spans)
+- ✅ **Account setup** (for API keys)
+- ✅ **Further improvements** (GitHub link)
+
+### **Code Integrations - CORRECTLY Include:**
+- ✅ **`@track` decorator examples**
+- ✅ **Evaluation framework integration**
+- ✅ **`track_*()` wrapper functions**
+- ✅ **Opik SDK import patterns**
+- ✅ **SDK configuration** (`opik configure`)
+
+### **Why They're Incompatible:**
+- `@track` creates spans in Opik's internal context system
+- OTEL integrations create spans in OpenTelemetry's context system  
+- These don't automatically correlate or merge together
+- Evaluation frameworks require Opik SDK data structures, not OTEL spans
+
+## 📝 Page Title and Description Standards
+
+### Frontmatter Requirements
+
+All integration documentation pages must include the following frontmatter:
+
+```yaml
+---
+title: Observability for [Integration Name] with Opik
+description: Start here to integrate Opik into your [INTEGRATION NAME]-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+```
+
+### Language Specification Rules
+
+**⚠️ CRITICAL: Language specifications appear in different locations depending on the context:**
+
+| Location | Include Language Spec? | Reason |
+|----------|----------------------|---------|
+| **Page Title (frontmatter)** | ✅ YES (when multiple versions exist) | Provides clear identification in page metadata |
+| **Navigation (docs.yml)** | ❌ NO | Language context provided by section organization |
+| **Overview Cards (overview.mdx)** | ❌ NO | Language context provided by section organization |
+| **README Tables/Lists** | ✅ YES (when multiple versions exist) | NO section organization - flat list needs disambiguation |
+
+#### Page Title Frontmatter (metadata):
+- **Include language specification** `(Python)`, `(TypeScript)`, `(JavaScript)`, `(Java)`, or `(.NET)` in the frontmatter title **if and only if** there are multiple language integrations for the same service
+- **When multiple language versions exist**, BOTH/ALL versions must include the language specification in their frontmatter titles
+- **Single language integrations** should not include language specification in the frontmatter title
+
+**Examples:**
+  - ✅ `title: Observability for LangChain (Python) with Opik` (Python version when TypeScript also exists)
+  - ✅ `title: Observability for LangChain (JavaScript) with Opik` (TypeScript version when Python also exists)
+  - ✅ `title: Observability for OpenAI (Python) with Opik` (Python version when TypeScript also exists)
+  - ✅ `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version when Python also exists)
+  - ✅ `title: Observability for Google Gemini (Python) with Opik` (Python version when TypeScript also exists)
+  - ✅ `title: Observability for Google Gemini (TypeScript) with Opik` (TypeScript version when Python also exists)
+  - ✅ `title: Observability for Microsoft Agent Framework (Python) with Opik` (Python version when .NET also exists)
+  - ✅ `title: Observability for Microsoft Agent Framework (.NET) with Opik` (.NET version when Python also exists)
+  - ✅ `title: Observability for Spring AI (Java) with Opik` (Java only, no other languages - but includes (Java) for clarity)
+  - ✅ `title: Observability for Semantic Kernel (Python) with Opik` (Python only, no other languages - but includes (Python) for clarity)
+  - ✅ `title: Observability for CrewAI with Opik` (Python only, no other languages)
+  - ❌ `title: Observability for LangChain with Opik` (Missing language spec when multiple versions exist)
+
+#### Navigation (docs.yml) and Overview Cards (overview.mdx):
+- **NEVER include language specifications** in page names in `docs.yml` navigation
+- **NEVER include language specifications** in card titles in `overview.mdx` 
+- **Language context is provided by the section organization** (TypeScript section, Python section, etc.)
+
+**Examples:**
+  - ✅ Navigation: `- page: Microsoft Agent Framework` (no language spec)
+  - ✅ Overview card: `<Card title="Microsoft Agent Framework" href="..." />` (no language spec)
+  - ✅ Navigation: `- page: OpenAI` (no language spec, even though multiple language versions exist)
+  - ✅ Overview card: `<Card title="OpenAI" href="..." />` (no language spec)
+  - ❌ Navigation: `- page: Microsoft Agent Framework (Python)` (incorrect - removes language spec)
+  - ❌ Overview card: `<Card title="OpenAI (Python)" href="..." />` (incorrect - removes language spec)
+
+#### README Tables/Lists (README.md and translated versions):
+- **ALWAYS include language specifications** when multiple language versions exist
+- **Language context is NOT provided by organization** - READMEs are flat lists/tables without language sections
+- **Required for disambiguation** - users need to know which language version they're looking at
+
+**Examples:**
+  - ✅ README: `| BeeAI (Python) | Log traces for BeeAI Python agent framework calls | [Documentation](...) |`
+  - ✅ README: `| BeeAI (TypeScript) | Log traces for BeeAI TypeScript agent framework calls | [Documentation](...) |`
+  - ✅ README: `| OpenAI (Python) | Log traces for OpenAI Python calls | [Documentation](...) |`
+  - ✅ README: `| OpenAI (TypeScript) | Log traces for OpenAI TypeScript calls | [Documentation](...) |`
+  - ✅ README: `| CrewAI | Log traces for CrewAI agent framework calls | [Documentation](...) |` (only one language version)
+  - ❌ README: `| OpenAI | Log traces for OpenAI calls | [Documentation](...) |` (ambiguous when multiple versions exist)
+
+### Content Structure
+
+- **No H1 markdown titles** - the page title is defined in frontmatter only
+- **Start content directly** after the frontmatter with the integration description
+- **Maintain all existing content** when updating titles and descriptions
+
+## 🔧 Code Integration Requirements
+
+### Minimum Required Sections
+
+1. **Header with description**
+2. **Account setup** (Comet.com account creation)
+3. **Installation** (`pip install opik [integration_package]`)
+4. **Configuration** (`opik.configure()`)
+5. **Environment setup** (API keys)
+6. **Basic usage** (import and `track_*()` wrapper)
+7. **Simple example** (working code snippet)
+8. **Advanced usage** (with `@track` decorator)
+9. **Integration-specific features** (streaming, async, etc.)
+10. **Results viewing** (screenshot)
+11. **Troubleshooting** (common issues)
+
+### Required Code Patterns
+
+```python
+# Always include these imports and patterns
+from opik.integrations.[module] import track_[integration]
+from [package] import [ClientClass]
+
+# Wrapping pattern
+client = [ClientClass]()
+tracked_client = track_[integration](client, project_name="optional")
+
+# Combined with @track decorator
+from opik import track
+
+@track
+def my_function():
+    result = tracked_client.some_method()
+    return result
+```
+
+### Integration-Specific Adaptations
+
+Customize these sections based on integration type:
+
+- **LLM Providers** (OpenAI, Anthropic): Focus on model calls, streaming, token usage
+- **Agent Frameworks** (CrewAI, Autogen): Focus on multi-agent workflows, task execution
+- **ML Frameworks** (LangChain, DSPy): Focus on chains, pipelines, evaluation
+- **Validation** (Guardrails): Focus on validation steps, rule enforcement
+
+## ⚙️ OpenTelemetry Integration Requirements
+
+### Minimum Required Sections
+
+1. **Header with description** - Clear title and framework description
+2. **Framework overview** - Brief description of what the framework is and its primary advantages
+3. **Results viewing** - Screenshot showing traces in Opik UI (positioned after framework overview)
+4. **Getting started** - Installation instructions with all required packages
+5. **Environment configuration** - Tabs for Cloud/Enterprise/Self-hosted deployment
+6. **Using Opik with [Framework]** - Dedicated setup section with instrumentation code
+7. **Advanced usage** - ONLY include if framework has genuine advanced features (DO NOT auto-generate)
+8. **Further improvements** - GitHub call-to-action for feature requests
+
+### Required Configuration Patterns
+
+#### Environment Variables with Tabs Structure
+
+Use the standardized tab structure for all deployment types:
+
+**⚠️ CRITICAL: Endpoint Format for Node.js/TypeScript Integrations**
+
+For **Node.js/TypeScript** OpenTelemetry integrations using `OTLPTraceExporter` from `@opentelemetry/exporter-trace-otlp-http`:
+- **DO NOT include `/v1/traces`** in the endpoint URL
+- The Node.js exporter **automatically appends** `/v1/traces` to the base URL
+- Using the full path will result in a **404 error** (double path: `/v1/traces/v1/traces`)
+
+For **Python** OpenTelemetry integrations:
+- The endpoint format shown below works correctly for Python exporters
+- Python exporters handle both with and without the `/v1/traces` suffix
+
+```markdown
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
+```
+
+#### Framework-Specific Instrumentation
+
+Each integration must include framework-specific setup code in the "Using Opik with [Framework]" section.
+
+## 🚀 LiteLLM Integration Requirements
+
+### Minimum Required Sections
+
+1. **Header with provider link** - Provider name with link and brief description
+2. **Getting started** - Installation and configuration instructions
+3. **Configuring Opik** - Standard Opik setup with pip install and configure
+4. **Configuring [Provider]** - Provider-specific API key setup
+5. **Logging LLM calls** - Basic usage example with OpikLogger
+6. **Logging LLM calls within a tracked function** - Advanced usage with @track decorator
+
+### Required Code Patterns
+
+```python
+# LiteLLM OpikLogger setup
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+
+opik_logger = OpikLogger()
+litellm.callbacks = [opik_logger]
+
+# Basic completion call
+response = litellm.completion(
+    model="[provider_model_name]",
+    messages=[{"role": "user", "content": "Your message"}]
+)
+
+# Within tracked function
+from opik import track, opik_context
+
+@track
+def my_function(prompt):
+    response = litellm.completion(
+        model="[provider_model_name]",
+        messages=[{"role": "user", "content": prompt}],
+        metadata={
+            "opik": {
+                "current_span_data": opik_context.get_current_span_data(),
+            },
+        },
+    )
+    return response.choices[0].message.content
+```
+
+## 📝 Content Standards
+
+### Required Placeholders
+
+Replace these placeholders in templates:
+
+**Code Integrations:**
+- `[INTEGRATION_NAME]` → Actual integration name (e.g., "OpenAI")
+- `[integration_name]` → Lowercase version (e.g., "openai")
+- `[integration_module]` → Python module name (e.g., "openai")
+- `[integration_package]` → Package to install (e.g., "openai")
+- `[ClientClass]` → Main client class (e.g., "OpenAI")
+- `[INTEGRATION_API_KEY_NAME]` → Environment variable name (e.g., "OPENAI_API_KEY")
+
+**LiteLLM Integrations:**
+- `[PROVIDER_NAME]` → Full provider name (e.g., "Groq", "Fireworks AI", "xAI Grok")
+- `[provider_api_key_url]` → URL where users can create/manage API keys
+- `[PROVIDER_API_KEY_NAME]` → Environment variable name (e.g., "GROQ_API_KEY", "FIREWORKS_API_KEY")
+- `[provider_model_name]` → Example model name (e.g., "groq/llama3-8b-8192", "accounts/fireworks/models/llama-v3p1-8b-instruct")
+- `[provider_model_name_2]` → Different model name for advanced example (optional, can be same)
+- `[provider_screenshot_name]` → Base name for screenshot files (e.g., "groq", "fireworks_ai")
+
+**OpenTelemetry Integrations:**
+- `[FRAMEWORK_NAME]` → Framework name (e.g., "PydanticAI")  
+- `[framework_name]` → Lowercase version (e.g., "pydantic-ai")
+- `[framework_package]` → Main framework package to install (e.g., "pydantic-ai")
+- `[framework_otel_packages]` → Required OTEL packages (e.g., "logfire")
+- `[framework_specific_instrumentation_code]` → Framework-specific setup code
+- `[advanced_configuration_examples]` → Framework-specific advanced features (NOT generic OTel configurations)
+- `apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png` → Screenshot path for tracing results (full Git root relative path)
+
+### Code Examples Requirements
+
+1. **Always use realistic examples** - not just "hello world"
+2. **Include working imports** - users should be able to copy-paste
+3. **Show both simple and advanced usage**
+4. **Include error handling where relevant**
+5. **Add comments explaining key steps**
+
+### Screenshots and Visual Assets
+
+1. **Include at least one screenshot** of traces in Opik UI
+2. **Use consistent screenshot style** (same browser, same project structure)
+3. **Show relevant trace data** (spans, metadata, timing)
+4. **Update screenshots** when UI changes
+
+### Screenshot File Placement
+
+**⚠️ CRITICAL: Screenshot File Locations**
+
+Screenshots must be placed in the correct directory structure to avoid confusion:
+
+**File System Location (Git root relative):**
+- `apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png`
+
+**Documentation Reference Path:**
+- `/img/tracing/[integration_name]_integration.png`
+
+**Examples:**
+- Fireworks AI: `apps/opik-documentation/documentation/fern/img/tracing/fireworks_ai_integration.png`
+- OpenAI: `apps/opik-documentation/documentation/fern/img/tracing/openai_integration.png`
+- LangChain: `apps/opik-documentation/documentation/fern/img/tracing/langchain_integration.png`
+
+**⚠️ Common Mistakes to Avoid:**
+- ❌ Placing screenshots in `static/img/tracing/` (incorrect location)
+- ❌ Using absolute paths in documentation
+- ❌ Inconsistent naming conventions
+
+**📸 Screenshot Paths by Documentation Type:**
+
+**Integration Documentation:**
+- File location: `apps/opik-documentation/documentation/fern/img/tracing/[integration_name]_integration.png`
+- Documentation reference: `/img/tracing/[integration_name]_integration.png`
+
+**OpenTelemetry Documentation:**
+- File location: `apps/opik-documentation/documentation/fern/img/tracing/[framework_name]_integration.png`
+- Documentation reference: `/img/tracing/[framework_name]_integration.png`
+
+## 🔍 Quality Checklist
+
+Before publishing integration documentation, verify:
+
+### Functional Requirements
+- [ ] All code examples are tested and working
+- [ ] API keys and environment setup is accurate
+- [ ] Integration actually produces traces in Opik
+- [ ] Screenshots show current UI state
+- [ ] Links are working and point to correct destinations
+
+### Content Requirements
+- [ ] All placeholder text is replaced with actual values
+- [ ] Framework overview explains purpose and advantages clearly
+- [ ] Installation instructions include all required packages
+- [ ] Environment configuration uses standardized tab structure
+- [ ] Framework-specific instrumentation code is provided
+- [ ] Advanced usage section contains genuine framework-specific features (or is omitted entirely if no advanced features exist)
+- [ ] GitHub call-to-action is included
+- [ ] **Language specification in title**: If multiple language versions exist for the same integration (e.g., LangChain Python and JavaScript, OpenAI Python and TypeScript), BOTH/ALL versions include the language in the title metadata
+
+### Integration Type Compatibility
+- [ ] **OpenTelemetry integrations** do NOT include SDK features (`@track`, evaluation, `opik.configure()`)
+- [ ] **Code integrations** do NOT include OTEL-only configuration patterns
+- [ ] **LiteLLM integrations** properly combine OpikLogger with `@track` decorator examples
+- [ ] Integration type matches the actual framework capabilities
+- [ ] "Next Steps" section is appropriate for integration type (evaluation only for SDK integrations)
+
+### Advanced Usage Section Guidelines
+
+**⚠️ CRITICAL: DO NOT AUTO-GENERATE THIS SECTION**
+
+Only include "Advanced usage" if the framework has genuine advanced features worth showcasing.
+
+**✅ Include ONLY when framework has these features:**
+- Framework-specific configuration options
+- Multi-agent workflows (AG2, Autogen)
+- Custom tool integrations (Smolagents, Agno)
+- Advanced routing and workflows (Strands Agents)
+- Production-ready enterprise configurations
+- Framework-specific parameters and options
+
+**❌ NEVER include generic OpenTelemetry content:**
+- Batch vs Simple span processors
+- Generic resource configuration
+- Standard OpenTelemetry SDK setup
+- Generic tracer provider customization
+- Custom span attributes (unless framework-specific)
+
+**✅ Examples of integrations that SHOULD have Advanced usage:**
+- Pydantic AI (has `capture_all` configuration)
+
+**❌ Examples of integrations that should NOT have Advanced usage:**
+- Most basic OpenTelemetry integrations without framework-specific advanced features
+
+### Style Requirements
+- [ ] Consistent formatting with existing docs
+- [ ] Proper markdown syntax
+- [ ] Code blocks have language tags
+- [ ] UTM parameters in links are updated
+- [ ] Follows the template structure
+
+## 🚀 Publication Process
+
+### Documentation Locations
+
+**⚠️ CRITICAL: Integration Documentation Structure**
+
+All integration documentation is now consolidated into a single comprehensive format within the dedicated integrations tab.
+
+#### Integration Documentation (Comprehensive format)
+**Location**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/[integration_name].mdx`
+**Navigation**: Added to `docs.yml` under `integrations` tab with organized categories
+**Purpose**: Complete integration guides with all necessary content merged from cookbooks
+**Format**: Comprehensive guides with setup, basic usage, advanced examples, and troubleshooting
+
+#### Integration Tab Structure:
+
+**Language-Based Organization:**
+
+The integrations tab is now organized by **programming language** to improve discoverability:
+
+1. **TypeScript** - TypeScript/JavaScript integrations with icon `fa-brands fa-js`
+   - Frameworks (Agno, BeeAI, LangChain, Mastra, Vercel AI SDK)
+   - Model Providers (Cloudflare Workers AI, Gemini, OpenAI)
+   - Manual Integration (TypeScript SDK)
+
+2. **Python** - Python integrations with icon `fa-brands fa-python`
+   - Frameworks (AG2, Autogen, CrewAI, DSPy, Haystack, Semantic Kernel, etc.)
+   - Model Providers (Anthropic, Bedrock, Gemini, OpenAI, Groq, etc.)
+   - Dataset Management (Gretel, Hugging Face Datasets)
+   - Evaluation (Ragas)
+   - Gateways (AISuite, LiteLLM, OpenRouter)
+   - Other (Guardrails AI)
+   - Manual Integration (Python SDK, OpenTelemetry Python SDK)
+
+3. **Java** - Java integrations with icon `fa-brands fa-java`
+   - Spring AI
+
+4. **.NET** - .NET integrations with icon `fa-solid fa-code`
+   - Coming soon! No integrations yet.
+
+5. **Ruby** - Ruby integrations with icon `fa-solid fa-gem`
+   - OpenTelemetry Ruby SDK
+
+6. **No-Code** - No-code tools with icon `fa-solid fa-wand-magic-sparkles`
+   - Cursor, Dify, Flowise
+
+7. **Multi-Language** - Multi-language support with icon `fa-solid fa-globe`
+   - OpenTelemetry Overview
+
+#### Integration Type Mapping:
+
+**All Integration Types:**
+- Integration Doc: `docs/tracing/integrations/[integration_name].mdx` (required)
+- **No separate cookbook documentation** - all content is merged into integration pages
+- **No Colab notebook links** - comprehensive examples are included in the integration docs
+
+### Templates Location
+
+Templates are available at:
+- `apps/opik-documentation/documentation/templates/integration_template_code.md`
+- `apps/opik-documentation/documentation/templates/integration_template_litellm.md`
+- `apps/opik-documentation/documentation/templates/integration_template_otel.md`
+
+## 📚 Integration Content Architecture
+
+### Comprehensive Integration Documentation
+
+All integration documentation is now consolidated into comprehensive integration pages that include:
+
+**Content Requirements:**
+- Complete setup instructions
+- Basic usage examples
+- Advanced usage patterns (when applicable)
+- Troubleshooting guides
+- Screenshots and visual examples
+- All content previously found in separate cookbooks
+
+### Integration Content Validation
+
+To verify integration documentation is complete:
+
+1. **Check integration page exists**: `docs/tracing/integrations/[integration_name].mdx`
+2. **Check navigation entry exists**: Entry in `docs.yml` under integrations tab
+3. **Check URL consistency**: Integration overview href matches docs.yml slug
+4. **Check integration overview card exists**: Card in `overview.mdx` with correct href
+5. **Verify comprehensive content**: Page includes all necessary setup, usage, and examples
+
+### Common Integration Issues
+
+- **URL Mismatch**: Integration overview href doesn't match docs.yml slug
+- **Missing Navigation**: Integration page exists but no docs.yml entry  
+- **Duplicate Entries**: Same integration listed multiple times in docs.yml
+- **Broken Links**: Overview cards link to non-existent slugs
+- **Incomplete Content**: Missing setup instructions or examples
+- **Wrong Category**: Integration placed in incorrect section
+
+## 📋 Integration Maintenance Requirements
+
+When adding, updating, or removing integrations in Opik, you must update **ALL** of the following locations to maintain consistency:
+
+### Required Update Locations
+
+#### 1. Main README Files
+**Files**: `README.md`, `readme_CN.md`, `readme_JP.md`, `readme_KO.md`
+**Section**: "📝 Logging Traces with Integrations"
+- Update the integrations table/list in ALL README files (including translated versions)
+- **Table Format**: 3-column table (Integration, Description, Documentation)
+- Ensure all integration names are consistent across all languages
+- **Documentation Links**: Point to `/integrations/[integration_name]` (new integrations tab URLs)
+- **No Colab links** - comprehensive examples are included in the integration docs
+- Update any integration-specific descriptions in all translations
+
+#### 2. Integration Overview Documentation
+**File**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx`
+**Structure**: Language-based layout with H2 headers using `<Icon>` components
+
+**Language Section Headers:**
+- Use `<Icon icon="..." />` component in H2 headers for language icons
+- Example: `## <Icon icon="fa-brands fa-js" /> TypeScript`
+- Icons: `fa-brands fa-js` (TypeScript), `fa-brands fa-python` (Python), `fa-brands fa-java` (Java), `fa-solid fa-code` (.NET), `fa-solid fa-gem` (Ruby), `fa-solid fa-wand-magic-sparkles` (No-Code), `fa-solid fa-globe` (Multi-Language)
+
+**Content Organization:**
+- Each language has an H2 header with an icon (e.g., `## <Icon icon="fa-brands fa-python" /> Python`)
+- Within each language, use H3 headers for subsections (Frameworks, Model Providers, etc.)
+- Use H3 "Manual Integration" subsection for SDKs at the bottom of each language
+- Organize integrations using `<CardGroup cols={3}>` and `<Card>` components
+- Ensure all cards have proper hrefs pointing to `/docs/opik/integrations/[integration_name]`
+- **No Colab badges** - comprehensive examples are included in the integration docs
+- Use consistent card structure: `<Card title="Integration Name" href="/docs/opik/integrations/integration-name" />`
+
+**Example Structure:**
+```markdown
+## <Icon icon="fa-brands fa-python" /> Python
+
+### Frameworks
+
+<CardGroup cols={3}>
+  <Card title="LangChain" href="/docs/opik/integrations/langchain" />
+  <Card title="CrewAI" href="/docs/opik/integrations/crewai" />
+</CardGroup>
+
+### Model Providers
+
+<CardGroup cols={3}>
+  <Card title="OpenAI" href="/docs/opik/integrations/openai" />
+  <Card title="Anthropic" href="/docs/opik/integrations/anthropic" />
+</CardGroup>
+
+### Manual Integration
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" href="https://www.comet.com/docs/opik/python-sdk-reference/" />
+  <Card title="OpenTelemetry Python SDK" href="/docs/opik/integrations/opentelemetry-python-sdk" />
+</CardGroup>
+```
+
+#### 3. Integration Tab Navigation
+**File**: `apps/opik-documentation/documentation/fern/docs.yml`
+**Tab**: `integrations`
+- Ensure all integrations are properly categorized in the correct sections
+- Verify `skip-slug: true` is set for all category sections to maintain clean URLs
+- Check that all integration pages exist and are properly linked
+
+#### 4. Navigation Structure
+**File**: `apps/opik-documentation/documentation/fern/docs.yml`
+
+**For Integration Documentation** (Required for ALL integrations):
+- **Tab**: `integrations` (dedicated integrations tab)
+- **Organization**: Language-based sections with icons (TypeScript, Python, Java, .NET, Ruby, No-Code, Multi-Language)
+- **Path**: `docs/tracing/integrations/[integration_name].mdx`
+- **Slug**: `[integration_name]` (matches the filename)
+- **URL Structure**: `/docs/opik/integrations/[integration_name]` (clean URLs without language/category folders)
+
+**Navigation Structure Example:**
+```yaml
+- tab: integrations
+  layout:
+    - page: Overview
+      path: docs/tracing/integrations/overview.mdx
+      slug: overview
+    - section: TypeScript
+      skip-slug: true
+      icon: fa-brands fa-js
+      contents:
+        - section: Frameworks
+          skip-slug: true
+          contents:
+            - page: LangChain
+              path: docs/tracing/integrations/langchainjs.mdx
+              slug: langchainjs
+            - page: Vercel AI SDK
+              path: docs/tracing/integrations/vercel-ai-sdk.mdx
+              slug: vercel-ai-sdk
+        - section: Model Providers
+          skip-slug: true
+          contents:
+            - page: OpenAI
+              path: docs/tracing/integrations/openai-typescript.mdx
+              slug: openai-typescript
+        - page: Opik TypeScript SDK
+          path: docs/reference/typescript-sdk/overview.mdx
+          slug: typescript-sdk
+    - section: Python
+      skip-slug: true
+      icon: fa-brands fa-python
+      contents:
+        - section: Frameworks
+          skip-slug: true
+          contents:
+            - page: LangChain
+              path: docs/tracing/integrations/langchain.mdx
+              slug: langchain
+            - page: CrewAI
+              path: docs/tracing/integrations/crewai.mdx
+              slug: crewai
+        - section: Model Providers
+          skip-slug: true
+          contents:
+            - page: OpenAI
+              path: docs/tracing/integrations/openai.mdx
+              slug: openai
+        - page: Opik Python SDK
+          path: docs/reference/python-sdk/overview.mdx
+          slug: python-sdk
+        - page: OpenTelemetry Python SDK
+          path: docs/tracing/opentelemetry/python-sdk.mdx
+          slug: opentelemetry-python-sdk
+```
+
+**Navigation Structure Rules:**
+- Each language section has `skip-slug: true` to prevent URL pollution
+- Each language section has an `icon` property with Font Awesome icon class
+- Within each language, subsections (Frameworks, Model Providers, etc.) also have `skip-slug: true`
+- Manual integration pages (SDKs) are placed directly under the language section, not in a subsection
+- All integrations maintain clean URLs: `/docs/opik/integrations/[integration_name]`
+
+### Integration Information Requirements
+
+#### For Each Integration, Ensure:
+- **Name**: Consistent across all locations
+- **Description**: Clear, concise explanation of what the integration does
+- **Documentation Link**: Points to the correct integration documentation (`/docs/opik/integrations/[integration_name]`)
+- **Card Structure**: Properly formatted card with correct href
+- **Category**: Properly categorized in the appropriate section (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry, Other)
+
+#### Integration Organization:
+
+**Language-Based Structure:**
+
+1. **TypeScript** (`icon: fa-brands fa-js`)
+   - **Frameworks**: Agno, BeeAI, LangChain, Mastra, Vercel AI SDK
+   - **Model Providers**: Cloudflare Workers AI, Gemini, OpenAI
+   - **Manual Integration**: TypeScript SDK
+
+2. **Python** (`icon: fa-brands fa-python`)
+   - **Frameworks**: AG2, Autogen, CrewAI, DSPy, Google ADK, Haystack, Instructor, LangChain, LangGraph, LiveKit, Llama Index, OpenAI Agents, Pipecat, Pydantic AI, Semantic Kernel, Smolagents, Strands Agents, VoltAgent
+   - **Model Providers**: Anthropic, Bedrock, BytePlus, Cohere, DeepSeek, Fireworks AI, Gemini, Groq, Mistral AI, Novita AI, Ollama, OpenAI, Predibase, Together AI, WatsonX, xAI Grok
+   - **Dataset Management**: Gretel, Hugging Face Datasets
+   - **Evaluation**: Ragas
+   - **Gateways**: AISuite, LiteLLM, OpenRouter
+   - **Other**: Guardrails AI
+   - **Manual Integration**: Python SDK, OpenTelemetry Python SDK
+
+3. **Java** (`icon: fa-brands fa-java`)
+   - Spring AI
+
+4. **.NET** (`icon: fa-solid fa-code`)
+   - Coming soon! No integrations yet.
+
+5. **Ruby** (`icon: fa-solid fa-gem`)
+   - OpenTelemetry Ruby SDK
+
+6. **No-Code** (`icon: fa-solid fa-wand-magic-sparkles`)
+   - Cursor, Dify, Flowise
+
+7. **Multi-Language** (`icon: fa-solid fa-globe`)
+   - OpenTelemetry Overview
+
+#### Card Structure Requirements:
+- Use `<CardGroup cols={3}>` for consistent 3-column layout
+- Each integration card: `<Card title="Integration Name" href="/docs/opik/integrations/integration-name" />`
+- Ensure proper categorization within the appropriate section
+- Maintain consistent naming across all card titles
+
+### Update Checklist
+
+When modifying integrations, verify:
+
+- [ ] All README files are updated (README.md, readme_CN.md, readme_JP.md, readme_KO.md)
+- [ ] README integration tables use 3-column format (Integration, Description, Documentation)
+- [ ] **README integration entries include language specifications when multiple versions exist** (e.g., `OpenAI (Python)`, `OpenAI (TypeScript)`)
+- [ ] Integration overview cards are updated with correct language-based organization
+- [ ] Language headers use `<Icon icon="..." />` component in H2 headers
+- [ ] Subsections use H3 headers within each language
+- [ ] Manual Integration subsection includes SDKs at the bottom of each language
+- [ ] Integration tab navigation in docs.yml is updated
+- [ ] Integration is placed in the correct language section with proper icon
+- [ ] Integration is properly categorized in the correct subsection (Frameworks, Model Providers, etc.)
+- [ ] **Integration is in the same subsection (Frameworks, Model Providers, etc.) in BOTH docs.yml navigation AND overview.mdx page**
+- [ ] Integration names are consistent across all locations
+- [ ] **Language specifications appear ONLY in page title frontmatter, NOT in navigation or overview cards**
+- [ ] When multiple language versions exist, ALL versions include language spec in frontmatter title
+- [ ] Documentation links point to `/docs/opik/integrations/[integration_name]`
+- [ ] Language sections have `icon` property with Font Awesome icon class
+- [ ] All sections have `skip-slug: true` to maintain clean URLs
+- [ ] Descriptions are clear and consistent
+- [ ] No duplicate navigation entries exist
+- [ ] Enterprise deployment configuration is included for OTel integrations
+- [ ] Integration page contains comprehensive content (no separate cookbook needed)
+- [ ] No Colab links in README files (comprehensive examples in integration docs)
+
+### Example Integration Entry
+
+```markdown
+| Integration | Description | Documentation |
+|-------------|-------------|---------------|
+| NewIntegration | Log traces for all NewIntegration LLM calls | [Documentation](/tracing/integrations/newintegration) |
+```
+
+### Common Maintenance Mistakes to Avoid
+
+- ❌ Updating main README.md but forgetting translated README files (readme_CN.md, readme_JP.md, readme_KO.md)
+- ❌ Adding integration to README but forgetting integration overview
+- ❌ Inconsistent naming between locations
+- ❌ Broken documentation links pointing to old `/tracing/integrations/` URLs instead of `/integrations/`
+- ❌ Incorrect categorization of integrations in the integrations tab
+- ❌ Placing integration in wrong language section
+- ❌ **Placing integration in different subsections between docs.yml navigation and overview.mdx page (e.g., in Frameworks in nav but Other in overview)**
+- ❌ Missing `icon` property for language sections in docs.yml
+- ❌ Missing `skip-slug: true` for language and subsection sections in docs.yml
+- ❌ Missing navigation entries in docs.yml integrations tab
+- ❌ Duplicate entries in docs.yml navigation structure
+- ❌ Not using `<Icon icon="..." />` component in overview page H2 headers
+- ❌ Using wrong icon for language sections
+- ❌ Not including "Manual Integration" H3 subsection for SDKs
+- ❌ Placing SDKs in a subsection instead of directly under language section
+- ❌ Screenshot positioned at the bottom instead of near the top (after framework overview)
+- ❌ Screenshot placed in incorrect directory (`static/img/tracing/` instead of `fern/img/tracing/`)
+- ❌ Screenshot file naming doesn't follow `[integration_name]_integration.png` pattern
+- ❌ Using `--quiet` flag in pip install commands (removes user feedback)
+- ❌ Auto-generating "Advanced usage" sections instead of only including when genuine framework features exist
+- ❌ Including generic OpenTelemetry configurations in Advanced usage instead of framework-specific features
+- ❌ Adding Advanced usage section when no framework-specific features exist
+- ❌ Including redundant text like "This combined with the environment variables above will log your traces to Opik"
+- ❌ Creating separate cookbook documentation instead of merging content into integration pages
+- ❌ Adding Colab notebook links instead of including comprehensive examples in integration docs
+- ❌ Using incorrect card structure (missing CardGroup wrapper or wrong href format)
+- ❌ Placing integrations in wrong language or subsection
+- ❌ Inconsistent card titles or hrefs in integration overview
+- ❌ Adding Colab links in README files instead of pointing to comprehensive integration docs
+- ❌ Using old `/tracing/integrations/` URLs in README instead of `/integrations/`
+- ❌ Including "Try in Colab" column in README integration tables (use 3-column format only)
+- ❌ Missing language specification in page title frontmatter when multiple language versions exist (e.g., `title: Observability for LangChain with Opik` instead of `title: Observability for LangChain (Python) with Opik` when TypeScript version also exists)
+- ❌ Only adding language specification to one page title when multiple language versions exist (both/all versions must include language spec in frontmatter)
+- ❌ **Including language specifications in navigation page names** (e.g., `- page: Microsoft Agent Framework (Python)` - should be `- page: Microsoft Agent Framework`)
+- ❌ **Including language specifications in overview card titles** (e.g., `<Card title="OpenAI (Python)" />` - should be `<Card title="OpenAI" />`)
+- ❌ **Omitting language specifications in README tables/lists when multiple versions exist** (e.g., `| OpenAI |` should be `| OpenAI (Python) |` and `| OpenAI (TypeScript) |`)
+- ❌ **Including `/v1/traces` suffix in OTEL endpoint URLs for Node.js/TypeScript integrations** - Node.js `OTLPTraceExporter` automatically appends this, causing 404 errors
+- ❌ **Using incorrect OTEL endpoint format**: Always use base URL `https://www.comet.com/opik/api/v1/private/otel` (NOT `/otel/v1/traces`)
+
+## 📖 Integration-Specific Guidance
+
+### LLM Provider Integrations (OpenAI, Anthropic, etc.)
+
+**Focus Areas:**
+- Model selection and parameters
+- Token usage tracking
+- Streaming response handling
+- Error handling for rate limits
+- Cost tracking capabilities
+
+**Required Examples:**
+- Basic chat completion
+- Streaming response
+- Function calling (if supported)
+- Async usage (if supported)
+
+### Agent Framework Integrations (CrewAI, Autogen, etc.)
+
+**Focus Areas:**
+- Multi-agent workflows
+- Task execution tracking
+- Agent communication
+- Tool usage
+- Hierarchical trace structures
+
+**Required Examples:**
+- Simple single-agent task
+- Multi-agent collaboration
+- Tool usage within agents
+- Error handling in workflows
+
+### ML Framework Integrations (LangChain, DSPy, etc.)
+
+**Focus Areas:**
+- Pipeline/chain execution
+- Component-level tracking
+- Data flow through stages
+- Evaluation integration
+- Custom component tracking
+
+**Required Examples:**
+- Simple chain execution
+- Complex pipeline with multiple steps
+- Integration with evaluation
+- Custom component tracking
+
+### OpenTelemetry Framework Integrations
+
+**Focus Areas:**
+- Framework-specific instrumentation setup
+- Environment variable configuration
+- Deployment-specific instructions (Cloud/Enterprise/Self-hosted)
+- Advanced configuration options
+- Clear integration examples
+
+**Required Examples:**
+- Basic framework instrumentation
+- Environment variable setup for all deployment types
+- Framework-specific configuration
+- Advanced usage patterns
+
+### Validation Framework Integrations (Guardrails, etc.)
+
+**Focus Areas:**
+- Validation rule tracking
+- Pass/fail metrics
+- Rule violation details
+- Performance impact
+- Custom validator support
+
+**Required Examples:**
+- Basic validation setup
+- Multiple validation rules
+- Custom validator creation
+- Error handling and recovery
+
+## 🔧 Ongoing Maintenance Guidelines
+
+### Regular Updates Required
+
+1. **Version compatibility** - Test with new package versions
+2. **API changes** - Update for provider API changes
+3. **Screenshot updates** - Keep UI screenshots current
+4. **Link validation** - Ensure all links remain valid
+5. **Dependency updates** - Update package versions in examples
+
+### Monitoring Integration Health
+
+1. **Community feedback** - Monitor GitHub issues and Slack
+2. **Usage analytics** - Track which integrations are most used
+3. **Breaking changes** - Watch for upstream breaking changes
+4. **Performance** - Monitor integration performance impact
+
+### Integration Lifecycle Management
+
+#### Addition Process:
+1. Add to README.md integration list (all language versions)
+2. Add to integration overview with proper categorization
+3. Create comprehensive integration documentation page
+4. Add to integrations tab navigation in docs.yml
+5. Ensure proper categorization in correct section
+6. Update any cross-references
+
+#### Removal Process:
+1. Remove from README.md (all language versions)
+2. Remove from integration overview
+3. Remove from integrations tab navigation
+4. Remove corresponding documentation files
+5. Update any cross-references
+
+This rule ensures that users always have consistent, up-to-date information about Opik integrations across all documentation locations, while providing clear guidelines for creating high-quality integration documentation.

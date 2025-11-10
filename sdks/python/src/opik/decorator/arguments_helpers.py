@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from .. import datetime_helpers, llm_usage
 from ..api_objects import helpers, span
-from ..types import ErrorInfoDict, SpanType
+from ..types import ErrorInfoDict, SpanType, DistributedTraceHeadersDict
 
 
 @dataclasses.dataclass
@@ -34,6 +34,7 @@ class EndSpanParameters(BaseArguments):
     model: Optional[str] = None
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
+    total_cost: Optional[float] = None
 
 
 @dataclasses.dataclass
@@ -91,3 +92,9 @@ def create_span_data(
         provider=start_span_arguments.provider,
     )
     return span_data
+
+
+def extract_distributed_trace_headers(
+    kwargs: Dict[str, Any],
+) -> Optional[DistributedTraceHeadersDict]:
+    return kwargs.pop("opik_distributed_trace_headers", None)

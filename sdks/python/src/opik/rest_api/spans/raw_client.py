@@ -7,6 +7,7 @@ from json.decoder import JSONDecodeError
 
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
+from ..core.datetime_utils import serialize_datetime
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
@@ -23,14 +24,13 @@ from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
-from ..types.json_node import JsonNode
-from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.span_page_public import SpanPagePublic
 from ..types.span_public import SpanPublic
 from ..types.span_write import SpanWrite
 from ..types.span_write_type import SpanWriteType
+from ..types.value_entry import ValueEntry
 from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNames1RequestType
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
@@ -121,6 +121,7 @@ class RawSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -148,6 +149,8 @@ class RawSpansClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -168,6 +171,9 @@ class RawSpansClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -194,8 +200,11 @@ class RawSpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SpanPagePublic]:
         """
@@ -219,9 +228,15 @@ class RawSpansClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -243,8 +258,11 @@ class RawSpansClient:
                 "type": type,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -276,7 +294,7 @@ class RawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -313,7 +331,7 @@ class RawSpansClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         model : typing.Optional[str]
 
@@ -356,7 +374,9 @@ class RawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListStringWrite, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -433,7 +453,11 @@ class RawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_span_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SpanPublic]:
         """
         Get span by id
@@ -441,6 +465,8 @@ class RawSpansClient:
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -453,6 +479,9 @@ class RawSpansClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/spans/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "strip_attachments": strip_attachments,
+            },
             request_options=request_options,
         )
         try:
@@ -535,7 +564,7 @@ class RawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -571,7 +600,7 @@ class RawSpansClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         model : typing.Optional[str]
 
@@ -609,7 +638,9 @@ class RawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListString, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListString, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -682,7 +713,12 @@ class RawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete span feedback score
@@ -692,6 +728,8 @@ class RawSpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -705,6 +743,7 @@ class RawSpansClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -827,6 +866,8 @@ class RawSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpanStatsRequestType] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsPublic]:
         """
@@ -843,6 +884,10 @@ class RawSpansClient:
         type : typing.Optional[GetSpanStatsRequestType]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -861,6 +906,8 @@ class RawSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -933,6 +980,8 @@ class RawSpansClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -958,6 +1007,12 @@ class RawSpansClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        from_time : typing.Optional[dt.datetime]
+            Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -980,6 +1035,8 @@ class RawSpansClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -1171,6 +1228,7 @@ class AsyncRawSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1198,6 +1256,8 @@ class AsyncRawSpansClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1218,6 +1278,9 @@ class AsyncRawSpansClient:
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
                 "last_updated_by": last_updated_by,
+                "value_by_author": convert_and_respect_annotation_metadata(
+                    object_=value_by_author, annotation=typing.Dict[str, ValueEntry], direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1244,8 +1307,11 @@ class AsyncRawSpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SpanPagePublic]:
         """
@@ -1269,9 +1335,15 @@ class AsyncRawSpansClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1293,8 +1365,11 @@ class AsyncRawSpansClient:
                 "type": type,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1326,7 +1401,7 @@ class AsyncRawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1363,7 +1438,7 @@ class AsyncRawSpansClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         model : typing.Optional[str]
 
@@ -1406,7 +1481,9 @@ class AsyncRawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListStringWrite, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -1483,7 +1560,11 @@ class AsyncRawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_span_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SpanPublic]:
         """
         Get span by id
@@ -1491,6 +1572,8 @@ class AsyncRawSpansClient:
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1503,6 +1586,9 @@ class AsyncRawSpansClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/spans/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "strip_attachments": strip_attachments,
+            },
             request_options=request_options,
         )
         try:
@@ -1585,7 +1671,7 @@ class AsyncRawSpansClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1621,7 +1707,7 @@ class AsyncRawSpansClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         model : typing.Optional[str]
 
@@ -1659,7 +1745,9 @@ class AsyncRawSpansClient:
                 "output": convert_and_respect_annotation_metadata(
                     object_=output, annotation=JsonListString, direction="write"
                 ),
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListString, direction="write"
+                ),
                 "model": model,
                 "provider": provider,
                 "tags": tags,
@@ -1732,7 +1820,12 @@ class AsyncRawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete span feedback score
@@ -1742,6 +1835,8 @@ class AsyncRawSpansClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1755,6 +1850,7 @@ class AsyncRawSpansClient:
             method="POST",
             json={
                 "name": name,
+                "author": author,
             },
             headers={
                 "content-type": "application/json",
@@ -1877,6 +1973,8 @@ class AsyncRawSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpanStatsRequestType] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsPublic]:
         """
@@ -1893,6 +1991,10 @@ class AsyncRawSpansClient:
         type : typing.Optional[GetSpanStatsRequestType]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1911,6 +2013,8 @@ class AsyncRawSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1983,6 +2087,8 @@ class AsyncRawSpansClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -2008,6 +2114,12 @@ class AsyncRawSpansClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        from_time : typing.Optional[dt.datetime]
+            Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2030,6 +2142,8 @@ class AsyncRawSpansClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",

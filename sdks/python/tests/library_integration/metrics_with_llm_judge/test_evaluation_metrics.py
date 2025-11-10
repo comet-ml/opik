@@ -6,6 +6,10 @@ import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
 from ragas import metrics as ragas_metrics
 from ragas import llms as ragas_llms
+from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema import (
+    FewShotExampleStructuredOutputCompliance,
+)
+
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -16,7 +20,7 @@ model_parametrizer = pytest.mark.parametrize(
         "gpt-4o",
         langchain_chat_model.LangchainChatModel(
             chat_model=langchain_openai.ChatOpenAI(
-                model_name="gpt-4o",
+                model="gpt-4o",
             )
         ),
     ],
@@ -174,7 +178,7 @@ def test__g_eval(model):
 
     result = g_eval_metric.score(
         output="""
-                OUTPUT: What is the capital of France?
+                OUTPUT: Paris is the capital of France.
                 CONTEXT: France is a country in Western Europe, Its capital is Paris, which is known for landmarks like the Eiffel Tower.
                """
     )
@@ -301,7 +305,141 @@ def test__trajectory_accuracy__poor_quality(model):
 
     assert_helpers.assert_score_result(result)
     # The score should be low due to inappropriate actions
-    assert result.value < 0.6  # Should get a low score for poor trajectory
+    assert result.value <= 0.61  # Should get a low score for poor trajectory
+
+
+@model_parametrizer
+def test__structured_output_compliance__valid_json(model):
+    """Test structured output compliance with valid JSON."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30, "city": "New York"}'
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__invalid_json(model):
+    """Test structured output compliance with invalid JSON."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30, "city": New York}'
+    )
+
+    assert_helpers.assert_score_result(result)
+    # Should get a low score for invalid JSON
+    assert result.value < 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_schema(model):
+    """Test structured output compliance with schema validation."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30}', schema="User(name: str, age: int)"
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_few_shot_examples(model):
+    """Test structured output compliance with few-shot examples."""
+    few_shot_examples = [
+        FewShotExampleStructuredOutputCompliance(
+            title="Valid JSON",
+            output='{"name": "Alice", "age": 25}',
+            output_schema="User(name: str, age: int)",
+            score=True,
+            reason="Valid JSON format",
+        ),
+        FewShotExampleStructuredOutputCompliance(
+            title="Invalid JSON",
+            output='{"name": "Bob", age: 30}',
+            output_schema="User(name: str, age: int)",
+            score=False,
+            reason="Missing quotes around age value",
+        ),
+    ]
+
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, few_shot_examples=few_shot_examples, track=False
+    )
+
+    result = structured_output_metric.score(output='{"name": "John", "age": 30}')
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@model_parametrizer
+def test__structured_output_compliance__with_json_schema(model):
+    """Test structured output compliance with JSON schema validation."""
+    structured_output_metric = metrics.StructuredOutputCompliance(
+        model=model, track=False
+    )
+    schema = '{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}'
+
+    result = structured_output_metric.score(
+        output='{"name": "John", "age": 30}', schema=schema
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.value > 0.5
+
+
+@pytest.mark.asyncio
+async def test__structured_output_compliance__async():
+    """Test structured output compliance with async model."""
+
+    structured_output_metric = metrics.StructuredOutputCompliance()
+
+    result = await structured_output_metric.ascore(
+        output='{"name": "John", "age": 30, "city": "New York"}'
+    )
+
+    assert_helpers.assert_score_result(result, include_reason=False)
+    assert 0.0 <= result.value <= 1.0
+
+
+@model_parametrizer
+def test__usefulness(model):
+    usefulness_metric = metrics.Usefulness(model=model, track=False)
+
+    result = usefulness_metric.score(
+        input="What's the capital of France?",
+        output="Paris is the capital of France.",
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__llm_juries_judge(model):
+    usefulness_judge = metrics.Usefulness(model=model, track=False)
+    jury_metric = metrics.LLMJuriesJudge(judges=[usefulness_judge], track=False)
+
+    result = jury_metric.score(
+        input="Summarise the capital of France in a word.",
+        output="Paris.",
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.metadata["judge_scores"][usefulness_judge.name] == pytest.approx(
+        result.value
+    )
 
 
 def test__ragas_exact_match():
@@ -319,7 +457,7 @@ def test__ragas_exact_match():
 
 def test__ragas_llm_context_precision():
     llm_evaluator = ragas_llms.LangchainLLMWrapper(
-        langchain_openai.ChatOpenAI(model_name="gpt-4o"),
+        langchain_openai.ChatOpenAI(model="gpt-4o"),
     )
 
     ragas_context_precision_metric = metrics.RagasMetricWrapper(

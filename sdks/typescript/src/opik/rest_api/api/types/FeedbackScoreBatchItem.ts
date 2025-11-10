@@ -5,12 +5,14 @@
 import * as OpikApi from "../index";
 
 export interface FeedbackScoreBatchItem {
-    id: string;
     /** If null, the default project is used */
     projectName?: string;
+    projectId?: string;
     name: string;
     categoryName?: string;
     value: number;
     reason?: string;
     source: OpikApi.FeedbackScoreBatchItemSource;
+    author?: string;
+    id: string;
 }

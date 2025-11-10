@@ -11,6 +11,7 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
+from ..types.dataset_expansion_response import DatasetExpansionResponse
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
@@ -18,6 +19,8 @@ from ..types.dataset_item_write import DatasetItemWrite
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
+from ..types.project_stats_public import ProjectStatsPublic
+from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
 
@@ -193,6 +196,56 @@ class RawDatasetsClient:
                 "dataset_id": dataset_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/from-traces",
+            method="POST",
+            json={
+                "trace_ids": trace_ids,
+                "enrichment_options": convert_and_respect_annotation_metadata(
+                    object_=enrichment_options, annotation=TraceEnrichmentOptions, direction="write"
                 ),
             },
             headers={
@@ -441,6 +494,78 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def expand_dataset(
+        self,
+        id: str,
+        *,
+        model: str,
+        sample_count: typing.Optional[int] = OMIT,
+        preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
+        variation_instructions: typing.Optional[str] = OMIT,
+        custom_prompt: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[DatasetExpansionResponse]:
+        """
+        Generate synthetic dataset samples using LLM based on existing data patterns
+
+        Parameters
+        ----------
+        id : str
+
+        model : str
+            The model to use for synthetic data generation
+
+        sample_count : typing.Optional[int]
+            Number of synthetic samples to generate
+
+        preserve_fields : typing.Optional[typing.Sequence[str]]
+            Fields to preserve patterns from original data
+
+        variation_instructions : typing.Optional[str]
+            Additional instructions for data variation
+
+        custom_prompt : typing.Optional[str]
+            Custom prompt to use for generation instead of auto-generated one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetExpansionResponse]
+            Generated synthetic samples
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/expansions",
+            method="POST",
+            json={
+                "model": model,
+                "sample_count": sample_count,
+                "preserve_fields": preserve_fields,
+                "variation_instructions": variation_instructions,
+                "custom_prompt": custom_prompt,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExpansionResponse,
+                    parse_obj_as(
+                        type_=DatasetExpansionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def find_dataset_items_with_experiment_items(
         self,
         id: str,
@@ -449,6 +574,8 @@ class RawDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetItemPageCompare]:
@@ -466,6 +593,10 @@ class RawDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -485,6 +616,8 @@ class RawDatasetsClient:
                 "size": size,
                 "experiment_ids": experiment_ids,
                 "filters": filters,
+                "sorting": sorting,
+                "search": search,
                 "truncate": truncate,
             },
             request_options=request_options,
@@ -549,6 +682,57 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ProjectStatsPublic]:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ProjectStatsPublic]
+            Experiment items stats resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items/stats",
+            method="GET",
+            params={
+                "experiment_ids": experiment_ids,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[DatasetItemPublic]:
@@ -593,6 +777,7 @@ class RawDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetItemPagePublic]:
@@ -606,6 +791,8 @@ class RawDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -623,6 +810,7 @@ class RawDatasetsClient:
             params={
                 "page": page,
                 "size": size,
+                "filters": filters,
                 "truncate": truncate,
             },
             request_options=request_options,
@@ -934,6 +1122,56 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/from-traces",
+            method="POST",
+            json={
+                "trace_ids": trace_ids,
+                "enrichment_options": convert_and_respect_annotation_metadata(
+                    object_=enrichment_options, annotation=TraceEnrichmentOptions, direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_dataset_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DatasetPublic]:
@@ -1168,6 +1406,78 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def expand_dataset(
+        self,
+        id: str,
+        *,
+        model: str,
+        sample_count: typing.Optional[int] = OMIT,
+        preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
+        variation_instructions: typing.Optional[str] = OMIT,
+        custom_prompt: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[DatasetExpansionResponse]:
+        """
+        Generate synthetic dataset samples using LLM based on existing data patterns
+
+        Parameters
+        ----------
+        id : str
+
+        model : str
+            The model to use for synthetic data generation
+
+        sample_count : typing.Optional[int]
+            Number of synthetic samples to generate
+
+        preserve_fields : typing.Optional[typing.Sequence[str]]
+            Fields to preserve patterns from original data
+
+        variation_instructions : typing.Optional[str]
+            Additional instructions for data variation
+
+        custom_prompt : typing.Optional[str]
+            Custom prompt to use for generation instead of auto-generated one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetExpansionResponse]
+            Generated synthetic samples
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/expansions",
+            method="POST",
+            json={
+                "model": model,
+                "sample_count": sample_count,
+                "preserve_fields": preserve_fields,
+                "variation_instructions": variation_instructions,
+                "custom_prompt": custom_prompt,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExpansionResponse,
+                    parse_obj_as(
+                        type_=DatasetExpansionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def find_dataset_items_with_experiment_items(
         self,
         id: str,
@@ -1176,6 +1486,8 @@ class AsyncRawDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetItemPageCompare]:
@@ -1193,6 +1505,10 @@ class AsyncRawDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1212,6 +1528,8 @@ class AsyncRawDatasetsClient:
                 "size": size,
                 "experiment_ids": experiment_ids,
                 "filters": filters,
+                "sorting": sorting,
+                "search": search,
                 "truncate": truncate,
             },
             request_options=request_options,
@@ -1276,6 +1594,57 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ProjectStatsPublic]:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ProjectStatsPublic]
+            Experiment items stats resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items/stats",
+            method="GET",
+            params={
+                "experiment_ids": experiment_ids,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DatasetItemPublic]:
@@ -1320,6 +1689,7 @@ class AsyncRawDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetItemPagePublic]:
@@ -1333,6 +1703,8 @@ class AsyncRawDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1350,6 +1722,7 @@ class AsyncRawDatasetsClient:
             params={
                 "page": page,
                 "size": size,
+                "filters": filters,
                 "truncate": truncate,
             },
             request_options=request_options,

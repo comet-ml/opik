@@ -14,4 +14,5 @@ export interface FeedbackScoreExperimentItemBulkWriteView {
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
+    valueByAuthor?: Record<string, OpikApi.ValueEntryExperimentItemBulkWriteView>;
 }

@@ -1,25 +1,22 @@
+---
+title: Structured Output Tracking for Instructor with Opik
+description: Start here to integrate Opik into your Instructor-based genai application for structured output tracking, schema validation monitoring, and LLM call observability.
+---
+
 [Instructor](https://github.com/instructor-ai/instructor) is a Python library for working with structured outputs
 for LLMs built on top of Pydantic. It provides a simple way to manage schema validations, retries and streaming responses.
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/instructor.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+In this guide, we will showcase how to integrate Opik with Instructor so that all the Instructor calls are logged as traces in Opik.
 
-## Getting started
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=instructor&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=instructor&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=instructor&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
 
 First, ensure you have both `opik` and `instructor` installed:
 
@@ -27,16 +24,46 @@ First, ensure you have both `opik` and `instructor` installed:
 pip install opik instructor
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or
-if you are using the Cloud platform your API key:
+### Configuring Opik
 
-```bash {pytest_codeblocks_skip=true}
-opik configure
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Instructor
+
+In order to use Instructor, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI, Anthropic, and Gemini. You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+
+You can set them as environment variables:
+
+```bash
+export OPENAI_API_KEY="YOUR_API_KEY"
+export ANTHROPIC_API_KEY="YOUR_API_KEY"
+export GOOGLE_API_KEY="YOUR_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+
+if "ANTHROPIC_API_KEY" not in os.environ:
+    os.environ["ANTHROPIC_API_KEY"] = getpass.getpass("Enter your Anthropic API key: ")
+
+if "GOOGLE_API_KEY" not in os.environ:
+    os.environ["GOOGLE_API_KEY"] = getpass.getpass("Enter your Google API key: ")
 ```
 
 ## Using Opik with Instructor library
 
-To use Opik with Instructor, we are going to rely on the existing Opik integrations with popular LLM providers.
+In order to log traces from Instructor into Opik, we are going to patch the `instructor` library. This will log each LLM call to the Opik platform.
 
 For all the integrations, we will first add tracking to the LLM client and then pass it to the Instructor library:
 
@@ -46,7 +73,8 @@ import instructor
 from pydantic import BaseModel
 from openai import OpenAI
 
-# We will first create the OpenAI client and add the `track_openai` method to log data to Opik
+# We will first create the OpenAI client and add the `track_openai`
+# method to log data to Opik
 openai_client = track_openai(OpenAI())
 
 # Patch the OpenAI client for Instructor
@@ -69,31 +97,16 @@ print(user_info)
 Thanks to the `track_openai` method, all the calls made to OpenAI will be logged to the Opik platform. This approach also works well if you are also using the `opik.track` decorator as it will automatically log the LLM call made with Instructor to the relevant trace.
 
 <Frame>
-  <img src="/img/tracing/instructor_integration.png" />
+  <img src="/img/cookbook/instructor_cookbook.png" />
 </Frame>
 
-## Supported LLM providers
+## Integrating with other LLM providers
 
-Opik supports the OpenAI, Anthropic and Gemini LLM providers, feel free to create a [Github issue](https://github.com/comet-ml/opik/issues/new) if you would like
-us to support more providers.
+The instructor library supports many LLM providers beyond OpenAI, including: Anthropic, AWS Bedrock, Gemini, etc. Opik supports the majority of these providers as well.
 
-<Tabs>
-    <Tab value="openai" title="OpenAI">
+Here are the code snippets needed for the integration with different providers:
 
-```python
-from opik.integrations.openai import track_openai
-import instructor
-from openai import OpenAI
-
-# Add Opik tracking
-openai_client = track_openai(OpenAI())
-
-# Patch the OpenAI client for Instructor
-client = instructor.from_openai(openai_client)
-```
-
-    </Tab>
-     <Tab value="anthropic" title="Anthropic">
+### Anthropic
 
 ```python
 from opik.integrations.anthropic import track_anthropic
@@ -104,31 +117,42 @@ from anthropic import Anthropic
 anthropic_client = track_anthropic(Anthropic())
 
 # Patch the Anthropic client for Instructor
-client = instructor.from_openai(anthropic_client)
+client = instructor.from_anthropic(
+    anthropic_client, mode=instructor.Mode.ANTHROPIC_JSON
+)
+
+user_info = client.chat.completions.create(
+    model="claude-3-5-sonnet-20241022",
+    response_model=UserInfo,
+    messages=[{"role": "user", "content": "John Doe is 30 years old."}],
+    max_tokens=1000,
+)
+
+print(user_info)
 ```
 
-    </Tab>
-     <Tab value="gemini" title="Gemini">
+### Gemini
 
 ```python
 from opik.integrations.genai import track_genai
 import instructor
-import google.generativeai as genai
+from google import genai
 
 # Add Opik tracking
-genai_client = track_genai(genai.GenerativeModel(
-    model_name="models/gemini-1.5-flash-latest",  # model defaults to "gemini-pro"
-))
+gemini_client = track_genai(genai.Client())
 
 # Patch the GenAI client for Instructor
-client = instructor.from_openai(
-    genai_client,
-    mode=instructor.Mode.GEMINI_JSON
+client = instructor.from_genai(
+    gemini_client, mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS
 )
+
+user_info = client.chat.completions.create(
+    model="gemini-2.0-flash-001",
+    response_model=UserInfo,
+    messages=[{"role": "user", "content": "John Doe is 30 years old."}],
+)
+
+print(user_info)
 ```
-
-    </Tab>
-
-</Tabs>
 
 You can read more about how to use the Instructor library in [their documentation](https://python.useinstructor.com/).

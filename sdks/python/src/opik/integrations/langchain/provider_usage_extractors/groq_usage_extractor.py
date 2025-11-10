@@ -5,12 +5,16 @@ import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
 from . import provider_usage_extractor_protocol, langchain_run_helpers
+from .langchain_run_helpers import langchain_usage
 
 if TYPE_CHECKING:
     pass
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+GROQ_CANDIDATE_USAGE_KEYS = {"prompt_tokens", "completion_tokens", "total_tokens"}
 
 
 class GroqUsageExtractor(
@@ -52,37 +56,32 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
     token usage info might be in different places, different formats, or completely missing.
     """
     try:
-        if run_dict["outputs"]["llm_output"] is not None:
-            token_usage_dict = run_dict["outputs"]["llm_output"]["token_usage"]
-            if not isinstance(token_usage_dict, dict):
-                return None
-            return llm_usage.OpikUsage.from_groq_completions_dict(token_usage_dict)
-
-        # streaming mode handling
-        # token usage data MAY be available at the end of streaming
-        # in async mode may not provide token usage info
-        if (
-            langchain_usage := langchain_run_helpers.try_get_streaming_token_usage(
-                run_dict
-            )
-        ) is not None:
-            groq_usage_dict = langchain_usage.map_to_groq_completions_usage()
-            opik_usage = llm_usage.OpikUsage.from_groq_completions_dict(groq_usage_dict)
-            return opik_usage
+        if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
+            run_dict, GROQ_CANDIDATE_USAGE_KEYS
+        ):
+            if isinstance(token_usage, dict):
+                return llm_usage.OpikUsage.from_groq_completions_dict(token_usage)
+            elif isinstance(token_usage, langchain_usage.LangChainUsage):
+                # streaming mode handling
+                # token usage data MAY be available at the end of streaming
+                # in async mode may not provide token usage info
+                groq_usage_dict = token_usage.map_to_groq_completions_usage()
+                return llm_usage.OpikUsage.from_groq_completions_dict(groq_usage_dict)
 
         opik_logging.log_once_at_level(
-            logging_level=logging.WARNING,
-            message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
-            logger=LOGGER,
+            logging.WARNING,
+            "Failed to extract token usage from presumably Groq LLM langchain run. Run dict: %s",
+            LOGGER,
+            run_dict,
         )
-        return None
 
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GROQ_LLM_RUN,
+            run_dict,
             exc_info=True,
         )
-        return None
+    return None
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:

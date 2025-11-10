@@ -240,8 +240,11 @@ export class Spans {
             type: type_,
             filters,
             truncate,
+            stripAttachments,
             sorting,
             exclude,
+            fromTime,
+            toTime,
         } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -278,12 +281,24 @@ export class Spans {
             _queryParams["truncate"] = truncate.toString();
         }
 
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
+        }
+
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
         }
 
         if (exclude != null) {
             _queryParams["exclude"] = exclude;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -519,6 +534,7 @@ export class Spans {
      * Get span by id
      *
      * @param {string} id
+     * @param {OpikApi.GetSpanByIdRequest} request
      * @param {Spans.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
@@ -528,15 +544,23 @@ export class Spans {
      */
     public getSpanById(
         id: string,
+        request: OpikApi.GetSpanByIdRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.SpanPublic> {
-        return core.HttpResponsePromise.fromPromise(this.__getSpanById(id, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__getSpanById(id, request, requestOptions));
     }
 
     private async __getSpanById(
         id: string,
+        request: OpikApi.GetSpanByIdRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.SpanPublic>> {
+        const { stripAttachments } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -557,6 +581,7 @@ export class Spans {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
@@ -1148,7 +1173,7 @@ export class Spans {
         request: OpikApi.GetSpanStatsRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, traceId, type: type_, filters } = request;
+        const { projectId, projectName, traceId, type: type_, filters, fromTime, toTime } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
             _queryParams["project_id"] = projectId;
@@ -1170,6 +1195,14 @@ export class Spans {
 
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -1245,10 +1278,10 @@ export class Spans {
      * @example
      *     await client.spans.scoreBatchOfSpans({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 id: "id"
      *             }]
      *     })
      */

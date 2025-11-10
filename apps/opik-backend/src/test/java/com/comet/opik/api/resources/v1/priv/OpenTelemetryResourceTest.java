@@ -48,11 +48,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.runner.RunWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
@@ -93,7 +94,7 @@ class OpenTelemetryResourceTest {
     public static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
@@ -320,14 +321,19 @@ class OpenTelemetryResourceTest {
             sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
         }
 
-        @Test
-        void testRuleMapping() {
+        @ParameterizedTest
+        @ValueSource(strings = {"model_name", "gen_ai.request.model", "gen_ai.response.model", "gen_ai.request_model",
+                "gen_ai.response_model"})
+        void testRuleMapping(String modelKey) {
             String randomKeyArray = UUID.randomUUID().toString();
             String randomKeyJson = UUID.randomUUID().toString();
             String randomKeyInt = UUID.randomUUID().toString();
 
             var attributes = List.of(
-                    KeyValue.newBuilder().setKey("model_name").setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                    KeyValue.newBuilder().setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build(),
+                    KeyValue.newBuilder().setKey(modelKey).setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
                             .build(),
                     KeyValue.newBuilder().setKey("code.line").setValue(AnyValue.newBuilder().setIntValue(11)).build(),
                     KeyValue.newBuilder().setKey("input")
@@ -370,6 +376,7 @@ class OpenTelemetryResourceTest {
 
             // checks key-values with rules
             assertThat(span.model()).isEqualTo("gpt-4o");
+            assertThat(span.provider()).isEqualTo("openai");
             assertThat(span.type()).isEqualTo(SpanType.llm);
 
             assertThat(span.metadata().get("code.line").asInt()).isEqualTo(11);
@@ -382,6 +389,67 @@ class OpenTelemetryResourceTest {
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
 
             assertThat(span.output().get("tool_responses").isArray()).isEqualTo(Boolean.TRUE);
+        }
+
+        @Test
+        @DisplayName("test thread_id support in OpenTelemetry")
+        void testThreadIdSupport() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+            String threadId = "test-thread-123";
+
+            // Create a root span with thread_id attribute
+            var rootSpan = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("thread_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(threadId))
+                            .build())
+                    .build();
+
+            // Create a child span
+            var childSpan = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(rootSpan, childSpan);
+
+            // Calculate expected Opik trace ID
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            // Send the spans
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            // Verify the trace was created with the correct thread_id
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+            assertThat(trace.threadId()).isEqualTo(threadId);
+
+            // Verify the spans were created
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            // Verify the root span has thread_id in metadata
+            var rootSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(rootSpanFromDb.metadata().get("thread_id").asText()).isEqualTo(threadId);
         }
 
     }

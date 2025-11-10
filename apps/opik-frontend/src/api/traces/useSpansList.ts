@@ -16,6 +16,7 @@ export type UseSpansListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  stripAttachments?: boolean;
   exclude?: string[];
 };
 
@@ -37,6 +38,7 @@ const getSpansList = async (
     size,
     page,
     truncate,
+    stripAttachments,
     exclude,
   }: UseSpansListParams,
 ) => {
@@ -49,9 +51,12 @@ const getSpansList = async (
       ...processFilters(filters, generateSearchByIDFilters(search)),
       ...processSorting(sorting),
       ...(exclude && { exclude: JSON.stringify(exclude) }),
+      ...(truncate !== undefined && { truncate }),
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
       size,
       page,
-      truncate,
     },
   });
 

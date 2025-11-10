@@ -6,6 +6,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 type CustomMeta = {
   fieldType: "input" | "output";
@@ -13,9 +14,9 @@ type CustomMeta = {
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
-const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
+  const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
   });
@@ -35,29 +36,27 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   }, [value]);
 
   const hasExceededLimit = useMemo(
-    () => rawValue.length > maxDataLength,
-    [rawValue, maxDataLength],
+    () => truncationEnabled && rawValue.length > maxDataLength,
+    [rawValue, maxDataLength, truncationEnabled],
   );
 
-  const response = useMemo(() => {
+  const displayMessage = useMemo(() => {
     if (!value || hasExceededLimit) {
-      return {
-        message: "",
-        prettified: false,
-      };
+      return hasExceededLimit
+        ? rawValue.slice(0, maxDataLength) + " [truncated]"
+        : "-";
     }
 
-    return prettifyMessage(value, {
+    const pretty = prettifyMessage(value, {
       type: fieldType,
     });
-  }, [value, fieldType, hasExceededLimit]);
 
-  const message = useMemo(() => {
-    if (isObject(response.message)) {
-      return JSON.stringify(value, null, 2);
-    }
-    return response.message || "";
-  }, [response.message, value]);
+    const message = isObject(pretty.message)
+      ? JSON.stringify(value, null, 2)
+      : pretty.message || "";
+
+    return message;
+  }, [value, hasExceededLimit, fieldType, rawValue, maxDataLength]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
@@ -69,23 +68,18 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const content = useMemo(() => {
     if (isSmall) {
       return (
-        <CellTooltipWrapper
-          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
-        >
-          <span className="comet-code truncate">
-            {hasExceededLimit
-              ? rawValue.slice(0, maxDataLength) + "..."
-              : message}
-          </span>
+        <CellTooltipWrapper content={displayMessage}>
+          <span className="comet-code truncate">{displayMessage}</span>
         </CellTooltipWrapper>
       );
     }
+
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
+        {displayMessage}
       </div>
     );
-  }, [isSmall, message, hasExceededLimit, rawValue, maxDataLength]);
+  }, [isSmall, displayMessage]);
 
   return (
     <CellWrapper

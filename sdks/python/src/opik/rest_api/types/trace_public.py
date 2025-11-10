@@ -10,7 +10,6 @@ from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_list_string_public import JsonListStringPublic
-from .json_node_public import JsonNodePublic
 from .trace_public_visibility_mode import TracePublicVisibilityMode
 
 
@@ -22,7 +21,7 @@ class TracePublic(UniversalBaseModel):
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListStringPublic] = None
     output: typing.Optional[JsonListStringPublic] = None
-    metadata: typing.Optional[JsonNodePublic] = None
+    metadata: typing.Optional[JsonListStringPublic] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoPublic] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
@@ -43,6 +42,10 @@ class TracePublic(UniversalBaseModel):
     thread_id: typing.Optional[str] = None
     visibility_mode: typing.Optional[TracePublicVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None
+    providers: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    List of unique provider names from all spans in this trace, sorted alphabetically
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

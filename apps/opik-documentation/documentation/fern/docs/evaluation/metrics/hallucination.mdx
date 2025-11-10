@@ -1,7 +1,5 @@
 ---
 description: Describes the Hallucination metric
-
-pytest_codeblocks_skip: true
 ---
 
 The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output. If the context is provided, this will also be used to check for hallucinations.
@@ -10,20 +8,36 @@ The hallucination metric allows you to check if the LLM response contains any ha
 
 You can use the `Hallucination` metric as follows:
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination()
 
 metric.score(
-    input="What is the capital of France?",
-    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+input="What is the capital of France?",
+output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
 )
-```
+
+````
+
+```typescript title="TypeScript" language="typescript"
+import { Hallucination } from 'opik';
+
+const metric = new Hallucination();
+
+await metric.score({
+    input: "What is the capital of France?",
+    output: "The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+});
+````
+
+</CodeBlocks>
 
 If you want to check for hallucinations based on context, you can also pass the context to the `score` method:
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 metric.score(
     input="What is the capital of France?",
     output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
@@ -31,11 +45,25 @@ metric.score(
 )
 ```
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+```typescript title="TypeScript" language="typescript"
+await metric.score({
+  input: "What is the capital of France?",
+  output:
+    "The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+  context: [
+    "France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.",
+  ],
+});
+```
+
+</CodeBlocks>
+
+Asynchronous scoring is also supported with the `ascore` method in Python and `score` method in TypeScript (which is always async).
 
 <Tip>
-  The hallucination score is either `0` or `1`. A score of `0` indicates that no hallucinations were detected, a score
-  of `1` indicates that hallucinations were detected.
+  The hallucination score is either `0` or `1`. A score of `0` indicates that no
+  hallucinations were detected, a score of `1` indicates that hallucinations
+  were detected.
 </Tip>
 
 ## Hallucination Prompt

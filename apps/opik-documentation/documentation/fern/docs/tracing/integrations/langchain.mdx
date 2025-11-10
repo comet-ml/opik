@@ -1,24 +1,28 @@
-Opik provides seamless integration with LangChain, allowing you to easily log and trace your LangChain-based applications. By using the `OpikTracer` callback, you can automatically capture detailed information about your LangChain runs, including inputs, outputs, and metadata for each step in your chain.
+---
+title: Observability for LangChain (Python) with Opik
+description: Start here to integrate Opik into your LangChain-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+Opik provides seamless integration with LangChain, allowing you to easily log and trace your LangChain-based applications. By using the `OpikTracer` callback, you can automatically capture detailed information about your LangChain runs, including inputs, outputs, metadata, and cost tracking for each step in your chain.
+
+## Key Features
+
+- **Automatic cost tracking** for supported LLM providers (OpenAI, Anthropic, Google AI, AWS Bedrock, and more)
+- **Full compatibility** with the `@opik.track` decorator for hybrid tracing approaches
+- **Thread support** for conversational applications with `thread_id` parameter
+- **Distributed tracing** support for multi-service applications
+- **LangGraph compatibility** for complex graph-based workflows
+- **Evaluation and testing** support for automated LLM application testing
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) for more information.
 
 ## Getting Started
+
+### Installation
 
 To use the `OpikTracer` with LangChain, you'll need to have both the `opik` and `langchain` packages installed. You can install them using pip:
 
@@ -26,54 +30,238 @@ To use the `OpikTracer` with LangChain, you'll need to have both the `opik` and 
 pip install opik langchain langchain_openai
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
 
-```bash
-opik configure
-```
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
 
 ## Using OpikTracer
 
 Here's a basic example of how to use the `OpikTracer` callback with a LangChain chain:
 
 ```python
-from langchain.chains import LLMChain
-from langchain_openai import OpenAI
-from langchain.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 from opik.integrations.langchain import OpikTracer
 
 # Initialize the tracer
-opik_tracer = OpikTracer()
+opik_tracer = OpikTracer(project_name="langchain-examples")
 
-# Create the LLM Chain using LangChain
-llm = OpenAI(temperature=0)
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
+prompt = ChatPromptTemplate.from_messages([
+    ("human", "Translate the following text to French: {text}")
+])
+chain = prompt | llm
 
-prompt_template = PromptTemplate(
-    input_variables=["input"],
-    template="Translate the following text to French: {input}"
+result = chain.invoke(
+    {"text": "Hello, how are you?"},
+    config={"callbacks": [opik_tracer]}
 )
-
-llm_chain = LLMChain(llm=llm, prompt=prompt_template)
-
-# Generate the translations
-translation = llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
-print(translation)
-
-# The OpikTracer will automatically log the run and its details to Opik
+print(result.content)
 ```
 
-This example demonstrates how to create a LangChain chain with a `OpikTracer` callback. When you run the chain with a prompt, the `OpikTracer` will automatically log the run and its details to Opik, including the input prompt, the output, and metadata for each step in the chain.
+The `OpikTracer` will automatically log the run and its details to Opik, including the input prompt, the output, and metadata for each step in the chain.
+
+For detailed parameter information, see the [OpikTracer SDK reference](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html).
+
+## Practical Example: Text-to-SQL with Evaluation
+
+Let's walk through a real-world example of using LangChain with Opik for a text-to-SQL query generation task. This example demonstrates how to create synthetic datasets, build LangChain chains, and evaluate your application.
+
+### Setting up the Environment
+
+First, let's set up our environment with the necessary dependencies:
+
+```python
+import os
+import getpass
+import opik
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Configure Opik
+opik.configure(use_local=False)
+os.environ["OPIK_PROJECT_NAME"] = "langchain-integration-demo"
+
+# Set up API keys
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```
+
+### Creating a Synthetic Dataset
+
+We'll create a synthetic dataset of questions for our text-to-SQL task:
+
+```python
+import json
+from langchain_community.utilities import SQLDatabase
+
+# Download and set up the Chinook database
+import requests
+
+url = "https://github.com/lerocha/chinook-database/raw/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite"
+filename = "./data/chinook/Chinook_Sqlite.sqlite"
+
+folder = os.path.dirname(filename)
+if not os.path.exists(folder):
+    os.makedirs(folder)
+
+if not os.path.exists(filename):
+    response = requests.get(url)
+    with open(filename, "wb") as file:
+        file.write(response.content)
+    print("Chinook database downloaded")
+
+db = SQLDatabase.from_uri(f"sqlite:///{filename}")
+
+# Create synthetic questions using OpenAI
+client = OpenAI()
+openai_client = track_openai(client)
+
+prompt = """
+Create 20 different example questions a user might ask based on the Chinook Database.
+These questions should be complex and require the model to think. They should include complex joins and window functions to answer.
+Return the response as a json object with a "result" key and an array of strings with the question.
+"""
+
+completion = openai_client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": prompt}]
+)
+
+synthetic_questions = json.loads(completion.choices[0].message.content)["result"]
+
+# Create dataset in Opik
+opik_client = opik.Opik()
+dataset = opik_client.get_or_create_dataset(name="synthetic_questions")
+dataset.insert([{"question": question} for question in synthetic_questions])
+```
+
+### Building the LangChain Chain
+
+Now let's create a LangChain chain for SQL query generation:
+
+```python
+from langchain.chains import create_sql_query_chain
+from langchain_openai import ChatOpenAI
+from opik.integrations.langchain import OpikTracer
+
+# Create the LangChain chain with OpikTracer
+opik_tracer = OpikTracer(tags=["sql_generation"])
+
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+chain = create_sql_query_chain(llm, db).with_config({"callbacks": [opik_tracer]})
+
+# Test the chain
+response = chain.invoke({"question": "How many employees are there?"})
+print(response)
+```
+
+### Evaluating the Application
+
+Let's create a custom evaluation metric and test our application:
+
+```python
+from opik import track
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import base_metric, score_result
+from typing import Any
+
+class ValidSQLQuery(base_metric.BaseMetric):
+    def __init__(self, name: str, db: Any):
+        self.name = name
+        self.db = db
+
+    def score(self, output: str, **ignored_kwargs: Any):
+        try:
+            db.run(output)
+            return score_result.ScoreResult(
+                name=self.name, value=1, reason="Query ran successfully"
+            )
+        except Exception as e:
+            return score_result.ScoreResult(name=self.name, value=0, reason=str(e))
+
+# Set up evaluation
+valid_sql_query = ValidSQLQuery(name="valid_sql_query", db=db)
+dataset = opik_client.get_dataset("synthetic_questions")
+
+@track()
+def llm_chain(input: str) -> str:
+    response = chain.invoke({"question": input})
+    return response
+
+def evaluation_task(item):
+    response = llm_chain(item["question"])
+    return {"output": response}
+
+# Run evaluation
+res = evaluate(
+    experiment_name="SQL question answering",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[valid_sql_query],
+    nb_samples=20,
+)
+```
+
+The evaluation results are now uploaded to the Opik platform and can be viewed in the UI.
+
+<Frame>
+  <img src="/img/cookbook/langchain_cookbook.png" />
+</Frame>
+
+## Cost Tracking
+
+The `OpikTracer` automatically tracks token usage and cost for all supported LLM models used within LangChain applications.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+
+- Token usage details
+- Cost per request based on model pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>
+
+For streaming with cost tracking, ensure `stream_usage=True` is set:
+
+```python
+from langchain_openai import ChatOpenAI
+from opik.integrations.langchain import OpikTracer
+
+llm = ChatOpenAI(
+    model="gpt-4o",
+    streaming=True,
+    stream_usage=True,  # Required for cost tracking with streaming
+)
+
+opik_tracer = OpikTracer()
+
+for chunk in llm.stream("Hello", config={"callbacks": [opik_tracer]}):
+    print(chunk.content, end="")
+```
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>
 
 ## Settings tags and metadata
 
-You can also customize the `OpikTracer` callback to include additional metadata or logging options. For example:
+You can customize the `OpikTracer` callback to include additional metadata, logging options, and conversation threading:
 
 ```python
 from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer(
-    tags=["langchain"],
-    metadata={"use-case": "documentation-example"}
+    tags=["langchain", "production"],
+    metadata={"use-case": "customer-support", "version": "1.0"},
+    thread_id="conversation-123",  # For conversational applications
+    project_name="my-langchain-project"
 )
 ```
 
@@ -121,16 +309,93 @@ You can update the metadata, feedback scores and tags for traces after they are 
 ```python
 from opik.integrations.langchain import OpikTracer
 
-opik_tracer = OpikTracer()
+opik_tracer = OpikTracer(project_name="langchain-examples")
 
-# Calling Langchain object
+# ... calling Langchain object
 
 traces = opik_tracer.created_traces()
 
 for trace in traces:
-    trace.update(tag=["langchain"])
+    trace.update(tags=["my-tag"])
     trace.log_feedback_score(name="user-feedback", value=0.5)
 ```
+
+## Compatibility with @track Decorator
+
+The `OpikTracer` is fully compatible with the `@track` decorator, allowing you to create hybrid tracing approaches:
+
+```python
+import opik
+from langchain_openai import ChatOpenAI
+from opik.integrations.langchain import OpikTracer
+
+@opik.track
+def my_langchain_workflow(user_input: str) -> str:
+    llm = ChatOpenAI(model="gpt-4o")
+    opik_tracer = OpikTracer()
+
+    # The LangChain call will create spans within the existing trace
+    response = llm.invoke(user_input, config={"callbacks": [opik_tracer]})
+    return response.content
+
+result = my_langchain_workflow("What is machine learning?")
+```
+
+## Thread Support
+
+Use the `thread_id` parameter to group related conversations or interactions:
+
+```python
+from opik.integrations.langchain import OpikTracer
+
+# All traces with the same thread_id will be grouped together
+opik_tracer = OpikTracer(thread_id="user-session-123")
+```
+
+## Distributed Tracing
+
+For multi-service/thread/process applications, you can use distributed tracing headers to connect traces across services:
+
+```python
+from opik import opik_context
+from opik.integrations.langchain import OpikTracer
+from opik.types import DistributedTraceHeadersDict
+
+# In your service that receives distributed trace headers.
+# The distributed_headers dict can be obtained in the "parent" service via `opik_context.get_distributed_trace_headers()`
+distributed_headers = DistributedTraceHeadersDict(
+    opik_trace_id="trace-id-from-upstream",
+    opik_parent_span_id="parent-span-id-from-upstream"
+)
+
+opik_tracer = OpikTracer(distributed_headers=distributed_headers)
+
+# LangChain operations will be attached to the existing distributed trace
+chain.invoke(input_data, config={"callbacks": [opik_tracer]})
+```
+
+<Tip>Learn more about distributed tracing in the [Distributed Tracing guide](/tracing/log_distributed_traces).</Tip>
+
+## LangGraph Integration
+
+For LangGraph applications, Opik provides specialized support. The `OpikTracer` works seamlessly with LangGraph, and you can also visualize graph definitions:
+
+```python
+from langgraph.graph import StateGraph
+from opik.integrations.langchain import OpikTracer
+
+# Your LangGraph setup
+graph = StateGraph(...)
+compiled_graph = graph.compile()
+
+opik_tracer = OpikTracer()
+result = compiled_graph.invoke(
+    input_data,
+    config={"callbacks": [opik_tracer]}
+)
+```
+
+<Tip>For detailed LangGraph integration examples, see the [LangGraph Integration guide](/integrations/langgraph).</Tip>
 
 ## Advanced usage
 
@@ -145,15 +410,6 @@ opik_tracer.flush()
 
 ## Important notes
 
-1. If you are using asynchronous streaming mode (calling `.astream()` method), the `input` field in the trace UI will be empty due to a Langchain limitation for this mode.
-   However, you can find the input data inside the nested spans of this chain.
+1. **Asynchronous streaming**: If you are using asynchronous streaming mode (calling `.astream()` method), the `input` field in the trace UI may be empty due to a LangChain limitation for this mode. However, you can find the input data inside the nested spans of this chain.
 
-2. if you are planning to use streaming with LLM-calls, and you want to calculate LLM-call tokens/cost, you need explicitly set argument `stream_usage` to `True`,
-
-```python
-from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(
-    temperature=0,
-    stream_usage=True,
-)
-```
+2. **Streaming with cost tracking**: If you are planning to use streaming with LLM calls and want to calculate LLM call tokens/cost, you need to explicitly set `stream_usage=True`:

@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .feedback_score_source import FeedbackScoreSource
+from .value_entry import ValueEntry
 
 
 class FeedbackScore(UniversalBaseModel):
@@ -18,6 +19,7 @@ class FeedbackScore(UniversalBaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
+    value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

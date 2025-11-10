@@ -1,4 +1,4 @@
-import React, { ReactNode, useRef } from "react";
+import React, { ReactNode, useRef, useEffect, useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -10,6 +10,7 @@ import { EXTENSION_MAP } from "./constants";
 import { CodeOutput } from "./types";
 import SyntaxHighlighterLayout from "./SyntaxHighlighterLayout";
 import SyntaxHighlighterSearch from "./SyntaxHighlighterSearch";
+import { hyperLink } from "@uiw/codemirror-extensions-hyper-link";
 
 export interface CodeMirrorHighlighterProps {
   searchValue?: string;
@@ -19,6 +20,9 @@ export interface CodeMirrorHighlighterProps {
   modeSelector: ReactNode;
   copyButton: ReactNode;
   withSearch?: boolean;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  maxHeight?: string;
 }
 
 const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
@@ -29,6 +33,9 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
   modeSelector,
   copyButton,
   withSearch,
+  scrollRef,
+  onScroll,
+  maxHeight,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
   const theme = useCodemirrorTheme();
@@ -46,10 +53,39 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     codeOutput,
   });
 
-  const handleCreateEditor = (view: EditorView) => {
-    viewRef.current = view;
-    initSearch(view, localSearchValue || searchValue);
-  };
+  // Keep latest onScroll callback in ref to avoid stale closures
+  const onScrollRef = useRef(onScroll);
+  useEffect(() => {
+    onScrollRef.current = onScroll;
+  }, [onScroll]);
+
+  const handleCreateEditor = useCallback(
+    (view: EditorView) => {
+      viewRef.current = view;
+      initSearch(view, localSearchValue || searchValue);
+
+      // Expose CodeMirror's scroll container via scrollRef
+      if (scrollRef) {
+        (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current =
+          view.scrollDOM as HTMLDivElement;
+      }
+
+      // Attach scroll listener - uses ref to always get latest callback
+      const handleScroll = () => {
+        if (onScrollRef.current) {
+          onScrollRef.current({
+            currentTarget: view.scrollDOM,
+          } as React.UIEvent<HTMLDivElement>);
+        }
+      };
+
+      view.scrollDOM.addEventListener("scroll", handleScroll, {
+        passive: true,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [localSearchValue, searchValue, initSearch],
+  );
 
   return (
     <SyntaxHighlighterLayout
@@ -82,8 +118,9 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           EditorView.contentAttributes.of({ tabindex: "0" }),
           searchPanelTheme,
           searchExtension,
+          hyperLink,
         ]}
-        maxHeight="700px"
+        maxHeight={maxHeight || "700px"}
         onCreateEditor={handleCreateEditor}
       />
     </SyntaxHighlighterLayout>

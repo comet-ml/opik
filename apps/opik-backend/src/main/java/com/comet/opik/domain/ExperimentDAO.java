@@ -3,19 +3,20 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
-import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -52,6 +53,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -84,8 +86,9 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
-                optimization_id
-            ) <settings_clause>
+                optimization_id,
+                status
+            )
             SELECT
                 if(
                     LENGTH(CAST(old.id AS Nullable(String))) > 0,
@@ -102,7 +105,8 @@ class ExperimentDAO {
                 new.prompt_id,
                 new.prompt_versions,
                 new.type,
-                new.optimization_id
+                new.optimization_id,
+                new.status
             FROM (
                 SELECT
                 :id AS id,
@@ -116,7 +120,8 @@ class ExperimentDAO {
                 :prompt_id AS prompt_id,
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
-                :optimization_id AS optimization_id
+                :optimization_id AS optimization_id,
+                :status AS status
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -142,6 +147,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(id)> AND id = :id <endif>
+                <if(ids_list)> AND id IN :ids_list <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
@@ -163,7 +169,16 @@ class ExperimentDAO {
                     experiment_id,
                     mapFromArrays(
                         ['p50', 'p90', 'p99'],
-                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(duration)
+                        )
                     ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
@@ -200,6 +215,71 @@ class ExperimentDAO {
                     ) AS s ON ei.trace_id = s.trace_id
                 )
                 GROUP BY experiment_id
+            ), feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
+                FROM feedback_scores_combined_grouped
             ),
             feedback_scores_agg AS (
                 SELECT
@@ -225,10 +305,7 @@ class ExperimentDAO {
                             name,
                             entity_id AS trace_id,
                             value
-                        FROM feedback_scores final
-                        WHERE workspace_id = :workspace_id
-                        AND entity_type = 'trace'
-                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                        FROM feedback_scores_final
                     ) fs ON fs.trace_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
                     HAVING length(fs.name) > 0
@@ -279,6 +356,7 @@ class ExperimentDAO {
                 e.prompt_versions as prompt_versions,
                 e.optimization_id as optimization_id,
                 e.type as type,
+                e.status as status,
                 fs.feedback_scores as feedback_scores,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
@@ -319,15 +397,196 @@ class ExperimentDAO {
             WITH experiments_filtered AS (
                 SELECT
                     dataset_id,
-                    metadata
+                    metadata,
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids,
+                    created_at
                 FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
             )
-            SELECT <groupSelects>
+            SELECT <groupSelects>, max(created_at) AS last_created_experiment_at
             FROM experiments_filtered
+            GROUP BY <groupBy>
+            ;
+            """;
+
+    private static final String FIND_GROUPS_AGGREGATIONS = """
+            WITH experiments_final AS (
+                SELECT
+                    *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                FROM experiments final
+                WHERE workspace_id = :workspace_id
+                <if(types)> AND type IN :types <endif>
+                <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
+                <if(filters)> AND <filters> <endif>
+            ), experiment_items_final AS (
+                SELECT
+                    id, experiment_id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_final)
+            ), experiment_durations AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(duration)
+                        )
+                    ) AS duration_values,
+                    count(DISTINCT trace_id) as trace_count,
+                    sum(total_estimated_cost) as total_estimated_cost_sum,
+                    avg(total_estimated_cost) as total_estimated_cost_avg
+                FROM (
+                    SELECT DISTINCT
+                        ei.experiment_id,
+                        ei.trace_id as trace_id,
+                        t.duration as duration,
+                        total_estimated_cost
+                    FROM experiment_items_final ei
+                    LEFT JOIN (
+                        SELECT
+                            id,
+                            if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                NULL) as duration
+                        FROM traces final
+                        WHERE workspace_id = :workspace_id
+                        AND id IN (SELECT trace_id FROM experiment_items_final)
+                    ) AS t ON ei.trace_id = t.id
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sum(total_estimated_cost) as total_estimated_cost
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                        GROUP BY workspace_id, project_id, trace_id
+                    ) AS s ON ei.trace_id = s.trace_id
+                )
+                GROUP BY experiment_id
+            ), feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ),
+            feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.avg_value)
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        et.experiment_id,
+                        fs.name,
+                        avg(fs.value) AS avg_value
+                    FROM (
+                        SELECT
+                            DISTINCT
+                                experiment_id,
+                                trace_id
+                        FROM experiment_items_final
+                    ) as et
+                    LEFT JOIN (
+                        SELECT
+                            name,
+                            entity_id AS trace_id,
+                            value
+                        FROM feedback_scores_final
+                    ) fs ON fs.trace_id = et.trace_id
+                    GROUP BY et.experiment_id, fs.name
+                    HAVING length(fs.name) > 0
+                ) as fs_avg
+                GROUP BY experiment_id
+            ),
+            experiments_full AS (
+                SELECT
+                    e.id as id,
+                    e.dataset_id AS dataset_id,
+                    e.metadata AS metadata,
+                    fs.feedback_scores as feedback_scores,
+                    ed.trace_count as trace_count,
+                    ed.duration_values AS duration,
+                    ed.total_estimated_cost_sum as total_estimated_cost,
+                    ed.total_estimated_cost_avg as total_estimated_cost_avg
+                FROM experiments_final AS e
+                LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
+                LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            )
+            SELECT
+                count(DISTINCT id) as experiment_count,
+                sum(trace_count) as trace_count,
+                sum(total_estimated_cost) as total_estimated_cost,
+                avg(total_estimated_cost_avg) as total_estimated_cost_avg,
+                avgMap(feedback_scores) as feedback_scores,
+                avgMap(duration) as duration,
+                <groupSelects>
+            FROM experiments_full
             GROUP BY <groupBy>
             ;
             """;
@@ -404,11 +663,49 @@ class ExperimentDAO {
             AND id NOT IN (
                 SELECT id
                 FROM experiments
-                WHERE workspace_id = :demo_workspace_id
-                AND name IN :excluded_names
+                WHERE name IN :excluded_names
             )
             GROUP BY workspace_id, created_by
             ;
+            """;
+
+    private static final String UPDATE = """
+            INSERT INTO experiments (
+                id,
+                dataset_id,
+                name,
+                workspace_id,
+                metadata,
+                created_by,
+                last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                type,
+                optimization_id,
+                status,
+                created_at,
+                last_updated_at
+            )
+            SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                created_by,
+                :user_name as last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                <if(type)> :type <else> type <endif> as type,
+                optimization_id,
+                <if(status)> :status <else> status <endif> as status,
+                created_at,
+                now64(9) as last_updated_at
+            FROM experiments
+            WHERE id = :id
+            AND workspace_id = :workspace_id
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -416,7 +713,6 @@ class ExperimentDAO {
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -426,17 +722,14 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> insert(Experiment experiment, Connection connection) {
-        ST template = new ST(INSERT);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
-        var statement = connection.createStatement(template.render())
+        var statement = connection.createStatement(INSERT)
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
-                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "");
+                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
+                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue());
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -487,6 +780,18 @@ class ExperimentDAO {
                         statement -> statement.bind("id", id).bind("limit", limit)))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
+    }
+
+    @WithSpan
+    Flux<Experiment> getByIds(@NonNull Set<UUID> ids) {
+        log.info("Getting experiment by ids '{}'", ids);
+        var template = new ST(FIND);
+        template.add("ids_list", ids);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> get(
+                        template.render(), connection,
+                        statement -> statement.bind("ids_list", ids.toArray(UUID[]::new))))
+                .flatMap(this::mapToDto);
     }
 
     @WithSpan
@@ -543,6 +848,7 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
+                    .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .build();
         });
     }
@@ -557,10 +863,20 @@ class ExperimentDAO {
         return Optional.ofNullable(row.get("duration", Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        (BigDecimal) durations.get("p50"),
-                        (BigDecimal) durations.get("p90"),
-                        (BigDecimal) durations.get("p99")))
+                        convertToBigDecimal(durations.get("p50")),
+                        convertToBigDecimal(durations.get("p90")),
+                        convertToBigDecimal(durations.get("p99"))))
                 .orElse(null);
+    }
+
+    private static BigDecimal convertToBigDecimal(Number value) {
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        } else if (value instanceof Double) {
+            return BigDecimal.valueOf((Double) value);
+        } else {
+            return BigDecimal.ZERO;
+        }
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {
@@ -771,7 +1087,6 @@ class ExperimentDAO {
 
     private Publisher<? extends Result> getBiDailyData(Connection connection) {
         return connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
-                .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
                 .bind("excluded_names", DemoData.EXPERIMENTS)
                 .execute();
     }
@@ -853,7 +1168,6 @@ class ExperimentDAO {
     public Mono<Long> getDailyCreatedCount() {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
-                        .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
                         .bind("excluded_names", DemoData.EXPERIMENTS)
                         .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
@@ -873,6 +1187,21 @@ class ExperimentDAO {
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(result -> mapExperimentGroupItem(result, criteria.groups().size()));
+    }
+
+    @WithSpan
+    public Flux<ExperimentGroupAggregationItem> findGroupsAggregations(@NonNull ExperimentGroupCriteria criteria) {
+        log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS, criteria);
+                    var statement = connection.createStatement(template.render());
+                    bindGroupCriteria(statement, criteria);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> mapExperimentGroupAggregationItem(result, criteria.groups().size()));
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria) {
@@ -914,7 +1243,91 @@ class ExperimentDAO {
 
             return ExperimentGroupItem.builder()
                     .groupValues(groupValues)
+                    .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
                     .build();
         });
     }
+
+    private Publisher<ExperimentGroupAggregationItem> mapExperimentGroupAggregationItem(Result result,
+            int groupsCount) {
+        return result.map((row, rowMetadata) -> {
+
+            var groupValues = IntStream.range(0, groupsCount)
+                    .mapToObj(i -> "group_" + i)
+                    .map(columnName -> row.get(columnName, String.class))
+                    .toList();
+
+            return ExperimentGroupAggregationItem.builder()
+                    .groupValues(groupValues)
+                    .experimentCount(row.get("experiment_count", Long.class))
+                    .traceCount(row.get("trace_count", Long.class))
+                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
+                    .duration(getDuration(row))
+                    .feedbackScores(getFeedbackScores(row))
+                    .build();
+        });
+    }
+
+    @WithSpan
+    Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
+        log.info("Updating experiment with id '{}'", id);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
+                .then();
+    }
+
+    private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
+            Connection connection) {
+
+        ST template = buildUpdateTemplate(experimentUpdate, UPDATE);
+        String sql = template.render();
+
+        Statement statement = connection.createStatement(sql);
+        bindUpdateParams(experimentUpdate, statement);
+        statement.bind("id", id);
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+    }
+
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update) {
+        ST template = new ST(update);
+
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            template.add("name", experimentUpdate.name());
+        }
+
+        if (experimentUpdate.metadata() != null) {
+            template.add("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.type() != null) {
+            template.add("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            template.add("status", experimentUpdate.status().getValue());
+        }
+
+        return template;
+    }
+
+    private void bindUpdateParams(ExperimentUpdate experimentUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            statement.bind("name", experimentUpdate.name());
+        }
+
+        if (experimentUpdate.metadata() != null) {
+            statement.bind("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.type() != null) {
+            statement.bind("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            statement.bind("status", experimentUpdate.status().getValue());
+        }
+    }
+
 }

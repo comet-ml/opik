@@ -7,33 +7,38 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 224 17% 26%;
-    --foreground-secondary: 224 71% 4%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --tooltip: 224 17% 26%;
-    --tooltip-foreground: 0 0% 100%;
-
-    --popover: 0 0% 100%;
-    --popover-gray: 240 14% 99%;
-    --popover-foreground: 222.2 84% 4.9%;
-
+    /* Design system colors */
     --primary: 239 89% 64%;
     --primary-hover: 238 62% 51%;
     --primary-active: 238 65% 43%;
-    --primary-100: 235 85% 97%;
-    --primary-foreground: 210 40% 98%;
-
     --secondary: 240 93% 95%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --primary-100: 235 85% 97%;
+    --white: #ffffff;
 
-    --muted: 210 40% 96.1%;
-    --muted-slate: 215 16%, 47%;
+    --foreground-secondary: 224 71% 4%;
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
+
+    --muted-slate: 215 16%, 47%;
+    --light-slate: 215 20% 65%;
+    --slate-300: 213 27% 84%;
+    --border: 214 32% 92%;
+    --breadcrumb-last: 216 20% 40%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --background: 0 0% 100%;
+    --foreground: 224 17% 26%;
+
+    --soft-background: 240 20% 99%;
+
+    /* other colors */
+    --tooltip: 224 17% 26%;
+    --tooltip-foreground: 0 0% 100%;
+
+    --popover-gray: 240 14% 99%;
+
+    --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
     --accent: 210 40% 96.1%;
@@ -42,60 +47,317 @@
     --destructive: 348 86% 61%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 239 89% 64%;
 
     --warning: 348 86% 61%;
     --success: 129 100% 42%;
-    --lite-slate: 215 20% 65%;
+
+    /* Gray scale for utility classes */
+    --gray-100: #f3f4f6;
+
+    /* Special button colors */
+    --special-button: #19a979;
+    --special-button-hover: #1e8a66;
+    --special-button-active: #1a7557;
+
+    /* Toggle colors */
+    --toggle-outline-active: #f3f4fe;
+
+    /* CodeMirror theme colors */
+    --codemirror-background: #f8fafc;
+    --codemirror-gutter: #94a3b8;
+    --codemirror-line-highlight: #e6e6fe;
+    --codemirror-syntax-blue: #005cc5;
+
+    /* Chart colors */
+    --chart-tick-stroke: #373d4d;
+    --chart-grid-stroke: #f1f5f8;
+
+    /* DataTable colors */
+
+    /* Trace thread colors */
+    --thread-active: #ebf2f5;
+    --thread-inactive: #e2effd;
+    --thread-icon-background: #dedefd;
+    --thread-icon-text: #1b1c7e;
+    --message-input-background: #e7ecff;
+
+    /* Action cards */
+    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+    /* Action types */
+    --action-trace-background: #dafbf0;
+    --action-trace-text: #295747;
+    --action-experiment-background: #fde2f6;
+    --action-experiment-text: #72275f;
+    --action-guardrail-background: #fee3d7;
+    --action-guardrail-text: #73422b;
+    --action-playground-background: #efe2fd;
+    --action-playground-text: #491b7e;
+
+    /* Feature/brand colors */
+    --feature-experiment-management: #6c6ff7;
+    --feature-llm: #52aea4;
+
+    /* Error indicator colors */
+    --error-indicator-background: #ffd2d2;
+    --error-indicator-text: #822c45;
+
+    /* Search highlight colors */
+    --search-highlight: #ffdf20;
+    --search-current-highlight: #ff8904;
+
+    /* Diff colors */
+    --diff-removed-bg: #fde2e7;
+    --diff-removed-text: #931a32;
+    --diff-added-bg: #e2fde6;
+    --diff-added-text: #1d6728;
+
+    /* Upload field colors */
+    --upload-icon-bg: 213 26.8% 83.9%;
+
+    /* Code block colors */
+    --code-block: #fbfcfd;
+
+    /* Welcome banner gradient colors */
+    --banner-gradient-start: #060a28;
+    --banner-gradient-end: #604fff;
+
+    /* Scrollbar colors */
+    --scrollbar-thumb: #babac0;
+    --scrollbar-thumb-hover: #7d7d7d;
+    --scrollbar-background: #ffffff;
+
+    /* Modern color variants for tags and charts */
+    --color-gray: #64748b;
+    --color-purple: #8b5cf6;
+    --color-burgundy: #bf399e;
+    --color-pink: #f43f5e;
+    --color-red: #ef4444;
+    --color-orange: #f97316;
+    --color-yellow: #eab308;
+    --color-green: #10b981;
+    --color-turquoise: #06b6d4;
+    --color-blue: #3b82f6;
+    --color-primary: #6366f1;
+    --color-indigo: #6366f1;
+    --color-violet: #8b5cf6;
+    --color-emerald: #10b981;
+    --color-cyan: #06b6d4;
+    --color-rose: #f43f5e;
+
+    /* Tag variant background and text colors */
+    --tag-gray-bg: #f3f4f6;
+    --tag-purple-bg: #efe2fd;
+    --tag-purple-text: #491b7e;
+    --tag-burgundy-bg: #fde2f6;
+    --tag-burgundy-text: #72275f;
+    --tag-pink-bg: #fde2ea;
+    --tag-pink-text: #822c45;
+    --tag-red-bg: #fdc9c9;
+    --tag-red-text: #4e1d1d;
+    --tag-orange-bg: #fee3d7;
+    --tag-orange-text: #73422b;
+    --tag-yellow-bg: #fef0c8;
+    --tag-yellow-text: #675523;
+    --tag-green-bg: #dafbf0;
+    --tag-green-text: #295747;
+    --tag-turquoise-bg: #cdf5f9;
+    --tag-turquoise-text: #15545b;
+    --tag-blue-bg: #e2effd;
+    --tag-blue-text: #19426b;
+
+    /* Info box colors (blue variant for informational content) */
+    --info-box-bg: 214 100% 92%;
+    --info-box-text: 224 76% 40%;
+    --info-box-icon-bg: 214 100% 92%;
+    --info-box-icon-text: 217 91% 60%;
+
+    /* Warning/tip box colors (amber variant for tips and warnings) */
+    --warning-box-bg: 45 93% 89%;
+    --warning-box-text: 32 85% 32%;
+    --warning-box-icon-bg: 45 93% 58%;
+    --warning-box-icon-text: 32 85% 32%;
 
     --radius: 0.5rem;
 
     --header-height: 60px;
     --sidebar-width: 61px;
-
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 224 17% 26%;
+    /* Design system colors */
+    --primary: 223 91% 60%;
+    --primary-hover: 217 91% 70%;
+    --primary-active: 220, 91%, 67%;
+    --secondary: 0, 0%, 18%;
+    --primary-100: 222, 25%, 14%;
+    --white: #ffffff;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --foreground-secondary: 214, 32%, 91%;
+    --muted-gray: 0, 0%, 30%;
+    --muted-disabled: 0, 0%, 14%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --muted-slate: 0, 0%, 64%;
+    --light-slate: 0, 0%, 64%;
+    --slate-300: 213 27% 84%;
+    --border: 0, 0%, 16%;
+    --breadcrumb-last: 214, 32%, 91%;
+    --secondary-foreground: 0, 0%, 10%;
+    --primary-foreground: 0, 0%, 11%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --background: 0, 0%, 7%;
+    --foreground: 214, 32%, 91%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --soft-background: 0, 0%, 7%;
+    --accent-background: 0, 0%, 9%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    /* other colors - Dark Mode */
+    --tooltip: 0, 0%, 9%;
+    --tooltip-foreground: 214, 32%, 91%;
 
-    --accent: 217.2 32.6% 17.5%;
+    /* Legacy variables - Dark Mode (for backward compatibility) */
+    --input: 0, 0%, 16%;
+    --ring: 217.2 91.2% 59.8%;
+
+    /* Popover colors - Dark Mode */
+    --popover-gray: 217.2 32.6% 10%;
+
+    --muted-foreground: 0, 0%, 64%;
+    --accent: 0, 0%, 12%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 348 86% 61%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --warning: 348 86% 61%;
+    --success: 129 100% 42%;
 
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Gray scale for utility classes - Dark Mode */
+    --gray-100: 217.2 32.6% 15%;
+
+    /* Special button colors - Dark Mode */
+    --special-button: #20ac74;
+    --special-button-hover: #219c6a;
+    --special-button-active: #1e9a65;
+
+    /* Action cards - Dark Mode */
+    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1),
+      0 2px 4px -2px rgb(255 255 255 / 0.05);
+
+    /* Action types - Dark Mode (darker backgrounds, lighter text) */
+    --action-trace-background: #29322f;
+    --action-trace-text: #14bb83;
+    --action-experiment-background: #2b2229;
+    --action-experiment-text: #cf44ad;
+    --action-guardrail-background: #322d29;
+    --action-guardrail-text: #ff9847;
+    --action-playground-background: #2e2932;
+    --action-playground-text: #a06dd9;
+
+    /* Feature colors - Dark Mode */
+    --feature-experiment-management: #3b70f6;
+    --feature-llm: #20ac74;
+
+    /* Muted colors - Dark Mode */
+    --muted: 0, 0%, 11%;
+
+    /* Toggle colors - Dark Mode */
+    --toggle-outline-active: #2c3c56;
+
+    /* Thread colors - Dark Mode */
+    --thread-icon-background: #2e2932;
+    --thread-icon-text: #a06dd9;
+    --thread-active: #2a3f2f;
+    --thread-inactive: #2a3447;
+    --message-input-background: #2a2f47;
+
+    /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
+    --codemirror-background: #1c1c1c;
+    --codemirror-gutter: #7d8590;
+    --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
+    --codemirror-syntax-blue: #79c0ff;
+
+    /* Chart colors */
+    --chart-tick-stroke: #a3a3a3;
+    --chart-grid-stroke: #303030;
+
+    /* Diff colors - Dark Mode */
+    --diff-removed-bg: #7f1d1d;
+    --diff-removed-text: #fef2f2;
+    --diff-added-bg: #14532d;
+    --diff-added-text: #bbf7d0;
+
+    /* Upload field colors - Dark Mode */
+    --upload-icon-bg: 215 19.3% 34.5%;
+
+    /* Code block colors - Dark Mode */
+    --code-block: #1c1c1c;
+
+    /* Welcome banner gradient colors - Dark Mode */
+    --banner-gradient-start: #0f172a;
+    --banner-gradient-end: hsl(var(--primary));
+
+    /* Scrollbar colors - Dark Mode */
+    --scrollbar-thumb: #242424;
+    --scrollbar-thumb-hover: #2e2e2e;
+    --scrollbar-background: #121212;
+    /* Tag variant background and text colors - Dark Mode */
+    --tag-gray-bg: #242424;
+    --tag-purple-bg: #2e2932;
+    --tag-purple-text: #a06dd9;
+    --tag-burgundy-bg: #2b2229;
+    --tag-burgundy-text: #cf44ad;
+    --tag-pink-bg: #2e2427;
+    --tag-pink-text: #f45d8a;
+    --tag-red-bg: #322929;
+    --tag-red-text: #f36d6d;
+    --tag-orange-bg: #322d29;
+    --tag-orange-text: #ff9847;
+    --tag-yellow-bg: #323029;
+    --tag-yellow-text: #ebad00;
+    --tag-green-bg: #29322f;
+    --tag-green-text: #14bb83;
+    --tag-turquoise-bg: #293232;
+    --tag-turquoise-text: #0fbfd2;
+    --tag-blue-bg: #292e32;
+    --tag-blue-text: #6eabe7;
+
+    /* Info box colors - Dark Mode */
+    --info-box-bg: 224 76% 33%;
+    --info-box-text: 221 83% 78%;
+    --info-box-icon-bg: 232 94% 48%;
+    --info-box-icon-text: 213 93% 68%;
+
+    /* Warning/tip box colors - Dark Mode */
+    --warning-box-bg: 32 85% 32%;
+    --warning-box-text: 48 96% 64%;
+    --warning-box-icon-bg: 32 95% 44%;
+    --warning-box-icon-text: 45 93% 58%;
+  }
+
+  /* CodeMirror cursor and selection fix for dark mode */
+  .dark .cm-cursor {
+    border-left-color: hsl(var(--text-primary)) !important;
+  }
+
+  .dark .cm-selectionBackground {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .dark .cm-focused .cm-selectionBackground {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .dark thead th {
+    background-color: hsl(var(--accent-background));
+  }
+
+  /* Playground table headers - no background in dark mode */
+  .dark .playground-table thead th {
+    background-color: transparent;
   }
 
   .comet-expanded {
@@ -210,29 +472,43 @@
       monospace;
   }
 
-  .comet-custom-scrollbar {
+  /* Custom scrollbar styling that adapts to website theme
+   * Problem: Browsers use OS scrollbar appearance which may not match website theme
+   * - User has light OS theme + website in dark mode = light scrollbars on dark UI (jarring)
+   * - User has dark OS theme + website in light mode = dark scrollbars on light UI (inconsistent)
+   * Solution: Force custom scrollbar styling that adapts to website theme changes
+   * - Dark theme: Apply dark scrollbars regardless of OS preference (.dark body)
+   * - Light theme (non-Windows): Use default OS scrollbars for better native feel
+   * - Windows: Always use custom styling due to poor default scrollbar UX (.comet-custom-scrollbar)
+   */
+  .dark body,
+  body.comet-custom-scrollbar {
     &.firefox {
-      scrollbar-color: #babac0 transparent;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
       scrollbar-width: thin;
     }
 
     ::-webkit-scrollbar {
-      background-color: #fff;
+      background-color: var(--scrollbar-background);
       width: 16px;
     }
 
     ::-webkit-scrollbar-track {
-      background-color: #fff;
+      background-color: var(--scrollbar-background);
     }
 
     ::-webkit-scrollbar-thumb {
-      background-color: #babac0;
+      background-color: var(--scrollbar-thumb);
       border-radius: 16px;
-      border: 4px solid #fff;
+      border: 4px solid var(--scrollbar-background);
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #7d7d7d;
+      background: var(--scrollbar-thumb-hover);
+    }
+
+    ::-webkit-scrollbar-corner {
+      background: var(--scrollbar-background);
     }
 
     ::-webkit-scrollbar-button {
@@ -247,6 +523,18 @@
   .comet-no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .action-card-shadow {
+    box-shadow: var(--action-card-shadow);
+  }
+
+  .hover\:action-card-shadow:hover {
+    box-shadow: var(--action-card-shadow);
+  }
+
+  .hover\:bg-\[var\(--thread-active\)\]\/80:hover {
+    background-color: rgba(var(--thread-active), 0.8);
   }
 }
 
@@ -298,6 +586,14 @@
   }
 }
 
+.comet-table {
+  /* resets padding for all nested cells wrappers */
+  td [data-cell-wrapper="true"] [data-cell-wrapper="true"],
+  th [data-header-wrapper="true"] [data-header-wrapper="true"] {
+    padding: unset !important;
+  }
+}
+
 .comet-line-highlight {
   position: relative;
 
@@ -310,7 +606,7 @@
     right: 0;
     bottom: 0;
     z-index: -5;
-    background: hsl(var(--secondary));
+    background: var(--secondary);
   }
 }
 
@@ -348,16 +644,6 @@
   }
 }
 
-.json-view_github.dark {
-  color: white;
-  --json-property: white;
-  --json-index: white;
-  --json-number: white;
-  --json-string: white;
-  --json-boolean: white;
-  --json-null: white;
-}
-
 div.cm-theme div.cm-search.cm-panel {
   @apply px-2 py-1;
 
@@ -375,5 +661,85 @@ div.cm-theme div.cm-search.cm-panel {
 
   button[name="close"] {
     @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
+  }
+}
+
+/* Collapsible headings styles */
+.collapsible-heading {
+  @apply border border-border rounded-lg mb-4;
+
+  /* Summary styling */
+  summary.collapsible-heading-summary {
+    @apply cursor-pointer p-4 hover:bg-muted/50 transition-colors;
+    list-style: none; /* Remove default arrow */
+
+    /* Custom arrow */
+    &::before {
+      content: "▶";
+      @apply inline-block mr-2 text-muted-foreground transition-transform duration-200;
+    }
+
+    /* Rotate arrow when open */
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  /* Content wrapper */
+  .collapsible-heading-content {
+    @apply p-4 pt-0 border-t border-border;
+  }
+
+  /* When open, rotate arrow */
+  &[open] summary.collapsible-heading-summary::before {
+    transform: rotate(90deg);
+  }
+
+  /* Dark theme adjustments */
+  .dark & {
+    @apply border-border;
+
+    summary.collapsible-heading-summary {
+      @apply hover:bg-muted/30;
+    }
+  }
+}
+
+/* Specific styling for collapsible headings in markdown */
+.comet-markdown .collapsible-heading {
+  /* Ensure proper spacing with other markdown elements */
+  margin: 1rem 0;
+
+  /* Style headings inside collapsible sections */
+  .collapsible-heading-content {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      @apply mt-4 mb-2;
+
+      &:first-child {
+        @apply mt-0;
+      }
+    }
+
+    p {
+      @apply mb-2;
+
+      &:last-child {
+        @apply mb-0;
+      }
+    }
+
+    ul,
+    ol {
+      @apply mb-2;
+
+      &:last-child {
+        @apply mb-0;
+      }
+    }
   }
 }

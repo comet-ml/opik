@@ -7,6 +7,7 @@ import {
   FlaskConical,
   LayoutGrid,
   SparklesIcon,
+  UserPen,
 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
@@ -23,44 +24,58 @@ export enum RESOURCE_TYPE {
   experiment,
   optimization,
   trial,
+  annotationQueue,
 }
 
-const RESOURCE_MAP = {
+export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
     url: "/$workspaceName/projects/$projectId/traces",
     icon: LayoutGrid,
     param: "projectId",
-    deleted: "Project deleted",
+    deleted: "Deleted project",
+    label: "project",
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
     icon: Database,
     param: "datasetId",
-    deleted: "Dataset deleted",
+    deleted: "Deleted dataset",
+    label: "dataset",
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
     icon: FileTerminal,
     param: "promptId",
-    deleted: "Prompt deleted",
+    deleted: "Deleted prompt",
+    label: "prompt",
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
     icon: FlaskConical,
     param: "datasetId",
-    deleted: "Experiment deleted",
+    deleted: "Deleted experiment",
+    label: "experiment",
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
     icon: SparklesIcon,
     param: "datasetId",
-    deleted: "Optimization deleted",
+    deleted: "Deleted optimization",
+    label: "optimization run",
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
     icon: SparklesIcon,
     param: "datasetId",
-    deleted: "Optimization deleted",
+    deleted: "Deleted optimization",
+    label: "trial",
+  },
+  [RESOURCE_TYPE.annotationQueue]: {
+    url: "/$workspaceName/annotation-queues/$annotationQueueId",
+    icon: UserPen,
+    param: "annotationQueueId",
+    deleted: "Deleted annotation queue",
+    label: "annotation queue",
   },
 };
 
@@ -70,7 +85,9 @@ type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
+  tooltipContent?: string;
   asTag?: boolean;
+  isDeleted?: boolean;
 };
 
 const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
@@ -79,7 +96,9 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   id,
   search,
   params,
+  tooltipContent = "",
   asTag = false,
+  isDeleted = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
@@ -89,7 +108,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   };
   linkParams[props.param] = id;
 
-  const deleted = isUndefined(name);
+  const deleted = isUndefined(name) || isDeleted;
   const text = deleted ? props.deleted : name;
 
   return (
@@ -102,7 +121,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       disabled={deleted}
     >
       {asTag ? (
-        <TooltipWrapper content={text} stopClickPropagation>
+        <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <Tag
             size="md"
             variant="gray"

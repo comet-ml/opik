@@ -1,32 +1,16 @@
 import os
-import tempfile
 import time
 import uuid
 
-import numpy as np
 import pytest
 
 import opik
-from opik import opik_context, id_helpers, Attachment
+from opik import opik_context, id_helpers, Attachment, exceptions
 from opik.api_objects import helpers
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 from . import verifiers
-from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
+from .conftest import OPIK_E2E_TESTS_PROJECT_NAME, ATTACHMENT_FILE_SIZE
 from ..testlib import ANY_STRING
-
-FILE_SIZE = 2 * 1024 * 1024
-
-
-@pytest.fixture
-def data_file():
-    temp_file = tempfile.NamedTemporaryFile(delete=False)
-    try:
-        temp_file.write(np.random.bytes(FILE_SIZE))
-        temp_file.seek(0)
-        yield temp_file
-    finally:
-        temp_file.close()
-        os.unlink(temp_file.name)
 
 
 @pytest.mark.parametrize(
@@ -424,7 +408,12 @@ def test_manually_created_trace_and_span__happyflow(
         input={"input": "trace-input"},
         output={"output": "trace-output"},
         tags=["trace-tag"],
-        metadata={"trace-metadata-key": "trace-metadata-value"},
+        metadata={
+            "providers": [
+                provider_name
+            ],  # BE injects "providers" array as first field in metadata of trace
+            "trace-metadata-key": "trace-metadata-value",
+        },
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
     )
 
@@ -438,7 +427,10 @@ def test_manually_created_trace_and_span__happyflow(
         input={"input": "span-input"},
         output={"output": "span-output"},
         tags=["span-tag"],
-        metadata={"span-metadata-key": "span-metadata-value"},
+        metadata={
+            "provider": provider_name,  # BE injects "provider" string as first field in metadata of span
+            "span-metadata-key": "span-metadata-value",
+        },
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
         model=model_name,
         provider=provider_name,
@@ -446,7 +438,7 @@ def test_manually_created_trace_and_span__happyflow(
 
 
 def test_search_traces__happyflow(opik_client):
-    # In order to define a unique search query, we will create a unique identifier that will be part of the input of the trace
+    # To define a unique search query, we will create a unique identifier that will be part of the trace input
     unique_identifier = str(uuid.uuid4())[-6:]
 
     filter_string = f'input contains "{unique_identifier}"'
@@ -460,15 +452,14 @@ def test_search_traces__happyflow(opik_client):
     )
 
     # Send traces that don't match
-    non_matching_trace_ids = []
     for input_value in range(2):
-        trace = opik_client.trace(
+        opik_client.trace(
             name="trace-name",
             input={"input": "some-random-input"},
             output={"output": "trace-output"},
             project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         )
-        non_matching_trace_ids.append(trace.id)
+
     opik_client.flush()
 
     # Search for the traces - Note that we use a large max_results to ensure that we get all traces, if the project has more than 100000 matching traces it is possible
@@ -481,7 +472,7 @@ def test_search_traces__happyflow(opik_client):
 
     verifiers.verify_trace(
         opik_client=opik_client,
-        trace_id=traces[0].id,
+        trace_id=trace.id,
         name="trace-name",
         input={"input": f"Some random input - {unique_identifier}"},
         output={"output": "trace-output"},
@@ -489,8 +480,91 @@ def test_search_traces__happyflow(opik_client):
     )
 
 
-def test_search_spans__happyflow(opik_client):
-    # In order to define a unique search query, we will create a unique identifier that will be part of the input of the trace
+def test_search_traces__wait_for_at_least__happyflow(opik_client):
+    # check that synchronized searching for traces is working
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send traces that have this input
+    trace_ids = []
+    matching_count = 1000
+    for i in range(matching_count):
+        trace = opik_client.trace(
+            name=f"trace-name-{i}",
+            input={"input": f"Some random input - {unique_identifier}"},
+            output={"output": "trace-output"},
+            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        )
+        trace_ids.append(trace.id)
+
+    # send not matching traces
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-1"},
+    )
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-2"},
+    )
+
+    opik_client.flush()
+
+    # Search for the traces with synchronization
+    filter_string = f'input contains "{unique_identifier}"'
+    traces = opik_client.search_traces(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        filter_string=filter_string,
+        wait_for_at_least=matching_count,
+        wait_for_timeout=10,
+    )
+
+    # Verify that the matching trace is returned
+    assert (
+        len(traces) == matching_count
+    ), f"Expected to find {matching_count} matching traces"
+    for trace in traces:
+        assert (
+            trace.id in trace_ids
+        ), f"Expected to find the matching trace id {trace.id}"
+
+
+def test_search_traces__wait_for_at_least__timeout__exception_raised(opik_client):
+    # check that synchronized searching for traces is working
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send traces that have this input
+    opik_client.trace(
+        name="trace-name-3",
+        input={"input": f"Some random input - {unique_identifier}"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    # send not matching traces
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-1"},
+    )
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-2"},
+    )
+
+    opik_client.flush()
+
+    # Search for the traces with synchronization
+    unmatchable_count = 1000
+    filter_string = f'input contains "{unique_identifier}"'
+    with pytest.raises(exceptions.SearchTimeoutError):
+        opik_client.search_traces(
+            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+            filter_string=filter_string,
+            wait_for_at_least=unmatchable_count,
+            wait_for_timeout=1,
+        )
+
+
+def test_search_spans__happyflow(opik_client: opik.Opik):
+    # To define a unique search query, we will create a unique identifier that will be part of the trace input
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]
 
@@ -522,8 +596,7 @@ def test_search_spans__happyflow(opik_client):
 
     opik_client.flush()
 
-    # Search for the traces - Note that we use a large max_results to ensure that we get all traces,
-    # if the project has more than 100000 matching traces it is possible
+    # Search for the spans
     spans = opik_client.search_spans(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         trace_id=trace_id,
@@ -533,6 +606,109 @@ def test_search_spans__happyflow(opik_client):
     # Verify that the matching trace is returned
     assert len(spans) == 1, "Expected to find 1 matching span"
     assert spans[0].id == matching_span.id, "Expected to find the matching span"
+
+
+def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
+    # check that synchronized searching for spans is working
+    trace_id = helpers.generate_id()
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send a trace that matches the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    matching_count = 1000
+    matching_span_ids = []
+    for i in range(matching_count):
+        matching_span = trace.span(
+            name=f"span-name-{i}",
+            input={"input": f"Some random input - {unique_identifier}"},
+            output={"output": "span-output"},
+        )
+        matching_span_ids.append(matching_span.id)
+
+    # adding two not matching spans
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 1"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+    )
+
+    opik_client.flush()
+
+    filter_string = f'input contains "{unique_identifier}"'
+
+    # Search for the spans with synchronization
+    spans = opik_client.search_spans(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        trace_id=trace_id,
+        filter_string=filter_string,
+        wait_for_at_least=matching_count,
+        wait_for_timeout=10,
+    )
+
+    # Verify that the matching trace is returned
+    assert (
+        len(spans) == matching_count
+    ), f"Expected to find {matching_count} matching spans"
+    for span in spans:
+        assert (
+            span.id in matching_span_ids
+        ), f"Expected to find the matching span id {span.id}"
+
+
+def test_search_spans__wait_for_at_least__timeout__exception_raised(
+    opik_client: opik.Opik,
+):
+    trace_id = helpers.generate_id()
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send a trace that matches the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    trace.span(
+        name="span-name",
+        input={"input": f"Some random input - {unique_identifier}"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 1"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+    )
+
+    opik_client.flush()
+
+    # Search for the spans
+    unmatchable_count = 1000
+    filter_string = f'input contains "{unique_identifier}"'
+    with pytest.raises(exceptions.SearchTimeoutError):
+        opik_client.search_spans(
+            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+            trace_id=trace_id,
+            filter_string=filter_string,
+            wait_for_at_least=unmatchable_count,
+            wait_for_timeout=1,
+        )
 
 
 def test_copy_traces__happyflow(opik_client):
@@ -675,25 +851,25 @@ def test_tracked_function__update_current_span_and_trace_called__happyflow(
     )
 
 
-def test_opik_trace__attachments(opik_client, data_file):
+def test_opik_trace__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -719,22 +895,22 @@ def test_opik_trace__attachments(opik_client, data_file):
 
 
 def test_tracked_function__update_current_trace__with_attachments(
-    opik_client, data_file
+    opik_client, attachment_data_file
 ):
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
     }
     data_sizes = {
-        file_name: FILE_SIZE,
+        file_name: ATTACHMENT_FILE_SIZE,
     }
 
     @opik.track
@@ -763,25 +939,25 @@ def test_tracked_function__update_current_trace__with_attachments(
     )
 
 
-def test_opik_client_span__attachments(opik_client, data_file):
+def test_opik_client_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -812,25 +988,25 @@ def test_opik_client_span__attachments(opik_client, data_file):
     )
 
 
-def test_span_span__attachments(opik_client, data_file):
+def test_span_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -866,25 +1042,25 @@ def test_span_span__attachments(opik_client, data_file):
     )
 
 
-def test_trace_span__attachments(opik_client, data_file):
+def test_trace_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
     attachments = {
         names[0]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[0],
             content_type="application/octet-stream",
         ),
         names[1]: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=names[1],
             content_type="application/octet-stream",
         ),
     }
     data_sizes = {
-        names[0]: FILE_SIZE,
-        names[1]: FILE_SIZE,
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
     }
 
     # Send a trace that matches the input filter
@@ -915,22 +1091,22 @@ def test_trace_span__attachments(opik_client, data_file):
 
 
 def test_tracked_function__update_current_span__with_attachments(
-    opik_client, data_file
+    opik_client, attachment_data_file
 ):
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
     }
     data_sizes = {
-        file_name: FILE_SIZE,
+        file_name: ATTACHMENT_FILE_SIZE,
     }
 
     @opik.track
@@ -967,7 +1143,7 @@ def test_tracked_function__update_current_span__with_attachments(
 
 
 def test_opik_client__update_span_with_attachments__original_fields_preserved_but_some_are_patched(
-    opik_client: opik.Opik, data_file
+    opik_client: opik.Opik, attachment_data_file
 ):
     root_span_client = opik_client.span(
         name="root-span-name",
@@ -980,16 +1156,16 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
     )
     opik_client.flush()
 
-    file_name = os.path.basename(data_file.name)
+    file_name = os.path.basename(attachment_data_file.name)
     attachments = {
         file_name: Attachment(
-            data=data_file.name,
+            data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
         )
     }
     data_sizes = {
-        file_name: FILE_SIZE,
+        file_name: ATTACHMENT_FILE_SIZE,
     }
 
     opik_client.update_span(
@@ -1017,4 +1193,89 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
         entity_id=child_span_client.id,
         attachments=attachments,
         data_sizes=data_sizes,
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize(
+    "new_input,new_output,new_tags,new_metadata,new_thread_id",
+    [
+        ({"input": "new-trace-input-value"}, None, None, None, None),
+        (None, {"output": "new-trace-output-value"}, None, None, None),
+        (None, None, ["new-trace-tag"], None, None),
+        (
+            None,
+            None,
+            None,
+            {"new-trace-metadata-key": "new-trace-metadata-value"},
+            None,
+        ),
+        (None, None, None, None, id_helpers.generate_id()),
+    ],
+)
+def test_opik_client__update_trace__happy_flow(
+    new_input, new_output, new_tags, new_metadata, new_thread_id, opik_client: opik.Opik
+):
+    # test that the trace update works by updating only one field at a time
+    project_name = "update_trace_happy_flow"
+    trace_name = "trace_name"
+    input = {"input": "trace-input-value"}
+    output = {"output": "trace-output-value"}
+    tags = ["trace-tag"]
+    metadata = {"trace-metadata-key": "trace-metadata-value"}
+    thread_id = id_helpers.generate_id()
+    trace = opik_client.trace(
+        name=trace_name,
+        input=input,
+        output=output,
+        tags=tags,
+        metadata=metadata,
+        project_name=project_name,
+        thread_id=thread_id,
+    )
+
+    opik_client.flush()
+
+    # verify that the trace was saved
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name=trace_name,
+        project_name=project_name,
+        input=input,
+        output=output,
+        metadata=metadata,
+        tags=tags,
+        thread_id=thread_id,
+    )
+
+    #
+    # Do partial update
+    #
+    opik_client.update_trace(
+        trace_id=trace.id,
+        project_name=project_name,
+        input=new_input,
+        output=new_output,
+        tags=new_tags,
+        metadata=new_metadata,
+        thread_id=new_thread_id,
+    )
+
+    input = new_input or input
+    output = new_output or output
+    tags = new_tags or tags
+    metadata = new_metadata or metadata
+    thread_id = new_thread_id or thread_id
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name=trace_name,
+        project_name=project_name,
+        input=input,
+        output=output,
+        tags=tags,
+        metadata=metadata,
+        thread_id=thread_id,
     )

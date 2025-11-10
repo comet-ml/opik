@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.0 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -131,11 +131,20 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
+| clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
+| clickhouse.configuration.files."conf.d/profiles.xml" | string | `"<clickhouse>\n  <profiles>\n    <default>\n        <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>\n        <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>\n    </default>\n  </profiles>\n</clickhouse>\n"` |  |
+| clickhouse.configuration.files."conf.d/system_tables.xml" | string | `"<clickhouse>\n  <opentelemetry_span_log remove=\"1\"/>\n  <asynchronous_metric_log remove=\"1\"/>\n  <processors_profile_log remove=\"1\"/>\n  <text_log remove=\"1\"/>\n  <trace_log remove=\"1\"/>\n  <blob_storage_log remove=\"1\"/>\n  <error_log>\n      <engine>\n          ENGINE MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>error_log</table>\n  </error_log>\n  <latency_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>latency_log</table>\n  </latency_log>\n  <metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>metric_log</table>\n  </metric_log>\n  <query_metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>query_metric_log</table>\n  </query_metric_log>\n</clickhouse>\n"` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.livenessProbe.failureThreshold | int | `10` |  |
+| clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.livenessProbe.initialDelaySeconds | int | `60` |  |
+| clickhouse.livenessProbe.periodSeconds | int | `30` |  |
+| clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
@@ -159,6 +168,12 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
+| clickhouse.readinessProbe.failureThreshold | int | `30` |  |
+| clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.readinessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.readinessProbe.initialDelaySeconds | int | `30` |  |
+| clickhouse.readinessProbe.periodSeconds | int | `10` |  |
+| clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
@@ -234,6 +249,12 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
 | component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
+| component.backend.waitForMysql.enabled | bool | `true` |  |
+| component.backend.waitForMysql.image.registry | string | `"docker.io"` |  |
+| component.backend.waitForMysql.image.repository | string | `"busybox"` |  |
+| component.backend.waitForMysql.image.tag | float | `1.36` |  |
+| component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
+| component.backend.waitForMysql.mysql.port | int | `3306` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
@@ -250,6 +271,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
@@ -313,8 +335,11 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
-| demoDataJob | bool | `true` |  |
+| demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
+| global.argocd | bool | `false` |  |
+| global.security.allowInsecureImages | bool | `true` |  |
+| global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
@@ -322,6 +347,7 @@ Call opik api on http://localhost:5173/api
 | minio.disableWebUI | bool | `true` |  |
 | minio.enabled | bool | `true` |  |
 | minio.fullnameOverride | string | `"opik-minio"` |  |
+| minio.image.repository | string | `"bitnamilegacy/minio"` |  |
 | minio.mode | string | `"standalone"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
@@ -329,9 +355,11 @@ Call opik api on http://localhost:5173/api
 | minio.provisioning.extraCommands[0] | string | `"mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4"` |  |
 | minio.provisioning.extraCommands[1] | string | `"mc mb --ignore-existing s3/public"` |  |
 | minio.provisioning.extraCommands[2] | string | `"mc anonymous set download s3/public/"` |  |
+| minio.volumePermissions.image.repository | string | `"bitnamilegacy/os-shell"` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
+| mysql.image.repository | string | `"bitnamilegacy/mysql"` |  |
 | mysql.initdbScripts."createdb.sql" | string | `"CREATE DATABASE IF NOT EXISTS opik DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;\nCREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';\nGRANT ALL ON `opik`.* TO 'opik'@'%';\nFLUSH PRIVILEGES;"` |  |
 | nameOverride | string | `"opik"` |  |
 | nodeSelector | object | `{}` |  |
@@ -368,6 +396,8 @@ Call opik api on http://localhost:5173/api
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |
+| zookeeper.image.repository | string | `"bitnamilegacy/zookeeper"` |  |
+| zookeeper.image.tag | string | `"3.9.3-debian-12-r16"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |

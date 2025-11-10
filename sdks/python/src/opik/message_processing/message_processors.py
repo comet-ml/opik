@@ -1,268 +1,78 @@
 import abc
 import logging
-from typing import Any, Callable, Dict, Type
-import pydantic
-import tenacity
+from typing import List, Optional, TypeVar, Type
 
-import opik.logging_messages as logging_messages
-import opik.exceptions as exceptions
 from . import messages
-from ..jsonable_encoder import encode
-from .. import dict_utils
-from ..rate_limit import rate_limit
-from ..rest_api.types import (
-    feedback_score_batch_item,
-    guardrail,
-    feedback_score_batch_item_thread,
-)
-from ..rest_api import core as rest_api_core
-from ..rest_api import client as rest_api_client
+
+import opik.exceptions
+
 
 LOGGER = logging.getLogger(__name__)
 
-
-MessageProcessingHandler = Callable[[messages.BaseMessage], None]
+T = TypeVar("T")
 
 
 class BaseMessageProcessor(abc.ABC):
     @abc.abstractmethod
-    def process(
-        self,
-        message: messages.BaseMessage,
-    ) -> None:
+    def process(self, message: messages.BaseMessage) -> None:
         pass
 
+    @abc.abstractmethod
+    def is_active(self) -> bool:
+        return False
 
-class OpikMessageProcessor(BaseMessageProcessor):
-    def __init__(
-        self, rest_client: rest_api_client.OpikApi, batch_memory_limit_mb: int = 50
-    ):
-        self._rest_client = rest_client
-        self._batch_memory_limit_mb = batch_memory_limit_mb
 
-        self._handlers: Dict[Type, MessageProcessingHandler] = {
-            messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
-            messages.CreateTraceMessage: self._process_create_trace_message,  # type: ignore
-            messages.UpdateSpanMessage: self._process_update_span_message,  # type: ignore
-            messages.UpdateTraceMessage: self._process_update_trace_message,  # type: ignore
-            messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
-            messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
-            messages.AddThreadsFeedbackScoresBatchMessage: self._process_add_threads_feedback_scores_batch_message,  # type: ignore
-            messages.CreateSpansBatchMessage: self._process_create_spans_batch_message,  # type: ignore
-            messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
-            messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
-        }
+class ChainedMessageProcessor(BaseMessageProcessor):
+    """
+    Processes messages through a chain of message processors.
+
+    This class allows for the sequential processing of a message by a list of
+    `BaseMessageProcessor` instances. Each processor in the chain is invoked in the
+    order provided. If an exception occurs during the processing by a specific
+    processor, it is logged, and the process continues with the next processor in
+    the chain.
+    """
+
+    def __init__(self, processors: List[BaseMessageProcessor]) -> None:
+        self._processors = processors
+
+    def is_active(self) -> bool:
+        return True
 
     def process(self, message: messages.BaseMessage) -> None:
-        message_type = type(message)
-        handler = self._handlers.get(message_type)
-        if handler is None:
-            LOGGER.debug("Unknown type of message - %s", message_type.__name__)
-            return
+        rate_limit_error: Optional[opik.exceptions.OpikCloudRequestsRateLimited] = None
 
-        try:
-            handler(message)
-        except rest_api_core.ApiError as exception:
-            if exception.status_code == 409:
-                # sometimes a retry mechanism works in a way that it sends the same request 2 times.
-                # if the backend rejects the second request, we don't want users to see an error.
-                return
-            elif exception.status_code == 429:
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
-                        raise exceptions.OpikCloudRequestsRateLimited(
-                            headers=exception.headers,
-                            retry_after=rate_limiter.retry_after(),
-                        )
-
-            error_tracking_extra = _generate_error_tracking_extra(exception, message)
-            LOGGER.error(
-                logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
-                message_type.__name__,
-                str(exception),
-                extra={"error_tracking_extra": error_tracking_extra},
-            )
-        except tenacity.RetryError as retry_error:
-            cause = retry_error.last_attempt.exception()
-            error_tracking_extra = _generate_error_tracking_extra(cause, message)
-            LOGGER.error(
-                logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
-                message_type.__name__,
-                f"{cause.__class__.__name__} - {cause}",
-                extra={"error_tracking_extra": error_tracking_extra},
-            )
-        except pydantic.ValidationError as validation_error:
-            error_tracking_extra = _generate_error_tracking_extra(
-                validation_error, message
-            )
-            LOGGER.error(
-                "Failed to process message: '%s' due to input data validation error:\n%s\n",
-                message_type.__name__,
-                validation_error,
-                exc_info=True,
-                extra={"error_tracking_extra": error_tracking_extra},
-            )
-        except Exception as exception:
-            error_tracking_extra = _generate_error_tracking_extra(exception, message)
-            LOGGER.error(
-                logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
-                message_type.__name__,
-                str(exception),
-                exc_info=True,
-                extra={"error_tracking_extra": error_tracking_extra},
-            )
-
-    def _process_create_span_message(
-        self,
-        message: messages.CreateSpanMessage,
-    ) -> None:
-        create_span_kwargs = message.as_payload_dict()
-        cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
-            create_span_kwargs
-        )
-        cleaned_create_span_kwargs = encode(cleaned_create_span_kwargs)
-        LOGGER.debug("Create span request: %s", cleaned_create_span_kwargs)
-        self._rest_client.spans.create_span(**cleaned_create_span_kwargs)
-
-    def _process_create_trace_message(
-        self,
-        message: messages.CreateTraceMessage,
-    ) -> None:
-        create_trace_kwargs = message.as_payload_dict()
-        cleaned_create_trace_kwargs = dict_utils.remove_none_from_dict(
-            create_trace_kwargs
-        )
-        cleaned_create_trace_kwargs = encode(cleaned_create_trace_kwargs)
-        LOGGER.debug("Create trace request: %s", cleaned_create_trace_kwargs)
-        self._rest_client.traces.create_trace(**cleaned_create_trace_kwargs)
-
-    def _process_update_span_message(
-        self,
-        message: messages.UpdateSpanMessage,
-    ) -> None:
-        update_span_kwargs = message.as_payload_dict()
-
-        cleaned_update_span_kwargs = dict_utils.remove_none_from_dict(
-            update_span_kwargs
-        )
-        cleaned_update_span_kwargs = encode(cleaned_update_span_kwargs)
-        LOGGER.debug("Update span request: %s", cleaned_update_span_kwargs)
-        self._rest_client.spans.update_span(**cleaned_update_span_kwargs)
-
-    def _process_update_trace_message(
-        self,
-        message: messages.UpdateTraceMessage,
-    ) -> None:
-        update_trace_kwargs = message.as_payload_dict()
-
-        cleaned_update_trace_kwargs = dict_utils.remove_none_from_dict(
-            update_trace_kwargs
-        )
-        cleaned_update_trace_kwargs = encode(cleaned_update_trace_kwargs)
-        LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)
-        self._rest_client.traces.update_trace(**cleaned_update_trace_kwargs)
-        LOGGER.debug("Sent trace %s", message.trace_id)
-
-    def _process_add_span_feedback_scores_batch_message(
-        self,
-        message: messages.AddSpanFeedbackScoresBatchMessage,
-    ) -> None:
-        scores = [
-            feedback_score_batch_item.FeedbackScoreBatchItem(**score_message.__dict__)
-            for score_message in message.batch
-        ]
-
-        LOGGER.debug("Add spans feedbacks scores request of size: %d", len(scores))
-
-        self._rest_client.spans.score_batch_of_spans(
-            scores=scores,
-        )
-        LOGGER.debug("Sent batch of spans feedback scores %d", len(scores))
-
-    def _process_add_trace_feedback_scores_batch_message(
-        self,
-        message: messages.AddTraceFeedbackScoresBatchMessage,
-    ) -> None:
-        scores = [
-            feedback_score_batch_item.FeedbackScoreBatchItem(**score_message.__dict__)
-            for score_message in message.batch
-        ]
-
-        LOGGER.debug("Add traces feedbacks scores request: %d", len(scores))
-
-        self._rest_client.traces.score_batch_of_traces(
-            scores=scores,
-        )
-        LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
-
-    def _process_add_threads_feedback_scores_batch_message(
-        self,
-        message: messages.AddThreadsFeedbackScoresBatchMessage,
-    ) -> None:
-        scores = [
-            feedback_score_batch_item_thread.FeedbackScoreBatchItemThread(
-                **score_message.as_payload_dict()
-            )
-            for score_message in message.batch
-        ]
-
-        try:
-            LOGGER.debug("Add threads feedbacks scores request of size %d", len(scores))
-            self._rest_client.traces.score_batch_of_threads(
-                scores=scores,
-            )
-            LOGGER.debug(
-                "Sent batch of threads feedbacks scores of size %d", len(scores)
-            )
-        except rest_api_core.ApiError as exception:
-            # In the case of AddThreadsFeedbackScoresBatchMessage, the backend will reject the request
-            # if thread is not closed which can happen if the user is unaware of this fact.
-            # Thus, we display the warning message.
-            if exception.status_code == 409:
-                LOGGER.warning(
-                    "Threads feedbacks scores batch was rejected by the backend, reason: '%s'",
-                    exception.body,
+        for processor in self._processors:
+            try:
+                processor.process(message)
+            except opik.exceptions.OpikCloudRequestsRateLimited as ex:
+                rate_limit_error = ex
+            except Exception as ex:
+                LOGGER.error(
+                    "Unexpected error while processing message: %s with message processor: %s",
+                    ex,
+                    type(processor),
+                    exc_info=True,
                 )
-            # propagate further to be handled in a unified error handler
-            raise exception
 
-    def _process_create_spans_batch_message(
-        self, message: messages.CreateSpansBatchMessage
-    ) -> None:
-        LOGGER.debug("Create spans batch request of size %d", len(message.batch))
-        self._rest_client.spans.create_spans(spans=message.batch)
-        LOGGER.debug("Sent spans batch of size %d", len(message.batch))
+        # Rate limit error is a special case that is handled by the caller.
+        if rate_limit_error is not None:
+            raise rate_limit_error
 
-    def _process_create_traces_batch_message(
-        self, message: messages.CreateTraceBatchMessage
-    ) -> None:
-        LOGGER.debug("Create trace batch request of size %d", len(message.batch))
-        self._rest_client.traces.create_traces(traces=message.batch)
-        LOGGER.debug("Sent trace batch of size %d", len(message.batch))
+    def get_processor_by_type(self, processor_type: Type[T]) -> Optional[T]:
+        """
+        Retrieves a processor from the available processors that matches the specified type.
 
-    def _process_guardrail_batch_message(
-        self,
-        message: messages.GuardrailBatchMessage,
-    ) -> None:
-        batch = []
+        This method iterates through the list of processors and checks if any of them is
+        an instance of the given class type. If a match is found, it returns the processor.
 
-        for message_item in message.batch:
-            guardrail_batch_item_message = guardrail.Guardrail(**message_item.__dict__)
-            batch.append(guardrail_batch_item_message)
+        Args:
+            processor_type: Concrete processor class to search for.
 
-        self._rest_client.guardrails.create_guardrails(guardrails=batch)
-
-
-def _generate_error_tracking_extra(
-    exception: Exception, message: messages.BaseMessage
-) -> Dict[str, Any]:
-    result: Dict[str, Any] = {"exception": exception}
-
-    if isinstance(exception, rest_api_core.ApiError):
-        fingerprint = [type(message).__name__, type(exception).__name__]
-        fingerprint.append(str(exception.status_code))
-        result["fingerprint"] = fingerprint
-        result["status_code"] = exception.status_code
-
-    return result
+        Returns:
+            The processor matching the specified type if found, else None.
+        """
+        for processor in self._processors:
+            if isinstance(processor, processor_type):
+                return processor
+        return None

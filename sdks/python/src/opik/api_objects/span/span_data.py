@@ -5,16 +5,15 @@ from typing import Any, Dict, List, Optional, Union
 
 import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
-import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.types import (
+    DistributedTraceHeadersDict,
     ErrorInfoDict,
     FeedbackScoreDict,
     LLMProvider,
     SpanType,
 )
-
-from .. import helpers
+from .. import helpers, data_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,11 +96,24 @@ class SpanData:
         )
 
     def update(self, **new_data: Any) -> "SpanData":
+        """
+        Updates the attributes of the object with the provided key-value pairs. This method checks if
+        an attribute exists before updating it and merges the data appropriately for specific
+        keywords like metadata, output, input, attachments, and tags. If a key doesn't correspond
+        to an attribute of the object or the provided value is None, the update is skipped.
+
+        Args:
+            **new_data: Key-value pairs of attributes to update. Keys should match existing
+                attributes on the object, and values that are None will not update.
+
+        Returns:
+            SpanData: The updated object instance.
+        """
         for key, value in new_data.items():
             if value is None:
                 continue
 
-            if key not in self.__dict__:
+            if key not in self.__dict__ and key != "prompts":
                 LOGGER.debug(
                     "An attempt to update span with parameter name it doesn't have: %s",
                     key,
@@ -109,39 +121,31 @@ class SpanData:
                 continue
 
             if key == "metadata":
-                self._update_metadata(value)
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=value
+                )
                 continue
             elif key == "output":
-                self._update_output(value)
+                self.output = data_helpers.merge_outputs(self.output, new_outputs=value)
                 continue
             elif key == "input":
-                self._update_input(value)
+                self.input = data_helpers.merge_inputs(self.input, new_inputs=value)
                 continue
             elif key == "attachments":
                 self._update_attachments(value)
+                continue
+            elif key == "tags":
+                self.tags = data_helpers.merge_tags(self.tags, new_tags=value)
+                continue
+            elif key == "prompts":
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=new_data.get("metadata"), prompts=value
+                )
                 continue
 
             self.__dict__[key] = value
 
         return self
-
-    def _update_metadata(self, new_metadata: Dict[str, Any]) -> None:
-        if self.metadata is None:
-            self.metadata = new_metadata
-        else:
-            self.metadata = dict_utils.deepmerge(self.metadata, new_metadata)
-
-    def _update_output(self, new_output: Dict[str, Any]) -> None:
-        if self.output is None:
-            self.output = new_output
-        else:
-            self.output = dict_utils.deepmerge(self.output, new_output)
-
-    def _update_input(self, new_input: Dict[str, Any]) -> None:
-        if self.input is None:
-            self.input = new_input
-        else:
-            self.input = dict_utils.deepmerge(self.input, new_input)
 
     def init_end_time(self) -> "SpanData":
         self.end_time = datetime_helpers.local_timestamp()
@@ -199,3 +203,9 @@ class SpanData:
             "total_cost": self.total_cost,
             "attachments": self.attachments,
         }
+
+    def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
+        return DistributedTraceHeadersDict(
+            opik_trace_id=self.trace_id,
+            opik_parent_span_id=self.id,
+        )

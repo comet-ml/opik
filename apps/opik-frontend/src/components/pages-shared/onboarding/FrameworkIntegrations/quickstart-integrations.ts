@@ -3,8 +3,10 @@ import pythonLogoUrl from "/images/integrations/python.png";
 import langChainLogoUrl from "/images/integrations/langchain.png";
 import liteLLMLogoUrl from "/images/integrations/litellm.png";
 import openAILogoUrl from "/images/integrations/openai.png";
+import openAIWhiteLogoUrl from "/images/integrations/openai-white.png";
 import anthropicLogoUrl from "/images/integrations/anthropic.png";
 import bedrockLogoUrl from "/images/integrations/bedrock.png";
+import bedrockWhiteLogoUrl from "/images/integrations/bedrock-white.png";
 import ragasLogoUrl from "/images/integrations/ragas.png";
 import langGraphLogoUrl from "/images/integrations/langgraph.png";
 import llamaIndexLogoUrl from "/images/integrations/llamaindex.png";
@@ -32,6 +34,7 @@ import { integrationLogsMap } from "./integration-logs";
 export type FrameworkIntegration = {
   label: string;
   logo: string;
+  logoWhite?: string;
   colab: string;
   documentation: string;
   code: string;
@@ -55,9 +58,10 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {
     label: "OpenAI",
     logo: openAILogoUrl,
+    logoWhite: openAIWhiteLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: openAiCode,
     // executionUrl: "openai/run_stream",
     executionLogs: integrationLogsMap.OpenAI,
@@ -67,7 +71,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: anthropicLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/anthropic.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: anthropicCode,
     // executionUrl: "anthropic/run_stream",
     executionLogs: integrationLogsMap.Anthropic,
@@ -75,9 +79,10 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {
     label: "Bedrock",
     logo: bedrockLogoUrl,
+    logoWhite: bedrockWhiteLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: bedrockCode,
     executionLogs: integrationLogsMap.Bedrock,
   },
@@ -86,7 +91,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: geminiLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/gemini.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: geminiCode,
     executionLogs: integrationLogsMap.Gemini,
   },
@@ -95,7 +100,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: langChainLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: langChainCode,
     executionLogs: integrationLogsMap.LangChain,
   },
@@ -104,7 +109,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: langGraphLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: langGraphCode,
     executionLogs: integrationLogsMap.LangGraph,
   },
@@ -113,7 +118,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: llamaIndexLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: llamaIndexCode,
     executionLogs: integrationLogsMap.LlamaIndex,
   },
@@ -122,7 +127,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: haystackLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/haystack.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: haystackCode,
     executionLogs: integrationLogsMap.Haystack,
   },
@@ -131,7 +136,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: liteLLMLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/litellm"),
+    documentation: buildDocsUrl("/integrations/litellm"),
     code: liteLLMCode,
     executionLogs: integrationLogsMap.LiteLLM,
   },
@@ -140,7 +145,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: ragasLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/ragas"),
+    documentation: buildDocsUrl("/integrations/ragas"),
     code: ragasCode,
     executionLogs: integrationLogsMap.Ragas,
   },
@@ -149,7 +154,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: groqLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/groq.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/ragas"),
+    documentation: buildDocsUrl("/integrations/ragas"),
     code: groqCode,
     executionLogs: integrationLogsMap.Groq,
   },
@@ -158,7 +163,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: dspyLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb",
-    documentation: buildDocsUrl("/tracing/integrations/ragas"),
+    documentation: buildDocsUrl("/integrations/ragas"),
     code: dspyCode,
     executionLogs: integrationLogsMap.DSPy,
   },

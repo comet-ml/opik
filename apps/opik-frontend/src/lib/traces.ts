@@ -8,7 +8,9 @@ import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
-import { TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { safelyParseJSON } from "@/lib/utils";
+import isEmpty from "lodash/isEmpty";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -18,7 +20,13 @@ export const generateTagVariant = (label: string) => {
   return TAG_VARIANTS[index % TAG_VARIANTS.length];
 };
 
-export const isObjectSpan = (object: object) => get(object, "trace_id", false);
+export const isObjectSpan = (object: object) =>
+  Boolean(get(object, "trace_id", false));
+
+export const isObjectThread = (object: object): object is Thread =>
+  Boolean(get(object, "thread_model_id", false)) ||
+  Boolean(get(object, "first_message", false)) ||
+  Boolean(get(object, "last_message", false));
 
 export const isNumericFeedbackScoreValid = (
   { min, max }: { min: number; max: number },
@@ -365,6 +373,62 @@ const prettifyDemoProjectLogic = (
   return undefined;
 };
 
+const prettifyCustomMessagingLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  if (
+    config.type === "input" &&
+    isObject(message) &&
+    "prompt" in message &&
+    isArray(message.prompt)
+  ) {
+    const userMessages = message.prompt.filter(
+      (m) =>
+        isObject(m) &&
+        "role" in m &&
+        m.role === "user" &&
+        "content" in m &&
+        isString(m.content) &&
+        m.content !== "",
+    );
+
+    if (userMessages.length > 0) {
+      return last(userMessages).content;
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "candidates" in message &&
+    isArray(message.candidates)
+  ) {
+    const lastCandidate = last(message.candidates);
+    if (
+      lastCandidate &&
+      isObject(lastCandidate) &&
+      "content" in lastCandidate &&
+      isObject(lastCandidate.content) &&
+      "parts" in lastCandidate.content &&
+      isArray(lastCandidate.content.parts)
+    ) {
+      const lastTextPart = findLast(
+        lastCandidate.content.parts,
+        (part) =>
+          isObject(part) &&
+          "text" in part &&
+          isString(part.text) &&
+          part.text !== "",
+      );
+
+      if (lastTextPart && "text" in lastTextPart) {
+        return lastTextPart.text;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 const prettifyGenericLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -372,14 +436,19 @@ const prettifyGenericLogic = (
   const PREDEFINED_KEYS_MAP = {
     input: [
       "question",
+      "message",
       "messages",
       "user_input",
+      "user_text",
       "query",
       "input_prompt",
       "prompt",
       "sys.query", // Dify
+      "contents",
+      "user_payload",
+      "user_query",
     ],
-    output: ["answer", "output", "response"],
+    output: ["answer", "output", "response", "reply"],
   };
 
   let unwrappedMessage = message;
@@ -403,6 +472,12 @@ const prettifyGenericLogic = (
       for (const key of PREDEFINED_KEYS_MAP[config.type]) {
         const value = get(unwrappedMessage, key);
         if (isString(value)) {
+          const json = safelyParseJSON(value);
+
+          if (!isEmpty(json)) {
+            return JSON.stringify(json, null, 2);
+          }
+
           return value;
         }
       }
@@ -443,6 +518,10 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyDemoProjectLogic(message, config);
+    }
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyCustomMessagingLogic(message, config);
     }
 
     if (!isString(processedMessage)) {

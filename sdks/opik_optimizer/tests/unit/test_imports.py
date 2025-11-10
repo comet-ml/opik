@@ -38,13 +38,11 @@ def test_optimizer_classes_importable() -> None:
     from opik_optimizer import MetaPromptOptimizer
     from opik_optimizer import EvolutionaryOptimizer
     from opik_optimizer import FewShotBayesianOptimizer
-    from opik_optimizer.mipro_optimizer import MiproOptimizer
 
     # Should be callable classes
     assert callable(MetaPromptOptimizer)
     assert callable(EvolutionaryOptimizer)
     assert callable(FewShotBayesianOptimizer)
-    assert callable(MiproOptimizer)
 
 
 def test_chat_prompt_import_and_creation() -> None:
@@ -110,23 +108,15 @@ def test_optimizer_initialization_basic() -> None:
     """Test that optimizers can be initialized with basic parameters."""
     from opik_optimizer import MetaPromptOptimizer, EvolutionaryOptimizer
     from opik_optimizer import FewShotBayesianOptimizer
-    from opik_optimizer.mipro_optimizer import MiproOptimizer
 
     # Test MetaPromptOptimizer initialization
-    meta_optimizer = MetaPromptOptimizer(
-        model="openai/gpt-4", rounds=1, num_prompts_per_round=2
-    )
+    meta_optimizer = MetaPromptOptimizer(model="openai/gpt-4", prompts_per_round=2)
     assert meta_optimizer.model == "openai/gpt-4"
-    assert meta_optimizer.rounds == 1
-    assert meta_optimizer.num_prompts_per_round == 2
+    assert meta_optimizer.prompts_per_round == 2
 
     # Test EvolutionaryOptimizer initialization
-    evo_optimizer = EvolutionaryOptimizer(
-        model="openai/gpt-4", population_size=2, num_generations=1
-    )
+    evo_optimizer = EvolutionaryOptimizer(model="openai/gpt-4")
     assert evo_optimizer.model == "openai/gpt-4"
-    assert evo_optimizer.population_size == 2
-    assert evo_optimizer.num_generations == 1
 
     # Test FewShotBayesianOptimizer initialization
     few_shot_optimizer = FewShotBayesianOptimizer(
@@ -137,10 +127,6 @@ def test_optimizer_initialization_basic() -> None:
     assert few_shot_optimizer.model == "openai/gpt-4"
     assert few_shot_optimizer.min_examples == 1
     assert few_shot_optimizer.max_examples == 2
-
-    # Test MiproOptimizer initialization
-    mipro_optimizer = MiproOptimizer(model="openai/gpt-4")
-    assert mipro_optimizer.model == "openai/gpt-4"
 
 
 if __name__ == "__main__":

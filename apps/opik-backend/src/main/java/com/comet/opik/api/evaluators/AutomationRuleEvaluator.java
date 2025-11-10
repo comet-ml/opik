@@ -1,6 +1,7 @@
 package com.comet.opik.api.evaluators;
 
 import com.comet.opik.api.Page;
+import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
@@ -65,6 +66,10 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @Builder.Default
     private final boolean enabled = true;
 
+    @JsonView({View.Public.class, View.Write.class})
+    @Builder.Default
+    private final List<TraceFilter> filters = List.of();
+
     @JsonIgnore
     @NotNull private final T code;
 
@@ -110,12 +115,13 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
-            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?>> content)
+            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?>> content,
+            @JsonView({View.Public.class}) List<String> sortableBy)
             implements
                 Page<AutomationRuleEvaluator<?>>{
 
-        public static AutomationRuleEvaluatorPage empty(int page) {
-            return new AutomationRuleEvaluatorPage(page, 0, 0, List.of());
+        public static AutomationRuleEvaluatorPage empty(int page, List<String> sortableBy) {
+            return new AutomationRuleEvaluatorPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 }

@@ -22,13 +22,15 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.util.List;
 import java.util.Random;
+import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.github.tomakehurst.wiremock.client.WireMock.exactly;
@@ -53,7 +55,7 @@ class OpikGuiceyLifecycleEventListenerTest {
     the reason this is needed is to make sure that only the first test will notify the event.
     */
 
-    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
+    private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
@@ -78,6 +80,8 @@ class OpikGuiceyLifecycleEventListenerTest {
 
         private final WireMockUtils.WireMockRuntime wireMock;
 
+        private final String expectedAnonymousId = UUID.randomUUID().toString();
+
         {
             Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS, ZOOKEEPER_CONTAINER).join();
 
@@ -92,7 +96,7 @@ class OpikGuiceyLifecycleEventListenerTest {
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))
                             .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
-                                    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")))
+                                    expectedAnonymousId)))
                             .withRequestBody(matchingJsonPath("$.event_type",
                                     matching(InstallationReportService.NOTIFICATION_EVENT_TYPE)))
                             .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
@@ -106,6 +110,9 @@ class OpikGuiceyLifecycleEventListenerTest {
                             .usageReportEnabled(true)
                             .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                             .metadataVersion(VERSION)
+                            .customConfigs(List.of(
+                                    new TestDropwizardAppExtensionUtils.CustomConfig(
+                                            "usageReport.anonymousId", expectedAnonymousId)))
                             .build());
         }
 
@@ -115,7 +122,14 @@ class OpikGuiceyLifecycleEventListenerTest {
 
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
+            Assertions.assertEquals(expectedAnonymousId, usageReportService.getAnonymousId().get());
         }
+
+        @AfterAll
+        void tearDown() {
+            wireMock.server().stop();
+        }
+
     }
 
     @Nested
@@ -163,6 +177,11 @@ class OpikGuiceyLifecycleEventListenerTest {
 
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
+        }
+
+        @AfterAll
+        void tearDown() {
+            wireMock.server().stop();
         }
     }
 

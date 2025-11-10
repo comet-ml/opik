@@ -1,1 +1,2 @@
+setuptools  # required by guardrails hub
 guardrails-ai

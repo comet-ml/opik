@@ -35,12 +35,14 @@ export enum ORGANIZATION_ROLE_TYPE {
   member = "MEMBER",
   opik = "LLM_ONLY",
   viewOnly = "VIEW_ONLY_MEMBER",
+  emAndMPMOnly = "EM_AND_MPM_ONLY",
 }
 
 export interface Organization {
   id: string;
   name: string;
   paymentPlan: string;
+  academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
 }
 

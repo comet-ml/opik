@@ -65,6 +65,8 @@ declare module "@tanstack/react-table" {
     rowHeight: ROW_HEIGHT;
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
+    aggregationMap?: Record<string, unknown>;
+    enableUserFeedbackEditing?: boolean;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -115,12 +117,10 @@ interface ExpandingConfig {
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   columnsStatistic?: ColumnsStatistic;
+  aggregationMap?: Record<string, unknown>;
   data: TData[];
   onRowClick?: (row: TData) => void;
-  renderCustomRow?: (
-    row: Row<TData>,
-    stickyWorkaround?: boolean,
-  ) => ReactNode | null;
+  renderCustomRow?: (row: Row<TData>) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
   sortConfig?: SortConfig;
@@ -129,6 +129,7 @@ interface DataTableProps<TData, TValue> {
   groupingConfig?: GroupingConfig;
   expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
+  getSubRows?: (originalRow: TData, index: number) => TData[] | undefined;
   getRowHeightStyle?: (height: ROW_HEIGHT) => React.CSSProperties;
   rowHeight?: ROW_HEIGHT;
   columnPinning?: ColumnPinningState;
@@ -146,6 +147,7 @@ interface DataTableProps<TData, TValue> {
 const DataTable = <TData, TValue>({
   columns,
   columnsStatistic,
+  aggregationMap,
   data,
   onRowClick,
   renderCustomRow,
@@ -166,6 +168,7 @@ const DataTable = <TData, TValue>({
   TableBody = DataTableBody,
   stickyHeader = false,
   meta,
+  getSubRows,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
@@ -174,6 +177,7 @@ const DataTable = <TData, TValue>({
     data,
     columns,
     getRowId,
+    getSubRows,
     columnResizeMode: "onChange",
     ...(isBoolean(groupingConfig?.groupedColumnMode) ||
     groupingConfig?.groupedColumnMode
@@ -215,13 +219,12 @@ const DataTable = <TData, TValue>({
       columnsStatistic,
       rowHeight,
       rowHeightStyle: getRowHeightStyle(rowHeight),
+      aggregationMap,
       ...meta,
     },
   });
 
-  const { onClick } = useCustomRowClick<TData>({
-    onRowClick: onRowClick,
-  });
+  const rowClickWrapper = useCustomRowClick();
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
@@ -258,7 +261,16 @@ const DataTable = <TData, TValue>({
 
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
-      return renderCustomRow(row, stickyBorderWorkaround);
+      return renderCustomRow(row);
+    }
+
+    const cells = row.getVisibleCells().slice();
+    const isGrouped = row.getIsGrouped();
+
+    if (isGrouped) {
+      cells.sort(
+        (c1, c2) => Number(c2.getIsGrouped()) - Number(c1.getIsGrouped()),
+      );
     }
 
     return (
@@ -268,26 +280,51 @@ const DataTable = <TData, TValue>({
         data-row-active={row.id === activeRowId}
         data-row-id={row.id}
         className={cn({
-          "cursor-pointer": isRowClickable,
+          "cursor-pointer": isRowClickable || isGrouped,
         })}
-        {...(isRowClickable && !row.getIsGrouped()
+        {...(isRowClickable || isGrouped
           ? {
-              onClick: (e) => onClick?.(e, row.original),
+              onClick: (e) =>
+                rowClickWrapper(
+                  e,
+                  isGrouped
+                    ? () => {
+                        row.toggleExpanded();
+                      }
+                    : () => {
+                        onRowClick?.(row.original);
+                      },
+                ),
             }
           : {})}
       >
-        {row.getVisibleCells().map((cell) => renderCell(row, cell))}
+        {cells.map((cell) => renderCell(row, cell))}
       </TableRow>
     );
   };
 
   const renderCell = (row: Row<TData>, cell: Cell<TData, unknown>) => {
+    const pinningStyles = getCommonPinningStyles({
+      column: cell.column,
+      applyStickyWorkaround: stickyBorderWorkaround,
+      table,
+    });
+
     if (cell.getIsGrouped()) {
       return (
         <TableCell
           key={cell.id}
           data-cell-id={cell.id}
-          colSpan={columns.length}
+          style={getCommonPinningStyles({
+            column: cell.column,
+            applyStickyWorkaround: stickyBorderWorkaround,
+            forceGroup: true,
+            table,
+          })}
+          className={getCommonPinningClasses({
+            column: cell.column,
+            forceGroup: true,
+          })}
         >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
@@ -295,7 +332,20 @@ const DataTable = <TData, TValue>({
     }
 
     if (cell.getIsAggregated()) {
-      return null;
+      if (aggregationMap) {
+        return (
+          <TableCell key={cell.id} data-cell-id={cell.id}>
+            {flexRender(
+              cell.column.columnDef.aggregatedCell,
+              cell.getContext(),
+            )}
+          </TableCell>
+        );
+      }
+
+      if (!getSubRows) {
+        return null;
+      }
     }
 
     if (cell.getIsPlaceholder()) {
@@ -303,14 +353,8 @@ const DataTable = <TData, TValue>({
         <TableCell
           key={cell.id}
           data-cell-id={cell.id}
-          style={{
-            ...getCommonPinningStyles(
-              cell.column,
-              false,
-              stickyBorderWorkaround,
-            ),
-          }}
-          className={getCommonPinningClasses(cell.column)}
+          style={pinningStyles}
+          className={getCommonPinningClasses({ column: cell.column })}
         />
       );
     }
@@ -319,10 +363,8 @@ const DataTable = <TData, TValue>({
       <TableCell
         key={cell.id}
         data-cell-id={cell.id}
-        style={{
-          ...getCommonPinningStyles(cell.column, false, stickyBorderWorkaround),
-        }}
-        className={getCommonPinningClasses(cell.column)}
+        style={pinningStyles}
+        className={getCommonPinningClasses({ column: cell.column })}
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
       </TableCell>
@@ -384,9 +426,16 @@ const DataTable = <TData, TValue>({
                         data-header-id={header.id}
                         style={{
                           zIndex: TABLE_HEADER_Z_INDEX,
-                          ...getCommonPinningStyles(header.column, true),
+                          ...getCommonPinningStyles({
+                            column: header.column,
+                            isHeader: true,
+                            table,
+                          }),
                         }}
-                        className={getCommonPinningClasses(header.column, true)}
+                        className={getCommonPinningClasses({
+                          column: header.column,
+                          isHeader: true,
+                        })}
                         colSpan={header.colSpan}
                       >
                         {header.isPlaceholder

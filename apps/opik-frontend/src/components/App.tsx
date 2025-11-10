@@ -8,6 +8,8 @@ import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
 import SentryErrorBoundary from "@/components/layout/SentryErrorBoundary/SentryErrorBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PostHogProvider } from "posthog-js/react";
+import posthog from "posthog-js";
 
 const TOOLTIP_DELAY_DURATION = 500;
 const TOOLTIP_SKIP__DELAY_DURATION = 0;
@@ -25,19 +27,21 @@ function App() {
 
   return (
     <SentryErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <QueryParamProvider adapter={WindowHistoryAdapter}>
-          <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-            <TooltipProvider
-              delayDuration={TOOLTIP_DELAY_DURATION}
-              skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
-            >
-              <RouterProvider router={router} />
-            </TooltipProvider>
-            <Toaster />
-          </ThemeProvider>
-        </QueryParamProvider>
-      </QueryClientProvider>
+      <PostHogProvider client={posthog}>
+        <QueryClientProvider client={queryClient}>
+          <QueryParamProvider adapter={WindowHistoryAdapter}>
+            <ThemeProvider>
+              <TooltipProvider
+                delayDuration={TOOLTIP_DELAY_DURATION}
+                skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
+              >
+                <RouterProvider router={router} />
+              </TooltipProvider>
+              <Toaster />
+            </ThemeProvider>
+          </QueryParamProvider>
+        </QueryClientProvider>
+      </PostHogProvider>
     </SentryErrorBoundary>
   );
 }

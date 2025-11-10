@@ -69,6 +69,11 @@ import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/Traces
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { ThreadStatus } from "@/types/thread";
+import {
+  USER_FEEDBACK_COLUMN_ID,
+  USER_FEEDBACK_NAME,
+} from "@/constants/shared";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -97,7 +102,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
   },
   {
     id: "number_of_messages",
-    label: "No. of messages",
+    label: "Message count",
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
@@ -107,23 +112,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     label: "Status",
     type: COLUMN_TYPE.category,
     cell: ThreadStatusCell as never,
-  },
-  {
-    id: `${COLUMN_USAGE_ID}.total_tokens`,
-    label: "Total tokens",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) =>
-      row.usage && isNumber(row.usage.total_tokens)
-        ? `${row.usage.total_tokens}`
-        : "-",
-  },
-  {
-    id: "total_estimated_cost",
-    label: "Estimated cost",
-    type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
-    size: 160,
   },
   {
     id: "created_at",
@@ -150,10 +138,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.list,
     cell: ListCell as never,
   },
-];
-
-const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
-  ...SHARED_COLUMNS,
   {
     id: "start_time",
     label: "Start time",
@@ -165,6 +149,27 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     label: "End time",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.end_time),
+  },
+];
+
+const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
+  ...SHARED_COLUMNS,
+  {
+    id: `${COLUMN_USAGE_ID}.total_tokens`,
+    label: "Total tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.total_tokens)
+        ? `${row.usage.total_tokens}`
+        : "-",
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
+    size: 160,
   },
   {
     id: "created_by",
@@ -206,6 +211,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "last_updated_at",
   "duration",
   "status",
+  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -225,6 +231,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectId,
   projectName,
 }) => {
+  const truncationEnabled = useTruncationEnabled();
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -307,11 +314,26 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
+  const { refetch: refetchExportData } = useThreadList(
+    {
+      projectId,
+      sorting: sortedColumns,
+      filters,
+      page: page as number,
+      size: size as number,
+      search: search as string,
+      truncate: false,
+    },
+    {
+      enabled: false,
     },
   );
 
@@ -353,21 +375,31 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }, [feedbackScoresNames]);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
-          }) as ColumnData<Thread>,
-      ),
-    ];
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: DynamicColumn = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      columnType: COLUMN_TYPE.number,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
+    );
+
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+        }) as ColumnData<Thread>,
+    );
   }, [dynamicScoresColumns]);
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
@@ -401,12 +433,38 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  const getDataForExport = useCallback(async (): Promise<Thread[]> => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
+
   const handleRowClick = useCallback(
     (row?: Thread) => {
       if (!row) return;
       setThreadId(row.id);
     },
     [setThreadId],
+  );
+
+  const meta = useMemo(
+    () => ({
+      projectId,
+      projectName,
+      enableUserFeedbackEditing: true,
+    }),
+    [projectId, projectName],
   );
 
   const columns = useMemo(() => {
@@ -540,7 +598,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <ThreadsActionsPanel
             projectId={projectId}
             projectName={projectName}
-            rows={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
@@ -587,6 +646,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        meta={meta}
       />
       <PageBodyStickyContainer
         className="py-4"
@@ -599,7 +659,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </PageBodyStickyContainer>
       <TraceDetailsPanel
         projectId={projectId}

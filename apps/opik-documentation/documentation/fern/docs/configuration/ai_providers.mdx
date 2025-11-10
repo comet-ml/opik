@@ -52,6 +52,8 @@ Opik supports integration with various AI providers, including:
 - OpenRouter
 - Gemini
 - VertexAI
+- Azure OpenAI
+- Amazon Bedrock
 - LM Studio (coming soon)
 - vLLM / Ollama / any other OpenAI API-compliant provider
 
@@ -95,6 +97,32 @@ Below are instructions for obtaining API keys and other required information for
 3. Create a new API key for one your existing Google Cloud project
 4. Copy your API key (it will only be shown once)
 5. In Opik, select "Gemini" as the provider and paste your key
+
+#### Azure OpenAI
+
+Azure OpenAI provides enterprise-grade access to OpenAI models through Microsoft Azure. To use Azure OpenAI with Opik:
+
+1. Get your Azure OpenAI endpoint URL
+
+   - Go to [portal.azure.com](https://portal.azure.com)
+   - Navigate to your Azure OpenAI resource
+   - Copy your endpoint URL (it looks like `https://your-company.openai.azure.com`)
+
+2. Construct the complete API URL
+
+   - Add `/openai/v1` to the end of your endpoint URL
+   - Your complete URL should look like: `https://your-company.openai.azure.com/openai/v1`
+
+3. Configure in Opik
+   - In Opik, go to **Configuration → AI Providers**
+   - Click **"Add Configuration"**
+   - Select **"vLLM / Custom provider"** from the dropdown
+   - Enter your complete URL in the URL field: `https://your-company.openai.azure.com/openai/v1`
+   - Add your Azure OpenAI API key in the API Key field
+   - In the Models section, list the models you have deployed in Azure (e.g., `gpt-4o`)
+   - Click **Save** to store the configuration
+
+Once saved, you can use your Azure OpenAI models directly from Online Scores and the Playground.
 
 #### Vertex AI
 
@@ -202,6 +230,44 @@ Step 4: Create and Download the Key
 
 4. Click **Add configuration**
 
+#### Amazon Bedrock
+
+Amazon Bedrock provides access to foundation models from leading AI companies through AWS. You can use Bedrock models in the Opik Playground by configuring it as a custom provider.
+
+##### Getting AWS Credentials
+
+1. Log into the [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
+2. Go to the **API Keys** section
+3. Generate or copy your API Key
+4. Keep this API Key secure - you'll need it for Opik configuration
+
+##### Configuring Bedrock in Opik
+
+1. In Opik, go to **Configuration → AI Providers**
+2. Click **"Add Configuration"**
+3. Select **"vLLM / Custom provider"** from the dropdown
+4. Enter your Bedrock endpoint URL in the URL field
+5. Add your AWS Bedrock API Key in the API Key field
+6. In the Models section, write the Bedrock models you want to use
+7. Click **Save** to store the configuration
+
+##### Bedrock URL Format by Region
+
+Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
+
+**Examples by Region:**
+
+- **US East 1**: `https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1`
+- **US West 2**: `https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1`
+- **Europe West 1 (Ireland)**: `https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1`
+- **Europe Central 1 (Frankfurt)**: `https://bedrock-runtime.eu-central-1.amazonaws.com/openai/v1`
+- **Asia Pacific (Tokyo)**: `https://bedrock-runtime.ap-northeast-1.amazonaws.com/openai/v1`
+- **Asia Pacific (Singapore)**: `https://bedrock-runtime.ap-southeast-1.amazonaws.com/openai/v1`
+
+<Tip>
+  Not all Bedrock models are available in all regions. Check the [AWS Bedrock model availability documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html) to verify model availability in your chosen region before configuring.
+</Tip>
+
 #### vLLM / Custom Provider
 
 Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc.
@@ -248,5 +314,5 @@ Once configured, AI providers can be used in:
 
 ## Additional Resources
 
-- For programmatic configuration of AI providers, see the [API Reference](/reference/api)
-- To learn about using different models in your application, see the [SDK Documentation](/sdk)
+- For programmatic configuration of AI providers, see the [API Reference](/reference/rest-api/overview)
+- To learn about using different models in your application, see the [SDK Documentation](/reference/overview)

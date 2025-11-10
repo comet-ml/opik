@@ -5,7 +5,8 @@ from typing import List, Optional, IO
 
 import httpx
 
-from . import file_parts_strategy, s3_upload_error, s3_httpx_client
+from opik import s3_httpx_client
+from . import file_parts_strategy, s3_upload_error
 from .. import file_upload_monitor
 
 

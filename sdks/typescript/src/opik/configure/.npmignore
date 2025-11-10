@@ -1,0 +1,12 @@
+assets
+examples
+docs
+.idea
+.vscode
+.travis
+.github
+.craft.yml
+.prettierrc
+.eslintrc.js
+tsconfig*
+e2e-tests

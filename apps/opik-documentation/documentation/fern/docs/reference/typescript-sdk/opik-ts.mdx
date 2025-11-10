@@ -1,0 +1,194 @@
+---
+title: Opik TS - Interactive Setup Tool
+description: A guided CLI tool for quickly integrating Opik SDK into your Node.js/TypeScript projects with automatic configuration and setup.
+---
+
+The Opik TS is an interactive command-line tool that streamlines the process of adding Opik observability to your Node.js and TypeScript applications. It automatically detects your project setup, installs dependencies, and configures tracing for your LLM integrations.
+
+## Features
+
+- **🔍 Smart Detection**: Automatically detects your project setup (package manager, TypeScript configuration, existing integrations)
+- **📦 Package Management**: Supports npm, yarn, pnpm, and bun
+- **⚙️ Environment Configuration**: Creates or updates `.env` files with proper Opik configuration
+
+## Getting Started
+
+### Basic Usage
+
+Run the CLI in your project directory:
+
+```bash
+npx opik-ts configure
+```
+
+The CLI will guide you through:
+
+1. **Project Detection**: Identifies your package manager and project structure
+2. **Dependency Installation**: Installs Opik SDK and integration packages
+3. **Environment Setup**: Configures API keys and environment variables
+4. **Code Generation**: Sets up Opik client in your root project folder
+5. **Formatting**: Optionally applies Prettier formatting
+
+### Requirements
+
+- **Node.js**: Version 18 or higher
+- **Package Manager**: npm, yarn, pnpm, or bun
+- **Supported Project Types**:
+  - Node.js applications
+  - TypeScript projects
+  - Express/Fastify APIs
+
+## CLI Options
+
+The CLI supports several command-line options for customization:
+
+| Option            | Type    | Default           | Description                                                    | Environment Variable    |
+| ----------------- | ------- | ----------------- | -------------------------------------------------------------- | ----------------------- |
+| `--help`          | boolean | -                 | Display help information                                       | -                       |
+| `--version`       | boolean | -                 | Show version number                                            | -                       |
+| `--debug`         | boolean | `false`           | Enable verbose logging for troubleshooting                     | `OPIK_TS_DEBUG`         |
+| `--default`       | boolean | `true`            | Use default options for all prompts (non-interactive)          | `OPIK_TS_DEFAULT`       |
+| `--force-install` | boolean | `false`           | Force package installation even if peer dependency checks fail | `OPIK_TS_FORCE_INSTALL` |
+| `--install-dir`   | string  | current directory | Specify custom installation directory                          | `OPIK_TS_INSTALL_DIR`   |
+| `--use-local`     | boolean | `false`           | Skip deployment selection and configure for local development  | `OPIK_TS_USE_LOCAL`     |
+
+### Examples
+
+**Verbose debugging mode:**
+
+```bash
+npx opik-ts configure --debug
+```
+
+**Non-interactive mode with defaults:**
+
+```bash
+npx opik-ts configure --default
+```
+
+**Install in a specific directory:**
+
+```bash
+npx opik-ts configure --install-dir=./my-app
+```
+
+**Force installation (skip peer dependency checks):**
+
+```bash
+npx opik-ts configure --force-install
+```
+
+**Local development setup:**
+
+```bash
+npx opik-ts configure --use-local
+```
+
+This will skip the deployment selection step and automatically configure your environment for local development (localhost:5173).
+
+## Environment Configuration
+
+The CLI automatically creates or updates your `.env` file with the necessary configuration:
+
+```bash
+# Opik Configuration
+OPIK_API_KEY=your-api-key-here
+OPIK_URL_OVERRIDE=https://www.comet.com/opik/api
+OPIK_PROJECT_NAME=default
+OPIK_WORKSPACE_NAME=default
+```
+
+<Tip>
+  The CLI will prompt you to enter your API keys during setup. For Opik Cloud,
+  you can get your API key from the [Opik
+  dashboard](https://www.comet.com/opik). For self-hosted instances, set
+  `OPIK_URL_OVERRIDE` to your server address.
+</Tip>
+
+## Troubleshooting
+
+### Permission Errors
+
+If you encounter permission errors during installation:
+
+```bash
+# Use --force-install to bypass peer dependency checks
+npx opik-ts configure --force-install
+```
+
+### Package Manager Issues
+
+If the CLI fails to detect your package manager:
+
+1. Ensure you have a `package.json` in your project directory
+2. Try running the CLI with debug mode: `npx opik-ts configure --debug`
+3. Manually specify your package manager by selecting it from the prompts
+
+### Environment Variable Setup
+
+If environment variables aren't being set correctly:
+
+1. Check that `.env` file was created in your project root
+2. Ensure your application loads environment variables (e.g., using `dotenv`)
+3. Restart your development server after running the CLI
+
+### Integration Not Working
+
+If traces aren't appearing in Opik:
+
+1. Verify your `OPIK_API_KEY` is correct
+2. Check that `OPIK_URL_OVERRIDE` points to the right endpoint
+3. Ensure you're calling `flush()` before your application exits:
+   ```typescript
+   await trackedClient.flush();
+   ```
+
+### Debug Mode
+
+Enable verbose logging to troubleshoot issues:
+
+```bash
+npx opik-ts configure --debug
+```
+
+This will show detailed information about:
+
+- Project detection results
+- Package installation steps
+- File modifications
+- Configuration changes
+
+## CI/CD Integration
+
+For automated deployments, use the non-interactive mode:
+
+```bash
+# In your CI/CD pipeline
+npx opik-ts configure --default --force-install
+```
+
+Set environment variables beforehand:
+
+```bash
+export OPIK_API_KEY="your-api-key"
+export OPENAI_API_KEY="your-openai-key"
+npx opik-ts configure --default
+```
+
+## Next Steps
+
+After running the CLI:
+
+1. **Start Your Application**: Run your application and make LLM calls to see traces in Opik
+2. **Explore Traces**: Visit the [Opik dashboard](https://www.comet.com/opik) to view your traces
+3. **Add Custom Spans**: Learn about [manual tracing](/tracing/log_traces) for custom instrumentation
+4. **Set Up Evaluation**: Configure [evaluation metrics](/evaluation/overview) for your LLM outputs
+5. **Production Monitoring**: Set up [production monitoring](/production/production_monitoring) for your application
+
+## Further Resources
+
+- [TypeScript SDK Overview](/reference/typescript-sdk/overview)
+- [OpenAI TypeScript Integration](/integrations/openai-typescript)
+- [LangChain TypeScript Integration](/integrations/langchainjs)
+- [Vercel AI SDK Integration](/integrations/vercel-ai-sdk)
+- [GitHub Repository](https://github.com/comet-ml/opik)

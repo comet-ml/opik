@@ -13,6 +13,7 @@ export const TraceThreadIdentifier: core.serialization.ObjectSchema<
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     threadId: core.serialization.property("thread_id", core.serialization.string()),
+    truncate: core.serialization.boolean().optional(),
 });
 
 export declare namespace TraceThreadIdentifier {
@@ -20,5 +21,6 @@ export declare namespace TraceThreadIdentifier {
         project_name?: string | null;
         project_id?: string | null;
         thread_id: string;
+        truncate?: boolean | null;
     }
 }

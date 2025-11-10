@@ -15,6 +15,19 @@ from ...api_objects import helpers
 LOGGER = logging.getLogger(__name__)
 
 
+INDEX_CONSTRUCTION_TRACE_NAME = "index_construction"
+
+
+def _get_last_event(trace_map: Dict[str, List[str]]) -> str:
+    def dfs(key: str) -> str:
+        if key not in trace_map or not trace_map[key]:
+            return key
+        return dfs(trace_map[key][-1])
+
+    start_key = next(iter(trace_map))
+    return dfs(start_key)
+
+
 class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
     def __init__(
         self,
@@ -75,6 +88,12 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         return trace_data
 
     def start_trace(self, trace_id: Optional[str] = None) -> None:
+        if (
+            self._skip_index_construction_trace
+            and trace_id == INDEX_CONSTRUCTION_TRACE_NAME
+        ):
+            return
+
         # When a new LLama Index trace is started, create a new trace in Opik
         existing_trace_data = opik_context.get_current_trace_data()
         if existing_trace_data is not None:
@@ -88,15 +107,6 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         ):
             self._opik_client.trace(**self._opik_trace_data.as_start_parameters)
 
-    def _get_last_event(self, trace_map: Dict[str, List[str]]) -> str:
-        def dfs(key: str) -> str:
-            if key not in trace_map or not trace_map[key]:
-                return key
-            return dfs(trace_map[key][-1])
-
-        start_key = next(iter(trace_map))
-        return dfs(start_key)
-
     def end_trace(
         self,
         trace_id: Optional[str] = None,
@@ -106,21 +116,18 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             return
 
         # When a trace finishes, we first get the last event output
-        last_event = self._get_last_event(trace_map)
+        last_event = _get_last_event(trace_map)
         last_event_output = self._map_event_id_to_output.get(last_event, None)
 
         # And then end the trace with the optional output
-        if self._opik_trace_data is not None and (
-            self._skip_index_construction_trace is False
-            or self._opik_trace_data.name != "index_construction"
-        ):
+        if self._opik_trace_data is not None:
             self._opik_trace_data.init_end_time().update(output=last_event_output)
             if tracing_runtime_config.is_tracing_active():
                 self._opik_client.trace(**self._opik_trace_data.as_parameters)
             self._opik_trace_data = None
 
         # Do not clean _map_event_id_to_span_data as streaming LLM events can
-        # ends after this method is called. _map_event_id_to_span_data is
+        # end after this method is called. _map_event_id_to_span_data is
         # individually cleaned after each event is ended
         self._map_event_id_to_output.clear()
 
@@ -135,16 +142,15 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         if not event_id:
             event_id = str(uuid.uuid4())
 
-        # Under some scenarios, it is possible for `start_trace` to not be called (for example if
-        # the callback raises an exception in a previous call).
-        # Unclear what the best behavior is here, so for now we'll just create a new trace when
+        # the event is not part of a trace probably because we are skipping the index construction trace
         if self._opik_trace_data is None:
-            self._opik_trace_data = self._create_trace_data(trace_name=parent_id)
+            if not self._skip_index_construction_trace:
+                LOGGER.warning(
+                    "No trace data found in context for event start. "
+                    "This is likely due to the fact that the trace is not started properly. "
+                    f"The parent_id: {parent_id}, event_type: {event_type}, event_id: {event_id}."
+                )
 
-        if (
-            self._skip_index_construction_trace
-            and self._opik_trace_data.name == "index_construction"
-        ):
             return event_id
 
         # Get parent span Id if it exists

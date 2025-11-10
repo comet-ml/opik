@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -58,7 +57,7 @@ class ExperimentItemDAO {
                 workspace_id,
                 created_by,
                 last_updated_by
-            ) <settings_clause>
+            )
             VALUES
                   <items:{item |
                      (
@@ -99,23 +98,118 @@ class ExperimentItemDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
                 LIMIT :limit
-            ), feedback_scores_final AS (
-            	SELECT
-                	entity_id,
+            ), feedback_scores_combined_raw AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
                     name,
                     category_name,
                     value,
                     reason,
                     source,
+                    created_by,
+                    last_updated_by,
                     created_at,
                     last_updated_at,
+                    feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
                     created_by,
-                    last_updated_by
-                FROM feedback_scores
-                WHERE workspace_id = :workspace_id
-                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ), feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    arrayStringConcat(reasons, ', ') AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                        authors,
+                        arrayMap(
+                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                            arrayEnumerate(values)
+                        )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM feedback_scores_combined_grouped
             ), comments_final AS (
                 SELECT
                     id AS comment_id,
@@ -158,7 +252,19 @@ class ExperimentItemDAO {
                     t.visibility_mode,
                     s.total_estimated_cost,
                     s.usage,
-                    groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
+                    groupUniqArray(tuple(
+                        fs.entity_id,
+                        fs.name,
+                        fs.category_name,
+                        fs.value,
+                        fs.reason,
+                        fs.source,
+                        fs.created_at,
+                        fs.last_updated_at,
+                        fs.created_by,
+                        fs.last_updated_by,
+                        fs.value_by_author
+                    )) AS feedback_scores_array,
                     groupUniqArray(tuple(c.*)) AS comments_array_agg
                 FROM (
                     SELECT
@@ -167,8 +273,8 @@ class ExperimentItemDAO {
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
+                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
                         visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
@@ -230,7 +336,7 @@ class ExperimentItemDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull OpikConfiguration opikConfiguration;
+    private final @NonNull OpikConfiguration configuration;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -274,8 +380,6 @@ class ExperimentItemDAO {
 
         var template = new ST(INSERT)
                 .add("items", queryItems);
-
-        ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
 
         String sql = template.render();
 
@@ -345,6 +449,7 @@ class ExperimentItemDAO {
             template.add("lastRetrievedId", lastRetrievedId);
         }
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
         var statement = connection.createStatement(template.render())
                 .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
                 .bind("limit", limit);

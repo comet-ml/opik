@@ -2,6 +2,7 @@ import os
 import random
 import string
 import tempfile
+import warnings
 from typing import cast
 
 import numpy as np
@@ -12,8 +13,13 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
+
 from . import testlib
-from .testlib import backend_emulator_message_processor, noop_file_upload_manager
+from .testlib import (
+    backend_emulator_message_processor,
+    environment,
+    noop_file_upload_manager,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -193,7 +199,7 @@ def temp_file_15mb():
 @pytest.fixture(scope="session")
 def ensure_openai_configured():
     # don't use assertion here to prevent printing os.environ with all env variables
-    if not ("OPENAI_API_KEY" in os.environ and "OPENAI_ORG_ID" in os.environ):
+    if not environment.has_openai_api_key():
         raise Exception("OpenAI not configured!")
 
 
@@ -266,3 +272,22 @@ def ensure_aws_bedrock_configured():
             raise Exception("AWS Bedrock not configured! No models available")
     except Exception as e:
         raise Exception(f"AWS Bedrock not configured! {e}")
+
+
+@pytest.fixture(scope="session")
+def ensure_groq_configured():
+    # don't use assertion here to prevent printing os.environ with all env variables
+    if "GROQ_API_KEY" not in os.environ:
+        raise Exception("Groq is not configured!")
+
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*PydanticDeprecatedSince20.*",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*0 counts of 2-gram overlaps.*",
+    category=UserWarning,
+)

@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.redis;
 
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.DistributedLockConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RedisConfig;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
@@ -38,6 +40,12 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
     @Singleton
     public CacheManager cacheManager(RedissonReactiveClient redisClient) {
         return new RedisCacheManager(redisClient);
+    }
+
+    @Provides
+    @Singleton
+    public QueueProducer rqPublisher(RedissonReactiveClient redisClient, IdGenerator idGenerator) {
+        return new RqPublisher(redisClient, configuration(), idGenerator);
     }
 
 }

@@ -1,19 +1,22 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.api.events.webhooks.AlertEvent;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -22,22 +25,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
+import static com.comet.opik.api.AlertEventType.TRACE_THREAD_FEEDBACK_SCORE;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -45,20 +44,18 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
 
-    Mono<Map<UUID, List<FeedbackScore>>> getScores(EntityType entityType, List<UUID> entityIds);
+    Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score, UUID projectId,
+            @Nullable String author);
 
-    Mono<Long> scoreEntity(EntityType entityType, UUID entityId, FeedbackScore score,
-            UUID projectId);
-
-    Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name);
+    Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score);
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
-    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names);
+    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names, String author);
 
-    Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores);
+    Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores, @Nullable String author);
 
-    Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
+    Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
 
@@ -78,11 +75,8 @@ public interface FeedbackScoreDAO {
 @Slf4j
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
-    record FeedbackScoreDto(UUID entityId, FeedbackScore score) {
-    }
-
     private static final String BULK_INSERT_FEEDBACK_SCORE = """
-            INSERT INTO feedback_scores(
+            INSERT INTO <if(author)>authored_feedback_scores<else>feedback_scores<endif>(
                 entity_type,
                 entity_id,
                 project_id,
@@ -92,9 +86,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 value,
                 reason,
                 source,
+                <if(author)>author,<endif>
                 created_by,
                 last_updated_by
-            ) <settings_clause>
+            )
             VALUES
                 <items:{item |
                     (
@@ -107,6 +102,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :value<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
+                         <if(author)>:author<item.index>,<endif>
                          :user_name,
                          :user_name
                      )
@@ -117,29 +113,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private static final String SELECT_FEEDBACK_SCORE_BY_ID = """
-            SELECT
-                *
-            FROM feedback_scores
-            WHERE entity_id in :entity_ids
-            AND entity_type = :entity_type
-            AND workspace_id = :workspace_id
-            ORDER BY entity_id DESC, last_updated_at DESC
-            LIMIT 1 BY entity_id, name
-            ;
-            """;
-
     private static final String DELETE_FEEDBACK_SCORE = """
-            DELETE FROM feedback_scores
+            DELETE FROM <table_name>
             WHERE entity_id = :entity_id
             AND entity_type = :entity_type
             AND name = :name
             AND workspace_id = :workspace_id
-            ;
+            <if(author)>AND <author> = :author<endif>
             """;
 
     private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
-            DELETE FROM feedback_scores
+            DELETE FROM <table_name>
             WHERE entity_type = 'span'
             AND entity_id IN (
                 SELECT id
@@ -151,18 +135,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS allow_nondeterministic_mutations = 1
-            ;
             """;
 
     private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
-            DELETE FROM feedback_scores
+            DELETE FROM <table_name>
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
+            <if(author)>AND <author> = :author<endif>
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
-            ;
             """;
 
     private static final String SELECT_TRACE_FEEDBACK_SCORE_NAMES = """
@@ -205,6 +188,43 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 AND entity_type = :entity_type
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    name
+                FROM authored_feedback_scores
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
+                <if(with_experiments_only)>
+                AND entity_id IN (
+                    SELECT
+                        trace_id
+                    FROM (
+                        SELECT
+                            id
+                        FROM experiments
+                        WHERE workspace_id = :workspace_id
+                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS e
+                    INNER JOIN (
+                        SELECT
+                            experiment_id,
+                            trace_id
+                        FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                        <if(experiment_ids)>
+                        AND experiment_id IN :experiment_ids
+                        <endif>
+                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) ei ON e.id = ei.experiment_id
+                )
+                <endif>
+                AND entity_type = :entity_type
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, author, name
             ) AS names
             ;
             """;
@@ -222,11 +242,21 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 <endif>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    name
+                FROM authored_feedback_scores
+                WHERE workspace_id = :workspace_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
+                <endif>
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, author, name
             ) AS names
             ;
             """;
 
-    private final static String SELECT_SPAN_FEEDBACK_SCORE_NAMES = """
+    private static final String SELECT_SPAN_FEEDBACK_SCORE_NAMES = """
             SELECT
                 distinct name
             FROM (
@@ -250,77 +280,45 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 AND entity_type = 'span'
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+                UNION ALL
+                SELECT
+                    name
+                FROM authored_feedback_scores
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(type)>
+                AND entity_id IN (
+                    SELECT
+                        id
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND type = :type
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                <endif>
+                AND entity_type = 'span'
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, author, name
             ) AS names
             ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration opikConfiguration;
-
-    @Override
-    @WithSpan
-    public Mono<Map<UUID, List<FeedbackScore>>> getScores(@NonNull EntityType entityType,
-            @NonNull List<UUID> entityIds) {
-        return asyncTemplate.stream(connection -> fetchFeedbackScoresByEntityIds(entityType, entityIds, connection))
-                .collectList()
-                .map(this::groupByEntityId);
-    }
-
-    private Map<UUID, List<FeedbackScore>> groupByEntityId(List<FeedbackScoreDto> feedbackLogs) {
-        return feedbackLogs.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreDto::entityId,
-                        Collectors.mapping(FeedbackScoreDto::score, Collectors.toList())));
-    }
-
-    private Flux<FeedbackScoreDto> fetchFeedbackScoresByEntityIds(EntityType entityType,
-            Collection<UUID> entityIds,
-            Connection connection) {
-
-        if (entityIds.isEmpty()) {
-            return Flux.empty();
-        }
-
-        var statement = connection.createStatement(SELECT_FEEDBACK_SCORE_BY_ID);
-
-        statement
-                .bind("entity_ids", entityIds.toArray(UUID[]::new))
-                .bind("entity_type", entityType.getType());
-
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .flatMap(result -> result.map((row, rowMetadata) -> mapFeedback(row)));
-    }
-
-    private FeedbackScoreDto mapFeedback(Row row) {
-        return new FeedbackScoreDto(
-                row.get("entity_id", UUID.class),
-                FeedbackScore.builder()
-                        .name(row.get("name", String.class))
-                        .categoryName(Optional.ofNullable(row.get("category_name", String.class))
-                                .filter(it -> !it.isBlank())
-                                .orElse(null))
-                        .value(row.get("value", BigDecimal.class))
-                        .reason(Optional.ofNullable(row.get("reason", String.class))
-                                .filter(it -> !it.isBlank())
-                                .orElse(null))
-                        .source(ScoreSource.fromString(row.get("source", String.class)))
-                        .createdAt(row.get("created_at", Instant.class))
-                        .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                        .createdBy(row.get("created_by", String.class))
-                        .lastUpdatedBy(row.get("last_updated_by", String.class))
-                        .build());
-    }
+    private final @NonNull EventBus eventBus;
 
     @Override
     @WithSpan
     public Mono<Long> scoreEntity(@NonNull EntityType entityType,
             @NonNull UUID entityId,
             @NonNull FeedbackScore score,
-            @NonNull UUID projectId) {
+            @NonNull UUID projectId, @Nullable String author) {
 
         FeedbackScoreItem item = FeedbackScoreMapper.INSTANCE.toFeedbackScore(entityId,
                 projectId, score);
 
-        return scoreBatchOf(entityType, List.of(item));
+        return scoreBatchOf(entityType, List.of(item), author);
     }
 
     private String getValueOrDefault(String value) {
@@ -333,36 +331,77 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
-            @NonNull List<? extends FeedbackScoreItem> scores) {
+            @NonNull List<? extends FeedbackScoreItem> scores, @Nullable String author) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-            ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+            return asyncTemplate.nonTransaction(connection -> {
 
-            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
+                ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+                template.add("author", author);
 
-            var statement = connection.createStatement(template.render());
+                var statement = connection.createStatement(template.render());
 
-            bindParameters(entityType, scores, statement);
+                bindParameters(entityType, scores, statement, author);
 
-            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(Long::sum);
+                return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(Long::sum);
+            })
+                    .doOnSuccess(cnt -> {
+                        switch (entityType) {
+                            case TRACE ->
+                                publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId, workspaceName,
+                                        userName);
+                            case THREAD ->
+                                publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId,
+                                        workspaceName, userName);
+                            default -> {
+                                // no-op
+                            }
+                        }
+                    });
         });
+    }
 
+    private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType,
+            String workspaceId, String workspaceName, String userName) {
+        if (CollectionUtils.isEmpty(scores)) {
+            return;
+        }
+
+        var scoresWithAuthor = scores.stream()
+                .map(item -> switch (item) {
+                    case FeedbackScoreItem.FeedbackScoreBatchItem tracingItem -> tracingItem.toBuilder()
+                            .author(author)
+                            .build();
+                    case FeedbackScoreBatchItemThread threadItem -> threadItem.toBuilder()
+                            .author(author)
+                            .build();
+                }).toList();
+
+        eventBus.post(AlertEvent.builder()
+                .eventType(eventType)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .userName(userName)
+                .projectId(scores.getFirst().projectId())
+                .payload(scoresWithAuthor)
+                .build());
     }
 
     @Override
-    public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
-
-        return scoreBatchOf(EntityType.THREAD, scores);
+    public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores, @Nullable String author) {
+        return scoreBatchOf(EntityType.THREAD, scores, author);
     }
 
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
-            Statement statement) {
+            Statement statement, String author) {
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
@@ -375,22 +414,58 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
+
+            if (author != null) {
+                statement.bind("author" + i, getValueOrDefault(author));
+            }
         }
     }
 
     @Override
     @WithSpan
-    public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, String name) {
+    public Mono<Void> deleteScoreFrom(EntityType entityType, UUID id, DeleteFeedbackScore score) {
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(DELETE_FEEDBACK_SCORE);
 
-            statement
+            // Delete from feedback_scores table
+            var deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                    .add("table_name", "feedback_scores");
+
+            if (StringUtils.isNotBlank(score.author())) {
+                deleteFeedbackScore.add("author", "last_updated_by");
+            }
+
+            var statement1 = connection.createStatement(deleteFeedbackScore.render());
+            statement1
                     .bind("entity_id", id)
                     .bind("entity_type", entityType.getType())
-                    .bind("name", name);
+                    .bind("name", score.name());
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            if (StringUtils.isNotBlank(score.author())) {
+                statement1.bind("author", score.author());
+            }
+
+            var deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+
+            // Delete from authored_feedback_scores table
+            var deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+                    .add("table_name", "authored_feedback_scores");
+            Optional.ofNullable(score.author())
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", "author"));
+
+            var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
+            statement2
+                    .bind("entity_id", id)
+                    .bind("entity_type", entityType.getType())
+                    .bind("name", score.name());
+            Optional.ofNullable(score.author())
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(author -> statement2.bind("author", author));
+
+            return deleteNonAuthoredOperation
+                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
                     .then();
         });
@@ -421,22 +496,53 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<Long> deleteByEntityIdAndNames(@NonNull EntityType entityType, @NonNull UUID entityId,
-            @NonNull Set<String> names) {
+            @NonNull Set<String> names, String author) {
 
         if (names.isEmpty()) {
             return Mono.just(0L);
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
-            template.add("names", names);
 
-            var statement = connection.createStatement(template.render())
+            // Delete from feedback_scores table
+            ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template1.add("names", names);
+            template1.add("table_name", "feedback_scores");
+
+            if (StringUtils.isNotBlank(author)) {
+                template1.add("author", "last_updated_by");
+            }
+
+            var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", Set.of(entityId))
                     .bind("entity_type", entityType.getType())
                     .bind("names", names);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            if (StringUtils.isNotBlank(author)) {
+                statement1.bind("author", author);
+            }
+
+            var deleteNonAuthoredOperation = makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+
+            // Delete from authored_feedback_scores table
+            ST template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template2.add("names", names);
+            template2.add("table_name", "authored_feedback_scores");
+            Optional.ofNullable(author)
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(a -> template2.add("author", "author"));
+
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("entity_ids", Set.of(entityId))
+                    .bind("entity_type", entityType.getType())
+                    .bind("names", names);
+            Optional.ofNullable(author)
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(a -> statement2.bind("author", a));
+
+            return deleteNonAuthoredOperation
+                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
@@ -530,18 +636,33 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
 
-            var template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            // Delete from feedback_scores table
+            var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template1.add("project_id", projectId);
+            template1.add("sources", sources);
+            template1.add("table_name", "feedback_scores");
 
-            template.add("project_id", projectId);
-            template.add("sources", sources);
-
-            var statement = connection.createStatement(template.render())
+            var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
                     .bind("sources", sources)
                     .bind("project_id", projectId);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            // Delete from authored_feedback_scores table
+            var template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            template2.add("project_id", projectId);
+            template2.add("sources", sources);
+            template2.add("table_name", "authored_feedback_scores");
+
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("entity_ids", threadModelIds)
+                    .bind("entity_type", EntityType.THREAD.getType())
+                    .bind("sources", sources)
+                    .bind("project_id", projectId);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
@@ -605,37 +726,71 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, UUID projectId, Connection connection) {
         log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
 
-        var template = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
+        // Delete from feedback_scores table
+        var template1 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
         Optional.ofNullable(projectId)
-                .ifPresent(id -> template.add("project_id", id));
+                .ifPresent(id -> template1.add("project_id", id));
+        template1.add("table_name", "feedback_scores");
 
-        var statement = connection.createStatement(template.render())
+        var statement1 = connection.createStatement(template1.render())
                 .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
         if (projectId != null) {
-            statement.bind("project_id", projectId);
+            statement1.bind("project_id", projectId);
         }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+        // Delete from authored_feedback_scores table
+        var template2 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
+        Optional.ofNullable(projectId)
+                .ifPresent(id -> template2.add("project_id", id));
+        template2.add("table_name", "authored_feedback_scores");
+
+        var statement2 = connection.createStatement(template2.render())
+                .bind("trace_ids", traceIds.toArray(UUID[]::new));
+
+        if (projectId != null) {
+            statement2.bind("project_id", projectId);
+        }
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)));
     }
 
     private Mono<Long> deleteScoresByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId,
             Connection connection) {
         log.info("Deleting feedback scores by entityType '{}', entityIds count '{}'", entityType, entityIds.size());
 
-        var template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        // Delete from feedback_scores table
+        var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
         Optional.ofNullable(projectId)
-                .ifPresent(id -> template.add("project_id", id));
+                .ifPresent(id -> template1.add("project_id", id));
+        template1.add("table_name", "feedback_scores");
 
-        var statement = connection.createStatement(template.render())
+        var statement1 = connection.createStatement(template1.render())
                 .bind("entity_ids", entityIds.toArray(UUID[]::new))
                 .bind("entity_type", entityType.getType());
 
         if (projectId != null) {
-            statement.bind("project_id", projectId);
+            statement1.bind("project_id", projectId);
         }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+        // Delete from authored_feedback_scores table
+        var template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        Optional.ofNullable(projectId)
+                .ifPresent(id -> template2.add("project_id", id));
+        template2.add("table_name", "authored_feedback_scores");
+
+        var statement2 = connection.createStatement(template2.render())
+                .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                .bind("entity_type", entityType.getType());
+
+        if (projectId != null) {
+            statement2.bind("project_id", projectId);
+        }
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement1))
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(makeMonoContextAware(bindWorkspaceIdToMono(statement2)))
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
 }

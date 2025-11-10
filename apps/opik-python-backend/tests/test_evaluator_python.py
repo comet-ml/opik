@@ -5,6 +5,8 @@ from opik_backend.payload_types import PayloadType
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
+
+
 @pytest.fixture(params=[DockerExecutor, ProcessExecutor])
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
@@ -313,32 +315,35 @@ def test_missing_data_returns_bad_request(client):
 
 
 # Test how the evaluator handles invalid code, including syntax errors and Flask injection attempts
-@pytest.mark.parametrize("code, stacktrace", [
+@pytest.mark.parametrize("code, stacktraces", [
     (
             INVALID_METRIC,
-            """  File "<string>", line 2
-    from typing import
-                      ^
-SyntaxError: """
+            [
+                """SyntaxError: invalid syntax""",  # DockerExecutor format
+                """SyntaxError: Expected one or more names after 'import'"""  # ProcessExecutor format
+            ]
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
-            """  File "<string>", line 4, in <module>
-ModuleNotFoundError: No module named 'flask'""",
+            ["""ModuleNotFoundError: No module named 'flask'"""],
             marks=pytest.mark.skipif(
                 lambda: isinstance(app.executor, ProcessExecutor),
                 reason="Flask injection test only makes sense for DockerExecutor"
             )
     )
 ])
-def test_invalid_code_returns_bad_request(client, code, stacktrace):
+def test_invalid_code_returns_bad_request(client, code, stacktraces):
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
         "code": code
     })
     assert response.status_code == 400
     assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
-    assert stacktrace in str(response.json["error"])
+
+    # Check that the expected error message is in the response
+    error_message = str(response.json["error"])
+    # Check if any of the expected stacktraces match
+    assert any(stacktrace in error_message for stacktrace in stacktraces), f"None of the expected stacktraces found in error message: {error_message}"
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -354,13 +359,11 @@ def test_missing_metric_returns_bad_request(client):
 @pytest.mark.parametrize("code, stacktrace", [
     (
             CONSTRUCTOR_EXCEPTION_METRIC,
-            """  File "<string>", line 16, in __init__
-Exception: Exception in constructor"""
+            """Exception: Exception in constructor"""
     ),
     (
             SCORE_EXCEPTION_METRIC,
-            """  File "<string>", line 20, in score
-Exception: Exception while scoring"""
+            """Exception: Exception while scoring"""
     )
 ])
 def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
@@ -370,7 +373,10 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
     })
     assert response.status_code == 400
     assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
-    assert stacktrace in str(response.json["error"])
+
+    # Check that the expected error message is in the response
+    error_message = str(response.json["error"])
+    assert stacktrace in error_message
 
 
 def test_no_scores_returns_bad_request(client):
@@ -440,9 +446,9 @@ def test_conversation_thread_metric_wrong_data_structure_fails(client, app):
 
     response = client.post(EVALUATORS_URL, json=wrong_payload)
 
-    # Should fail with 400 error about mapping vs list
+    # Should fail with 400 error about evaluation failure
     assert response.status_code == 400
-    assert "argument after ** must be a mapping, not list" in response.json["error"]
+    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
 
 
 def test_conversation_thread_metric_with_trace_thread_type(client, app):

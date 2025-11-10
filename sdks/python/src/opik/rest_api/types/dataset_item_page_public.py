@@ -3,7 +3,9 @@
 import typing
 
 import pydantic
+import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from ..core.serialization import FieldMetadata
 from .column_public import ColumnPublic
 from .dataset_item_public import DatasetItemPublic
 
@@ -14,6 +16,9 @@ class DatasetItemPagePublic(UniversalBaseModel):
     size: typing.Optional[int] = None
     total: typing.Optional[int] = None
     columns: typing.Optional[typing.List[ColumnPublic]] = None
+    sortable_by: typing_extensions.Annotated[typing.Optional[typing.List[str]], FieldMetadata(alias="sortableBy")] = (
+        None
+    )
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

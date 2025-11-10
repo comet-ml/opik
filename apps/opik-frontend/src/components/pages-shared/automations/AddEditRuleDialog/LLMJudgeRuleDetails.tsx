@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
@@ -36,6 +36,7 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { isReasoningModel } from "@/lib/modelUtils";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -59,11 +60,15 @@ const MESSAGE_TYPE_OPTIONS = [
 type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
   form: UseFormReturn<EvaluationRuleFormType>;
+  projectName?: string;
+  datasetColumnNames?: string[];
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
   form,
+  projectName,
+  datasetColumnNames,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
   const { calculateModelProvider, calculateDefaultModel } =
@@ -100,6 +105,25 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     },
     [calculateModelProvider, form],
   );
+
+  // Auto-adjust temperature for reasoning models
+  const model = form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE | "";
+  const config = form.watch("llmJudgeDetails.config");
+
+  useEffect(() => {
+    // When a reasoning model is selected, ensure temperature is at least 1.0
+    if (
+      isReasoningModel(model) &&
+      config &&
+      typeof config.temperature === "number" &&
+      config.temperature < 1
+    ) {
+      form.setValue("llmJudgeDetails.config", {
+        ...config,
+        temperature: 1.0,
+      });
+    }
+  }, [model, config, form]);
 
   return (
     <>
@@ -140,6 +164,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                       <PromptModelConfigs
                         size="icon"
                         provider={provider}
+                        model={model}
                         configs={field.value}
                         onChange={field.onChange}
                       />
@@ -224,6 +249,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   messages={messages}
                   validationErrors={validationErrors}
                   possibleTypes={MESSAGE_TYPE_OPTIONS}
+                  disableImages={isThreadScope}
                   onChange={(messages: LLMMessage[]) => {
                     field.onChange(messages);
 
@@ -288,6 +314,8 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     projectId={form.watch("projectId")}
                     variables={field.value}
                     onChange={field.onChange}
+                    projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
                   />
                 </>
               );

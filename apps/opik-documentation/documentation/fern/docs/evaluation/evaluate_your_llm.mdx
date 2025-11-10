@@ -5,8 +5,9 @@ subtitle: Step by step guide on how to evaluate your LLM application
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
 
 <Tip>
-  In this guide, we will focus on evaluating complex LLM applications. If you are looking at evaluating single prompts
-  you can refer to the [Evaluate A Prompt](/evaluation/evaluate_prompt) guide.
+  In this guide, we will focus on evaluating complex LLM applications. If you
+  are looking at evaluating single prompts you can refer to the [Evaluate A
+  Prompt](/evaluation/evaluate_prompt) guide.
 </Tip>
 
 The evaluation is done in five steps:
@@ -17,78 +18,142 @@ The evaluation is done in five steps:
 4. Choose the metrics that you would like to evaluate your application with
 5. Create and run the evaluation experiment
 
-## 1. Add tracking to your LLM application
+## Running an offline evaluation
 
-While not required, we recommend adding tracking to your LLM application. This allows you to have full visibility into each evaluation run. In the example below we will use a combination of the `track` decorator and the `track_openai` function to trace the LLM application.
+### 1. (Optional) Add tracking to your LLM application
 
-```python
-from opik import track
-from opik.integrations.openai import track_openai
-import openai
+While not required, we recommend adding tracking to your LLM application. This allows you to have
+full visibility into each evaluation run. In the example below we will use a combination of the
+`track` decorator and the `track_openai` function to trace the LLM application.
 
-openai_client = track_openai(openai.OpenAI())
+<CodeBlocks>
+    ```python title="Python" language="python"
+    from opik import track
+    from opik.integrations.openai import track_openai
+    import openai
 
-# This method is the LLM application that you want to evaluate
-# Typically this is not updated when creating evaluations
-@track
-def your_llm_application(input: str) -> str:
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": input}],
-    )
+    openai_client = track_openai(openai.OpenAI())
 
-    return response.choices[0].message.content
-```
+    # This method is the LLM application that you want to evaluate
+    # Typically this is not updated when creating evaluations
+    @track
+    def your_llm_application(input: str) -> str:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": input}],
+        )
+
+        return response.choices[0].message.content
+    ```
+
+</CodeBlocks>
 
 <Tip>
-  Here we have added the `track` decorator so that this trace and all its nested steps are logged to the platform for
-  further analysis.
+  Here we have added the `track` decorator so that this trace and all its nested
+  steps are logged to the platform for further analysis.
 </Tip>
 
-## 2. Define the evaluation task
+### 2. Define the evaluation task
 
-Once you have added instrumentation to your LLM application, we can define the evaluation task. The evaluation task takes in as an input a dataset item and needs to return a dictionary with keys that match the parameters expected by the metrics you are using. In this example we can define the evaluation task as follows:
+Once you have added instrumentation to your LLM application, we can define the evaluation
+task. The evaluation task takes in as an input a dataset item and needs to return a
+dictionary with keys that match the parameters expected by the metrics you are using. In
+this example we can define the evaluation task as follows:
 
-```python
+<CodeBlocks>
+```typescript title="TypeScript" language="typescript"
+import { EvaluationTask } from "opik";
+import { OpenAI } from "openai";
+
+// Define dataset item type
+type DatasetItem = {
+input: string;
+expected: string;
+};
+
+const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
+    const { input } = datasetItem;
+
+    const openai = new OpenAI();
+    const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+            { role: "system", content: "You are a coding assistant" },
+            { role: "user", content: input }
+        ],
+    });
+
+    return { output: response.choices[0].message.content };
+
+};
+
+````
+
+```python title="Python" language="python"
 def evaluation_task(x):
     return {
         "output": your_llm_application(x['user_question'])
     }
-```
+````
+
+</CodeBlocks>
 
 <Warning>
-  If the dictionary returned does not match with the parameters expected by the metrics, you will get inconsistent
-  evaluation results.
+  If the dictionary returned does not match with the parameters expected by the
+  metrics, you will get inconsistent evaluation results.
 </Warning>
 
-## 3. Choose the evaluation Dataset
+### 3. Choose the evaluation Dataset
 
-In order to create an evaluation experiment, you will need to have a Dataset that includes all your test cases.
+In order to create an evaluation experiment, you will need to have a Dataset that includes
+all your test cases.
 
-If you have already created a Dataset, you can use the [`Opik.get_or_create_dataset`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_or_create_dataset) function to fetch it:
+If you have already created a Dataset, you can use the get or create dataset methods to
+fetch it.
 
-```python
-from opik import Opik
+<CodeBlocks>
+    ```typescript title="TypeScript" language="typescript"
+    import { Opik } from "opik";
 
-client = Opik()
-dataset = client.get_or_create_dataset(name="Example dataset")
-```
+    const client = new Opik();
+    const dataset = await client.getOrCreateDataset<DatasetItem>("Example dataset");
 
-If you don't have a Dataset yet, you can insert dataset items using the [`Dataset.insert`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/Dataset.html#opik.Dataset.insert) method. You can call this method multiple times as Opik performs data deduplication before ingestion:
+    // Opik deduplicates items that are inserted into a dataset so we can insert them
+    // for multiple times
+    await dataset.insert([
+        {
+            input: "Hello, world!",
+            expected: "Hello, world!"
+        },
+        {
+            input: "What is the capital of France?",
+            expected: "Paris"
+        },
+    ]);
+    ```
 
-```python
-from opik import Opik
+    ```python title="Python" language="python"
+    from opik import Opik
 
-client = Opik()
-dataset = client.get_or_create_dataset(name="Example dataset")
+    client = Opik()
+    dataset = client.get_or_create_dataset(name="Example dataset")
 
-dataset.insert([
-    {"input": "Hello, world!", "expected_output": "Hello, world!"},
-    {"input": "What is the capital of France?", "expected_output": "Paris"},
-])
-```
+    # Opik deduplicates items that are inserted into a dataset so we can insert them
+    # for multiple times
+    dataset.insert([
+        {
+            "input": "Hello, world!",
+            "expected_output": "Hello, world!"
+        },
+        {
+            "input": "What is the capital of France?",
+            "expected_output": "Paris"
+        },
+    ])
+    ```
+    </CodeBlocks>
 
-## 4. Choose evaluation metrics
+### 4. Choose evaluation metrics
 
 Opik provides a set of built-in evaluation metrics that you can choose from. These are broken down into two main categories:
 
@@ -97,76 +162,389 @@ Opik provides a set of built-in evaluation metrics that you can choose from. The
 
 In the same evaluation experiment, you can use multiple metrics to evaluate your application:
 
-```python
+<CodeBlocks>
+```typescript title="TypeScript" language="typescript"
+import { ExactMatch } from "opik";
+
+const exact_match_metric = new ExactMatch();
+
+````
+
+```python title="Python" language="python"
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination()
-```
+````
+
+</CodeBlocks>
 
 <Tip>
-  Each metric expects the data in a certain format. You will need to ensure that the task you have defined in step 1
-  returns the data in the correct format.
+  Each metric expects the data in a certain format. You will need to ensure that
+  the task you have defined in step 2 returns the data in the correct format.
 </Tip>
 
-## 5. Run the evaluation
+### 5. Run the evaluation
 
-Now that we have the task we want to evaluate, the dataset to evaluate on, and the metrics we want to evaluate with, we can run the evaluation:
+Now that we have the task we want to evaluate, the dataset to evaluate on, and the metrics
+we want to evaluate with, we can run the evaluation:
 
-```python
-from opik import Opik, track
-from opik.evaluation import evaluate
-from opik.evaluation.metrics import Equals, Hallucination
-from opik.integrations.openai import track_openai
-import openai
+<CodeBlocks>
+    ```typescript title="TypeScript" language="typescript" maxLines=1000
+    import { EvaluationTask, Opik, ExactMatch, evaluate } from "opik";
+    import { OpenAI } from "openai";
 
-# Define the task to evaluate
-openai_client = track_openai(openai.OpenAI())
+    // Define dataset item type
+    type DatasetItem = {
+        input: string;
+        expected: string;
+    };
 
-MODEL = "gpt-3.5-turbo"
+    // Define the evaluation task
+    const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
+        const { input } = datasetItem;
 
-@track
-def your_llm_application(input: str) -> str:
-    response = openai_client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": input}],
+        const openai = new OpenAI();
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                { role: "system", content: "You are a coding assistant" },
+                { role: "user", content: input }
+            ],
+        });
+
+        return { output: response.choices[0].message.content };
+    };
+
+    // Get or create the dataset - items are automatically deduplicated
+    const client = new Opik();
+    const dataset = await client.getOrCreateDataset<DatasetItem>("Example dataset");
+    await dataset.insert([
+        {
+            input: "Hello, world!",
+            expected: "Hello, world!"
+        },
+        {
+            input: "What is the capital of France?",
+            expected: "Paris"
+        },
+    ]);
+
+    // Define the metric
+    const exact_match_metric = new ExactMatch();
+
+    // Run the evaluation
+    const result = await evaluate({
+        dataset,
+        task: llmTask,
+        scoringMetrics: [exact_match_metric],
+        experimentName: "Example Evaluation",
+    });
+    console.log(`Experiment ID: ${result.experimentId}`);
+    console.log(`Experiment Name: ${result.experimentName}`);
+    console.log(`Total test cases: ${result.testResults.length}`);
+    ```
+
+    ```python title="Python" language="python" maxLines=1000
+    from opik import Opik, track
+    from opik.evaluation import evaluate
+    from opik.evaluation.metrics import Equals, Hallucination
+    from opik.integrations.openai import track_openai
+    import openai
+
+    # Define the task to evaluate
+    openai_client = track_openai(openai.OpenAI())
+
+    MODEL = "gpt-3.5-turbo"
+
+    @track
+    def your_llm_application(input: str) -> str:
+        response = openai_client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": input}],
+        )
+        return response.choices[0].message.content
+
+    # Define the evaluation task
+    def evaluation_task(x):
+        return {
+            "output": your_llm_application(x['input'])
+        }
+
+    # Create a simple dataset
+    client = Opik()
+    dataset = client.get_or_create_dataset(name="Example dataset")
+    dataset.insert([
+        {"input": "What is the capital of France?"},
+        {"input": "What is the capital of Germany?"},
+    ])
+
+    # Define the metrics
+    hallucination_metric = Hallucination()
+
+    evaluation = evaluate(
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        experiment_config={
+            "model": MODEL
+        }
     )
-    return response.choices[0].message.content
+    ```
 
-# Define the evaluation task
-def evaluation_task(x):
-    return {
-        "output": your_llm_application(x['input'])
-    }
+</CodeBlocks>
 
-# Create a simple dataset
-client = Opik()
-dataset = client.get_or_create_dataset(name="Example dataset")
-dataset.insert([
-    {"input": "What is the capital of France?"},
-    {"input": "What is the capital of Germany?"},
-])
+<Tip>
+  You can use the `experiment_config` parameter to store information about your
+  evaluation task. Typically we see teams store information about the prompt
+  template, the model used and model parameters used to evaluate the
+  application.
+</Tip>
 
-# Define the metrics
-hallucination_metric = Hallucination()
+### 6. Analyze the evaluation results
 
+Once the evaluation is complete, you will get a link to the Opik UI where you can analyze the
+evaluation results. In addition to being able to deep dive into each test case, you will also
+be able to compare multiple experiments side by side.
+
+<Frame>
+  <img src="/img/evaluation/evaluation_results.png" />
+</Frame>
+
+## Advanced usage
+
+### Missing arguments for scoring methods
+
+When you face the `opik.exceptions.ScoreMethodMissingArguments` exception, it means that the dataset
+item and task output dictionaries do not contain all the arguments expected by the scoring method.
+The way the evaluate function works is by merging the dataset item and task output dictionaries and
+then passing the result to the scoring method. For example, if the dataset item contains the keys
+`user_question` and `context` while the evaluation task returns a dictionary with the key `output`,
+the scoring method will be called as `scoring_method.score(user_question='...', context= '...', output= '...')`.
+This can be an issue if the scoring method expects a different set of arguments.
+
+You can solve this by either updating the dataset item or evaluation task to return the missing
+arguments or by using the `scoring_key_mapping` parameter of the `evaluate` function. In the example
+above, if the scoring method expects `input` as an argument, you can map the `user_question` key to
+the `input` key as follows:
+
+<CodeBlocks>
+```typescript title="TypeScript" language="typescript"
+evaluation = evaluate({
+    dataset,
+    task: evaluation_task,
+    scoringMetrics: [hallucination_metric],
+    scoringKeyMapping: {"input": "user_question"},
+})
+```
+
+```python title="Python" language="python"
 evaluation = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
-    experiment_config={
-        "model": MODEL
-    }
+    scoring_key_mapping={"input": "user_question"},
 )
 ```
 
-<Tip>
-  You can use the `experiment_config` parameter to store information about your evaluation task. Typically we see teams
-  store information about the prompt template, the model used and model parameters used to evaluate the application.
-</Tip>
+</CodeBlocks>
 
-## Advanced usage
+### Linking prompts to experiments
 
-### Using async evaluation tasks
+The [Opik prompt library](/prompt_engineering/prompt_management) can be used to version your prompt templates.
+
+When creating an Experiment, you can link the Experiment to a specific prompt version:
+
+<CodeBlocks>
+    ```typescript title="TypeScript" language="typescript"
+    import { Opik, evaluate, evaluatePrompt } from 'opik';
+    import { Hallucination } from 'opik';
+
+    const client = new Opik();
+
+    // Create a prompt
+    const prompt = await client.createPrompt({
+        name: "My prompt",
+        prompt: "Translate to French: {{input}}",
+    });
+
+    // Link prompt to evaluation experiment
+    await evaluatePrompt({
+        dataset: myDataset,
+        messages: [
+            { role: "user", content: "Translate to French: {{input}}" },
+        ],
+        model: "gpt-4o",
+        scoringMetrics: [new Hallucination()],
+        prompts: [prompt],
+    });
+    ```
+
+    ```python title="Python" language="python"
+    import opik
+
+    # Create a prompt
+    prompt = opik.Prompt(
+        name="My prompt",
+        prompt="..."
+    )
+
+    # Run the evaluation
+    evaluation = evaluate(
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        prompts=[prompt],
+    )
+    ```
+
+</CodeBlocks>
+
+The experiment will now be linked to the prompt allowing you to view all experiments that use a specific prompt:
+
+<Frame>
+  <img src="/img/evaluation/linked_prompt.png" />
+</Frame>
+
+### Logging traces to a specific project
+
+You can use the `project_name` parameter of the `evaluate` function to log evaluation traces to a specific project:
+
+<CodeBlocks>
+    ```typescript title="TypeScript" language="typescript"
+    const evaluation = await evaluate({
+        dataset,
+        task: evaluation_task,
+        scoringMetrics: [hallucination_metric],
+        projectName: "hallucination-detection",
+    })
+    ```
+
+    ```python title="Python" language="python"
+    evaluation = evaluate(
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        project_name="hallucination-detection",
+    )
+    ```
+
+</CodeBlocks>
+
+### Evaluating a subset of the dataset
+
+You can use the `nb_samples` parameter to specify the number of samples to use for the evaluation. This is useful if you only want to evaluate a subset of the dataset.
+
+<CodeBlocks>
+    ```typescript title="TypeScript" language="typescript"
+    const evaluation = await evaluate({
+        dataset,
+        task: evaluation_task,
+        scoringMetrics: [hallucination_metric],
+        nbSamples: 10,
+    })
+    ```
+
+    ```python title="Python" language="python"
+    evaluation = evaluate(
+        experiment_name="My experiment",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        nb_samples=10,
+    )
+    ```
+
+</CodeBlocks>
+
+### Sampling the dataset for evaluation
+
+You can use the `dataset_sampler` parameter to specify the instance of dataset sampler to use for sampling the dataset.
+This is useful if you want to sample the dataset differently than the default sampling strategy (accept all items).
+
+For example, you can use the `RandomDatasetSampler` to sample the dataset randomly:
+
+<CodeBlocks>
+    ```python title="Python" language="python"
+    from opik.evaluation import samplers
+
+    evaluation = evaluate(
+        experiment_name="My experiment",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        dataset_sampler=samplers.RandomDatasetSampler(max_samples=10),
+    )
+    ```
+
+</CodeBlocks>
+
+In the example above, the evaluation will sample 10 random items from the dataset.
+
+Also, you can implement your own dataset sampler by extending the `BaseDatasetSampler` and overriding the `sample` method.
+
+<CodeBlocks>
+    ```python title="Python" language="python"
+    import re
+    from typing import List
+
+    from opik.api_objects.dataset import dataset_item
+    from opik.evaluation import samplers
+
+    class MyDatasetSampler(samplers.BaseDatasetSampler):
+
+        def __init__(self, filter_string: str, field_name: str) -> None:
+            self.filter_regex = re.compile(filter_string)
+            self.field_name = field_name
+
+        def sample(self, dataset: List[dataset_item.DatasetItem]) -> List[dataset_item.DatasetItem]:
+            # Sample items from the dataset that match the filter string in the 'field_name' field
+            return [item for item in filter(lambda x: self.filter_regex.search(x[self.field_name]), dataset)]
+
+    # Example usage
+    evaluation = evaluate(
+        experiment_name="My experiment",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        dataset_sampler=MyDatasetSampler(filter_string="\\.*SUCCESS\\.*", field_name="output"),
+    )
+
+    ```
+
+</CodeBlocks>
+
+Implementing your own dataset sampler is useful if you want to implement a custom sampling strategy. For instance,
+you can implement a dataset sampler that samples the dataset using some filtering criteria as in the example above.
+
+### Analyzing the evaluation results
+
+The `evaluate` function returns an `EvaluationResult` object that contains the evaluation results.
+You can create aggregated statistics for each metric by calling its `aggregate_evaluation_scores` method:
+
+<CodeBlocks>
+```python title="Python" language="python"
+    evaluation = evaluate(
+        experiment_name="My experiment",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+    )
+
+    # Retrieve and print the aggregated scores statistics (mean, min, max, std) per metric
+    scores = evaluation.aggregate_evaluation_scores()
+    for metric_name, statistics in scores.aggregated_scores.items():
+        print(f"{metric_name}: {statistics}")
+
+    ```
+
+</CodeBlocks>
+
+Aggregated statistics can help analyze evaluation results and are useful for comparing the
+performance of different models or different versions of the same model, for example.
+
+### Python SDK
+
+#### Using async evaluation tasks
 
 The `evaluate` function does not support `async` evaluation tasks, if you pass
 an async task you will get an error similar to:
@@ -223,94 +601,1199 @@ evaluation = evaluate(
 
 </Warning>
 
-### Missing arguments for scoring methods
-
-When you face the `opik.exceptions.ScoreMethodMissingArguments` exception, it means that the dataset item and task output dictionaries do not contain all the arguments expected by the scoring method. The way the evaluate function works is by merging the dataset item and task output dictionaries and then passing the result to the scoring method. For example, if the dataset item contains the keys `user_question` and `context` while the evaluation task returns a dictionary with the key `output`, the scoring method will be called as `scoring_method.score(user_question='...', context= '...', output= '...')`. This can be an issue if the scoring method expects a different set of arguments.
-
-You can solve this by either updating the dataset item or evaluation task to return the missing arguments or by using the `scoring_key_mapping` parameter of the `evaluate` function. In the example above, if the scoring method expects `input` as an argument, you can map the `user_question` key to the `input` key as follows:
-
-```python
-evaluation = evaluate(
-    dataset=dataset,
-    task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
-    scoring_key_mapping={"input": "user_question"},
-)
-```
-
-### Linking prompts to experiments
-
-The [Opik prompt library](/prompt_engineering/prompt_management) can be used to version your prompt templates.
-
-When creating an Experiment, you can link the Experiment to a specific prompt version:
-
-```python
-import opik
-
-# Create a prompt
-prompt = opik.Prompt(
-    name="My prompt",
-    prompt="..."
-)
-
-# Run the evaluation
-evaluation = evaluate(
-    dataset=dataset,
-    task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
-    prompt=prompt,
-)
-```
-
-The experiment will now be linked to the prompt allowing you to view all experiments that use a specific prompt:
-
-<Frame>
-  <img src="/img/evaluation/linked_prompt.png" />
-</Frame>
-
-### Logging traces to a specific project
-
-You can use the `project_name` parameter of the `evaluate` function to log evaluation traces to a specific project:
-
-```python
-evaluation = evaluate(
-    dataset=dataset,
-    task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
-    project_name="hallucination-detection",
-)
-```
-
-### Evaluating a subset of the dataset
-
-You can use the `nb_samples` parameter to specify the number of samples to use for the evaluation. This is useful if you only want to evaluate a subset of the dataset.
-
-```python
-evaluation = evaluate(
-    experiment_name="My experiment",
-    dataset=dataset,
-    task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
-    nb_samples=10,
-)
-```
-
-### Disabling threading
+#### Disabling threading
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
 
+#### Passing additional arguments to `evaluation_task`
+
+Sometimes your evaluation task needs extra context besides the dataset item (commonly referred to as `x`). For example, you may want to pass a model name, a system prompt, or a pre-initialized client.
+Since `evaluate` calls the task as `task(x)` for each dataset item, the recommended pattern is to create a wrapper (or use `functools.partial`) that closes over any additional arguments.
+
+Using a wrapper function:
+
+```python
+# Extra dependencies you want to provide to the task
+MODEL = "gpt-4o"
+IMAGE_TYPE = "thumbnail"
+
+def evaluation_task(x, model, image_type, client, prompt):
+    full_response = client.get_answer(
+        x["question"],
+        x["image_paths"][image_type],
+        prompt.format(),
+        model=model,
+    )
+    response = full_response["response"]
+    return {
+        "response": response,
+        "bbox": full_response.get("bounding_boxes"),
+        "image_url": full_response.get("image_url"),
+    }
+
+def make_task(model, image_type, client, prompt):
+    # Return a unary function that evaluate() can call as task(x)
+    def _task(x):
+        return evaluation_task(x, model, image_type, client, prompt)
+    return _task
+
+task = make_task(MODEL, IMAGE_TYPE, bot, system_prompt)
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=task,  # evaluate will call task(x) for each item
+    scoring_metrics=[levenshteinratio_metric],
+    scoring_key_mapping={
+        "input": "question",
+        "output": "response",
+        "reference": "expected_answer",
+    },
+)
+```
+
+### Using Scoring Functions
+
+In addition to using built-in metrics, Opik allows you to define custom scoring functions to evaluate your LLM applications. Scoring functions give you complete control over how your outputs are evaluated and can be tailored to your specific use cases.
+
+There are two types of scoring functions you can use:
+
+1. **Plain Scoring Functions**: Use `dataset_item` and `task_outputs` parameters
+2. **Task Span Scoring Functions**: Use a `task_span` parameter for advanced evaluation
+
+#### Using Plain Scoring Functions in Evaluation
+
+Plain scoring functions receive dataset inputs and task outputs, making them ideal for evaluating the final results of your LLM application:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import Dict, Any
+from opik.evaluation.metrics import score_result
+
+def custom_equals_scorer(
+    dataset_item: Dict[str, Any],
+    task_outputs: Dict[str, Any]
+) -> score_result.ScoreResult:
+    """
+    Custom scoring function that compares expected output with actual output.
+
+    Args:
+        dataset_item: Data from the dataset item (includes expected outputs)
+        task_outputs: Outputs from the evaluation task
+    """
+    expected = dataset_item.get("expected_output")
+    actual = task_outputs.get("output")
+
+    if expected == actual:
+        score = 1.0
+        reason = "Perfect match"
+    else:
+        score = 0.0
+        reason = f"Mismatch: expected '{expected}', got '{actual}'"
+
+    return score_result.ScoreResult(
+        name="custom_equals_scorer",
+        value=score,
+        reason=reason
+    )
+```
+</CodeBlocks>
+
+You can use your custom scoring functions alongside built-in metrics:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Create dataset
+dataset = opik_client.create_dataset("custom_evaluation_dataset")
+dataset.insert([
+    {
+        "input": "What is the capital of France?",
+        "expected_output": "Paris"
+    },
+    {
+        "input": "What is 2 + 2?",
+        "expected_output": "4"
+    }
+])
+
+# Define evaluation task
+def evaluation_task(item):
+    # Your LLM application logic here
+    return {"output": your_llm_application(item["input"])}
+
+# Run evaluation with custom scoring functions
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_functions=[
+        custom_equals_scorer
+    ],
+    scoring_metrics=[
+        Hallucination()  # Mix with built-in metrics
+    ],
+    experiment_name="Custom Scoring Experiment"
+)
+```
+</CodeBlocks>
+
+#### Task Span Scoring Functions
+
+Task span scoring functions provide access to detailed execution information about your LLM tasks. These functions receive a `task_span` parameter containing structured data about the task execution, including input, output, metadata, and nested operations.
+
+Task span functions are particularly useful for evaluating:
+
+- The internal structure and behavior of your LLM applications
+- Performance characteristics like execution patterns
+- Quality of intermediate steps in complex workflows
+- Cost and usage optimization opportunities
+- Agent trajectory analysis
+
+##### Creating Task Span Scoring Functions
+
+Task span scoring functions accept a `task_span` parameter which is a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import Any
+from opik.evaluation.metrics import score_result
+from opik.message_processing.emulation.models import SpanModel
+
+def execution_time_scorer(
+    task_span: SpanModel
+) -> score_result.ScoreResult:
+    """
+    Scoring function that evaluates based on execution time.
+
+    Args:
+        task_span: Complete execution information including timing
+    """
+    if task_span.start_time and task_span.end_time:
+        duration = (task_span.end_time - task_span.start_time).total_seconds()
+
+        # Score based on execution speed
+        if duration < 1.0:
+            score = 1.0
+            reason = f"Fast execution: {duration:.2f}s"
+        elif duration < 5.0:
+            score = 0.8
+            reason = f"Acceptable execution time: {duration:.2f}s"
+        else:
+            score = 0.5
+            reason = f"Slow execution: {duration:.2f}s"
+    else:
+        score = 0.0
+        reason = "Cannot determine execution time"
+
+    return score_result.ScoreResult(
+        name="execution_time_scorer",
+        value=score,
+        reason=reason
+    )
+
+def task_name_scorer(
+    task_span: SpanModel
+) -> score_result.ScoreResult:
+    """
+    Scoring function that validates the task span name.
+    """
+    expected_name = "your_llm_application"  # Adjust to your function name
+
+    score = 1.0 if task_span.name == expected_name else 0.0
+    reason = f"Task name: '{task_span.name}'"
+
+    return score_result.ScoreResult(
+        name="task_name_scorer",
+        value=score,
+        reason=reason
+    )
+```
+</CodeBlocks>
+
+##### Combined Scoring Functions
+
+You can also create scoring functions that use both dataset inputs/outputs AND task span information:
+
+<CodeBlocks>
+```python title="Python" language="python"
+def comprehensive_scorer(
+    dataset_item: Dict[str, Any],
+    task_outputs: Dict[str, Any],
+    task_span: SpanModel
+) -> score_result.ScoreResult:
+    """
+    Comprehensive scoring function using all available information.
+
+    Args:
+        dataset_item: Dataset item data
+        task_outputs: Task execution outputs
+        task_span: Detailed execution information
+    """
+    # Check output correctness
+    expected = dataset_item.get("expected_output")
+    actual = task_outputs.get("output")
+    correctness_score = 1.0 if expected == actual else 0.0
+
+    # Check execution efficiency
+    if task_span.start_time and task_span.end_time:
+        duration = (task_span.end_time - task_span.start_time).total_seconds()
+        efficiency_score = 1.0 if duration < 2.0 else 0.5
+    else:
+        efficiency_score = 0.0
+
+    # Combined score (weighted average)
+    final_score = (correctness_score * 0.7) + (efficiency_score * 0.3)
+
+    return score_result.ScoreResult(
+        name="comprehensive_scorer",
+        value=final_score,
+        reason=f"Correctness: {correctness_score}, Efficiency: {efficiency_score}"
+    )
+```
+</CodeBlocks>
+
+##### Using Task Span Scoring Functions in Evaluation
+
+Task span scoring functions work seamlessly with the evaluation framework:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import track
+
+@track  # Enable span collection for task span metrics
+def evaluation_task(item):
+    return {"output": your_llm_application(item["input"])}
+
+# Run evaluation with task span scoring functions
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,  # Must be decorated with @track
+    scoring_functions=[
+        execution_time_scorer,
+        task_name_scorer,
+        comprehensive_scorer  # Mix different types
+    ],
+    experiment_name="Task Span Evaluation"
+)
+```
+</CodeBlocks>
+
+<Tip>
+When you use task span scoring functions, Opik automatically enables span collection and analysis. You don't need to configure anything special - the system will detect functions with `task_span` parameters and handle them appropriately.
+</Tip>
+
+<Warning>
+Task span scoring functions have access to detailed execution information including inputs, outputs, and metadata. Be mindful of sensitive data and ensure your functions handle this information appropriately.
+</Warning>
+
+### Using task span evaluation metrics
+
+Opik supports advanced evaluation metrics that can analyze the detailed execution information of your LLM tasks. These metrics receive a `task_span` parameter containing structured data about the task execution, including input, output, metadata, and nested operations.
+
+Task span metrics are particularly useful for evaluating:
+
+- The internal structure and behavior of your LLM applications
+- Performance characteristics like execution patterns
+- Quality of intermediate steps in complex workflows
+- Cost and usage optimization opportunities
+- Agent trajectory
+
+#### Creating task span metrics
+
+To create a task span evaluation metric, define a metric class that accepts a `task_span` parameter in its `score` method. The `task_span` parameter is a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object that contains detailed information about the task execution:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import Any, Optional
+from opik.evaluation.metrics import BaseMetric, score_result
+from opik.message_processing.emulation.models import SpanModel
+
+class ExecutionTimeMetric(BaseMetric):
+def score(self, task_span: SpanModel, \*\*ignored_kwargs: Any) -> score_result.ScoreResult: # Calculate execution duration
+if task_span.start_time and task_span.end_time:
+duration = (task_span.end_time - task_span.start_time).total_seconds()
+
+            # Score based on execution speed
+            if duration < 1.0:
+                score = 1.0
+                reason = f"Fast execution: {duration:.2f}s"
+            elif duration < 5.0:
+                score = 0.8
+                reason = f"Acceptable execution time: {duration:.2f}s"
+            else:
+                score = 0.5
+                reason = f"Slow execution: {duration:.2f}s"
+        else:
+            score = 0.0
+            reason = "Cannot determine execution time"
+
+        return score_result.ScoreResult(
+            value=score,
+            name=self.name,
+            reason=reason
+        )
+
+````
+</CodeBlocks>
+
+#### Using task span metrics in evaluation
+
+Task span metrics work alongside regular evaluation metrics and are automatically detected by the evaluation engine:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import evaluate
+from opik.evaluation.metrics import Equals
+
+# Create both regular and task span metrics
+equals_metric = Equals()
+timing_metric = ExecutionTimeMetric()
+
+# Run evaluation with mixed metric types
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[
+        equals_metric,        # Regular metric
+        timing_metric,        # Task span metric
+    ],
+    experiment_name="Comprehensive Evaluation"
+)
+````
+
+</CodeBlocks>
+
+<Tip>
+  When you use task span metrics, Opik automatically enables span collection and
+  analysis. You don't need to configure anything special - the system will
+  detect metrics with `task_span` parameters and handle them appropriately.
+</Tip>
+
+#### Accessing span hierarchy
+
+Task spans can contain nested spans representing sub-operations. You can analyze the complete execution hierarchy.
+
+Here's an example of a tracked function that produces nested spans:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import track
+from opik.integrations.openai import track_openai
+import openai
+
+openai_client = track_openai(openai.OpenAI())
+
+@track
+def research_topic(topic: str) -> str:
+"""Main research function that creates nested spans."""
+
+    # This will create a nested span for gathering context
+    context = gather_context(topic)
+
+    # This will create another nested span for analysis
+    analysis = analyze_information(context, topic)
+
+    # Final span for generating summary
+    summary = generate_summary(analysis, topic)
+
+    return summary
+
+@track
+def gather_context(topic: str) -> str:
+"""Gather background context - creates its own span."""
+response = openai_client.chat.completions.create(
+model="gpt-3.5-turbo",
+messages=[{
+"role": "user",
+"content": f"Provide background context about: {topic}"
+}]
+)
+return response.choices[0].message.content
+
+@track
+def analyze_information(context: str, topic: str) -> str:
+"""Analyze the gathered information - creates its own span."""
+response = openai_client.chat.completions.create(
+model="gpt-3.5-turbo",
+messages=[{
+"role": "user",
+"content": f"Analyze this context about {topic}: {context}"
+}]
+)
+return response.choices[0].message.content
+
+@track
+def generate_summary(analysis: str, topic: str) -> str:
+"""Generate final summary - creates its own span."""
+response = openai_client.chat.completions.create(
+model="gpt-3.5-turbo",
+messages=[{
+"role": "user",
+"content": f"Create a summary for {topic} based on: {analysis}"
+}]
+)
+return response.choices[0].message.content
+
+````
+</CodeBlocks>
+
+When you call `research_topic("artificial intelligence")`, Opik will create a hierarchy of spans:
+
+<CodeBlocks>
+```python title="Python" language="python"
+SpanModel(id='0199f2c5-4097-7139-8e20-ce93d10ca3b0',
+          start_time=datetime.datetime(2025, 10, 17, 15, 23, 57, 462154, tzinfo=TzInfo(UTC)),
+          name='research_topic',
+          input={'topic': 'artificial intelligence'},
+          output={'output': 'In summary, artificial intelligence is a field in computer science that focuses on '
+                            'creating machines or software that can replicate human intelligence. This includes tasks '
+                            'like learning, problem-solving, decision-making, and natural language processing. Recent '
+                            'advancements in AI technologies have enabled machines to perform complex tasks such as '
+                            'image and speech recognition, autonomous driving, and medical diagnosis. Different '
+                            'approaches to AI include symbolic AI and machine learning, with deep learning using '
+                            "neural networks to mimic the human brain's structure. AI has applications across various "
+                            'industries, but also raises concerns about privacy, bias, and job displacement. As AI '
+                            'continues to progress, it will be crucial to address ethical and societal issues related '
+                            'to its implementation.'},
+          tags=None,
+          metadata=None,
+          type='general',
+          usage=None,
+          end_time=datetime.datetime(2025, 10, 17, 15, 24, 5, 196086, tzinfo=TzInfo(UTC)),
+          project_name='Default Project',
+          spans=[SpanModel(id='0199f2c5-4098-7c21-a23e-c361eb71b9de',
+                           start_time=datetime.datetime(2025, 10, 17, 15, 23, 57, 462447, tzinfo=TzInfo(UTC)),
+                           name='gather_context',
+                           input={'topic': 'artificial intelligence'},
+                           output={'output': 'Artificial intelligence (AI) is a branch of computer science that '
+                                             'focuses on creating machines or software that can perform tasks that '
+                                             'typically require human intelligence. This includes tasks such as '
+                                             'learning, problem-solving, decision-making, and natural language '
+                                             'processing. AI technologies have advanced rapidly in recent years, '
+                                             'enabling machines to perform increasingly complex tasks such as image '
+                                             'and speech recognition, autonomous driving, and medical diagnosis.\n'
+                                             '\n'
+                                             'There are several approaches to AI, including symbolic AI, which relies '
+                                             'on rules and logic, and machine learning, which involves training '
+                                             'algorithms on large amounts of data to make predictions or decisions. '
+                                             'Deep learning is a subset of machine learning that involves neural '
+                                             'networks with multiple layers, mimicking the structure of the human '
+                                             'brain.\n'
+                                             '\n'
+                                             'AI has a wide range of applications across various industries, including '
+                                             'healthcare, finance, education, transportation, and entertainment. It '
+                                             'has the potential to revolutionize many aspects of everyday life, but '
+                                             'also raises ethical and societal concerns about privacy, bias, and job '
+                                             'displacement.\n'
+                                             '\n'
+                                             'Overall, artificial intelligence represents a rapidly evolving field '
+                                             'with the potential to greatly impact society in the coming years.'},
+                           tags=None,
+                           metadata=None,
+                           type='general',
+                           usage=None,
+                           end_time=datetime.datetime(2025, 10, 17, 15, 24, 0, 23394, tzinfo=TzInfo(UTC)),
+                           project_name='Default Project',
+                           spans=[SpanModel(id='0199f2c5-4099-7bef-994a-36d67f95b652',
+                                            start_time=datetime.datetime(2025, 10, 17, 15, 23, 57, 462529, tzinfo=TzInfo(UTC)),
+                                            name='chat_completion_create',
+                                            input={'messages': [{'content': 'Provide background context about: '
+                                                                            'artificial intelligence',
+                                                                 'role': 'user'}]},
+                                            output={'choices': [{'finish_reason': 'stop',
+                                                                 'index': 0,
+                                                                 'logprobs': None,
+                                                                 'message': {'annotations': [],
+                                                                             'audio': None,
+                                                                             'content': 'Artificial intelligence (AI) '
+                                                                                        'is a branch of computer '
+                                                                                        'science that focuses on '
+                                                                                        'creating machines or software '
+                                                                                        'that can perform tasks that '
+                                                                                        'typically require human '
+                                                                                        'intelligence. This includes '
+                                                                                        'tasks such as learning, '
+                                                                                        'problem-solving, '
+                                                                                        'decision-making, and natural '
+                                                                                        'language processing. AI '
+                                                                                        'technologies have advanced '
+                                                                                        'rapidly in recent years, '
+                                                                                        'enabling machines to perform '
+                                                                                        'increasingly complex tasks '
+                                                                                        'such as image and speech '
+                                                                                        'recognition, autonomous '
+                                                                                        'driving, and medical '
+                                                                                        'diagnosis.\n'
+                                                                                        '\n'
+                                                                                        'There are several approaches '
+                                                                                        'to AI, including symbolic AI, '
+                                                                                        'which relies on rules and '
+                                                                                        'logic, and machine learning, '
+                                                                                        'which involves training '
+                                                                                        'algorithms on large amounts '
+                                                                                        'of data to make predictions '
+                                                                                        'or decisions. Deep learning '
+                                                                                        'is a subset of machine '
+                                                                                        'learning that involves neural '
+                                                                                        'networks with multiple '
+                                                                                        'layers, mimicking the '
+                                                                                        'structure of the human '
+                                                                                        'brain.\n'
+                                                                                        '\n'
+                                                                                        'AI has a wide range of '
+                                                                                        'applications across various '
+                                                                                        'industries, including '
+                                                                                        'healthcare, finance, '
+                                                                                        'education, transportation, '
+                                                                                        'and entertainment. It has the '
+                                                                                        'potential to revolutionize '
+                                                                                        'many aspects of everyday '
+                                                                                        'life, but also raises ethical '
+                                                                                        'and societal concerns about '
+                                                                                        'privacy, bias, and job '
+                                                                                        'displacement.\n'
+                                                                                        '\n'
+                                                                                        'Overall, artificial '
+                                                                                        'intelligence represents a '
+                                                                                        'rapidly evolving field with '
+                                                                                        'the potential to greatly '
+                                                                                        'impact society in the coming '
+                                                                                        'years.',
+                                                                             'function_call': None,
+                                                                             'refusal': None,
+                                                                             'role': 'assistant',
+                                                                             'tool_calls': None}}]},
+                                            tags=['openai'],
+                                            metadata={'created': 1760714637,
+                                                      'created_from': 'openai',
+                                                      'id': 'chatcmpl-CRgb7Al2eepM3s2aalsXUwSYYhX4f',
+                                                      'model': 'gpt-3.5-turbo-0125',
+                                                      'object': 'chat.completion',
+                                                      'service_tier': 'default',
+                                                      'system_fingerprint': None,
+                                                      'type': 'openai_chat',
+                                                      'usage': {'completion_tokens': 212,
+                                                                'completion_tokens_details': {'accepted_prediction_tokens': 0,
+                                                                                              'audio_tokens': 0,
+                                                                                              'reasoning_tokens': 0,
+                                                                                              'rejected_prediction_tokens': 0},
+                                                                'prompt_tokens': 14,
+                                                                'prompt_tokens_details': {'audio_tokens': 0,
+                                                                                          'cached_tokens': 0},
+                                                                'total_tokens': 226}},
+                                            type='llm',
+                                            usage={'completion_tokens': 212,
+                                                   'original_usage.completion_tokens': 212,
+                                                   'original_usage.completion_tokens_details.accepted_prediction_tokens': 0,
+                                                   'original_usage.completion_tokens_details.audio_tokens': 0,
+                                                   'original_usage.completion_tokens_details.reasoning_tokens': 0,
+                                                   'original_usage.completion_tokens_details.rejected_prediction_tokens': 0,
+                                                   'original_usage.prompt_tokens': 14,
+                                                   'original_usage.prompt_tokens_details.audio_tokens': 0,
+                                                   'original_usage.prompt_tokens_details.cached_tokens': 0,
+                                                   'original_usage.total_tokens': 226,
+                                                   'prompt_tokens': 14,
+                                                   'total_tokens': 226},
+                                            end_time=datetime.datetime(2025, 10, 17, 15, 24, 0, 23173, tzinfo=TzInfo(UTC)),
+                                            project_name='Default Project',
+                                            spans=[],
+                                            feedback_scores=[],
+                                            model='gpt-3.5-turbo-0125',
+                                            provider='openai',
+                                            error_info=None,
+                                            total_cost=None,
+                                            last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 0, 23320, tzinfo=TzInfo(UTC)))],
+                           feedback_scores=[],
+                           model=None,
+                           provider=None,
+                           error_info=None,
+                           total_cost=None,
+                           last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 0, 23407, tzinfo=TzInfo(UTC))),
+                 SpanModel(id='0199f2c5-4a97-75b4-8067-293062038a45',
+                           start_time=datetime.datetime(2025, 10, 17, 15, 24, 0, 23674, tzinfo=TzInfo(UTC)),
+                           name='analyze_information',
+                           input={'context': 'Artificial intelligence (AI) is a branch of computer science that '
+                                             'focuses on creating machines or software that can perform tasks that '
+                                             'typically require human intelligence. This includes tasks such as '
+                                             'learning, problem-solving, decision-making, and natural language '
+                                             'processing. AI technologies have advanced rapidly in recent years, '
+                                             'enabling machines to perform increasingly complex tasks such as image '
+                                             'and speech recognition, autonomous driving, and medical diagnosis.\n'
+                                             '\n'
+                                             'There are several approaches to AI, including symbolic AI, which relies '
+                                             'on rules and logic, and machine learning, which involves training '
+                                             'algorithms on large amounts of data to make predictions or decisions. '
+                                             'Deep learning is a subset of machine learning that involves neural '
+                                             'networks with multiple layers, mimicking the structure of the human '
+                                             'brain.\n'
+                                             '\n'
+                                             'AI has a wide range of applications across various industries, including '
+                                             'healthcare, finance, education, transportation, and entertainment. It '
+                                             'has the potential to revolutionize many aspects of everyday life, but '
+                                             'also raises ethical and societal concerns about privacy, bias, and job '
+                                             'displacement.\n'
+                                             '\n'
+                                             'Overall, artificial intelligence represents a rapidly evolving field '
+                                             'with the potential to greatly impact society in the coming years.',
+                                  'topic': 'artificial intelligence'},
+                           output={'output': 'Artificial intelligence, as described in the context, is a field within '
+                                             'computer science that aims to create machines or software that can mimic '
+                                             'human intelligence. This includes tasks such as learning, '
+                                             'problem-solving, decision-making, and natural language processing. AI '
+                                             'technologies have seen significant advancements in recent years, '
+                                             'allowing machines to perform complex tasks like image and speech '
+                                             'recognition, autonomous driving, and medical diagnosis.\n'
+                                             '\n'
+                                             'There are different approaches to AI, including symbolic AI and machine '
+                                             'learning. Machine learning, in particular, involves training algorithms '
+                                             'on large datasets to make predictions or decisions. Deep learning, a '
+                                             'subset of machine learning, uses neural networks with multiple layers to '
+                                             "imitate the human brain's structure.\n"
+                                             '\n'
+                                             'AI has a wide range of applications in various industries, from '
+                                             'healthcare to entertainment. It has the potential to revolutionize many '
+                                             'aspects of daily life, but also raises concerns about privacy, bias, and '
+                                             'job displacement.\n'
+                                             '\n'
+                                             'In conclusion, artificial intelligence is a rapidly evolving field that '
+                                             'has the potential to significantly impact society in the future. As '
+                                             'advancements continue, it will be important to address ethical and '
+                                             'societal issues related to AI implementation.'},
+                           tags=None,
+                           metadata=None,
+                           type='general',
+                           usage=None,
+                           end_time=datetime.datetime(2025, 10, 17, 15, 24, 2, 363253, tzinfo=TzInfo(UTC)),
+                           project_name='Default Project',
+                           spans=[SpanModel(id='0199f2c5-4a98-72b5-a152-fdbfacbc6785',
+                                            start_time=datetime.datetime(2025, 10, 17, 15, 24, 0, 23909, tzinfo=TzInfo(UTC)),
+                                            name='chat_completion_create',
+                                            input={'messages': [{'content': 'Analyze this context about artificial '
+                                                                            'intelligence: Artificial intelligence '
+                                                                            '(AI) is a branch of computer science that '
+                                                                            'focuses on creating machines or software '
+                                                                            'that can perform tasks that typically '
+                                                                            'require human intelligence. This includes '
+                                                                            'tasks such as learning, problem-solving, '
+                                                                            'decision-making, and natural language '
+                                                                            'processing. AI technologies have advanced '
+                                                                            'rapidly in recent years, enabling '
+                                                                            'machines to perform increasingly complex '
+                                                                            'tasks such as image and speech '
+                                                                            'recognition, autonomous driving, and '
+                                                                            'medical diagnosis.\n'
+                                                                            '\n'
+                                                                            'There are several approaches to AI, '
+                                                                            'including symbolic AI, which relies on '
+                                                                            'rules and logic, and machine learning, '
+                                                                            'which involves training algorithms on '
+                                                                            'large amounts of data to make predictions '
+                                                                            'or decisions. Deep learning is a subset '
+                                                                            'of machine learning that involves neural '
+                                                                            'networks with multiple layers, mimicking '
+                                                                            'the structure of the human brain.\n'
+                                                                            '\n'
+                                                                            'AI has a wide range of applications '
+                                                                            'across various industries, including '
+                                                                            'healthcare, finance, education, '
+                                                                            'transportation, and entertainment. It has '
+                                                                            'the potential to revolutionize many '
+                                                                            'aspects of everyday life, but also raises '
+                                                                            'ethical and societal concerns about '
+                                                                            'privacy, bias, and job displacement.\n'
+                                                                            '\n'
+                                                                            'Overall, artificial intelligence '
+                                                                            'represents a rapidly evolving field with '
+                                                                            'the potential to greatly impact society '
+                                                                            'in the coming years.',
+                                                                 'role': 'user'}]},
+                                            output={'choices': [{'finish_reason': 'stop',
+                                                                 'index': 0,
+                                                                 'logprobs': None,
+                                                                 'message': {'annotations': [],
+                                                                             'audio': None,
+                                                                             'content': 'Artificial intelligence, as '
+                                                                                        'described in the context, is '
+                                                                                        'a field within computer '
+                                                                                        'science that aims to create '
+                                                                                        'machines or software that can '
+                                                                                        'mimic human intelligence. '
+                                                                                        'This includes tasks such as '
+                                                                                        'learning, problem-solving, '
+                                                                                        'decision-making, and natural '
+                                                                                        'language processing. AI '
+                                                                                        'technologies have seen '
+                                                                                        'significant advancements in '
+                                                                                        'recent years, allowing '
+                                                                                        'machines to perform complex '
+                                                                                        'tasks like image and speech '
+                                                                                        'recognition, autonomous '
+                                                                                        'driving, and medical '
+                                                                                        'diagnosis.\n'
+                                                                                        '\n'
+                                                                                        'There are different '
+                                                                                        'approaches to AI, including '
+                                                                                        'symbolic AI and machine '
+                                                                                        'learning. Machine learning, '
+                                                                                        'in particular, involves '
+                                                                                        'training algorithms on large '
+                                                                                        'datasets to make predictions '
+                                                                                        'or decisions. Deep learning, '
+                                                                                        'a subset of machine learning, '
+                                                                                        'uses neural networks with '
+                                                                                        'multiple layers to imitate '
+                                                                                        "the human brain's structure.\n"
+                                                                                        '\n'
+                                                                                        'AI has a wide range of '
+                                                                                        'applications in various '
+                                                                                        'industries, from healthcare '
+                                                                                        'to entertainment. It has the '
+                                                                                        'potential to revolutionize '
+                                                                                        'many aspects of daily life, '
+                                                                                        'but also raises concerns '
+                                                                                        'about privacy, bias, and job '
+                                                                                        'displacement.\n'
+                                                                                        '\n'
+                                                                                        'In conclusion, artificial '
+                                                                                        'intelligence is a rapidly '
+                                                                                        'evolving field that has the '
+                                                                                        'potential to significantly '
+                                                                                        'impact society in the future. '
+                                                                                        'As advancements continue, it '
+                                                                                        'will be important to address '
+                                                                                        'ethical and societal issues '
+                                                                                        'related to AI implementation.',
+                                                                             'function_call': None,
+                                                                             'refusal': None,
+                                                                             'role': 'assistant',
+                                                                             'tool_calls': None}}]},
+                                            tags=['openai'],
+                                            metadata={'created': 1760714640,
+                                                      'created_from': 'openai',
+                                                      'id': 'chatcmpl-CRgbA7W6uLjdALHSqIYBRtCzY50s8',
+                                                      'model': 'gpt-3.5-turbo-0125',
+                                                      'object': 'chat.completion',
+                                                      'service_tier': 'default',
+                                                      'system_fingerprint': None,
+                                                      'type': 'openai_chat',
+                                                      'usage': {'completion_tokens': 215,
+                                                                'completion_tokens_details': {'accepted_prediction_tokens': 0,
+                                                                                              'audio_tokens': 0,
+                                                                                              'reasoning_tokens': 0,
+                                                                                              'rejected_prediction_tokens': 0},
+                                                                'prompt_tokens': 226,
+                                                                'prompt_tokens_details': {'audio_tokens': 0,
+                                                                                          'cached_tokens': 0},
+                                                                'total_tokens': 441}},
+                                            type='llm',
+                                            usage={'completion_tokens': 215,
+                                                   'original_usage.completion_tokens': 215,
+                                                   'original_usage.completion_tokens_details.accepted_prediction_tokens': 0,
+                                                   'original_usage.completion_tokens_details.audio_tokens': 0,
+                                                   'original_usage.completion_tokens_details.reasoning_tokens': 0,
+                                                   'original_usage.completion_tokens_details.rejected_prediction_tokens': 0,
+                                                   'original_usage.prompt_tokens': 226,
+                                                   'original_usage.prompt_tokens_details.audio_tokens': 0,
+                                                   'original_usage.prompt_tokens_details.cached_tokens': 0,
+                                                   'original_usage.total_tokens': 441,
+                                                   'prompt_tokens': 226,
+                                                   'total_tokens': 441},
+                                            end_time=datetime.datetime(2025, 10, 17, 15, 24, 2, 363045, tzinfo=TzInfo(UTC)),
+                                            project_name='Default Project',
+                                            spans=[],
+                                            feedback_scores=[],
+                                            model='gpt-3.5-turbo-0125',
+                                            provider='openai',
+                                            error_info=None,
+                                            total_cost=None,
+                                            last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 2, 363184, tzinfo=TzInfo(UTC)))],
+                           feedback_scores=[],
+                           model=None,
+                           provider=None,
+                           error_info=None,
+                           total_cost=None,
+                           last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 2, 363270, tzinfo=TzInfo(UTC))),
+                 SpanModel(id='0199f2c5-53bb-7110-8832-51d9fa92285d',
+                           start_time=datetime.datetime(2025, 10, 17, 15, 24, 2, 363463, tzinfo=TzInfo(UTC)),
+                           name='generate_summary',
+                           input={'analysis': 'Artificial intelligence, as described in the context, is a field within '
+                                              'computer science that aims to create machines or software that can '
+                                              'mimic human intelligence. This includes tasks such as learning, '
+                                              'problem-solving, decision-making, and natural language processing. AI '
+                                              'technologies have seen significant advancements in recent years, '
+                                              'allowing machines to perform complex tasks like image and speech '
+                                              'recognition, autonomous driving, and medical diagnosis.\n'
+                                              '\n'
+                                              'There are different approaches to AI, including symbolic AI and machine '
+                                              'learning. Machine learning, in particular, involves training algorithms '
+                                              'on large datasets to make predictions or decisions. Deep learning, a '
+                                              'subset of machine learning, uses neural networks with multiple layers '
+                                              "to imitate the human brain's structure.\n"
+                                              '\n'
+                                              'AI has a wide range of applications in various industries, from '
+                                              'healthcare to entertainment. It has the potential to revolutionize many '
+                                              'aspects of daily life, but also raises concerns about privacy, bias, '
+                                              'and job displacement.\n'
+                                              '\n'
+                                              'In conclusion, artificial intelligence is a rapidly evolving field that '
+                                              'has the potential to significantly impact society in the future. As '
+                                              'advancements continue, it will be important to address ethical and '
+                                              'societal issues related to AI implementation.',
+                                  'topic': 'artificial intelligence'},
+                           output={'output': 'In summary, artificial intelligence is a field in computer science that '
+                                             'focuses on creating machines or software that can replicate human '
+                                             'intelligence. This includes tasks like learning, problem-solving, '
+                                             'decision-making, and natural language processing. Recent advancements in '
+                                             'AI technologies have enabled machines to perform complex tasks such as '
+                                             'image and speech recognition, autonomous driving, and medical diagnosis. '
+                                             'Different approaches to AI include symbolic AI and machine learning, '
+                                             "with deep learning using neural networks to mimic the human brain's "
+                                             'structure. AI has applications across various industries, but also '
+                                             'raises concerns about privacy, bias, and job displacement. As AI '
+                                             'continues to progress, it will be crucial to address ethical and '
+                                             'societal issues related to its implementation.'},
+                           tags=None,
+                           metadata=None,
+                           type='general',
+                           usage=None,
+                           end_time=datetime.datetime(2025, 10, 17, 15, 24, 5, 196015, tzinfo=TzInfo(UTC)),
+                           project_name='Default Project',
+                           spans=[SpanModel(id='0199f2c5-53bc-7609-889b-b8b1e6f8e3ca',
+                                            start_time=datetime.datetime(2025, 10, 17, 15, 24, 2, 363735, tzinfo=TzInfo(UTC)),
+                                            name='chat_completion_create',
+                                            input={'messages': [{'content': 'Create a summary for artificial '
+                                                                            'intelligence based on: Artificial '
+                                                                            'intelligence, as described in the '
+                                                                            'context, is a field within computer '
+                                                                            'science that aims to create machines or '
+                                                                            'software that can mimic human '
+                                                                            'intelligence. This includes tasks such as '
+                                                                            'learning, problem-solving, '
+                                                                            'decision-making, and natural language '
+                                                                            'processing. AI technologies have seen '
+                                                                            'significant advancements in recent years, '
+                                                                            'allowing machines to perform complex '
+                                                                            'tasks like image and speech recognition, '
+                                                                            'autonomous driving, and medical '
+                                                                            'diagnosis.\n'
+                                                                            '\n'
+                                                                            'There are different approaches to AI, '
+                                                                            'including symbolic AI and machine '
+                                                                            'learning. Machine learning, in '
+                                                                            'particular, involves training algorithms '
+                                                                            'on large datasets to make predictions or '
+                                                                            'decisions. Deep learning, a subset of '
+                                                                            'machine learning, uses neural networks '
+                                                                            'with multiple layers to imitate the human '
+                                                                            "brain's structure.\n"
+                                                                            '\n'
+                                                                            'AI has a wide range of applications in '
+                                                                            'various industries, from healthcare to '
+                                                                            'entertainment. It has the potential to '
+                                                                            'revolutionize many aspects of daily life, '
+                                                                            'but also raises concerns about privacy, '
+                                                                            'bias, and job displacement.\n'
+                                                                            '\n'
+                                                                            'In conclusion, artificial intelligence is '
+                                                                            'a rapidly evolving field that has the '
+                                                                            'potential to significantly impact society '
+                                                                            'in the future. As advancements continue, '
+                                                                            'it will be important to address ethical '
+                                                                            'and societal issues related to AI '
+                                                                            'implementation.',
+                                                                 'role': 'user'}]},
+                                            output={'choices': [{'finish_reason': 'stop',
+                                                                 'index': 0,
+                                                                 'logprobs': None,
+                                                                 'message': {'annotations': [],
+                                                                             'audio': None,
+                                                                             'content': 'In summary, artificial '
+                                                                                        'intelligence is a field in '
+                                                                                        'computer science that focuses '
+                                                                                        'on creating machines or '
+                                                                                        'software that can replicate '
+                                                                                        'human intelligence. This '
+                                                                                        'includes tasks like learning, '
+                                                                                        'problem-solving, '
+                                                                                        'decision-making, and natural '
+                                                                                        'language processing. Recent '
+                                                                                        'advancements in AI '
+                                                                                        'technologies have enabled '
+                                                                                        'machines to perform complex '
+                                                                                        'tasks such as image and '
+                                                                                        'speech recognition, '
+                                                                                        'autonomous driving, and '
+                                                                                        'medical diagnosis. Different '
+                                                                                        'approaches to AI include '
+                                                                                        'symbolic AI and machine '
+                                                                                        'learning, with deep learning '
+                                                                                        'using neural networks to '
+                                                                                        "mimic the human brain's "
+                                                                                        'structure. AI has '
+                                                                                        'applications across various '
+                                                                                        'industries, but also raises '
+                                                                                        'concerns about privacy, bias, '
+                                                                                        'and job displacement. As AI '
+                                                                                        'continues to progress, it '
+                                                                                        'will be crucial to address '
+                                                                                        'ethical and societal issues '
+                                                                                        'related to its '
+                                                                                        'implementation.',
+                                                                             'function_call': None,
+                                                                             'refusal': None,
+                                                                             'role': 'assistant',
+                                                                             'tool_calls': None}}]},
+                                            tags=['openai'],
+                                            metadata={'created': 1760714643,
+                                                      'created_from': 'openai',
+                                                      'id': 'chatcmpl-CRgbDujtWhm4gH1bHDPeZIbJ4ChiV',
+                                                      'model': 'gpt-3.5-turbo-0125',
+                                                      'object': 'chat.completion',
+                                                      'service_tier': 'default',
+                                                      'system_fingerprint': None,
+                                                      'type': 'openai_chat',
+                                                      'usage': {'completion_tokens': 133,
+                                                                'completion_tokens_details': {'accepted_prediction_tokens': 0,
+                                                                                              'audio_tokens': 0,
+                                                                                              'reasoning_tokens': 0,
+                                                                                              'rejected_prediction_tokens': 0},
+                                                                'prompt_tokens': 230,
+                                                                'prompt_tokens_details': {'audio_tokens': 0,
+                                                                                          'cached_tokens': 0},
+                                                                'total_tokens': 363}},
+                                            type='llm',
+                                            usage={'completion_tokens': 133,
+                                                   'original_usage.completion_tokens': 133,
+                                                   'original_usage.completion_tokens_details.accepted_prediction_tokens': 0,
+                                                   'original_usage.completion_tokens_details.audio_tokens': 0,
+                                                   'original_usage.completion_tokens_details.reasoning_tokens': 0,
+                                                   'original_usage.completion_tokens_details.rejected_prediction_tokens': 0,
+                                                   'original_usage.prompt_tokens': 230,
+                                                   'original_usage.prompt_tokens_details.audio_tokens': 0,
+                                                   'original_usage.prompt_tokens_details.cached_tokens': 0,
+                                                   'original_usage.total_tokens': 363,
+                                                   'prompt_tokens': 230,
+                                                   'total_tokens': 363},
+                                            end_time=datetime.datetime(2025, 10, 17, 15, 24, 5, 195846, tzinfo=TzInfo(UTC)),
+                                            project_name='Default Project',
+                                            spans=[],
+                                            feedback_scores=[],
+                                            model='gpt-3.5-turbo-0125',
+                                            provider='openai',
+                                            error_info=None,
+                                            total_cost=None,
+                                            last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 5, 195954, tzinfo=TzInfo(UTC)))],
+                           feedback_scores=[],
+                           model=None,
+                           provider=None,
+                           error_info=None,
+                           total_cost=None,
+                           last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 5, 196032, tzinfo=TzInfo(UTC)))],
+          feedback_scores=[],
+          model=None,
+          provider=None,
+          error_info=None,
+          total_cost=None,
+          last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 5, 196101, tzinfo=TzInfo(UTC)))
+````
+
+</CodeBlocks>
+
+You can then analyze this complete execution hierarchy using task span metrics:
+
+<CodeBlocks>
+```python title="Python" language="python"
+class HierarchyAnalysisMetric(BaseMetric):
+    def _analyze_hierarchy_recursively(self, span: SpanModel, hierarchy_stats: dict = None) -> dict:
+        """Recursively analyze span hierarchy across the entire span tree."""
+        if hierarchy_stats is None:
+            hierarchy_stats = {
+                'total_spans': 0,
+                'llm_spans': 0,
+                'tool_spans': 0,
+                'other_spans': 0,
+                'max_depth': 0,
+                'current_depth': 0,
+                'llm_span_names': [],
+                'tool_span_names': []
+            }
+
+        # Count current span
+        hierarchy_stats['total_spans'] += 1
+        hierarchy_stats['max_depth'] = max(hierarchy_stats['max_depth'], hierarchy_stats['current_depth'])
+
+        # Categorize span types
+        if span.type == "llm":
+            hierarchy_stats['llm_spans'] += 1
+            hierarchy_stats['llm_span_names'].append(span.name)
+        elif span.type == "tool":
+            hierarchy_stats['tool_spans'] += 1
+            hierarchy_stats['tool_span_names'].append(span.name)
+        else:
+            hierarchy_stats['other_spans'] += 1
+
+        # Recursively analyze nested spans with depth tracking
+        for nested_span in span.spans:
+            hierarchy_stats['current_depth'] += 1
+            self._analyze_hierarchy_recursively(nested_span, hierarchy_stats)
+            hierarchy_stats['current_depth'] -= 1
+
+        return hierarchy_stats
+
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        # Analyze hierarchy across the entire span tree
+        # Only for illustrative purposes.
+        # Please adjust for your specific use case!
+        hierarchy_stats = self._analyze_hierarchy_recursively(task_span)
+
+        total_operations = hierarchy_stats['total_spans']
+        llm_operations = hierarchy_stats['llm_spans']
+        tool_operations = hierarchy_stats['tool_spans']
+        max_depth = hierarchy_stats['max_depth']
+
+        # Analyze the complexity and structure of the operation
+        if llm_operations > 5:
+            # Many LLM calls might indicate inefficient processing
+            if tool_operations == 0:
+                score = 0.4
+                reason = f"Over-complex operation: {llm_operations} LLM calls with no tool usage (depth: {max_depth})"
+            else:
+                score = 0.6
+                reason = f"Complex operation: {llm_operations} LLM calls, {tool_operations} tool calls (depth: {max_depth})"
+        elif llm_operations == 0:
+            # No reasoning might indicate a purely mechanical process
+            score = 0.3 if tool_operations > 0 else 0.1
+            reason = f"No reasoning detected: {tool_operations} tool calls only" if tool_operations > 0 else "No LLM or tool operations detected"
+        else:
+            # Balanced approach with reasonable LLM usage
+            balance_ratio = min(llm_operations, tool_operations) / max(llm_operations, tool_operations) if tool_operations > 0 else 0.8
+            depth_bonus = 1.0 if max_depth <= 3 else max(0.8, 1.0 - (max_depth - 3) * 0.05)
+
+            score = min(1.0, 0.7 + balance_ratio * 0.2 + depth_bonus * 0.1)
+
+            if tool_operations > 0:
+                reason = f"Well-structured operation: {llm_operations} LLM calls, {tool_operations} tool calls across {total_operations} spans (depth: {max_depth})"
+            else:
+                reason = f"Reasoning-focused operation: {llm_operations} LLM calls across {total_operations} spans (depth: {max_depth})"
+
+        return score_result.ScoreResult(
+            value=score,
+            name=self.name,
+            reason=reason
+        )
+
+```
+</CodeBlocks>
+
+For the `SpanModel`'s hierarchy given above the `HierarchyAnalysisMetric` metric's score will be:
+
+<CodeBlocks>
+```
+
+    Score: 0.96, Reason: Reasoning-focused operation: 3 LLM calls across 7 spans (depth: 2)
+
+````
+</CodeBlocks>
+
+#### Quickly testing task span metrics locally
+
+You can validate a task span metric without running a full evaluation by recording spans locally. The SDK provides a context manager that captures all spans/traces created in the block and exposes them in-memory:
+
+<CodeBlocks>
+```python title="Python" language="python"
+import opik
+from opik import track
+from opik.evaluation.metrics import score_result
+from opik.message_processing.emulation.models import SpanModel
+
+# Example metric under test
+class ExecutionTimeMetric:
+    def __init__(self, name: str = "execution_time_metric"):
+        self.name = name
+
+    def score(self, task_span: SpanModel, **_):
+        if task_span.start_time and task_span.end_time:
+            duration = (task_span.end_time - task_span.start_time).total_seconds()
+            value = 1.0 if duration < 2.0 else 0.5
+            reason = f"Duration: {duration:.2f}s"
+        else:
+            value = 0.0
+            reason = "Missing timing information"
+        return score_result.ScoreResult(value=value, name=self.name, reason=reason)
+
+@track
+def my_tracked_function(question: str) -> str:
+    # Your LLM/tool code here that produces spans
+    return f"Answer to: {question}"
+
+with opik.record_traces_locally() as storage:
+    # Execute tracked code that creates spans
+    _ = my_tracked_function("What is the capital of France?")
+
+    # Access the in-memory span tree (flush is automatic before reading)
+    span_trees = storage.span_trees
+    assert len(span_trees) > 0, "No spans recorded"
+    root_span = span_trees[0]
+
+    # Evaluate your task span metric directly
+    metric = ExecutionTimeMetric()
+    result = metric.score(task_span=root_span)
+    print(result)
+```
+
+</CodeBlocks>
+
+<Warning>
+  Local recording cannot be nested. If a recording block is already active, entering another will raise an error.
+</Warning>
+
+#### Best practices for task span metrics
+
+1. **Focus on execution patterns**: Use task span metrics to evaluate how your application executes, not just the final output
+2. **Combine with regular metrics**: Mix task span metrics with traditional output-based metrics for comprehensive evaluation
+3. **Analyze performance**: Leverage timing, cost, and usage information for optimization insights
+4. **Handle missing data gracefully**: Always check for None values in optional span attributes
+
+<Warning>
+Task span metrics have access to detailed execution information including inputs, outputs, and metadata. Be mindful of sensitive data and ensure your metrics handle this information appropriately.
+</Warning>
+
 ### Accessing logged experiments
 
-You can access all the experiments logged to the platform from the SDK with the [`Opik.get_experiments_by_name`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_name) and [`Opik.get_experiment_by_id`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_id) methods:
+You can access all the experiments logged to the platform from the SDK with the
+`get experiment by name` methods:
 
-```python {pytest_codeblocks_skip=true}
-import opik
+<CodeBlocks>
+    ```typescript title="TypeScript" language="typescript"
+    import { Opik } from "opik";
 
-# Get the experiment
-opik_client = opik.Opik()
-experiments = opik_client.get_experiments_by_name("My experiment")
+    const client = new Opik({
+        apiKey: "your-api-key",
+        apiUrl: "https://www.comet.com/opik/api",
+        projectName: "your-project-name",
+        workspaceName: "your-workspace-name",
+    });
+    const experiments = await client.getExperimentsByName("My experiment");
 
-# Access the first experiment content
-items = experiments[0].get_items()
-print(items)
-```
+    // Access the first experiment content
+    const items = await experiments[0].getItems();
+    console.log(items);
+    ```
+
+    ```python title="Python" language="python"
+    import opik
+
+    # Get the experiment
+    opik_client = opik.Opik()
+    experiments = opik_client.get_experiments_by_name("My experiment")
+
+    # Access the first experiment content
+    items = experiments[0].get_items()
+    print(items)
+    ```
+
+</CodeBlocks>
+
+
+````

@@ -1,14 +1,14 @@
 {
   "name": "opik-openai",
   "description": "Opik TypeScript and JavaScript SDK integration with OpenAI",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "engines": {
     "node": ">=18"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
-    "directory": "blob/sdks/typescript/src/opik/integrations/opik-openai"
+    "directory": "sdks/typescript/src/opik/integrations/opik-openai"
   },
   "homepage": "https://www.comet.com/docs/opik/",
   "author": {
@@ -57,11 +57,17 @@
     "README.md"
   ],
   "peerDependencies": {
-    "openai": "^4.97.0",
-    "opik": "^1.7.25"
+    "openai": "^6.0.1",
+    "opik": "^1.8.61"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.34.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.42.0",
     "vitest": "^3.0.5"
   }
 }

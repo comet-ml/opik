@@ -4,28 +4,36 @@ import { Dot, XAxis, CartesianGrid, YAxis, AreaChart, Area } from "recharts";
 import { LineDot } from "recharts/types/cartesian/Line";
 import debounce from "lodash/debounce";
 
-import ChartTooltipContent, {
-  ChartTooltipRenderHeaderArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderHeaderArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import OptimizationProgressTooltip from "./OptimizationProgressTooltip";
 import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
 import {
   ChartContainer,
   ChartTooltip,
   ChartLegend,
 } from "@/components/ui/chart";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import {
+  extractSecondaryScoreNames,
+  getScoreValue,
+  generateDistinctColorMap,
+} from "./optimizationChartUtils";
 
 export type DataRecord = {
   entityId: string;
   entityName: string;
   createdDate: string;
   value: number | null;
+  allFeedbackScores?: { name: string; value: number }[];
 };
 
 export type ChartData = {
   data: DataRecord[];
-  line: string;
+  objectiveName: string;
 };
 
 type OptimizationProgressChartContentProps = {
@@ -36,19 +44,52 @@ type OptimizationProgressChartContentProps = {
 const OptimizationProgressChartContent: React.FC<
   OptimizationProgressChartContentProps
 > = ({ chartData, bestEntityId }) => {
-  const { line, data } = chartData;
-  const [, setActiveLine] = useState<string | null>(null);
+  const { objectiveName, data } = chartData;
+  const [activeLine, setActiveLine] = useState<string | null>(null);
   const [position, setPosition] = useState<
     { x: number; y: number } | undefined
   >();
 
+  // Extract all score names (main objective + secondary scores)
+  const secondaryScoreNames = useMemo(
+    () => extractSecondaryScoreNames(data, objectiveName),
+    [data, objectiveName],
+  );
+
+  const allScoreNames = useMemo(
+    () => [objectiveName, ...secondaryScoreNames],
+    [objectiveName, secondaryScoreNames],
+  );
+
+  // Generate distinct color map for all scores
+  const colorMap = useMemo(
+    () => generateDistinctColorMap(objectiveName, secondaryScoreNames),
+    [objectiveName, secondaryScoreNames],
+  );
+
   const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig([line]);
-  }, [line]);
+    return getDefaultHashedColorsChartConfig(
+      allScoreNames,
+      undefined,
+      colorMap,
+    );
+  }, [allScoreNames, colorMap]);
 
-  const lineColor = config[line].color as string;
+  const mainObjectiveColor = config[objectiveName].color as string;
 
-  const values = useMemo(() => data.map((d) => d.value), [data]);
+  // Collect all values (main objective + secondary scores) for Y-axis scaling
+  const values = useMemo(() => {
+    const allValues: DataRecord["value"][] = [];
+    data.forEach((record) => {
+      // Main objective value
+      allValues.push(record.value);
+      // Secondary scores values
+      secondaryScoreNames.forEach((scoreName) => {
+        allValues.push(getScoreValue(record, scoreName));
+      });
+    });
+    return allValues;
+  }, [data, secondaryScoreNames]);
 
   const {
     width: tickWidth,
@@ -59,6 +100,7 @@ const OptimizationProgressChartContent: React.FC<
   } = useChartTickDefaultConfig(values, {
     tickPrecision: 2,
     numberOfTicks: 3,
+    showMinMaxDomain: true,
   });
 
   const renderHeader = useCallback(
@@ -108,14 +150,14 @@ const OptimizationProgressChartContent: React.FC<
     const leftCorrection = -9;
 
     const bgStyles: React.CSSProperties = {
-      backgroundColor: `color-mix(in srgb, ${lineColor} 10%, white 100%)`,
+      backgroundColor: `color-mix(in srgb, ${mainObjectiveColor} 10%, white 100%)`,
     };
 
     return (
       <div
         style={
           {
-            "--line-color": lineColor,
+            "--main-objective-color": mainObjectiveColor,
             top: position.y,
             left: position.x + leftCorrection,
           } as React.CSSProperties
@@ -123,7 +165,7 @@ const OptimizationProgressChartContent: React.FC<
         className="pointer-events-none absolute z-10"
       >
         <div
-          className="comet-body-s rounded px-2 py-1 text-[--line-color]"
+          className="comet-body-s rounded px-2 py-1 text-[--main-objective-color]"
           style={bgStyles}
         >
           Best prompt
@@ -136,7 +178,8 @@ const OptimizationProgressChartContent: React.FC<
     );
   };
 
-  const renderDot: LineDot = (props) => {
+  // Render dot for main objective (primary score)
+  const renderMainDot: LineDot = (props) => {
     const { key, ...rest } = props;
     const color = config[props.name as string].color;
     const height = 80;
@@ -170,6 +213,24 @@ const OptimizationProgressChartContent: React.FC<
     );
   };
 
+  // Render smaller, less prominent dots for secondary scores
+  const renderSecondaryDot: LineDot = (props) => {
+    const { key, ...rest } = props;
+    const color = config[props.name as string].color;
+    const smallRadius = 5; // Slightly larger for better visibility
+
+    return (
+      <Dot
+        key={key}
+        {...rest}
+        fill={color}
+        strokeWidth={1.2}
+        stroke="white"
+        r={smallRadius}
+      />
+    );
+  };
+
   return (
     <>
       {renderPopover()}
@@ -178,7 +239,7 @@ const OptimizationProgressChartContent: React.FC<
           data={chartData.data}
           margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <CartesianGrid vertical={false} />
+          <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
           <XAxis
             axisLine={false}
             tickLine={false}
@@ -198,7 +259,12 @@ const OptimizationProgressChartContent: React.FC<
           />
           <ChartTooltip
             isAnimationActive={false}
-            content={<ChartTooltipContent renderHeader={renderHeader} />}
+            content={
+              <OptimizationProgressTooltip
+                objectiveName={objectiveName}
+                renderHeader={renderHeader}
+              />
+            }
           />
           <ChartLegend
             content={
@@ -210,25 +276,63 @@ const OptimizationProgressChartContent: React.FC<
           />
           <defs>
             <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={lineColor} stopOpacity={0.2} />
-              <stop offset="75%" stopColor={lineColor} stopOpacity={0} />
+              <stop
+                offset="5%"
+                stopColor={mainObjectiveColor}
+                stopOpacity={0.2}
+              />
+              <stop
+                offset="75%"
+                stopColor={mainObjectiveColor}
+                stopOpacity={0}
+              />
             </linearGradient>
           </defs>
+
+          {/* Main objective line with prominent styling */}
           <Area
             type="linear"
-            key={line}
+            key={objectiveName}
             dataKey={(record) => record.value}
-            name={config[line].label as string}
-            stroke={lineColor}
-            fillOpacity={1}
+            name={config[objectiveName].label as string}
+            stroke={mainObjectiveColor}
+            fillOpacity={
+              activeLine === null || activeLine === objectiveName ? 1 : 0.2
+            }
             fill="url(#area)"
-            dot={renderDot}
+            dot={renderMainDot}
             activeDot={{ strokeWidth: 2, stroke: "white" }}
-            strokeWidth={1.5}
-            strokeOpacity={1}
+            strokeWidth={2.5}
+            strokeOpacity={
+              activeLine === null || activeLine === objectiveName ? 1 : 0.2
+            }
             animationDuration={100}
             connectNulls={false}
           />
+
+          {/* Secondary score lines with subtle styling */}
+          {secondaryScoreNames.map((scoreName) => {
+            const scoreColor = config[scoreName].color as string;
+            const isHighlighted = activeLine === scoreName;
+            const isDimmed = activeLine !== null && activeLine !== scoreName;
+            return (
+              <Area
+                type="linear"
+                key={scoreName}
+                dataKey={(record) => getScoreValue(record, scoreName)}
+                name={config[scoreName].label as string}
+                stroke={scoreColor}
+                fillOpacity={0}
+                fill="transparent"
+                dot={renderSecondaryDot}
+                activeDot={{ strokeWidth: 1.5, stroke: "white", r: 5 }}
+                strokeWidth={isHighlighted ? 1.5 : 1.0}
+                strokeOpacity={isDimmed ? 0.15 : isHighlighted ? 0.8 : 0.5}
+                animationDuration={100}
+                connectNulls={false}
+              />
+            );
+          })}
         </AreaChart>
       </ChartContainer>
     </>

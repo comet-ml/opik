@@ -14,6 +14,7 @@ jobs:
     run-unit-tests:
         name: Opik Optimizer Unit Tests Python ${{matrix.python_version}}
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         
         defaults:
           run:
@@ -23,10 +24,10 @@ jobs:
             fail-fast: false
             matrix:
                 python_version: [
-                  "3.9",
                   "3.10",
                   "3.11",
-                  "3.12"
+                  "3.12",
+                  "3.13"
                 ]
 
         steps:
@@ -45,6 +46,14 @@ jobs:
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
             restore-keys: |
               hf-datasets-
+
+        - name: Cache LiteLLM cache
+          uses: actions/cache@v4
+          with:
+            path: ~/.litellm_cache
+            key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
+            restore-keys: |
+              litellm-cache-
 
         - name: Install opik_optimizer
           run: pip install .

@@ -3,8 +3,9 @@ subtitle: Introduces the concepts behind Opik's evaluation platform
 ---
 
 <Tip>
-  If you want to jump straight to running evaluations, you can head to the [Evaluate
-  prompts](/evaluation/evaluate_prompt) or [Evaluate your LLM application](/evaluation/evaluate_your_llm) guides.
+  If you want to jump straight to running evaluations, you can head to the
+  [Evaluate prompts](/evaluation/evaluate_prompt) or [Evaluate your LLM
+  application](/evaluation/evaluate_your_llm) guides.
 </Tip>
 
 When working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.
@@ -28,15 +29,15 @@ Given the importance of datasets in the evaluation process, teams often spend a 
 
 1. **Manually curating examples**: As a first step, you can manually curate a set of examples based on your knowledge of the application you are building. You can also leverage subject matter experts to help in the creation of the dataset.
 
-2. **Using synthetic data**: If you don't have enough data to create a diverse set of examples, you can turn to synthetic data generation tools to help you create a dataset. The [LangChain cookbook](/cookbook/langchain) has a great example of how to use synthetic data generation tools to create a dataset.
+2. **Using synthetic data**: If you don't have enough data to create a diverse set of examples, you can turn to synthetic data generation tools to help you create a dataset. The [LangChain cookbook](/integrations/langchain) has a great example of how to use synthetic data generation tools to create a dataset.
 
-3. **Leveraging production data**: If you application is in production, you can leverage the data that is being generated to augment your dataset. While this is often not the first step in creating a dataset, it can be a great way to to enrich your dataset with real world data.
+3. **Leveraging production data**: If your application is in production, you can leverage the data that is being generated to augment your dataset. While this is often not the first step in creating a dataset, it can be a great way to enrich your dataset with real world data.
 
    If you are using Opik for production monitoring, you can easily add traces to your dataset by selecting them in the UI and selecting `Add to dataset` in the `Actions` dropdown.
 
 <Tip>
-  You can learn more about how to manage your datasets in Opik in the [Manage Datasets](/evaluation/manage_datasets)
-  section.
+  You can learn more about how to manage your datasets in Opik in the [Manage
+  Datasets](/evaluation/manage_datasets) section.
 </Tip>
 
 ## Experiments
@@ -66,6 +67,31 @@ Experiment items store the input, expected output, actual output and feedback sc
 
 <Frame>
   <img src="/img/evaluation/experiment_items.png" />
+</Frame>
+
+### Multi-Value Feedback Scores for Experiment Items
+
+The experiment interface supports multiple evaluators scoring the same experiment items. Each item can receive independent scores from different team members, with all ratings preserved and aggregated in the interface.
+
+#### Interface Features
+
+- **Score overlay**: Hover over any score to see individual scores, reasons, and aggregates
+- **Evaluator tracking**: Each score shows who provided it, when, and their reasoning
+- **Reason display**: View individual explanations alongside each score
+- **Statistical summary**: View mean, standard deviation, and score distribution
+
+#### Evaluation Workflow
+
+1. **Initial scoring**: First evaluator scores experiment items with optional reasoning
+2. **Additional evaluation**: Other team members add their scores and explanations to the same items
+3. **Aggregate calculation**: Interface automatically computes means and variance metrics
+4. **Analysis tools**: Use built-in charts to identify high-disagreement items and compare
+5. **Consensus review**: Discuss items with high score variance using individual explanations to align criteria
+
+This approach helps identify experiment items where evaluators disagree significantly, with access to individual reasoning to understand why disagreements occurred and improve evaluation consistency.
+
+<Frame>
+  <img src="/img/evaluation/multivalue_experiment_items.png" />
 </Frame>
 
 ## Learn more

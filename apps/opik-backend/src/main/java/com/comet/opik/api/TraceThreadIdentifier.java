@@ -13,5 +13,9 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @TraceThreadIdentifierValidation
-public record TraceThreadIdentifier(String projectName, UUID projectId, @NotBlank String threadId) {
+public record TraceThreadIdentifier(
+        String projectName,
+        UUID projectId,
+        @NotBlank String threadId,
+        boolean truncate) {
 }

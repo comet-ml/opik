@@ -1,6 +1,8 @@
+import json
 import logging
+import re
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from rich import box
 from rich.console import Console, Group
@@ -13,6 +15,24 @@ from .utils import get_optimization_run_url_by_id
 PANEL_WIDTH = 70
 
 
+def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
+    """
+    Calculate percentage change safely, handling division by zero.
+
+    Args:
+        current: Current value
+        baseline: Baseline value to compare against
+
+    Returns:
+        Tuple of (percentage_change, has_percentage) where:
+        - percentage_change: The percentage change if calculable, otherwise 0
+        - has_percentage: True if percentage was calculated, False if baseline was zero
+    """
+    if baseline == 0:
+        return 0.0, False
+    return ((current - baseline) / baseline) * 100, True
+
+
 def get_console(*args: Any, **kwargs: Any) -> Console:
     console = Console(*args, **kwargs)
     console.is_jupyter = False
@@ -20,7 +40,7 @@ def get_console(*args: Any, **kwargs: Any) -> Console:
 
 
 @contextmanager
-def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1) -> Any:
+def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> Any:
     """Context manager to convert tqdm to rich."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
@@ -35,38 +55,64 @@ def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1) ->
 
     from opik.evaluation import report
 
+    # Store original functions
+    original_display_experiment_results = report.display_experiment_results
+    original_display_experiment_link = report.display_experiment_link
+
+    # Replace with no-ops
     report.display_experiment_results = lambda *args, **kwargs: None
     report.display_experiment_link = lambda *args, **kwargs: None
 
     try:
         yield
     finally:
+        # Restore everything
         opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
+        report.display_experiment_results = original_display_experiment_results
+        report.display_experiment_link = original_display_experiment_link
 
 
 @contextmanager
 def suppress_opik_logs() -> Any:
     """Suppress Opik startup logs by temporarily increasing the log level."""
-    # Optimizer log level
-    optimizer_logger = logging.getLogger("opik_optimizer")
+    # Get all loggers we need to suppress
+    opik_client_logger = logging.getLogger("opik.api_objects.opik_client")
+    opik_logger = logging.getLogger("opik")
 
-    # Get the Opik logger
-    opik_logger = logging.getLogger("opik.api_objects.opik_client")
+    # Store original log levels
+    original_client_level = opik_client_logger.level
+    original_opik_level = opik_logger.level
 
-    # Store original log level
-    original_level = opik_logger.level
-
-    # Set log level to ERROR to suppress INFO messages
-    opik_logger.setLevel(optimizer_logger.level)
+    # Set log level to WARNING to suppress INFO messages
+    opik_client_logger.setLevel(logging.WARNING)
+    opik_logger.setLevel(logging.WARNING)
 
     try:
         yield
     finally:
-        # Restore original log level
-        opik_logger.setLevel(original_level)
+        # Restore original log levels
+        opik_client_logger.setLevel(original_client_level)
+        opik_logger.setLevel(original_opik_level)
 
 
-def display_messages(messages: List[Dict[str, str]], prefix: str = "") -> None:
+def format_prompt_snippet(text: str, max_length: int = 100) -> str:
+    """
+    Normalize whitespace in a prompt snippet and truncate it for compact display.
+
+    Args:
+        text: Raw text to summarize.
+        max_length: Maximum characters to keep before adding an ellipsis.
+
+    Returns:
+        str: Condensed snippet safe for inline logging.
+    """
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if len(normalized) > max_length:
+        return normalized[:max_length] + "…"
+    return normalized
+
+
+def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:
     for i, msg in enumerate(messages):
         panel = Panel(
             Text(msg.get("content", ""), overflow="fold"),
@@ -90,11 +136,53 @@ def display_messages(messages: List[Dict[str, str]], prefix: str = "") -> None:
             console.print(Text(prefix) + Text.from_ansi(line))
 
 
+def _format_tool_panel(tool: dict[str, Any]) -> Panel:
+    function_block = tool.get("function", {})
+    name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description", "")
+    parameters = function_block.get("parameters", {})
+
+    body_lines: list[str] = []
+    if description:
+        body_lines.append(description)
+    if parameters:
+        formatted_schema = json.dumps(parameters, indent=2, sort_keys=True)
+        body_lines.append("\nSchema:\n" + formatted_schema)
+
+    content = Text(
+        "\n".join(body_lines) if body_lines else "(no metadata)", overflow="fold"
+    )
+    return Panel(
+        content,
+        title=f"tool: {name}",
+        title_align="left",
+        border_style="cyan",
+        width=PANEL_WIDTH,
+        padding=(1, 2),
+    )
+
+
+def _display_tools(tools: list[dict[str, Any]] | None) -> None:
+    if not tools:
+        return
+
+    console = get_console()
+    console.print(Text("\nTools registered:\n", style="bold"))
+    for tool in tools:
+        panel = _format_tool_panel(tool)
+        with console.capture() as capture:
+            console.print(panel)
+        rendered_panel = capture.get()
+        for line in rendered_panel.splitlines():
+            console.print(Text.from_ansi(line))
+    console.print("")
+
+
 def get_link_text(
     pre_text: str,
     link_text: str,
-    optimization_id: Optional[str] = None,
-    dataset_id: Optional[str] = None,
+    optimization_id: str | None = None,
+    dataset_id: str | None = None,
 ) -> Text:
     if optimization_id is not None and dataset_id is not None:
         optimization_url = get_optimization_run_url_by_id(
@@ -112,8 +200,8 @@ def get_link_text(
 
 def display_header(
     algorithm: str,
-    optimization_id: Optional[str] = None,
-    dataset_id: Optional[str] = None,
+    optimization_id: str | None = None,
+    dataset_id: str | None = None,
     verbose: int = 1,
 ) -> None:
     if verbose < 1:
@@ -140,8 +228,9 @@ def display_header(
 def display_result(
     initial_score: float,
     best_score: float,
-    best_prompt: List[Dict[str, str]],
+    best_prompt: list[dict[str, str]],
     verbose: int = 1,
+    tools: list[dict[str, Any]] | None = None,
 ) -> None:
     if verbose < 1:
         return
@@ -149,21 +238,21 @@ def display_result(
     console = get_console()
     console.print(Text("\n> Optimization complete\n"))
 
-    content: Union[Text, Panel] = []
+    content: Text | Panel = []
 
     if best_score > initial_score:
-        if initial_score == 0:
+        perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
+        if has_percentage:
             content += [
                 Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
                     style="bold green",
                 )
             ]
         else:
-            perc_change = (best_score - initial_score) / initial_score
             content += [
                 Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
                     style="bold green",
                 )
             ]
@@ -199,9 +288,15 @@ def display_result(
         )
     )
 
+    if tools:
+        _display_tools(tools)
+
 
 def display_configuration(
-    messages: List[Dict[str, str]], optimizer_config: Dict[str, Any], verbose: int = 1
+    messages: list[dict[str, str]],
+    optimizer_config: dict[str, Any],
+    verbose: int = 1,
+    tools: list[dict[str, Any]] | None = None,
 ) -> None:
     """Displays the LLM messages and optimizer configuration using Rich panels."""
 
@@ -213,6 +308,7 @@ def display_configuration(
     console.print(Text("> Let's optimize the prompt:\n"))
 
     display_messages(messages)
+    _display_tools(tools)
 
     # Panel for configuration
     console.print(

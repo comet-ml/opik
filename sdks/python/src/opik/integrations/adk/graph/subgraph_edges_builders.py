@@ -1,6 +1,5 @@
 from typing import List, Optional
 from . import nodes
-import itertools
 
 
 def build_edge_definitions_for_parallel_subagents(
@@ -16,7 +15,7 @@ def build_edge_definitions_for_sequential_subagents(
         return [f"{children[0].name}"]
 
     result: List[str] = []
-    for current, next in itertools.pairwise(children):
+    for current, next in zip(children, children[1:]):
         edge_definition = f"{current.name} ==> {next.name}"
         result.append(edge_definition)
 

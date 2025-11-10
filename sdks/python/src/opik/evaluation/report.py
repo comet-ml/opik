@@ -4,8 +4,7 @@ from typing import Dict, List, Tuple
 from rich import align, console, panel, table, text
 
 
-from .. import url_helpers
-from . import test_result
+from . import test_result, evaluation_result
 
 
 def _format_time(seconds: float) -> str:
@@ -87,16 +86,63 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
-def display_experiment_link(
-    experiment_id: str, dataset_id: str, url_override: str
-) -> None:
+def display_experiment_link(experiment_url: str) -> None:
     console_container = console.Console()
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment_id,
-        dataset_id=dataset_id,
-        url_override=url_override,
-    )
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."
     )
+
+
+def display_evaluation_scores_statistics(
+    dataset_name: str,
+    evaluation_results: evaluation_result.EvaluationResult,
+) -> None:
+    """
+    Displays evaluation scores statistics for a given dataset.
+
+    The function generates a summary of evaluation scores including mean, max,
+    min, and optionally standard deviation for each metric in the evaluation
+    results. The summarized scores are formatted and presented in a table
+    within a panel for user clarity.
+
+    Args:
+        dataset_name: Name of the dataset for which evaluation statistics are
+            being displayed.
+        evaluation_results: An object containing evaluation results with
+            aggregated scores and statistical data.
+    """
+    aggregated_view = evaluation_results.aggregate_evaluation_scores()
+    if not aggregated_view.aggregated_scores:
+        return
+
+    # Create a table for the statistics
+    stats_table = table.Table()
+    stats_table.add_column("Name", style="cyan", no_wrap=True)
+    stats_table.add_column("Mean", justify="right", style="green")
+    stats_table.add_column("Min", justify="right", style="yellow")
+    stats_table.add_column("Max", justify="right", style="yellow")
+    stats_table.add_column("Std", justify="right", style="magenta")
+
+    # Add rows for each metric
+    for name, stats in aggregated_view.aggregated_scores.items():
+        std_value = f"{stats.std:.4f}" if stats.std is not None else "N/A"
+        stats_table.add_row(
+            name,
+            f"{stats.mean:.4f}",
+            f"{stats.min:.4f}",
+            f"{stats.max:.4f}",
+            std_value,
+        )
+
+    # Create a panel with the table inside
+    panel_content = panel.Panel(
+        stats_table,
+        title=f"Evaluation statistics for {dataset_name}",
+        title_align="left",
+        expand=False,
+    )
+
+    # Display results
+    console_container = console.Console()
+    console_container.print(panel_content)

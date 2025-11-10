@@ -46,7 +46,7 @@ dependencies:
   repository: https://charts.bitnami.com/bitnami
   condition: minio.enabled
 - name: altinity-clickhouse-operator
-  version: "0.25.0"
+  version: "0.25.4"
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
 - name: common

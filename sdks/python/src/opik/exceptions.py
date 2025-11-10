@@ -130,3 +130,19 @@ class ValidationError(OpikException):
 
     def __repr__(self) -> str:
         return f"ValidationError(prefix={self._prefix}, failure_reasons={self._failure_reasons})"
+
+
+class BaseLLMError(OpikException):
+    """Base class for all LLM errors during evaluation."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def __str__(self) -> str:
+        return f"LLM infrastructure error: {self.message}"
+
+
+class SearchTimeoutError(OpikException):
+    """Exception raised when a search times out."""
+
+    pass

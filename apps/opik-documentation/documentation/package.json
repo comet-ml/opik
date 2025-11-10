@@ -1,10 +1,8 @@
 {
-  "dependencies": {
-    "broken-link-checker": "^0.7.8",
-    "fern-api": "0.64.26",
-    "nodemon": "^3.1.9"
-  },
   "scripts": {
-    "dev": "sh dev_script.sh"
+    "dev": "cd fern && fern docs dev"
+  },
+  "dependencies": {
+    "fern-api": "^0.94.6"
   }
 }

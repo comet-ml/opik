@@ -1,24 +1,19 @@
+---
+title: Observability for LangGraph with Opik
+description: Start here to integrate Opik into your LangGraph-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 Opik provides a seamless integration with LangGraph, allowing you to easily log and trace your LangGraph-based applications. By using the `OpikTracer` callback, you can automatically capture detailed information about your LangGraph graph executions during both development and production.
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=langgraph&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langgraph&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langgraph&utm_campaign=opik) for more information.
 
 ## Getting Started
+
+### Installation
 
 To use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) with LangGraph, you'll need to have both the `opik` and `langgraph` packages installed. You can install them using pip:
 
@@ -26,11 +21,14 @@ To use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/i
 pip install opik langgraph langchain
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
 
-```bash
-opik configure
-```
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
 
 ## Using the OpikTracer
 
@@ -76,6 +74,202 @@ Once the OpikTracer is configured, you will start to see the traces in the Opik 
 <Frame>
   <img src="/img/cookbook/langgraph_cookbook.png" />
 </Frame>
+
+## Practical Example: Classification Workflow
+
+Let's walk through a real-world example of using LangGraph with Opik for a classification workflow. This example demonstrates how to create a graph with conditional routing and track its execution.
+
+### Setting up the Environment
+
+First, let's set up our environment with the necessary dependencies:
+
+```python
+import opik
+
+# Configure Opik
+opik.configure(use_local=False)
+```
+
+### Creating the LangGraph Workflow
+
+We'll create a LangGraph workflow with 3 nodes that demonstrates conditional routing:
+
+```python
+from langgraph.graph import StateGraph, END
+from typing import TypedDict, Optional
+
+# Define the graph state
+class GraphState(TypedDict):
+    question: Optional[str] = None
+    classification: Optional[str] = None
+    response: Optional[str] = None
+
+# Create the node functions
+def classify(question: str) -> str:
+    return "greeting" if question.startswith("Hello") else "search"
+
+def classify_input_node(state):
+    question = state.get("question", "").strip()
+    classification = classify(question)
+    return {"classification": classification}
+
+def handle_greeting_node(state):
+    return {"response": "Hello! How can I help you today?"}
+
+def handle_search_node(state):
+    question = state.get("question", "").strip()
+    search_result = f"Search result for '{question}'"
+    return {"response": search_result}
+
+# Create the workflow
+workflow = StateGraph(GraphState)
+workflow.add_node("classify_input", classify_input_node)
+workflow.add_node("handle_greeting", handle_greeting_node)
+workflow.add_node("handle_search", handle_search_node)
+
+# Add conditional routing
+def decide_next_node(state):
+    return (
+        "handle_greeting"
+        if state.get("classification") == "greeting"
+        else "handle_search"
+    )
+
+workflow.add_conditional_edges(
+    "classify_input",
+    decide_next_node,
+    {"handle_greeting": "handle_greeting", "handle_search": "handle_search"},
+)
+
+workflow.set_entry_point("classify_input")
+workflow.add_edge("handle_greeting", END)
+workflow.add_edge("handle_search", END)
+
+app = workflow.compile()
+```
+
+### Executing with Opik Tracing
+
+Now let's execute the workflow with Opik tracing enabled:
+
+```python
+from opik.integrations.langchain import OpikTracer
+
+# Create the OpikTracer with graph visualization
+tracer = OpikTracer(graph=app.get_graph(xray=True))
+
+# Execute the workflow
+inputs = {"question": "Hello, how are you?"}
+result = app.invoke(inputs, config={"callbacks": [tracer]})
+print(result)
+```
+
+The graph execution is now logged on the Opik platform and can be viewed in the UI. The trace will show the complete execution path through the graph, including the classification decision and the chosen response path.
+
+## Compatibility with Opik tracing context
+
+LangGraph tracing integrates seamlessly with Opik's tracing context, allowing you to call `@track`-decorated functions (and most use most of other native Opik integrations) from within your graph nodes and have them automatically attached to the trace tree.
+
+### Synchronous execution (invoke)
+
+For synchronous graph execution using `invoke()`, everything works out of the box. You can access current spans/traces from LangGraph nodes and call tracked functions inside them:
+
+```python
+import opik_context
+from opik import track
+from opik.integrations.langchain import OpikTracer
+from langgraph.graph import StateGraph, START, END
+
+@track
+def process_data(value: int) -> int:
+    """Custom tracked function that will be attached to the trace tree."""
+    return value * 2
+
+def my_node(state):
+    current_trace_data = opik_context.get_current_trace_data()
+    current_span_data = opik_context.get_current_span_data()  # will return the span for `my_node`, created by OpikTracer
+
+    # This tracked function call will automatically be part of the trace tree
+    result = process_data(state["value"])
+    return {"value": result}
+
+# Build and execute graph
+graph = StateGraph(dict)
+graph.add_node("processor", my_node)
+graph.add_edge(START, "processor")
+graph.add_edge("processor", END)
+
+app = graph.compile()
+opik_tracer = OpikTracer()
+
+# Synchronous execution - tracked functions work automatically
+result = app.invoke({"value": 21}, config={"callbacks": [opik_tracer]})
+```
+
+### Asynchronous execution (ainvoke)
+
+For asynchronous graph execution using `ainvoke()`, you need to explicitly propagate the trace context to `@track`-decorated functions using the `extract_current_langgraph_span_data` helper:
+
+<Accordion title="Why is this needed for async execution?">
+This is due to a LangChain framework limitation that doesn't automatically share the execution context between callbacks (like `OpikTracer`) and node code in async scenarios. The explicit trace context propagation via distributed headers is required for seamless tracking across async boundaries.
+</Accordion>
+
+```python
+from opik import track
+from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
+from langgraph.graph import StateGraph, START, END
+
+@track
+def process_data(value: int) -> int:
+    """Custom tracked function that needs distributed trace headers in async context."""
+    return value * 2
+
+async def my_async_node(state, config):
+    # Extract current span data from LangGraph config. `opik_context` doesn't work here due to langgraph platform limitations related to context propagation.
+    span_data = extract_current_langgraph_span_data(config)
+    
+    # Pass distributed trace headers to attach the tracked function to the trace tree
+    result = process_data(
+        state["value"],
+        opik_distributed_trace_headers=span_data.get_distributed_trace_headers()  # all tracked functions implicitly support this parameter
+    )
+    return {"value": result}
+
+# Build and execute graph
+graph = StateGraph(dict)
+graph.add_node("processor", my_async_node)
+graph.add_edge(START, "processor")
+graph.add_edge("processor", END)
+
+app = graph.compile()
+opik_tracer = OpikTracer()
+
+# Asynchronous execution - requires explicit trace context propagation
+result = await app.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
+```
+
+Alternatively, if you don't want to use the `@track` decorator, you can use the `opik.start_as_current_span` context manager with distributed headers:
+
+```python
+import opik
+from opik.integrations.langchain import extract_current_langgraph_span_data
+
+async def my_async_node(state, config):
+    span_data = extract_current_langgraph_span_data(config)
+    
+    # Use context manager with distributed headers
+    with opik.start_as_current_span(
+        name="custom_operation",
+        input={"input": state["value"]},
+        opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
+    ) as span_data:
+        # Your custom logic here
+        result = state["value"] * 2
+        span_data.output = {"output": result}
+    
+    return {"value": result}
+```
+
 
 ## Logging threads
 

@@ -17,6 +17,9 @@ export interface GetSpansByProjectRequest {
     type?: OpikApi.GetSpansByProjectRequestType;
     filters?: string;
     truncate?: boolean;
+    stripAttachments?: boolean;
     sorting?: string;
     exclude?: string;
+    fromTime?: Date;
+    toTime?: Date;
 }

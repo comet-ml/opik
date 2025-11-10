@@ -31,11 +31,14 @@ public class StatsMapper {
     public static final String TAGS = "tags";
     public static final String LLM_SPAN_COUNT = "llm_span_count";
     public static final String LLM_SPAN_COUNT_AVG = "llm_span_count_avg";
+    public static final String SPAN_COUNT = "span_count";
+    public static final String SPAN_COUNT_AVG = "span_count_avg";
     public static final String TRACE_COUNT = "trace_count";
     public static final String GUARDRAILS_FAILED_COUNT = "guardrails_failed_count";
     public static final String RECENT_ERROR_COUNT = "recent_error_count";
     public static final String PAST_PERIOD_ERROR_COUNT = "past_period_error_count";
     public static final String ERROR_COUNT = "error_count";
+    public static final String EXPERIMENT_ITEMS_COUNT = "experiment_items_count";
 
     public static ProjectStats mapProjectStats(Row row, String entityCountLabel) {
 
@@ -56,6 +59,7 @@ public class StatsMapper {
 
         if (entityCountLabel.equals("trace_count")) {
             stats.add(new AvgValueStat(LLM_SPAN_COUNT, row.get(LLM_SPAN_COUNT_AVG, Double.class)));
+            stats.add(new AvgValueStat(SPAN_COUNT, row.get(SPAN_COUNT_AVG, Double.class)));
         }
 
         BigDecimal totalEstimatedCostAvg = row.get(TOTAL_ESTIMATED_COST_AVG, BigDecimal.class);
@@ -215,5 +219,52 @@ public class StatsMapper {
                 .deviation(recentErrorCount)
                 .deviationPercentage(deviationPercentage)
                 .build();
+    }
+
+    public static ProjectStats mapExperimentItemsStats(Row row) {
+        var stats = Stream.<ProjectStats.ProjectStatItem<?>>builder();
+
+        stats.add(new CountValueStat(EXPERIMENT_ITEMS_COUNT,
+                row.get(EXPERIMENT_ITEMS_COUNT, Long.class)));
+
+        stats.add(new CountValueStat(TRACE_COUNT,
+                row.get(TRACE_COUNT, Long.class)));
+
+        BigDecimal totalEstimatedCostAvg = getCostValue(row, TOTAL_ESTIMATED_COST_AVG);
+        if (totalEstimatedCostAvg != null) {
+            stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST,
+                    totalEstimatedCostAvg.doubleValue()));
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> durationMap = row.get(DURATION, Map.class);
+        if (durationMap != null) {
+            var duration = new PercentageValues(
+                    durationMap.get("p50"),
+                    durationMap.get("p90"),
+                    durationMap.get("p99"));
+            stats.add(new PercentageValueStat(DURATION, duration));
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> feedbackScoresMap = row.get(FEEDBACK_SCORE, Map.class);
+        if (feedbackScoresMap != null) {
+            feedbackScoresMap.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        double value = entry.getValue() instanceof Number number
+                                ? number.doubleValue()
+                                : 0.0;
+                        stats.add(new AvgValueStat(
+                                "%s.%s".formatted(FEEDBACK_SCORE, entry.getKey()),
+                                value));
+                    });
+        }
+
+        return new ProjectStats(stats.build().toList());
+    }
+
+    private static BigDecimal getCostValue(Row row, String columnName) {
+        return row.get(columnName, BigDecimal.class);
     }
 }

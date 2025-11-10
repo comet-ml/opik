@@ -13,8 +13,6 @@ from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThrea
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
-from ..types.json_node import JsonNode
-from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_page_public import TracePagePublic
@@ -23,6 +21,7 @@ from ..types.trace_thread import TraceThread
 from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_write import TraceWrite
+from ..types.value_entry import ValueEntry
 from .raw_client import AsyncRawTracesClient, RawTracesClient
 
 # this is used as the default value for optional parameters
@@ -169,6 +168,7 @@ class TracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -196,6 +196,8 @@ class TracesClient:
 
         last_updated_by : typing.Optional[str]
 
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -220,6 +222,7 @@ class TracesClient:
             last_updated_at=last_updated_at,
             created_by=created_by,
             last_updated_by=last_updated_by,
+            value_by_author=value_by_author,
             request_options=request_options,
         )
         return _response.data
@@ -227,21 +230,24 @@ class TracesClient:
     def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -254,10 +260,14 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.close_trace_thread(thread_id='thread_id', )
+        client.traces.close_trace_thread()
         """
         _response = self._raw_client.close_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            project_name=project_name,
+            project_id=project_id,
+            thread_id=thread_id,
+            thread_ids=thread_ids,
+            request_options=request_options,
         )
         return _response.data
 
@@ -270,8 +280,11 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -291,9 +304,15 @@ class TracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -316,8 +335,11 @@ class TracesClient:
             project_id=project_id,
             filters=filters,
             truncate=truncate,
+            strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -332,7 +354,7 @@ class TracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -359,7 +381,7 @@ class TracesClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -428,13 +450,21 @@ class TracesClient:
         _response = self._raw_client.create_traces(traces=traces, request_options=request_options)
         return _response.data
 
-    def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    def get_trace_by_id(
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TracePublic:
         """
         Get trace by id
 
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -450,7 +480,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.get_trace_by_id(id='id', )
         """
-        _response = self._raw_client.get_trace_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_trace_by_id(
+            id, strip_attachments=strip_attachments, request_options=request_options
+        )
         return _response.data
 
     def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
@@ -487,7 +519,7 @@ class TracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
@@ -514,7 +546,7 @@ class TracesClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -583,6 +615,7 @@ class TracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -595,6 +628,8 @@ class TracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -610,7 +645,7 @@ class TracesClient:
         client.traces.delete_thread_feedback_scores(project_name='project_name', thread_id='thread_id', names=['names'], )
         """
         _response = self._raw_client.delete_thread_feedback_scores(
-            project_name=project_name, thread_id=thread_id, names=names, request_options=request_options
+            project_name=project_name, thread_id=thread_id, names=names, author=author, request_options=request_options
         )
         return _response.data
 
@@ -641,7 +676,12 @@ class TracesClient:
         return _response.data
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -651,6 +691,8 @@ class TracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -665,7 +707,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_trace_feedback_score(id='id', name='name', )
         """
-        _response = self._raw_client.delete_trace_feedback_score(id, name=name, request_options=request_options)
+        _response = self._raw_client.delete_trace_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     def delete_trace_threads(
@@ -795,6 +839,8 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -807,6 +853,10 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -823,7 +873,12 @@ class TracesClient:
         client.traces.get_trace_stats()
         """
         _response = self._raw_client.get_trace_stats(
-            project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
+            project_id=project_id,
+            project_name=project_name,
+            filters=filters,
+            from_time=from_time,
+            to_time=to_time,
+            request_options=request_options,
         )
         return _response.data
 
@@ -891,6 +946,7 @@ class TracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
@@ -903,6 +959,8 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -919,7 +977,11 @@ class TracesClient:
         client.traces.get_trace_thread(thread_id='thread_id', )
         """
         _response = self._raw_client.get_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -931,8 +993,11 @@ class TracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -950,9 +1015,15 @@ class TracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -974,8 +1045,11 @@ class TracesClient:
             project_name=project_name,
             project_id=project_id,
             truncate=truncate,
+            strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -986,6 +1060,7 @@ class TracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -998,6 +1073,8 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1013,7 +1090,11 @@ class TracesClient:
         client.traces.open_trace_thread(thread_id='thread_id', )
         """
         _response = self._raw_client.open_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1042,7 +1123,7 @@ class TracesClient:
         from Opik import OpikApi
         from Opik import FeedbackScoreBatchItemThread
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.score_batch_of_threads(scores=[FeedbackScoreBatchItemThread(thread_id='thread_id', name='name', value=1.1, source="ui", )], )
+        client.traces.score_batch_of_threads(scores=[FeedbackScoreBatchItemThread(name='name', value=1.1, source="ui", thread_id='thread_id', )], )
         """
         _response = self._raw_client.score_batch_of_threads(scores=scores, request_options=request_options)
         return _response.data
@@ -1072,7 +1153,7 @@ class TracesClient:
         from Opik import OpikApi
         from Opik import FeedbackScoreBatchItem
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
+        client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
         """
         _response = self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
         return _response.data
@@ -1086,6 +1167,9 @@ class TracesClient:
         last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -1105,7 +1189,16 @@ class TracesClient:
             Max number of trace thread to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1122,6 +1215,9 @@ class TracesClient:
             last_retrieved_thread_model_id=last_retrieved_thread_model_id,
             limit=limit,
             truncate=truncate,
+            strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1135,6 +1231,9 @@ class TracesClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -1154,7 +1253,16 @@ class TracesClient:
             Max number of traces to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1171,6 +1279,9 @@ class TracesClient:
             last_retrieved_id=last_retrieved_id,
             limit=limit,
             truncate=truncate,
+            strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1179,12 +1290,7 @@ class TracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1194,17 +1300,7 @@ class TracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1217,18 +1313,9 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.update_thread(thread_model_id='threadModelId', text='text', )
+        client.traces.update_thread(thread_model_id='threadModelId', )
         """
-        _response = self._raw_client.update_thread(
-            thread_model_id,
-            text=text,
-            id=id,
-            created_at=created_at,
-            last_updated_at=last_updated_at,
-            created_by=created_by,
-            last_updated_by=last_updated_by,
-            request_options=request_options,
-        )
+        _response = self._raw_client.update_thread(thread_model_id, tags=tags, request_options=request_options)
         return _response.data
 
     def update_thread_comment(
@@ -1490,6 +1577,7 @@ class AsyncTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
         last_updated_by: typing.Optional[str] = OMIT,
+        value_by_author: typing.Optional[typing.Dict[str, ValueEntry]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1516,6 +1604,8 @@ class AsyncTracesClient:
         created_by : typing.Optional[str]
 
         last_updated_by : typing.Optional[str]
+
+        value_by_author : typing.Optional[typing.Dict[str, ValueEntry]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1544,6 +1634,7 @@ class AsyncTracesClient:
             last_updated_at=last_updated_at,
             created_by=created_by,
             last_updated_by=last_updated_by,
+            value_by_author=value_by_author,
             request_options=request_options,
         )
         return _response.data
@@ -1551,21 +1642,24 @@ class AsyncTracesClient:
     async def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1580,11 +1674,15 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.close_trace_thread(thread_id='thread_id', )
+            await client.traces.close_trace_thread()
         asyncio.run(main())
         """
         _response = await self._raw_client.close_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            project_name=project_name,
+            project_id=project_id,
+            thread_id=thread_id,
+            thread_ids=thread_ids,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1597,8 +1695,11 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -1618,9 +1719,15 @@ class AsyncTracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1646,8 +1753,11 @@ class AsyncTracesClient:
             project_id=project_id,
             filters=filters,
             truncate=truncate,
+            strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -1662,7 +1772,7 @@ class AsyncTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -1689,7 +1799,7 @@ class AsyncTracesClient:
 
         output : typing.Optional[JsonListStringWrite]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1764,13 +1874,21 @@ class AsyncTracesClient:
         _response = await self._raw_client.create_traces(traces=traces, request_options=request_options)
         return _response.data
 
-    async def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    async def get_trace_by_id(
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TracePublic:
         """
         Get trace by id
 
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1789,7 +1907,9 @@ class AsyncTracesClient:
             await client.traces.get_trace_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_trace_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_trace_by_id(
+            id, strip_attachments=strip_attachments, request_options=request_options
+        )
         return _response.data
 
     async def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
@@ -1829,7 +1949,7 @@ class AsyncTracesClient:
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
-        metadata: typing.Optional[JsonNode] = OMIT,
+        metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
@@ -1856,7 +1976,7 @@ class AsyncTracesClient:
 
         output : typing.Optional[JsonListString]
 
-        metadata : typing.Optional[JsonNode]
+        metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1931,6 +2051,7 @@ class AsyncTracesClient:
         project_name: str,
         thread_id: str,
         names: typing.Sequence[str],
+        author: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1943,6 +2064,8 @@ class AsyncTracesClient:
         thread_id : str
 
         names : typing.Sequence[str]
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1961,7 +2084,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_thread_feedback_scores(
-            project_name=project_name, thread_id=thread_id, names=names, request_options=request_options
+            project_name=project_name, thread_id=thread_id, names=names, author=author, request_options=request_options
         )
         return _response.data
 
@@ -1995,7 +2118,12 @@ class AsyncTracesClient:
         return _response.data
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        author: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -2005,6 +2133,8 @@ class AsyncTracesClient:
         id : str
 
         name : str
+
+        author : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2022,7 +2152,9 @@ class AsyncTracesClient:
             await client.traces.delete_trace_feedback_score(id='id', name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_trace_feedback_score(id, name=name, request_options=request_options)
+        _response = await self._raw_client.delete_trace_feedback_score(
+            id, name=name, author=author, request_options=request_options
+        )
         return _response.data
 
     async def delete_trace_threads(
@@ -2166,6 +2298,8 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -2178,6 +2312,10 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2197,7 +2335,12 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_trace_stats(
-            project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
+            project_id=project_id,
+            project_name=project_name,
+            filters=filters,
+            from_time=from_time,
+            to_time=to_time,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2271,6 +2414,7 @@ class AsyncTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
@@ -2283,6 +2427,8 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2302,7 +2448,11 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2314,8 +2464,11 @@ class AsyncTracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -2333,9 +2486,15 @@ class AsyncTracesClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2360,8 +2519,11 @@ class AsyncTracesClient:
             project_name=project_name,
             project_id=project_id,
             truncate=truncate,
+            strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -2372,6 +2534,7 @@ class AsyncTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2384,6 +2547,8 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2402,7 +2567,11 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.open_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2433,7 +2602,7 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.score_batch_of_threads(scores=[FeedbackScoreBatchItemThread(thread_id='thread_id', name='name', value=1.1, source="ui", )], )
+            await client.traces.score_batch_of_threads(scores=[FeedbackScoreBatchItemThread(name='name', value=1.1, source="ui", thread_id='thread_id', )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.score_batch_of_threads(scores=scores, request_options=request_options)
@@ -2466,7 +2635,7 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
+            await client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
@@ -2481,6 +2650,9 @@ class AsyncTracesClient:
         last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2500,7 +2672,16 @@ class AsyncTracesClient:
             Max number of trace thread to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2517,6 +2698,9 @@ class AsyncTracesClient:
             last_retrieved_thread_model_id=last_retrieved_thread_model_id,
             limit=limit,
             truncate=truncate,
+            strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -2531,6 +2715,9 @@ class AsyncTracesClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2550,7 +2737,16 @@ class AsyncTracesClient:
             Max number of traces to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2567,6 +2763,9 @@ class AsyncTracesClient:
             last_retrieved_id=last_retrieved_id,
             limit=limit,
             truncate=truncate,
+            strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -2576,12 +2775,7 @@ class AsyncTracesClient:
         self,
         thread_model_id: str,
         *,
-        text: str,
-        id: typing.Optional[str] = OMIT,
-        created_at: typing.Optional[dt.datetime] = OMIT,
-        last_updated_at: typing.Optional[dt.datetime] = OMIT,
-        created_by: typing.Optional[str] = OMIT,
-        last_updated_by: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2591,17 +2785,7 @@ class AsyncTracesClient:
         ----------
         thread_model_id : str
 
-        text : str
-
-        id : typing.Optional[str]
-
-        created_at : typing.Optional[dt.datetime]
-
-        last_updated_at : typing.Optional[dt.datetime]
-
-        created_by : typing.Optional[str]
-
-        last_updated_by : typing.Optional[str]
+        tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2616,19 +2800,10 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.update_thread(thread_model_id='threadModelId', text='text', )
+            await client.traces.update_thread(thread_model_id='threadModelId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.update_thread(
-            thread_model_id,
-            text=text,
-            id=id,
-            created_at=created_at,
-            last_updated_at=last_updated_at,
-            created_by=created_by,
-            last_updated_by=last_updated_by,
-            request_options=request_options,
-        )
+        _response = await self._raw_client.update_thread(thread_model_id, tags=tags, request_options=request_options)
         return _response.data
 
     async def update_thread_comment(

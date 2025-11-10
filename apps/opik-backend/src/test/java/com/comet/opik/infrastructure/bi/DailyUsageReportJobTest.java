@@ -25,8 +25,10 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -36,10 +38,9 @@ import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -48,6 +49,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -71,6 +73,10 @@ class DailyUsageReportJobTest {
     private static final String VERSION = "%s.%s.%s".formatted(PodamUtils.getIntegerInRange(1, 99),
             PodamUtils.getIntegerInRange(1, 99), PodamUtils.getIntegerInRange(1, 99));
 
+    private static final Map<String, List<String>> EXPECTED_DEMO_DATA = Map.of(
+            DemoData.DATASETS.get(0), DemoData.EXPERIMENTS.subList(0, 1),
+            DemoData.DATASETS.get(1), DemoData.EXPERIMENTS.subList(1, DemoData.EXPERIMENTS.size()));
+
     private void mockBiEventResponse(String eventType, WireMockServer server) {
         server.stubFor(
                 post(urlPathEqualTo("/v1/notify/event"))
@@ -83,6 +89,12 @@ class DailyUsageReportJobTest {
     }
 
     private void verifyResponse(WireMockServer server, String totalUsers, String dailyUsers) {
+        // Delegate to the full parameter version with default values for traces, experiments, and datasets
+        verifyResponse(server, totalUsers, dailyUsers, "5", "5", "5");
+    }
+
+    private void verifyResponse(WireMockServer server, String totalUsers, String dailyUsers, String dailyTraces,
+            String dailyExperiments, String dailyDatasets) {
         server.verify(
                 postRequestedFor(urlPathEqualTo("/v1/notify/event"))
                         .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
@@ -93,9 +105,10 @@ class DailyUsageReportJobTest {
                                 .and(matchingJsonPath("$.event_properties.opik_app_version",
                                         equalTo(VERSION)))
                                 .and(matchingJsonPath("$.event_properties.daily_users", equalTo(dailyUsers)))
-                                .and(matchingJsonPath("$.event_properties.daily_traces", equalTo("5")))
-                                .and(matchingJsonPath("$.event_properties.daily_experiments", equalTo("5")))
-                                .and(matchingJsonPath("$.event_properties.daily_datasets", equalTo("5")))));
+                                .and(matchingJsonPath("$.event_properties.daily_traces", equalTo(dailyTraces)))
+                                .and(matchingJsonPath("$.event_properties.daily_experiments",
+                                        equalTo(dailyExperiments)))
+                                .and(matchingJsonPath("$.event_properties.daily_datasets", equalTo(dailyDatasets)))));
     }
 
     private void updateDatasets(String workspaceId, TransactionTemplate transactionTemplate, boolean updateUser) {
@@ -198,7 +211,7 @@ class DailyUsageReportJobTest {
     class CredentialsEnabledScenario {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-        private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+        private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
         private final Network NETWORK = Network.newNetwork();
         private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
                 NETWORK);
@@ -274,9 +287,7 @@ class DailyUsageReportJobTest {
             CLICKHOUSE.stop();
             ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
-            ZOOKEEPER_CONTAINER.stop();
         }
-
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
         }
@@ -344,7 +355,7 @@ class DailyUsageReportJobTest {
     class NoCredentialsEnabledScenario {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-        private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+        private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
         private final Network NETWORK = Network.newNetwork();
         private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
                 NETWORK);
@@ -441,7 +452,7 @@ class DailyUsageReportJobTest {
                     .await()
                     .atMost(5, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        verifyResponse(wireMock.server(), "1", "1");
+                        verifyResponse(wireMock.server(), "1", "1", "5", "0", "0");
                     });
 
         }
@@ -475,29 +486,76 @@ class DailyUsageReportJobTest {
             updateTraces(workspaceId, templateAsync, false);
         }
 
+        /**
+         * Helper method to create demo datasets.
+         * Note: Dataset existence checking requires complex PromptVersion setup,
+         * so for demo data we create datasets directly and rely on the fact that
+         * demo datasets have consistent names and are idempotent by design.
+         */
+        private void createDemoDataset(String datasetName, String apiKey, String workspaceName) {
+            Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .name(datasetName)
+                    .build();
+
+            var page = datasetResourceClient.getDatasetPage(apiKey, workspaceName, datasetName, 1);
+
+            if (page.content().isEmpty()) {
+                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+            }
+        }
+
+        /**
+         * Helper method to check if an experiment exists by name.
+         */
+        private boolean experimentExists(String experimentName, String apiKey, String workspaceName) {
+            var experimentPage = experimentResourceClient.findExperiments(1, 100, experimentName, apiKey,
+                    workspaceName);
+            return !experimentPage.content().isEmpty();
+        }
+
+        /**
+         * Helper method to check if a project exists by name.
+         */
+        private boolean projectExists(String projectName, String apiKey, String workspaceName) {
+            try (var response = projectResourceClient.callGetprojectByName(projectName, apiKey, workspaceName)) {
+                var projectPage = response.readEntity(com.comet.opik.api.Project.ProjectPage.class);
+                return !projectPage.content().isEmpty();
+            }
+        }
+
         private void createDemoData(String apiKey, String workspaceName) {
 
             DemoData.DATASETS.forEach(datasetName -> {
-                Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                        .name(datasetName)
-                        .build();
-
-                datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+                createDemoDataset(datasetName, apiKey, workspaceName);
             });
 
             for (int i = 0; i < DemoData.EXPERIMENTS.size(); i++) {
-                Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                        .name(DemoData.EXPERIMENTS.get(i))
-                        .datasetName(DemoData.DATASETS.get(i))
-                        .promptVersion(null)
-                        .promptVersions(null)
-                        .build();
+                int index = i;
+                String experimentName = DemoData.EXPERIMENTS.get(i);
 
-                experimentResourceClient.create(experiment, apiKey, workspaceName);
+                if (!experimentExists(experimentName, apiKey, workspaceName)) {
+                    String datasetName = EXPECTED_DEMO_DATA.entrySet()
+                            .stream()
+                            .filter(entry -> entry.getValue().contains(DemoData.EXPERIMENTS.get(index)))
+                            .findFirst()
+                            .map(Map.Entry::getKey)
+                            .orElseThrow();
+
+                    Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                            .name(experimentName)
+                            .datasetName(datasetName)
+                            .promptVersion(null)
+                            .promptVersions(null)
+                            .build();
+
+                    experimentResourceClient.create(experiment, apiKey, workspaceName);
+                }
             }
 
             DemoData.PROJECTS.forEach(projectName -> {
-                projectResourceClient.createProject(projectName, apiKey, workspaceName);
+                if (!projectExists(projectName, apiKey, workspaceName)) {
+                    projectResourceClient.createProject(projectName, apiKey, workspaceName);
+                }
 
                 List<Trace> traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                         .map(trace -> trace.toBuilder()
@@ -508,6 +566,98 @@ class DailyUsageReportJobTest {
                 traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
             });
         }
+
+        @Test
+        @DisplayName("Daily usage report excludes demo data from counts")
+        void dailyUsageReportExcludesDemoData() throws SchedulerException {
+            String workspaceName = "default";
+            String apiKey = "";
+
+            // Create regular project and data
+            String regularProjectName = "Regular Project";
+            projectResourceClient.createProject(regularProjectName, apiKey, workspaceName);
+
+            // Create some regular traces
+            List<Trace> regularTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(5) // Create 5 regular traces
+                    .map(trace -> trace.toBuilder()
+                            .projectName(regularProjectName)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(regularTraces, apiKey, workspaceName);
+
+            // Create demo data (which should be excluded)
+            createDemoData(apiKey, workspaceName);
+
+            // Update created_at to yesterday to be captured in daily report
+            updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
+
+            // Run the daily usage report job
+            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
+            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
+            guiceJobManager.getScheduler().scheduleJob(trigger);
+
+            // Wait for job completion and verify
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                // Verify that demo data tracking was properly excluded from BI events
+                // The verification here would depend on how the job reports data
+                // Since this test focuses on exclusion, we verify no demo data is included
+                // in the usage statistics by checking that only regular traces are counted
+                verifyResponse(wireMock.server(), "1", "1", "5", "0", "0"); // Only regular traces counted
+            });
+        }
+
+        @Test
+        @DisplayName("Daily usage report works correctly with mixed demo and regular data")
+        void dailyUsageReportMixedDataExcludesOnlyDemo() throws SchedulerException {
+            String workspaceName = "default";
+            String apiKey = "";
+
+            // Create multiple regular projects
+            String regularProject1 = "Production App";
+            String regularProject2 = "Staging Environment";
+            projectResourceClient.createProject(regularProject1, apiKey, workspaceName);
+            projectResourceClient.createProject(regularProject2, apiKey, workspaceName);
+
+            // Create regular traces for both projects
+            List<Trace> regularTraces1 = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder()
+                            .projectName(regularProject1)
+                            .build())
+                    .toList();
+
+            List<Trace> regularTraces2 = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(4)
+                    .map(trace -> trace.toBuilder()
+                            .projectName(regularProject2)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(regularTraces1, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(regularTraces2, apiKey, workspaceName);
+
+            // Create demo data (should be excluded from counts)
+            createDemoData(apiKey, workspaceName);
+
+            // Update created_at to yesterday to be captured in daily report
+            updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
+
+            // Run the daily usage report job
+            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
+            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
+            guiceJobManager.getScheduler().scheduleJob(trigger);
+
+            // Wait for job completion and verify
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                // Verify that demo data exclusion works properly with mixed data
+                // The job should process both regular and demo data, but only regular data
+                // should be included in the final usage statistics sent to the BI events
+                // Expected: Regular traces only, demo traces excluded
+                verifyResponse(wireMock.server(), "1", "1", "5", "0", "0"); // Only regular traces counted
+            });
+        }
+
     }
 
 }

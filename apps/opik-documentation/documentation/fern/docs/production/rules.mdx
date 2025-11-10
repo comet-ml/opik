@@ -28,8 +28,8 @@ To create a new scoring metric in the UI, first navigate to the project you woul
 When creating a new rule, you will be presented with the following options:
 
 1. **Name:** The name of the rule
-2. **Sampling rate:** The percentage of traces to score. When set to `1`, all traces will be scored.
-3. **Model:** The model to use to run the LLM as a Judge metric. As we use structured outputs to ensure the consistency of the LLM response, you will only be able to use `gpt-4o` and `gpt-4o-mini` models.
+2. **Sampling rate:** The percentage of traces to score. When set to `100%`, all traces will be scored.
+3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities.
 4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
 5. **Variable mapping:** This is the mapping of the variables in the prompt to the values from the trace.
 6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
@@ -60,7 +60,59 @@ When writing your own LLM as a Judge metric you will need to specify the prompt 
 `{{ variable_name }}`. You can then map these variables to your trace data using the `variable_mapping` parameter. When the
 rule is executed, Opik will replace the variables with the values from the trace data.
 
-You can control the format of the output using the `Scoring definition` parameter. This is were you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the the LLM as a Judge metric always returns trace scores.
+You can control the format of the output using the `Scoring definition` parameter. This is where you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
+
+### Evaluating traces with images
+
+LLM as a Judge metrics can evaluate traces that contain images when using vision-capable models. This is useful for:
+
+- Evaluating image generation quality
+- Analyzing visual content in multimodal applications
+- Validating image-based responses
+
+To reference image data from traces in your evaluation prompts:
+
+1. In the prompt editor, click the **"Images +"** button to add an image variable
+2. Map the image variable to the trace field containing image data using the Variable Mapping section
+
+<Frame>
+  <img src="/img/production/online_evaluation_rule_add_image.png" />
+</Frame>
+
+<Note>
+  When you add an image using the "Images +" button, Opik automatically adds a new line to the prompt with the image wrapped in `<<<image>>><</image>>>` tags. This wrapper is not visible in the UI but ensures proper image processing during evaluation.
+</Note>
+
+**Example rule configuration:**
+
+Prompt:
+
+```
+Evaluate the quality of this generated image.
+
+Rate the image on the following criteria:
+1. Visual clarity and resolution
+2. Relevance to the prompt
+3. Technical quality
+
+Provide a score between 0 and 1.
+```
+
+Variable Mapping:
+
+- `output_image` → `output.image_data` (path in trace structure)
+
+Model: Vision-capable model required
+
+**Supported image formats:**
+
+- Image URL
+- Base64 encoded image
+
+<Tip>
+  When mapping image variables, ensure the trace field contains image data in a
+  supported format (image URL or base64 encoded image).
+</Tip>
 
 ## Reviewing online evaluation scores
 
@@ -81,7 +133,7 @@ It is also possible to define LLM as a Judge and Custome Python metrics that run
 We have built-in templates for the LLM as a Judge metrics that you can use to score the entire conversation:
 1. **Conversation Coherence:** This metric checks if the conversation is coherent and follows a logical flow, return a decimal score between 0 and 1.
 2. **User Frustration:** This metric checks if the user is frustrated with the conversation, return a decimal score between 0 and 1.
-3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric.
+3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric. By default, this template uses binary scoring (true/false) following best practices.
 
 For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
 

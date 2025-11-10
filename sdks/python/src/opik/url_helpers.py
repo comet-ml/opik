@@ -87,3 +87,9 @@ def get_workspace_list_url(base_url: str) -> str:
 
 def get_is_alive_ping_url(base_url: str) -> str:
     return urllib.parse.urljoin(base_url, HEALTH_CHECK_URL_POSTFIX)
+
+
+def is_aws_presigned_url(url: str) -> bool:
+    return "X-Amz-Signature" in url or (
+        "Signature=" in url and "AWSAccessKeyId=" in url
+    )

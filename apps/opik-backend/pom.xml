@@ -19,21 +19,21 @@
         <dropwizard.version>4.0.14</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
-        <mysql.version>9.4.0</mysql.version>
+        <mysql.version>9.5.0</mysql.version>
         <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
         <stringtemplate.version>3.49.4</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
-        <google-protobuf.version>4.31.0</google-protobuf.version>
+        <google-protobuf.version>4.33.0</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
-        <testcontainers.version>1.21.0</testcontainers.version>
+        <testcontainers.version>2.0.1</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
-        <redisson.version>3.50.0</redisson.version>
-        <opentelmetry.version>2.18.0</opentelmetry.version>
-        <aws.java.sdk.version>2.32.4</aws.java.sdk.version>
-        <json-path.version>2.9.0</json-path.version>
+        <redisson.version>3.52.0</redisson.version>
+        <opentelmetry.version>2.21.0</opentelmetry.version>
+        <aws.java.sdk.version>2.37.3</aws.java.sdk.version>
+        <json-path.version>2.10.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
@@ -63,14 +63,14 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.2.0</version>
+                <version>1.8.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.2.1.Final</version>
+                <version>4.2.6.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -112,6 +112,11 @@
             <artifactId>s3</artifactId>
         </dependency>
         <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>auth</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
             <version>2.6.0</version>
@@ -119,6 +124,10 @@
         <dependency>
             <groupId>io.dropwizard</groupId>
             <artifactId>dropwizard-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
         </dependency>
         <dependency>
             <groupId>org.redisson</groupId>
@@ -260,7 +269,7 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-http-client-jdk</artifactId>
-            <version>1.2.0</version>
+            <version>1.8.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -280,7 +289,7 @@
         <dependency>
             <groupId>io.opentelemetry.proto</groupId>
             <artifactId>opentelemetry-proto</artifactId>
-            <version>1.7.0-alpha</version>
+            <version>1.8.0-alpha</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
@@ -346,7 +355,7 @@
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>mysql</artifactId>
+            <artifactId>testcontainers-mysql</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -357,7 +366,7 @@
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>clickhouse</artifactId>
+            <artifactId>testcontainers-clickhouse</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -368,13 +377,18 @@
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>uk.co.jemos.podam</groupId>
             <artifactId>podam</artifactId>
             <version>8.0.2.RELEASE</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -410,7 +424,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>3.11.2</version>
+                    <version>3.12.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -428,7 +442,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>2.46.0</version>
+                <version>3.0.0</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>

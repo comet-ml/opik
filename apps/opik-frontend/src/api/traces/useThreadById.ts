@@ -16,6 +16,7 @@ const getThreadById = async (
     {
       thread_id: threadId,
       project_id: projectId,
+      truncate: false,
     },
     {
       signal,

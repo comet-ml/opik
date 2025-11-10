@@ -12,13 +12,13 @@ import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
+import org.quartz.impl.matchers.GroupMatcher;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
@@ -41,9 +41,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setTraceThreadsClosingJob();
             }
 
-            case GuiceyLifecycle.ApplicationStopped -> {
-                shutdownJobManager();
-            }
+            case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
         }
     }
 
@@ -78,6 +76,12 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void setTraceThreadsClosingJob() {
         TraceThreadConfig traceThreadConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getTraceThreadConfig();
+
+        if (!traceThreadConfig.isEnabled()) {
+            log.info("Trace thread closing job is disabled, skipping job setup");
+            return;
+        }
+
         Duration closeTraceThreadJobInterval = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration();
 
         var jobDetail = JobBuilder.newJob(TraceThreadsClosingJob.class)
@@ -97,6 +101,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             var scheduler = getScheduler();
             scheduler.addJob(jobDetail, false);
             scheduler.scheduleJob(trigger);
+            log.info("Trace thread closing job scheduled successfully");
         } catch (SchedulerException e) {
             log.error("Failed to schedule job '{}'", jobDetail.getKey(), e);
         }
@@ -138,60 +143,27 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         return guiceJobManager.get().getScheduler();
     }
 
-    private void shutdownJobManager() {
+    private void shutdownJobManagerScheduler() {
         var jobManager = guiceJobManager.get();
-
         if (jobManager == null) {
-            log.info("No GuiceJobManager instance to shut down");
+            log.info("GuiceJobManager instance already cleared, nothing to shutdown");
             return;
         }
-
+        var scheduler = jobManager.getScheduler();
         try {
-            var scheduler = jobManager.getScheduler();
-
-            // First, try graceful shutdown with timeout
-            log.info("Attempting graceful scheduler shutdown...");
-            scheduler.shutdown(true);
-
-            // Wait up to 10 seconds for graceful shutdown
-            var shutdownStart = Instant.now();
-            var maxWaitTime = Duration.ofSeconds(10);
-
-            while (!scheduler.isShutdown()
-                    && Duration.between(shutdownStart, Instant.now()).compareTo(maxWaitTime) < 0) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-
-            if (!scheduler.isShutdown()) {
-                log.warn("Scheduler did not shut down gracefully within {} seconds, forcing shutdown",
-                        maxWaitTime.toSeconds());
-
-                // Force shutdown by interrupting running jobs
-                var runningJobs = scheduler.getCurrentlyExecutingJobs();
-                for (var jobExecution : runningJobs) {
-                    try {
-                        log.warn("Interrupting job: {}", jobExecution.getJobDetail().getKey());
-                        scheduler.interrupt(jobExecution.getJobDetail().getKey());
-                    } catch (Exception e) {
-                        log.warn("Failed to interrupt job: {}", jobExecution.getJobDetail().getKey(), e);
-                    }
-                }
-
-                // Force shutdown now
-                scheduler.shutdown(false);
-            }
-
-            log.info("JobManager shutdown completed");
-
-        } catch (SchedulerException e) {
-            log.warn("Error shutting down JobManager", e);
+            log.info("Attempting to delete all jobs from the scheduler...");
+            scheduler.deleteJobs(scheduler.getJobKeys(GroupMatcher.anyGroup()).stream().toList());
+            log.info("Jobs deleted");
+        } catch (SchedulerException exception) {
+            log.warn("Error deleting jobs during scheduler shutdown", exception);
         }
-
+        try {
+            log.info("Attempting scheduler shutdown...");
+            scheduler.shutdown(false); // Don't wait for jobs to complete
+            log.info("Scheduler shutdown completed");
+        } catch (SchedulerException exception) {
+            log.warn("Error shutting down scheduler", exception);
+        }
         guiceJobManager.set(null);
         log.info("Cleared GuiceJobManager instance");
     }

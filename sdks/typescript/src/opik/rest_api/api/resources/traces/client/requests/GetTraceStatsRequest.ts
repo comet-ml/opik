@@ -10,4 +10,6 @@ export interface GetTraceStatsRequest {
     projectId?: string;
     projectName?: string;
     filters?: string;
+    fromTime?: Date;
+    toTime?: Date;
 }

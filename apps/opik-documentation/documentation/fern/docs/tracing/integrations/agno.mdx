@@ -1,7 +1,15 @@
-[Agno](https://github.com/agno-agi/agno) is a lightweight, high-performance library for building Agents.
+---
+title: Observability for Agno with Opik
+description: Start here to integrate Opik into your Agno-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
 
-Opik's integration with Agno relies on OpenTelemetry. You can learn more about Opik's OpenTelemetry features
-in our [get started guide](/tracing/opentelemetry/overview).
+[Agno](https://github.com/agno-agi/agno) is a lightweight, high-performance library for building AI agents.
+
+Agno's primary advantage is its minimal overhead and efficient execution, making it ideal for production environments where performance is critical while maintaining simplicity in agent development.
+
+<Frame>
+  <img src="/img/tracing/agno_integration.png" alt="Agno tracing" />
+</Frame>
 
 ## Getting started
 
@@ -22,6 +30,28 @@ configure the OpenTelemetry integration:
             
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
 
@@ -64,7 +94,7 @@ configure the OpenTelemetry integration:
 
 The example below shows how to use the Agno integration with Opik:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.tools.yfinance import YFinanceTools
@@ -95,8 +125,7 @@ agent = Agent(
 agent.print_response("What is the current price of Apple?")
 ```
 
-Once the integration is set-up, you will see the trace in Opik:
+## Further improvements
 
-<Frame>
-  <img src="/img/tracing/agno_integration.png" />
-</Frame>
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

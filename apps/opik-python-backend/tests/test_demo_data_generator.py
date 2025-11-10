@@ -1,6 +1,7 @@
 import pytest
 import uuid6
 import json
+import re
 
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ def test_create_demo_data_structure(httpserver):
     baseUrl = httpserver.url_for("/")
 
     httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_data(status=404)
+    httpserver.expect_request("/v1/private/projects", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/traces/feedback-scores", method="PUT").respond_with_data(status=204)
@@ -72,6 +74,24 @@ def test_create_demo_data_structure(httpserver):
     httpserver.expect_request("/v1/private/prompts/versions/retrieve", method="POST").respond_with_json(prompt)
     httpserver.expect_request("/v1/private/prompts/versions", method="POST").respond_with_json(prompt)
 
+    # Mock optimization endpoints that don't exist in the backend yet
+    httpserver.expect_request("/v1/private/optimizations", method="POST").respond_with_json({
+        "id": str(uuid6.uuid7()),
+        "name": "Demo optimization",
+        "dataset_id": str(uuid6.uuid7()),
+        "objective_name": "Demo objective",
+        "status": "running",
+        "metadata": {},
+        "created_at": "2024-01-01T00:00:00Z"
+    })
+
+    # Mock specific optimization ID update (for the PUT request with specific ID)
+    httpserver.expect_request(re.compile(r"/v1/private/optimizations/.*"), method="PUT").respond_with_data(status=204)
+
+    # Mock thread endpoints for thread feedback scores
+    httpserver.expect_request("/v1/private/traces/threads/close", method="PUT").respond_with_data(status=204)
+    httpserver.expect_request("/v1/private/traces/threads/feedback-scores", method="PUT").respond_with_data(status=204)
+
     # Call the function to create the demo data
     create_demo_data(baseUrl, "default", "comet_api_key")
 
@@ -116,6 +136,15 @@ def test_create_demo_data_idempotence(httpserver):
 
     httpserver.expect_request("/v1/private/prompts/versions/retrieve", method="POST").respond_with_handler(fail_on_request)
     httpserver.expect_request("/v1/private/prompts/versions", method="POST").respond_with_handler(fail_on_request)
+
+    # Mock optimization endpoints (should not be called in idempotent case)
+    httpserver.expect_request("/v1/private/optimizations", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request(re.compile(r"/v1/private/optimizations/.*"), method="PUT").respond_with_handler(fail_on_request)
+
+    # Mock thread endpoints (should not be called in idempotent case)
+    httpserver.expect_request("/v1/private/traces/threads/close", method="PUT").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/traces/threads/feedback-scores", method="PUT").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/traces/threads/retrieve", method="POST").respond_with_handler(fail_on_request)
 
     # Call the function to create the demo data
     create_demo_data(baseUrl, "default", "comet_api_key")

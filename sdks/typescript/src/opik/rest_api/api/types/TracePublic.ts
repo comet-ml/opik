@@ -12,7 +12,7 @@ export interface TracePublic {
     endTime?: Date;
     input?: OpikApi.JsonListStringPublic;
     output?: OpikApi.JsonListStringPublic;
-    metadata?: OpikApi.JsonNodePublic;
+    metadata?: OpikApi.JsonListStringPublic;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoPublic;
     usage?: Record<string, number>;
@@ -30,4 +30,6 @@ export interface TracePublic {
     threadId?: string;
     visibilityMode?: OpikApi.TracePublicVisibilityMode;
     llmSpanCount?: number;
+    /** List of unique provider names from all spans in this trace, sorted alphabetically */
+    providers?: string[];
 }

@@ -1,14 +1,14 @@
 {
   "name": "opik-langchain",
   "description": "Opik TypeScript and JavaScript SDK integration with LangChain",
-  "version": "1.0.2",
+  "version": "1.0.6",
   "engines": {
     "node": ">=18"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
-    "directory": "blob/sdks/typescript/src/opik/integrations/opik-langchain"
+    "directory": "sdks/typescript/src/opik/integrations/opik-langchain"
   },
   "homepage": "https://www.comet.com/docs/opik/",
   "author": {
@@ -50,18 +50,24 @@
     "lint": "eslint '**/*.{ts,tsx}'",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "files": [
     "dist/**/*",
     "README.md"
   ],
   "peerDependencies": {
-    "@langchain/core": "^0.3.42",
-    "opik": "^1.7.33"
+    "@langchain/core": "^0.3.78",
+    "opik": "^1.8.75"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.34.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.42.0",
     "vitest": "^3.0.5"
   }
 }

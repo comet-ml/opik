@@ -14,5 +14,5 @@ import java.util.Set;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DeleteThreadFeedbackScores(@NotBlank String projectName, @NotBlank String threadId,
-        @NotNull @Size(min = 1, max = 1000) Set<@NotBlank String> names) {
+        @NotNull @Size(min = 1, max = 1000) Set<@NotBlank String> names, String author) {
 }

@@ -1,10 +1,11 @@
-import { trackOpikClient } from "@/decorators/track";
+import { getTrackOpikClient } from "@/decorators/track";
 import { getTrackContext, track } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 import { mockAPIFunction } from "./mockUtils";
 
 describe("Track decorator", () => {
+  let trackOpikClient: ReturnType<typeof getTrackOpikClient>;
   let createSpansSpy: MockInstance<
     typeof trackOpikClient.api.spans.createSpans
   >;
@@ -17,6 +18,8 @@ describe("Track decorator", () => {
   >;
 
   beforeEach(() => {
+    trackOpikClient = getTrackOpikClient();
+
     createSpansSpy = vi
       .spyOn(trackOpikClient.api.spans, "createSpans")
       .mockImplementation(mockAPIFunction);

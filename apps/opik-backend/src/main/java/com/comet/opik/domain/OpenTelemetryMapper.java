@@ -27,6 +27,10 @@ import java.util.UUID;
 @Slf4j
 public class OpenTelemetryMapper {
 
+    private static Map<String, String> USAGE_KEYS_MAPPING = Map.of(
+            "input_tokens", "prompt_tokens",
+            "output_tokens", "completion_tokens");
+
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
      * of concepts, especially around ids.
@@ -78,9 +82,9 @@ public class OpenTelemetryMapper {
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName) {
         Map<String, Integer> usage = new HashMap<>();
-        ObjectNode input = JsonUtils.MAPPER.createObjectNode();
-        ObjectNode output = JsonUtils.MAPPER.createObjectNode();
-        ObjectNode metadata = JsonUtils.MAPPER.createObjectNode();
+        ObjectNode input = JsonUtils.createObjectNode();
+        ObjectNode output = JsonUtils.createObjectNode();
+        ObjectNode metadata = JsonUtils.createObjectNode();
 
         if (StringUtils.isNotEmpty(integrationName)) {
             metadata.put("integration", integrationName);
@@ -97,6 +101,10 @@ public class OpenTelemetryMapper {
                 switch (rule.getOutcome()) {
                     case MODEL :
                         spanBuilder.model(value.getStringValue());
+                        break;
+
+                    case PROVIDER :
+                        spanBuilder.provider(value.getStringValue());
                         break;
 
                     case USAGE :
@@ -169,7 +177,7 @@ public class OpenTelemetryMapper {
             case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
             case BOOL_VALUE -> node.put(key, value.getBoolValue());
             case ARRAY_VALUE -> {
-                var array = JsonUtils.MAPPER.createArrayNode();
+                var array = JsonUtils.createArrayNode();
                 value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
                 node.set(key, array);
             }
@@ -182,7 +190,7 @@ public class OpenTelemetryMapper {
         // usage might appear as single int values or an json object
         if (value.hasIntValue()) {
             var actualKey = key.substring(rule.getRule().length());
-            usage.put(actualKey, (int) value.getIntValue());
+            usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
         } else {
             try {
                 JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
@@ -200,7 +208,8 @@ public class OpenTelemetryMapper {
                 // we expect only integers for usage fields
                 usageNode.properties().forEach(entry -> {
                     if (entry.getValue().isNumber()) {
-                        usage.put(entry.getKey(), entry.getValue().intValue());
+                        usage.put(USAGE_KEYS_MAPPING.getOrDefault(entry.getKey(), entry.getKey()),
+                                entry.getValue().intValue());
                     } else {
                         log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
                     }

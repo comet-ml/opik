@@ -54,7 +54,7 @@ public record Span(
         @Schema(implementation = JsonListString.class) @JsonView({Span.View.Public.class,
                 Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) JsonNode output,
-        @JsonView({Span.View.Public.class, Span.View.Write.class,
+        @Schema(implementation = JsonListString.class) @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) JsonNode metadata,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) String model,

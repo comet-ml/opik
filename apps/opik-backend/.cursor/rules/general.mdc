@@ -1,7 +1,7 @@
 ---
 description: General guidelines for making changes in Opik backend
 globs: **/*.java
-alwaysApply: true
+alwaysApply: false
 ---
 
 # General Development Guidelines
@@ -197,24 +197,7 @@ void shouldThrowBadRequestException_whenInvalidInput() {
 
 ### **Test Data Generation**
 
-Use PODAM for generating test data:
-
-```java
-@Autowired
-private PodamFactory podamFactory;
-
-@Test
-void shouldCreateEntity_whenValidRequest() {
-    // Given
-    var request = podamFactory.manufacturePojo(EntityCreateRequest.class);
-    
-    // When
-    var result = entityService.createEntity(request);
-    
-    // Then
-    assertThat(result).isNotNull();
-}
-```
+Use PODAM for generating test data. See the comprehensive [Test Data Generation guidelines](mdc:apps/opik-backend/.cursor/rules/testing.mdc#test-data-generation) in the testing documentation.
 
 ## Common Patterns
 

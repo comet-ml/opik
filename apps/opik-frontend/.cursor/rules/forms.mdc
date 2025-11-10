@@ -1,0 +1,338 @@
+---
+description: Frontend form handling patterns using React Hook Form and Zod
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+
+# Form Handling Patterns
+
+## React Hook Form + Zod Pattern
+
+### Basic Form Setup
+
+```typescript
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+// Define schema
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email"),
+  description: z.string().optional(),
+});
+
+type FormData = z.infer<typeof formSchema>;
+
+// Use in component
+const form = useForm<FormData>({
+  resolver: zodResolver(formSchema),
+  defaultValues: {
+    name: "",
+    email: "",
+    description: "",
+  },
+});
+
+const onSubmit = useCallback((data: FormData) => {
+  // Handle form submission
+  console.log(data);
+}, []);
+```
+
+### Form JSX Structure
+
+```typescript
+<Form {...form}>
+  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <FormField
+      control={form.control}
+      name="name"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Name</FormLabel>
+          <FormControl>
+            <Input {...field} />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+
+    <FormField
+      control={form.control}
+      name="email"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Email</FormLabel>
+          <FormControl>
+            <Input type="email" {...field} />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+
+    <Button type="submit" disabled={form.formState.isSubmitting}>
+      {form.formState.isSubmitting && <Spinner className="mr-2" />}
+      Submit
+    </Button>
+  </form>
+</Form>
+```
+
+## Advanced Form Patterns
+
+### Dynamic Form Fields
+
+```typescript
+const formSchema = z.object({
+  items: z.array(z.object({
+    name: z.string().min(1, "Name is required"),
+    value: z.string().min(1, "Value is required"),
+  })).min(1, "At least one item is required"),
+});
+
+const { fields, append, remove } = useFieldArray({
+  control: form.control,
+  name: "items",
+});
+
+// In JSX
+{fields.map((field, index) => (
+  <div key={field.id} className="flex gap-2">
+    <FormField
+      control={form.control}
+      name={`items.${index}.name`}
+      render={({ field }) => (
+        <FormItem>
+          <FormControl>
+            <Input {...field} placeholder="Name" />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => remove(index)}
+    >
+      Remove
+    </Button>
+  </div>
+))}
+
+<Button
+  type="button"
+  onClick={() => append({ name: "", value: "" })}
+>
+  Add Item
+</Button>
+```
+
+### Conditional Validation
+
+```typescript
+const formSchema = z
+  .object({
+    type: z.enum(["user", "admin"]),
+    permissions: z.array(z.string()).optional(),
+  })
+  .refine(
+    (data) => {
+      // Conditional validation: admin must have permissions
+      if (
+        data.type === "admin" &&
+        (!data.permissions || data.permissions.length === 0)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Admin users must have at least one permission",
+      path: ["permissions"],
+    },
+  );
+```
+
+### Custom Field Components
+
+```typescript
+// Custom field wrapper
+interface CustomFieldProps {
+  name: string;
+  label: string;
+  description?: string;
+  required?: boolean;
+  children: (field: any) => React.ReactNode;
+}
+
+const CustomField: React.FC<CustomFieldProps> = ({
+  name,
+  label,
+  description,
+  required,
+  children,
+}) => {
+  const form = useFormContext();
+
+  return (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>
+            {label} {required && <span className="text-destructive">*</span>}
+          </FormLabel>
+          <FormControl>
+            {children(field)}
+          </FormControl>
+          {description && (
+            <FormDescription>{description}</FormDescription>
+          )}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+};
+
+// Usage
+<CustomField
+  name="email"
+  label="Email Address"
+  description="We'll never share your email"
+  required
+>
+  {(field) => <Input type="email" {...field} />}
+</CustomField>
+```
+
+## Form State Management
+
+### Loading and Error States
+
+```typescript
+const [isSubmitting, setIsSubmitting] = useState(false);
+const [submitError, setSubmitError] = useState<string | null>(null);
+
+const onSubmit = useCallback(async (data: FormData) => {
+  setIsSubmitting(true);
+  setSubmitError(null);
+
+  try {
+    await submitForm(data);
+    toast({ description: "Form submitted successfully!" });
+    form.reset();
+  } catch (error) {
+    setSubmitError(error.message);
+    toast({
+      description: "Failed to submit form",
+      variant: "destructive"
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+}, [form, toast]);
+
+// In JSX
+{submitError && (
+  <Alert variant="destructive">
+    <AlertDescription>{submitError}</AlertDescription>
+  </Alert>
+)}
+
+<Button type="submit" disabled={isSubmitting}>
+  {isSubmitting && <Spinner className="mr-2" />}
+  Submit
+</Button>
+```
+
+### Form Reset and Default Values
+
+```typescript
+// Reset form to default values
+const handleReset = useCallback(() => {
+  form.reset();
+}, [form]);
+
+// Reset with new default values
+const handleResetWithData = useCallback(
+  (newData: Partial<FormData>) => {
+    form.reset(newData);
+  },
+  [form],
+);
+
+// Watch for changes
+const watchedValues = form.watch();
+const specificField = form.watch("name");
+
+useEffect(() => {
+  // React to form changes
+  console.log("Form values changed:", watchedValues);
+}, [watchedValues]);
+```
+
+## Validation Patterns
+
+### Custom Validators
+
+```typescript
+const phoneSchema = z.string().refine(
+  (val) => {
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    return phoneRegex.test(val);
+  },
+  {
+    message: "Invalid phone number format",
+  },
+);
+
+// Async validation
+const emailSchema = z
+  .string()
+  .email()
+  .refine(
+    async (email) => {
+      const isAvailable = await checkEmailAvailability(email);
+      return isAvailable;
+    },
+    {
+      message: "Email is already taken",
+    },
+  );
+```
+
+### Multi-step Forms
+
+```typescript
+const steps = [
+  { name: "Personal Info", schema: personalInfoSchema },
+  { name: "Contact Details", schema: contactSchema },
+  { name: "Preferences", schema: preferencesSchema },
+];
+
+const [currentStep, setCurrentStep] = useState(0);
+const currentSchema = steps[currentStep].schema;
+
+const form = useForm({
+  resolver: zodResolver(currentSchema),
+  defaultValues: formData,
+});
+
+const handleNext = useCallback(async () => {
+  const isValid = await form.trigger();
+  if (isValid) {
+    setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
+  }
+}, [form]);
+
+const handlePrevious = useCallback(() => {
+  setCurrentStep((prev) => Math.max(prev - 1, 0));
+}, []);
+```

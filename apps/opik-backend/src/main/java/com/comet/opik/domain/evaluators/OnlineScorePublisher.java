@@ -16,7 +16,6 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -74,10 +73,12 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 .map(streamConfiguration -> {
                     var evaluatorType = AutomationRuleEvaluatorType.fromString(streamConfiguration.getScorer());
                     if (evaluatorType != null) {
-                        log.info("Redis Stream map: '{}' -> '{}'", evaluatorType, streamConfiguration);
+                        log.info(
+                                "Online Score publisher for evaluatorType: '{}' with configuration: streamName='{}', codec='{}'",
+                                evaluatorType, streamConfiguration.getStreamName(), streamConfiguration.getCodec());
                         return Map.entry(evaluatorType, streamConfiguration);
                     } else {
-                        log.warn("No such evaluator type '{}'", streamConfiguration.getScorer());
+                        log.warn("No Online Score publisher for evaluatorType: '{}'", streamConfiguration.getScorer());
                         return null;
                     }
                 })
@@ -92,9 +93,12 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         Flux.fromIterable(messages)
                 .flatMap(message -> llmAsJudgeStream
                         .add(StreamAddArgs.entry(OnlineScoringConfig.PAYLOAD_FIELD, message))
-                        .doOnNext(id -> successLog(id, config))
-                        .doOnError(this::errorLog))
-                .subscribe(this::noop, this::logFluxCompletionError);
+                        .doOnNext(id -> log.debug("Message sent with ID: '{}' into stream '{}'",
+                                id, config.getStreamName()))
+                        .doOnError(throwable -> log.error("Error sending message", throwable)))
+                .subscribe(id -> {
+                    // noop
+                }, throwable -> log.error("Unexpected error when enqueueing messages into redis", throwable));
     }
 
     public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId,
@@ -155,21 +159,5 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 .userName(userName)
                 .code(code)
                 .build();
-    }
-
-    private void noop(StreamMessageId id) {
-        // no-op
-    }
-
-    private void logFluxCompletionError(Throwable throwable) {
-        log.error("Unexpected error when enqueueing messages into redis", throwable);
-    }
-
-    private void errorLog(Throwable throwable) {
-        log.error("Error sending message", throwable);
-    }
-
-    private void successLog(StreamMessageId id, OnlineScoringConfig.StreamConfiguration config) {
-        log.debug("Message sent with ID: '{}' into stream '{}'", id, config.getStreamName());
     }
 }

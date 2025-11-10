@@ -8,9 +8,13 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -27,6 +31,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,13 +62,28 @@ public class SpanService {
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
+    private final @NonNull AttachmentStripperService attachmentStripperService;
+    private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
         log.info("Finding span by '{}'", searchCriteria);
 
         return findProjectAndVerifyVisibility(searchCriteria)
-                .flatMap(it -> spanDAO.find(page, size, it));
+                .flatMap(resolvedCriteria -> spanDAO.find(page, size, resolvedCriteria)
+                        .flatMap(spanPage -> {
+                            // If stripAttachments=false, reinject attachments into all spans
+                            if (!resolvedCriteria.stripAttachments()) {
+                                return Flux.fromIterable(spanPage.content())
+                                        .concatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
+                                                !resolvedCriteria.stripAttachments()))
+                                        .collectList()
+                                        .map(reinjectedSpans -> spanPage.toBuilder()
+                                                .content(reinjectedSpans)
+                                                .build());
+                            }
+                            return Mono.just(spanPage);
+                        }));
     }
 
     private Mono<SpanSearchCriteria> findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
@@ -73,7 +94,11 @@ public class SpanService {
 
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
-        log.info("Getting span by id '{}'", id);
+        return getById(id, false);
+    }
+
+    @WithSpan
+    public Mono<Span> getById(@NonNull UUID id, boolean stripAttachments) {
         return Mono.deferContextual(ctx -> spanDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
                 .flatMap(span -> {
@@ -81,7 +106,20 @@ public class SpanService {
                     return Mono.just(span.toBuilder()
                             .projectName(project.name())
                             .build());
-                }));
+                }))
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, !stripAttachments));
+    }
+
+    @WithSpan
+    public Flux<Span> getByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting spans for '{}' traces", traceIds.size());
+
+        return spanDAO.getByTraceIds(traceIds)
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
     }
 
     @WithSpan
@@ -115,10 +153,21 @@ public class SpanService {
     }
 
     private Mono<UUID> create(Span span, Project project, UUID id) {
-        span = span.toBuilder().id(id).projectId(project.id()).build();
-        log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
-                span.id(), span.projectId(), span.traceId(), span.parentSpanId());
-        return spanDAO.insert(span).thenReturn(span.id());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            // Strip attachments from the span with the generated ID and project ID
+            Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
+            return attachmentStripperService.stripAttachments(spanWithId, workspaceId, userName, projectName)
+                    .flatMap(processedSpan -> {
+                        log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
+                                processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
+                                processedSpan.parentSpanId());
+                        return spanDAO.insert(processedSpan).thenReturn(processedSpan.id());
+                    });
+        });
     }
 
     @WithSpan
@@ -138,9 +187,24 @@ public class SpanService {
                                 Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
                                         .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
                                         .switchIfEmpty(
-                                                Mono.defer(() -> spanDAO.partialInsert(id, project.id(), spanUpdate)))
+                                                Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                         .onErrorResume(this::handleSpanDBError)
                                         .then()))));
+    }
+
+    private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
+        return IdGenerator
+                .validateVersionAsync(id, SPAN_KEY)
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    String projectName = project.name();
+
+                    // Strip attachments OUTSIDE the database transaction
+                    return attachmentStripperService.stripAttachments(
+                            spanUpdate, id, workspaceId, userName, projectName)
+                            .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
+                }));
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {
@@ -190,7 +254,34 @@ public class SpanService {
             return failWithConflict(TRACE_ID_MISMATCH);
         }
 
-        return spanDAO.update(id, spanUpdate, existingSpan);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            // Step 1: Get existing attachments OUTSIDE the database transaction
+            return attachmentService.getAttachmentInfoByEntity(id, SPAN, existingSpan.projectId())
+                    .flatMap(existingAttachments ->
+            // Step 2: Strip attachments OUTSIDE the database transaction
+            attachmentStripperService.stripAttachments(
+                    spanUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate ->
+            // Step 3: Update the span in database transaction
+            spanDAO.update(id, processedUpdate, existingSpan)
+                    .flatMap(updateResult -> {
+                        // Step 4: Delete only auto-stripped attachments from the old data
+                        // User-uploaded attachments are preserved unless explicitly removed by user
+                        List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                                .filterAutoStrippedAttachments(existingAttachments);
+
+                        if (!autoStrippedAttachments.isEmpty()) {
+                            return attachmentService.deleteSpecificAttachments(autoStrippedAttachments,
+                                    id, SPAN, existingSpan.projectId())
+                                    .thenReturn(updateResult);
+                        }
+                        return Mono.just(updateResult);
+                    })));
+        });
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -212,7 +303,9 @@ public class SpanService {
 
         Preconditions.checkArgument(!batch.spans().isEmpty(), "Batch spans must not be empty");
 
-        List<String> projectNames = batch.spans()
+        List<Span> dedupedSpans = dedupSpans(batch.spans());
+
+        List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
                 .map(WorkspaceUtils::getProjectName)
@@ -224,13 +317,58 @@ public class SpanService {
         Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
                 .flatMap(projectService::getOrCreate)
                 .collectList()
-                .map(projects -> bindSpanToProjectAndId(batch, projects));
+                .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
-        return resolveProjects
+        // Delete only auto-stripped attachments for all spans in the batch before processing
+        // This prevents duplicate auto-stripped attachments when the SDK sends the same span data multiple times
+        // while preserving user-uploaded attachments
+        Set<UUID> spanIds = dedupedSpans.stream()
+                .map(Span::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
+                .then(resolveProjects)
+                .flatMap(this::stripAttachmentsFromSpanBatch)
                 .flatMap(spanDAO::batchInsert);
     }
 
-    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
+    private Mono<List<Span>> stripAttachmentsFromSpanBatch(List<Span> spans) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return Flux.fromIterable(spans)
+                    .flatMap(span -> {
+                        String projectName = WorkspaceUtils.getProjectName(span.projectName());
+                        return attachmentStripperService.stripAttachments(span, workspaceId, userName,
+                                projectName);
+                    })
+                    .collectList();
+        });
+    }
+
+    private List<Span> dedupSpans(List<Span> initialSpans) {
+
+        Map<Boolean, List<Span>> shouldBeDeduped = initialSpans.stream()
+                .collect(Collectors.partitioningBy(span -> span.id() != null && span.lastUpdatedAt() != null));
+
+        List<Span> result = new ArrayList<>(shouldBeDeduped.get(false));
+
+        Collection<Span> dedupedSpans = shouldBeDeduped.get(true)
+                .stream()
+                .collect(Collectors.toMap(
+                        Span::id,
+                        Function.identity(),
+                        (span1, span2) -> span1.lastUpdatedAt().isAfter(span2.lastUpdatedAt()) ? span1 : span2))
+                .values();
+
+        result.addAll(dedupedSpans);
+
+        return result;
+    }
+
+    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         Project::name,
@@ -238,7 +376,7 @@ public class SpanService {
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
-        return batch.spans()
+        return spans
                 .stream()
                 .map(span -> {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
@@ -267,7 +405,11 @@ public class SpanService {
     @WithSpan
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMapMany(it -> spanDAO.search(limit, it));
+                .flatMapMany(resolvedCriteria -> spanDAO.search(limit, resolvedCriteria)
+                        .concatMap(span ->
+                        // If stripAttachments=false, reinject attachments
+                        attachmentReinjectorService.reinjectAttachments(span,
+                                !resolvedCriteria.stripAttachments())));
     }
 
     @WithSpan
@@ -286,7 +428,9 @@ public class SpanService {
 
     @WithSpan
     public Mono<SpansCountResponse> countSpansPerWorkspace() {
-        return spanDAO.countSpansPerWorkspace()
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::countSpansPerWorkspace)
                 .collectList()
                 .flatMap(items -> Mono.just(
                         SpansCountResponse.builder()
@@ -298,12 +442,13 @@ public class SpanService {
     @WithSpan
     public Mono<BiInformationResponse> getSpanBIInformation() {
         log.info("Getting span BI events daily data");
-        return spanDAO.getSpanBIInformation()
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::getSpanBIInformation)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        BiInformationResponse.builder()
-                                .biInformation(items)
-                                .build()))
+                .map(items -> BiInformationResponse.builder()
+                        .biInformation(items)
+                        .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 }

@@ -1,0 +1,592 @@
+The Opik TypeScript SDK provides comprehensive prompt management functionality for versioning, storing, and formatting your LLM prompt templates. Prompts in Opik are versioned automatically, allowing you to track changes over time while seamlessly integrating with your codebase.
+
+## Introduction
+
+A prompt in Opik is a versioned template with variables that can be formatted at runtime. Each prompt:
+
+- Has a unique name and auto-generated versions
+- Supports Mustache or Jinja2 template syntax
+- Tracks metadata, tags, and change descriptions
+- Maintains complete version history
+- Enables version comparison and rollback
+
+## Getting Started
+
+### Creating Your First Prompt
+
+Create a prompt with the `createPrompt` method:
+
+```typescript
+import { Opik, PromptType } from "opik";
+
+const client = new Opik();
+
+const prompt = await client.createPrompt({
+  name: "greeting-prompt",
+  prompt: "Hello {{name}}, your score is {{score}}",
+  type: PromptType.MUSTACHE,
+  metadata: { version: "1.0" },
+  tags: ["greetings"],
+});
+
+console.log(`Created prompt with commit: ${prompt.commit}`);
+```
+
+### Retrieving Prompts
+
+Get prompts by name or specific version:
+
+```typescript
+// Get latest version
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+if (prompt) {
+  console.log(`Template: ${prompt.prompt}`);
+  console.log(`Commit: ${prompt.commit}`);
+}
+
+// Get specific version
+const oldVersion = await client.getPrompt({
+  name: "greeting-prompt",
+  commit: "abc123de",
+});
+```
+
+### Formatting Prompts
+
+Opik supports two powerful template engines:
+
+- **[Mustache](https://mustache.github.io/)** - Simple, logic-less templates with `{{variable}}` placeholders (default)
+- **[Jinja2](https://jinja.palletsprojects.com/)** - Advanced templating with control flow using `{% %}` blocks and `{{ }}` variables
+
+The `format()` method works on both `Prompt` and `PromptVersion` instances:
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+// Format with variables
+const text = prompt.format({ name: "Alice", score: 95 });
+// Returns: "Hello Alice, your score is 95"
+
+// Format also works on PromptVersion objects
+const versions = await prompt.getVersions();
+const previousVersion = versions[1];
+const oldText = previousVersion.format({ name: "Alice", score: 95 });
+```
+
+**Template Syntax Examples:**
+
+```typescript
+// Mustache syntax (default)
+await client.createPrompt({
+  name: "mustache-prompt",
+  prompt: "Hello {{name}}, your score is {{score}}",
+  type: PromptType.MUSTACHE,
+});
+
+// Jinja2 syntax for advanced templating
+await client.createPrompt({
+  name: "jinja2-prompt",
+  prompt: "Hello {{ name }}! {% if premium %}Premium user{% endif %}",
+  type: PromptType.JINJA2,
+});
+```
+
+## Core Operations
+
+### Creating and Updating
+
+#### Understanding Version Creation
+
+The `createPrompt` method intelligently handles versioning based on content changes:
+
+**New version is created when:**
+
+- Template content (`prompt`) changes
+- Metadata changes (deep equality check)
+- Template type (`type`) changes
+
+**No new version (returns existing) when:**
+
+- Template, metadata, and type are all identical
+- Only `tags` or `description` differ
+
+```typescript
+// First call - creates new prompt with version 1
+const prompt1 = await client.createPrompt({
+  name: "greeting-prompt",
+  prompt: "Hello {{name}}, your score is {{score}}",
+  type: PromptType.MUSTACHE,
+  metadata: { version: "1.0" },
+  tags: ["greetings"],
+});
+
+// Same template, metadata, and type - returns existing version
+const prompt2 = await client.createPrompt({
+  name: "greeting-prompt",
+  prompt: "Hello {{name}}, your score is {{score}}", // Same
+  metadata: { version: "1.0" }, // Same
+  type: PromptType.MUSTACHE, // Same
+  tags: ["updated-tags"], // Different tags don't trigger new version
+});
+console.log(prompt2.commit === prompt1.commit); // true
+
+// Changed template - creates new version 2
+const prompt3 = await client.createPrompt({
+  name: "greeting-prompt",
+  prompt: "Hi {{name}}, score: {{score}}", // Different template
+  changeDescription: "Simplified greeting message",
+});
+
+// Changed metadata - creates new version 3
+const prompt4 = await client.createPrompt({
+  name: "greeting-prompt",
+  prompt: "Hi {{name}}, score: {{score}}", // Same as version 2
+  metadata: { version: "2.0" }, // Different metadata triggers new version
+  changeDescription: "Updated metadata",
+});
+```
+
+<Note>
+  Version creation is triggered by changes to **template content**,
+  **metadata**, or **type**. Changes to `tags`, `name` or `description` alone do
+  not create new versions - use `updateProperties()` for those.
+</Note>
+
+#### Updating Prompt Properties
+
+Update prompt metadata without creating new versions:
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+// Update name, description, or tags
+await prompt.updateProperties({
+  name: "welcome-prompt",
+  description: "Updated greeting template",
+  tags: ["welcome", "production", "v2"],
+});
+
+console.log(`Updated prompt name: ${prompt.name}`);
+```
+
+<Note>
+  Updating properties (`name`, `description`, `tags`) does **not** create a new
+  version. Only changes to the **template content**, **metadata**, or **type**
+  trigger version creation.
+</Note>
+
+### Retrieving and Searching
+
+#### Searching with Opik Query Language
+
+Search and filter prompts using [Opik Query Language (OQL)](/docs/opik/reference/typescript-sdk/opik-query-language) - a powerful SQL-like syntax for finding exactly the prompts you need.
+
+**Supported Fields:**
+
+| Field             | Type     | Description                   | Example                                 |
+| ----------------- | -------- | ----------------------------- | --------------------------------------- |
+| `id`              | String   | Unique prompt identifier      | `id = "prompt-123"`                     |
+| `name`            | String   | Prompt name                   | `name contains "greeting"`              |
+| `description`     | String   | Prompt description            | `description contains "template"`       |
+| `tags`            | List     | Prompt tags                   | `tags contains "production"`            |
+| `created_by`      | String   | Creator email/identifier      | `created_by = "user@example.com"`       |
+| `created_at`      | DateTime | Creation timestamp            | `created_at > "2024-01-01"`             |
+| `last_updated_by` | String   | Last updater email/identifier | `last_updated_by = "admin@example.com"` |
+| `last_updated_at` | DateTime | Last update timestamp         | `last_updated_at > "2024-01-01"`        |
+
+**Search Examples:**
+
+```typescript
+// Search all prompts (no filter)
+const allPrompts = await client.searchPrompts();
+
+// Search by exact name
+const prompts = await client.searchPrompts('name = "greeting-prompt"');
+
+// Search by name pattern
+const chatPrompts = await client.searchPrompts('name contains "chat"');
+
+// Search by tags
+const prodPrompts = await client.searchPrompts('tags contains "production"');
+
+// Search by creator
+const myPrompts = await client.searchPrompts(
+  'created_by = "alice@company.com"'
+);
+```
+
+### Deleting Prompts
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+// Delete prompt and all its versions
+await prompt.delete();
+
+// Or delete multiple prompts by ID
+await client.deletePrompts([prompt.id, anotherPrompt.id]);
+```
+
+## Version Management
+
+### Understanding Versions
+
+#### Version Metadata and Properties
+
+Access comprehensive version information:
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+const versions = await prompt.getVersions();
+const latest = versions[0];
+
+// Version properties
+console.log(`ID: ${latest.id}`);
+console.log(`Commit: ${latest.commit}`);
+console.log(`Template: ${latest.prompt}`);
+console.log(`Created: ${latest.createdAt}`);
+console.log(`Creator: ${latest.createdBy}`);
+console.log(`Type: ${latest.type}`);
+console.log(`Change: ${latest.changeDescription}`);
+
+// Formatted version info
+console.log(latest.getVersionInfo());
+// Output: [abc123de] 2024-01-15 by user@example.com - Initial version
+
+// Human-readable age
+console.log(latest.getVersionAge());
+// Output: "2 days ago"
+```
+
+#### Viewing Version History
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+// Get all versions
+const versions = await prompt.getVersions();
+
+console.log(`Total versions: ${versions.length}`);
+
+versions.forEach((version) => {
+  console.log(version.getVersionInfo());
+  // Output: [abc123de] 2024-01-15 by user@example.com - Initial version
+});
+```
+
+### Working with Versions
+
+#### Getting Specific Versions
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+// Option 1: Get version as Prompt instance (recommended for formatting)
+const oldVersion = await prompt.getVersion("abc123de");
+
+if (oldVersion) {
+  const text = oldVersion.format({ name: "Bob", score: 88 });
+  console.log(`Old version output: ${text}`);
+}
+
+// Option 2: Use format directly on PromptVersion objects
+const versions = await prompt.getVersions();
+const secondVersion = versions[1];
+
+// PromptVersion also has format() method
+const formattedText = secondVersion.format({ name: "Charlie", score: 92 });
+console.log(`Version ${secondVersion.commit}: ${formattedText}`);
+```
+
+#### Comparing Versions
+
+```typescript
+const versions = await prompt.getVersions();
+
+if (versions.length >= 2) {
+  const current = versions[0];
+  const previous = versions[1];
+
+  // Compare versions (logs diff and returns it)
+  const diff = current.compareTo(previous);
+  console.log(diff);
+  /* Output:
+   * - Current version [abc123de]
+   * + Other version [def456gh]
+   * @@ -1,2 +1,2 @@
+   * - Hello {{name}}, welcome!
+   * + Hello {{name}}, your score is {{score}}
+   */
+}
+```
+
+#### Restoring Previous Versions
+
+```typescript
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+const versions = await prompt.getVersions();
+
+// Find specific version to restore
+const targetVersion = versions.find((v) => v.commit === "abc123de");
+
+if (targetVersion) {
+  // Restore creates a new version with the old content
+  const restoredPrompt = await prompt.useVersion(targetVersion);
+
+  console.log(`Restored to commit: ${restoredPrompt.commit}`);
+  console.log(`Template: ${restoredPrompt.prompt}`);
+}
+```
+
+## Advanced Usage
+
+### Integration with Tracing
+
+Prompts work seamlessly with Opik's tracing functionality:
+
+```typescript
+import { Opik, track } from "opik";
+
+const client = new Opik();
+
+@track
+async function generateGreeting(userName: string, userScore: number) {
+  // Get the prompt
+  const prompt = await client.getPrompt({ name: "greeting-prompt" });
+
+  // Format it
+  const message = prompt.format({
+    name: userName,
+    score: userScore,
+  });
+
+  // Use with your LLM
+  const response = await llmClient.complete(message);
+
+  return response;
+}
+```
+
+### Best Practices
+
+#### Store Prompts in Code
+
+Keep your prompts versioned alongside your code:
+
+```typescript
+// prompts/greeting.ts
+export const GREETING_TEMPLATE = "Hello {{name}}, your score is {{score}}";
+
+// In your application
+import { GREETING_TEMPLATE } from "./prompts/greeting";
+
+const prompt = await client.createPrompt({
+  name: "greeting",
+  prompt: GREETING_TEMPLATE,
+  metadata: { version: "1.0" },
+});
+```
+
+#### Use Meaningful Version Descriptions
+
+```typescript
+const prompt = await client.createPrompt({
+  name: "summary-prompt",
+  prompt: updatedTemplate,
+  changeDescription: "Added support for multi-language summaries",
+  metadata: { sprint: "Q1-2024" },
+});
+```
+
+#### Tag Your Prompts
+
+```typescript
+const prompt = await client.createPrompt({
+  name: "production-greeting",
+  prompt: template,
+  tags: ["production", "customer-facing", "v2"],
+});
+
+// Later, search by tags
+const prodPrompts = await client.searchPrompts('tags contains "production"');
+```
+
+## API Reference
+
+### OpikClient Methods
+
+#### `createPrompt(options)`
+
+Creates a new prompt or returns existing version if content unchanged.
+
+**Arguments:**
+
+- `options.name: string` - Prompt name (required)
+- `options.prompt: string` - Template content (required)
+- `options.type?: PromptType` - Template engine (default: `MUSTACHE`)
+- `options.promptId?: string` - Optional prompt ID
+- `options.description?: string` - Optional description
+- `options.metadata?: JsonNode` - Optional metadata
+- `options.changeDescription?: string` - Version change description
+- `options.tags?: string[]` - Optional tags
+
+**Returns:** `Promise<Prompt>` - Created or existing prompt
+
+#### `getPrompt(options)`
+
+Retrieves a prompt by name and optional version.
+
+**Arguments:**
+
+- `options.name: string` - Prompt name (required)
+- `options.commit?: string` - Optional commit hash for specific version
+
+**Returns:** `Promise<Prompt | null>` - Prompt instance or null if not found
+
+#### `searchPrompts(filterString?)`
+
+Searches prompts with optional OQL filtering.
+
+**Arguments:**
+
+- `filterString?: string` - Optional OQL filter expression
+
+**Returns:** `Promise<Prompt[]>` - Array of matching prompts
+
+**Supported OQL fields:**
+
+- `id`, `name`, `created_by`: String fields
+- `tags`: List field (use "contains" operator)
+
+**Operators:** `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<`
+
+#### `deletePrompts(ids)`
+
+Deletes multiple prompts and all their versions.
+
+**Arguments:**
+
+- `ids: string[]` - Array of prompt IDs to delete
+
+**Returns:** `Promise<void>`
+
+### Prompt Class
+
+#### Methods
+
+##### `format(variables)`
+
+Formats the prompt template with provided variables.
+
+**Arguments:**
+
+- `variables: Record<string, unknown>` - Variables to substitute
+
+**Returns:** `string` - Formatted prompt text
+
+**Throws:** `PromptValidationError` if required variables missing (Mustache only)
+
+##### `getVersions()`
+
+Retrieves all version history for this prompt.
+
+**Returns:** `Promise<PromptVersion[]>` - Array of all versions (newest first)
+
+##### `getVersion(commit)`
+
+Gets a specific version as a Prompt instance.
+
+**Arguments:**
+
+- `commit: string` - Commit hash (8-char or full)
+
+**Returns:** `Promise<Prompt | null>` - Prompt instance or null if not found
+
+##### `useVersion(version)`
+
+Restores a specific version by creating a new version with old content.
+
+**Arguments:**
+
+- `version: PromptVersion` - Version object to restore
+
+**Returns:** `Promise<Prompt>` - New prompt instance with restored content
+
+##### `updateProperties(updates)`
+
+Updates prompt properties without creating new version.
+
+**Arguments:**
+
+- `updates.name?: string` - New prompt name
+- `updates.description?: string` - New description
+- `updates.tags?: string[]` - New tags array
+
+**Returns:** `Promise<this>` - This prompt instance (for chaining)
+
+##### `delete()`
+
+Deletes this prompt and all its versions.
+
+**Returns:** `Promise<void>`
+
+#### Properties
+
+- `id: string` - Unique prompt identifier
+- `name: string` - Prompt name
+- `prompt: string` - Current template content
+- `commit?: string` - Current version commit hash
+- `type: PromptType` - Template engine type
+- `description?: string` - Prompt description
+- `tags?: readonly string[]` - Prompt tags
+- `metadata?: JsonNode` - Prompt metadata
+- `changeDescription?: string` - Latest version change description
+
+### PromptVersion Class
+
+#### Methods
+
+##### `format(variables)`
+
+Formats this version's template with provided variables.
+
+**Arguments:**
+
+- `variables: Record<string, unknown>` - Variables to substitute
+
+**Returns:** `string` - Formatted prompt text
+
+##### `getVersionInfo()`
+
+Gets formatted version information string.
+
+**Returns:** `string` - Format: `[commit] YYYY-MM-DD by user@email.com - Change description`
+
+##### `getVersionAge()`
+
+Gets human-readable version age.
+
+**Returns:** `string` - Format: "2 days ago", "Today", etc.
+
+##### `compareTo(other)`
+
+Compares this version's template with another version.
+
+**Arguments:**
+
+- `other: PromptVersion` - Version to compare against
+
+**Returns:** `string` - Git-style unified diff showing changes
+
+#### Properties
+
+- `id: string` - Version unique identifier
+- `name: string` - Associated prompt name
+- `prompt: string` - Template content for this version
+- `commit: string` - Version commit hash
+- `type: PromptType` - Template engine type
+- `metadata?: JsonNode` - Version metadata
+- `changeDescription?: string` - Version change description
+- `createdAt?: Date` - Creation timestamp
+- `createdBy?: string` - Creator identifier

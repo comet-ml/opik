@@ -3,11 +3,16 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -22,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
@@ -30,23 +36,27 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
 
     Mono<Void> save(DatasetItemBatch batch);
 
+    Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
+
     Mono<DatasetItem> get(UUID id);
 
     Mono<Void> delete(List<UUID> ids);
-
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, boolean truncate);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
+
+    Mono<ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters);
 }
 
 @Singleton
@@ -58,6 +68,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetService datasetService;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
+    private final @NonNull TraceEnrichmentService traceEnrichmentService;
+    private final @NonNull IdGenerator idGenerator;
+    private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull TransactionTemplate template;
 
     @Override
     @WithSpan
@@ -69,6 +83,47 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return getDatasetId(batch)
                 .flatMap(it -> saveBatch(batch, it))
                 .then();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> createFromTraces(
+            @NonNull UUID datasetId,
+            @NonNull Set<UUID> traceIds,
+            @NonNull TraceEnrichmentOptions enrichmentOptions) {
+
+        log.info("Creating dataset items from '{}' traces for dataset '{}'", traceIds.size(), datasetId);
+
+        // Verify dataset exists
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> {
+                return template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.findById(datasetId, workspaceId)
+                            .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
+                });
+            }).subscribeOn(Schedulers.boundedElastic());
+        }).flatMap(dataset -> {
+            // Enrich traces with metadata
+            return traceEnrichmentService.enrichTraces(traceIds, enrichmentOptions)
+                    .flatMap(enrichedTraces -> {
+                        // Convert enriched traces to dataset items
+                        List<DatasetItem> datasetItems = enrichedTraces.entrySet().stream()
+                                .<DatasetItem>map(entry -> DatasetItem.builder()
+                                        .id(idGenerator.generateId())
+                                        .source(DatasetItemSource.TRACE)
+                                        .traceId(entry.getKey())
+                                        .data(entry.getValue())
+                                        .build())
+                                .toList();
+
+                        // Save dataset items
+                        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
+                        return saveBatch(batch, datasetId);
+                    });
+        }).then();
     }
 
     private Mono<UUID> getDatasetId(DatasetItemBatch batch) {
@@ -219,20 +274,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
-        // Verify dataset visibility
-        datasetService.findById(datasetId);
-
-        return dao.getItems(datasetId, page, size, truncate)
-                .defaultIfEmpty(DatasetItemPage.empty(page));
-    }
-
-    @Override
-    @WithSpan
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                 datasetItemSearchCriteria, page, size);
-        return dao.getItems(datasetItemSearchCriteria, page, size);
+
+        // Verify dataset visibility
+        datasetService.findById(datasetItemSearchCriteria.datasetId());
+
+        return dao.getItems(datasetItemSearchCriteria, page, size)
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+    }
+
+    public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
+            @NonNull Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters) {
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
+                experimentIds, filters);
+        return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
+                .switchIfEmpty(Mono.just(ProjectStats.empty()))
+                .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'", datasetId,
+                        stats.stats().size()));
     }
 }

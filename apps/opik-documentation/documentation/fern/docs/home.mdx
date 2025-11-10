@@ -1,9 +1,17 @@
-The Opik platform allows you to log, view and evaluate your LLM traces during
-both development and production. Using the platform and our LLM as a Judge
-evaluators, you can identify and fix issues in your LLM application.
+Opik is an [open-source](https://github.com/comet-ml/opik) logging, debugging, and optimization
+platform for AI agents and LLM applications. If you're building AI features, you know it's easy to
+spin up a working prototype but harder to log, test, iterate, and monitor to meet production
+requirements.
+
+Opik gives you all the tools you need to go from LLM observability to action across your AI
+application footprint and dev cycle. Ship measurable improvements with gorgeous logs, annotation and
+scoring functions, pre-configured LLM-as-a-judge [eval metrics](/evaluation/metrics/overview), and
+even [automated agent optimization algorithms](/agent_optimization/overview) to maximize performance. 
+
+## End-to-End AI Engineering
 
 <Frame>
-  <img src="/img/home/traces_page_with_sidebar.png" />
+  <img src="/img/home/EndToEnd-Engineering-Diagram.jpg" />
 </Frame>
 
 <Tip>
@@ -11,48 +19,68 @@ evaluators, you can identify and fix issues in your LLM application.
   self-hosting guide can be found [here](/self-host/local_deployment).
 </Tip>
 
-## Overview
+## Core Functions
 
-The Opik platform allows you to track, view and evaluate your LLM traces during
-both development and production.
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" href="/quickstart" icon="fa-solid fa-rocket" iconPosition="left">
+    Opik integrates with your existing AI stack through your model provider or LLM framework.
+  </Card>
+  <Card title="LLM Observability - Log LLM Traces" href="/tracing/log_traces" icon="fa-solid fa-eye" iconPosition="left">
+    Traces give you instant visibility into what's working, what's not, and why and includes
+    advanced analysis and debugging features built in. 
+  </Card>
+  <Card title="Evaluation - Score Performance" href="/evaluation/overview" icon="fa-solid fa-chart-line" iconPosition="left">
+    Use LLM-as-a-judge and heuristic eval metrics to score your app or agent on hallucination,
+    context recall, and more. 
+  </Card>
+  <Card title="Agent Optimization" href="/agent_optimization/overview" icon="fa-solid fa-brain" iconPosition="left">
+    Choose from six advanced optimization algorithms to auto-generate and score the best prompts for
+    the steps in your agentic system. 
+  </Card>
+  <Card title="Prompt Engineering" href="/prompt_engineering/prompt_management" icon="fa-solid fa-wand-magic-sparkles" iconPosition="left">
+    Store and version system prompts, compare results live in the [Prompt Playground](/prompt_engineering/playground),
+    and experiment with different models with our LLM proxy. 
+  </Card>
+  <Card title="Self-hosting Opik" href="/self-host/overview" icon="fa-solid fa-server" iconPosition="left">
+    Deploy Opik on your own infrastructure with local or Kubernetes deployment options.
+  </Card>
+</CardGroup>
 
-### Development
+## Video Tutorials
 
-During development, you can use the platform to log, view and debug your LLM traces:
+Prefer a visual guide ? Follow along as we cover everything from basic setup and trace logging to
+LLM evaluation metrics, production monitoring, and more.
 
-1. Log traces using:
+<Frame>
+  <iframe
+    width="100%"
+    height="500px"
+    src="https://www.youtube-nocookie.com/embed/TO9ar6-OJj4?rel=0"
+    frameborder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen
+  ></iframe>
+</Frame>
 
-   a. One of our [integrations](/tracing/integrations/overview).
+<Tip>
+  You can find a full set of video tutorials in the [Opik University](/opik-university/overview).
+</Tip>
 
-   b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces) guide.
+## Open-Source access meets enterprise performance
 
-   c. Using the Typescript Opik SDK, learn more in the [Logging Traces](/tracing/log_traces#logging-with-the-js--ts-sdk) guide.
+All Opik versions ([cloud](https://www.comet.com/signup?from=llm),
+[open source](https://github.com/comet-ml/opik), and
+[enterprise](https://www.comet.com/site/pricing/)) include the full AI engineering featureset
+and run on the Comet platform, with proven performance at scale supporting many of the world's
+largest organizations. 
 
-2. [Annotate and label traces](/tracing/annotate_traces) through the SDK or the UI.
-
-### Evaluation and Testing
-
-Evaluating the output of your LLM calls is critical to ensure that your application is working as expected and can be challenging. Using the Opik platform, you can:
-
-1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics) to score your traces and LLM calls
-2. [Store evaluation datasets](/evaluation/manage_datasets) in the platform and [run evaluations](/evaluation/evaluate_your_llm)
-3. Use our [pytest integration](/testing/pytest_integration) to track unit test results and compare results between runs
-
-### Production Monitoring
-
-Opik has been designed from the ground up to support high volumes of traces making it the ideal tool for monitoring your production LLM applications. We have stress-tested the application and even a small deployment can ingest more than 40 million traces per day!
-
-Our goal is to make it easy for you to monitor your production LLM applications and easily identify any issues with your production LLM application, for this we have included:
-
-1. [Online evaluation metrics](/production/rules) that allow you to score all your production traces and easily identify any issues with your production LLM application.
-2. [Production monitoring dashboards](/production/production_monitoring) that allow you to review your feedback scores, trace count and tokens over time at both a daily and hourly granularity.
-
-## Getting Started
-
-[Comet](https://www.comet.com/site) provides a managed Cloud offering for Opik, simply [create an account](https://www.comet.com/signup?from=llm) to get started.
-
-You can also run Opik locally using our [local installer](/self-host/local_deployment). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/self-host/kubernetes).
+Compare Opik to other LLM observability tools and you'll find that traces populate faster,
+evaluations run smoother, and reliability comes standard — even for complex agentic systems serving
+millions of users in production. 
 
 ## Join Our Bounty Program!
 
-Want to contribute to Opik and get rewarded for your efforts? Check out our [Bounty Program](/contributing/developer-programs/bounties) to find exciting tasks and help us grow the platform!
+Want to contribute to Opik and get rewarded for your efforts? Check out our
+[Bounty Program](/contributing/developer-programs/bounties) to find exciting tasks and help us
+grow the platform!

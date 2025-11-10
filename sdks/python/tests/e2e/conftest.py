@@ -1,5 +1,7 @@
 from typing import Final
-
+import os
+import tempfile
+import numpy as np
 import pytest
 
 import opik
@@ -8,6 +10,7 @@ from .. import testlib
 from ..conftest import random_chars
 
 OPIK_E2E_TESTS_PROJECT_NAME: Final[str] = "e2e-tests"
+ATTACHMENT_FILE_SIZE = 2 * 1024 * 1024
 
 
 @pytest.fixture()
@@ -43,3 +46,15 @@ def temporary_project_name(opik_client: opik.Opik):
     yield name
     project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
     opik_client.rest_client.projects.delete_project_by_id(project_id)
+
+
+@pytest.fixture
+def attachment_data_file():
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    try:
+        temp_file.write(np.random.bytes(ATTACHMENT_FILE_SIZE))
+        temp_file.seek(0)
+        yield temp_file
+    finally:
+        temp_file.close()
+        os.unlink(temp_file.name)

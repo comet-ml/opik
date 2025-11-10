@@ -1,0 +1,46 @@
+{
+  "name": "opik-typescript-e2e-tests",
+  "version": "1.0.0",
+  "description": "TypeScript E2E tests for Opik using Playwright and Python SDK via Flask helper service",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "test:trace": "playwright show-trace",
+    "test:sanity": "TEST_SUITE=sanity playwright test",
+    "test:happypaths": "TEST_SUITE=happypaths playwright test",
+    "test:fullregression": "TEST_SUITE=fullregression playwright test",
+    "test:projects": "TEST_SUITE=projects playwright test",
+    "test:datasets": "TEST_SUITE=datasets playwright test",
+    "test:experiments": "TEST_SUITE=experiments playwright test",
+    "test:prompts": "TEST_SUITE=prompts playwright test",
+    "test:playground": "TEST_SUITE=playground playwright test",
+    "test:tracing": "TEST_SUITE=tracing playwright test",
+    "test:threads": "TEST_SUITE=threads playwright test",
+    "test:attachments": "TEST_SUITE=attachments playwright test",
+    "test:feedbackscores": "TEST_SUITE=feedbackscores playwright test",
+    "test:onlinescores": "TEST_SUITE=onlinescores playwright test",
+    "allure:report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
+  },
+  "keywords": [
+    "opik",
+    "e2e",
+    "playwright",
+    "testing"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "allure-commandline": "^2.25.0",
+    "allure-playwright": "^3.0.0",
+    "js-yaml": "^4.1.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  }
+}

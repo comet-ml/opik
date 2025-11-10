@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import get from "lodash/get";
 import sortBy from "lodash/sortBy";
 import {
@@ -41,6 +41,7 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
@@ -58,6 +59,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -96,7 +98,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "objective_name"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
 
 export type TrialItemsTabProps = {
   objectiveName?: string;
@@ -196,13 +198,15 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     defaultValue: [],
   });
 
+  const truncationEnabled = useTruncationEnabled();
+
   const { data, isPending } = useCompareExperimentsList(
     {
       workspaceName,
       datasetId,
       experimentsIds,
       filters,
-      truncate: true,
+      truncate: truncationEnabled,
       page: page as number,
       size: size as number,
     },
@@ -304,20 +308,59 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      {
-        id: "objective_name",
-        label: objectiveName,
-        type: COLUMN_TYPE.numberDictionary,
-        header: FeedbackScoreHeader as never,
-        cell: CompareExperimentsFeedbackScoreCell as never,
-        customMeta: {
-          experimentsIds,
-          feedbackKey: objectiveName,
-        },
+    // Extract all unique feedback score names from experiments
+    const feedbackScoreNames = new Set<string>();
+
+    experiments?.forEach((experiment) => {
+      experiment.feedback_scores?.forEach((score) => {
+        feedbackScoreNames.add(score.name);
+      });
+    });
+
+    // Convert to array and sort: main objective first, then alphabetically
+    const sortedScoreNames = Array.from(feedbackScoreNames).sort((a, b) => {
+      // Main objective always comes first
+      if (a === objectiveName) return -1;
+      if (b === objectiveName) return 1;
+      // Sort the rest alphabetically (case-insensitive)
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    });
+
+    // Generate color map for consistent colors
+    const colorMap =
+      objectiveName && sortedScoreNames.length > 0
+        ? generateDistinctColorMap(
+            objectiveName,
+            sortedScoreNames.filter((name) => name !== objectiveName),
+          )
+        : {};
+
+    // Create column for each feedback score
+    return sortedScoreNames.map((scoreName) => ({
+      id: `score_${scoreName}`,
+      label: scoreName,
+      type: COLUMN_TYPE.numberDictionary,
+      header: FeedbackScoreHeader as never,
+      cell: CompareExperimentsFeedbackScoreCell as never,
+      customMeta: {
+        experimentsIds,
+        feedbackKey: scoreName,
+        colorMap,
       },
-    ] as ColumnData<ExperimentsCompare>[];
-  }, [experimentsIds, objectiveName]);
+    })) as ColumnData<ExperimentsCompare>[];
+  }, [experiments, experimentsIds, objectiveName]);
+
+  // Auto-select all score columns when they become available
+  useEffect(() => {
+    const scoreColumnIds = scoresColumnsData.map((col) => col.id);
+    const missingScoreColumns = scoreColumnIds.filter(
+      (id) => !selectedColumns.includes(id),
+    );
+
+    if (missingScoreColumns.length > 0) {
+      setSelectedColumns((prev) => [...prev, ...missingScoreColumns]);
+    }
+  }, [scoresColumnsData, selectedColumns, setSelectedColumns]);
 
   const columns = useMemo(() => {
     const retVal = [
@@ -555,7 +598,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={total}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </PageBodyStickyContainer>
       <TraceDetailsPanel
         traceId={traceId!}

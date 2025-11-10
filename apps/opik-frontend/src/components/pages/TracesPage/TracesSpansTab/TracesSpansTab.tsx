@@ -38,6 +38,7 @@ import {
   HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
+import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   convertColumnDataToColumn,
@@ -94,6 +95,11 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import { Filter } from "@/types/filters";
+import {
+  USER_FEEDBACK_COLUMN_ID,
+  USER_FEEDBACK_NAME,
+} from "@/constants/shared";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -208,6 +214,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "output",
   "duration",
   COLUMN_COMMENTS_ID,
+  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
@@ -230,6 +237,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   projectId,
   projectName,
 }) => {
+  const truncationEnabled = useTruncationEnabled();
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -366,9 +374,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             if (
               filter.key &&
               filter.value &&
-              !/^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/.test(
-                filter.key,
-              )
+              !CUSTOM_FILTER_VALIDATION_REGEXP.test(filter.key)
             ) {
               return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
             }
@@ -411,10 +417,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
+  const { refetch: refetchExportData } = useTracesOrSpansList(
+    {
+      projectId,
+      type: type as TRACE_DATA_TYPE,
+      sorting: sortedColumns,
+      filters,
+      page: page as number,
+      size: size as number,
+      search: search as string,
+      truncate: false,
+    },
+    {
+      enabled: false,
     },
   );
 
@@ -510,26 +532,55 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
-          }) as ColumnData<BaseTraceData>,
-      ),
-    ];
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: DynamicColumn = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      columnType: COLUMN_TYPE.number,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
+    );
+
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+        }) as ColumnData<BaseTraceData>,
+    );
   }, [dynamicScoresColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<
+    Array<Trace | Span>
+  > => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
 
   const handleRowClick = useCallback(
     (row?: Trace | Span, lastSection?: DetailsActionSectionValue) => {
@@ -554,6 +605,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       onCommentsReply: (row?: Trace | Span) => {
         handleRowClick(row, DetailsActionSection.Comments);
       },
+      enableUserFeedbackEditing: true,
     }),
     [handleRowClick],
   );
@@ -839,7 +891,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <TracesActionsPanel
             projectId={projectId}
             projectName={projectName}
-            rows={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
             onClearSelection={clearRowSelection}
@@ -908,7 +961,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-        ></DataTablePagination>
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
       </PageBodyStickyContainer>
       <TraceDetailsPanel
         projectId={projectId}

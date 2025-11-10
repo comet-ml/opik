@@ -2,18 +2,17 @@
 description: Describes how to use a custom model for Opik's built-in LLM as a Judge metrics
 
 toc_max_heading_level: 4
-pytest_codeblocks_execute_previous: true
 ---
 
 Opik provides a set of LLM as a Judge metrics that are designed to be model-agnostic and can be used with any LLM. In order to achieve this, we use the [LiteLLM library](https://github.com/BerriAI/litellm) to abstract the LLM calls.
 
-By default, Opik will use the `gpt-4o` model. However, you can change this by setting the `model` parameter when initializing your metric to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers):
+By default, Opik will use the `gpt-5-nano` model. However, you can change this by setting the `model` parameter when initializing your metric to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers):
 
 ```python
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination(
-    model="gpt-4-turbo"
+    model="gpt-4o-mini"
 )
 ```
 
@@ -26,8 +25,7 @@ from opik.evaluation.metrics import Hallucination
 from opik.evaluation import models
 
 model = models.LiteLLMChatModel(
-    name="<model_name>",
-    base_url="<base_url>"
+    model_name="<model_name>"
 )
 
 hallucination_metric = Hallucination(
@@ -48,7 +46,7 @@ Opik's LLM-as-a-Judge metrics, such as [`Hallucination`](https://www.comet.com/d
 2.  `generate_string(self, input: str, **kwargs: Any) -> str`:
     Simplified interface to generate a string output from the model.
 3.  `generate_provider_response(self, **kwargs: Any) -> Any`:
-     Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+    Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
 
 ### Implementing a Custom Model for an OpenAI-like API
 
@@ -103,13 +101,13 @@ class CustomOpenAICompatibleModel(OpikBaseModel):
 
 **Key considerations for the implementation:**
 
-- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's 
-requirements if they deviate from the common OpenAI structure.
+- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's
+  requirements if they deviate from the common OpenAI structure.
 - **Model Name**: The `model_name` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
 
 ### Using the Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) Metric
 
-In order to run an evaluation using your Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) metric, 
+In order to run an evaluation using your Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) metric,
 you will first need to instantiate our `CustomOpenAICompatibleModel` class and pass it to the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) class.
 The evaluation can then be kicked off by calling the [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html)` method.
 
@@ -144,4 +142,113 @@ print(f"Reason: {evaluation.reason}")
 ```
 
 **Key considerations for the implementation:**
+
 - **ScoreResult Output**: [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) returns a ScoreResult object containing the metric name (`name`), score value (`value`), optional explanation (`reason`), metadata (`metadata`), and a failure flag (`scoring_failed`).
+
+## TypeScript: Using Vercel AI SDK Models
+
+The TypeScript SDK integrates seamlessly with the Vercel AI SDK, allowing you to use language models directly with Opik's evaluation metrics. For comprehensive model configuration including supported providers, generation parameters, and advanced settings, see the [Models Reference](/reference/typescript-sdk/evaluation/models).
+
+### Creating Custom Models with OpikBaseModel
+
+For unsupported LLM providers, implement the `OpikBaseModel` interface:
+
+```typescript
+import { OpikBaseModel, OpikMessage } from "opik/evaluation/models";
+
+class CustomProviderModel extends OpikBaseModel {
+  private apiKey: string;
+  private baseUrl: string;
+
+  constructor(modelName: string, apiKey: string, baseUrl: string) {
+    super(modelName);
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+  }
+
+  async generateString(input: string): Promise<string> {
+    // Convert string input to message format
+    const messages: OpikMessage[] = [
+      {
+        role: "user",
+        content: input,
+      },
+    ];
+
+    // Call provider API
+    const response = await this.generateProviderResponse(messages);
+
+    // Extract text from response
+    return response.choices[0].message.content;
+  }
+
+  async generateProviderResponse(messages: OpikMessage[]): Promise<unknown> {
+    // Make API call to your custom provider
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: messages,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+}
+```
+
+### Using Custom Models
+
+Once implemented, use your custom model like any other:
+
+```typescript
+import { Hallucination } from "opik";
+import { evaluatePrompt } from "opik";
+
+// Initialize custom model
+const customModel = new CustomProviderModel(
+  "custom-model-v1",
+  process.env.CUSTOM_API_KEY!,
+  "https://api.custom-provider.com"
+);
+
+// Use with metrics
+const metric = new Hallucination({ model: customModel });
+
+const score = await metric.score({
+  input: "What is the capital of Mars?",
+  output: "The capital of Mars is Ares City, a bustling metropolis.",
+  context: [
+    "Mars is a planet in our solar system. It does not currently have any established cities or a designated capital.",
+  ],
+});
+
+console.log(`Hallucination Score: ${score.value}`); // Expected: 1.0 (hallucination detected)
+console.log(`Reason: ${score.reason}`);
+
+// Use with evaluatePrompt
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: customModel,
+  scoringMetrics: [metric],
+});
+```
+
+### Best Practices
+
+When implementing custom models:
+
+1. **Implement both required methods**: Ensure your custom model implements both `generateString()` and `generateProviderResponse()` methods
+2. **Handle errors gracefully**: Wrap API calls in try-catch blocks and provide meaningful error messages
+3. **Configure API keys securely**: Store API keys in environment variables, never hardcode them
+
+For standard model usage and configuration, refer to the [Models Reference](/reference/typescript-sdk/evaluation/models).

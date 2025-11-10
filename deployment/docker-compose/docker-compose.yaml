@@ -29,6 +29,8 @@ services:
       timeout: 4s
       retries: 20
       start_period: 30s
+    volumes:
+      - redis-data:/data
 
   clickhouse-init:
     image: alpine:latest
@@ -41,7 +43,7 @@ services:
         chown -R 1000:1000 /config
       "
   clickhouse:
-    image: clickhouse/clickhouse-server:24.3.6.48-alpine
+    image: clickhouse/clickhouse-server:25.3.6.56-alpine
     pull_policy: always
     hostname: clickhouse
     environment:
@@ -71,7 +73,7 @@ services:
         condition: service_completed_successfully
 
   zookeeper:
-    image: docker.io/bitnami/zookeeper:3.9.3-debian-12-r16
+    image: docker.io/bitnamilegacy/zookeeper:3.9.3-debian-12-r16
     hostname: zookeeper
     environment:
       ZOO_MY_ID: 1
@@ -97,6 +99,8 @@ services:
       timeout: 10s
       retries: 30
       start_period: 5s
+    volumes:
+      - minio-data:/data
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
@@ -113,6 +117,9 @@ services:
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - backend
+      - opik
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -123,6 +130,8 @@ services:
     environment:
       # WARNING: Do not set OPIK_VERSION as env var here. It's a multi-stage build, so build and runtime values can differ.
       DOCKER_BUILDKIT: 1
+      # Persistent anonymous installation ID passed from launcher script
+      OPIK_ANONYMOUS_ID: ${OPIK_ANONYMOUS_ID:-}
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
       STATE_DB_DATABASE_NAME: opik
@@ -149,16 +158,21 @@ services:
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
+      IS_MINIO: true
+      S3_URL: http://minio:9000
       PYTHON_EVALUATOR_URL: http://python-backend:8000
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
-      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
+      TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
+      CORS: ${CORS:-false}
+      ATTACHMENTS_STRIP_MIN_SIZE: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
+      JACKSON_MAX_STRING_LENGTH: ${JACKSON_MAX_STRING_LENGTH:-104857600}
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health-check" ]
       interval: 1s
-      timeout: 30s
-      retries: 30
+      timeout: 600s
+      retries: 600
       start_period: 1s
     depends_on:
       mysql:
@@ -169,10 +183,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    tmpfs:
+      - /tmp
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - backend
+      - opik
+      - local-be-fe
+      - local-be
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -192,6 +213,8 @@ services:
       timeout: 60s
       retries: 30
       start_period: 2s
+    tmpfs:
+      - /var/lib/docker
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
@@ -214,6 +237,10 @@ services:
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - opik
+      - local-be-fe
+      - local-be
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -227,18 +254,25 @@ services:
         condition: service_healthy
       python-backend:
         condition: service_healthy
+    tmpfs:
+      - /var/lib/docker
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
     pull_policy: always
+    profiles:
+      - opik
+      - local-be
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
     hostname: frontend
     ports:
       - "5173:5173" # Frontend server port
+      - "2020:2020" # Fluent Bit HTTP server (when enabled)
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
+      - ./fluent-bit.conf:/etc/fluent-bit/fluent-bit.conf:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -250,6 +284,10 @@ services:
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+      # OTEL log shipping configuration (Fluent Bit integrated in frontend container)
+      ENABLE_OTEL_LOG_EXPORT: ${ENABLE_OTEL_LOG_EXPORT:-false}
+      OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
+      OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
 
 networks:
   default:
@@ -260,3 +298,5 @@ volumes:
   clickhouse-config:
   mysql:
   zookeeper:
+  redis-data:
+  minio-data:

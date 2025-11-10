@@ -36,6 +36,7 @@ export namespace AutomationRuleEvaluatorWrite {
         name: string;
         samplingRate?: number;
         enabled?: boolean;
+        filters?: OpikApi.TraceFilterWrite[];
         action: "evaluator";
     }
 }

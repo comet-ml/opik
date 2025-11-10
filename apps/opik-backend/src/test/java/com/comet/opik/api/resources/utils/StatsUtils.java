@@ -77,6 +77,7 @@ public class StatsUtils {
                 Trace::endTime,
                 Trace::totalEstimatedCost,
                 Trace::llmSpanCount,
+                Trace::spanCount,
                 Trace::guardrailsValidations,
                 Trace::errorInfo,
                 "trace_count");
@@ -121,6 +122,7 @@ public class StatsUtils {
                 },
                 null,
                 null,
+                null,
                 Span::errorInfo,
                 "span_count");
     }
@@ -137,6 +139,7 @@ public class StatsUtils {
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
             Function<T, Integer> llmSpanCountProvider,
+            Function<T, Integer> spanCountProvider,
             Function<T, List<GuardrailsValidation>> guardrailsProvider,
             Function<T, ErrorInfo> errorProvider,
             String countLabel) {
@@ -154,6 +157,7 @@ public class StatsUtils {
         BigDecimal totalEstimatedCost = BigDecimal.ZERO;
         int countEstimatedCost = 0;
         int llmSpanCount = 0;
+        int spanCount = 0;
         long errorCount = 0;
 
         for (T entity : expectedEntities) {
@@ -165,6 +169,9 @@ public class StatsUtils {
 
             llmSpanCount += llmSpanCountProvider != null &&
                     llmSpanCountProvider.apply(entity) != null ? llmSpanCountProvider.apply(entity) : 0;
+
+            spanCount += spanCountProvider != null &&
+                    spanCountProvider.apply(entity) != null ? spanCountProvider.apply(entity) : 0;
 
             BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
                     ? totalEstimatedCostProvider.apply(entity)
@@ -221,6 +228,11 @@ public class StatsUtils {
         if (llmSpanCountProvider != null) {
             var avgLlmSpanCount = llmSpanCount == 0 ? 0 : (double) llmSpanCount / expectedEntities.size();
             stats.add(new AvgValueStat(StatsMapper.LLM_SPAN_COUNT, avgLlmSpanCount));
+        }
+
+        if (spanCountProvider != null) {
+            var avgSpanCount = spanCount == 0 ? 0 : (double) spanCount / expectedEntities.size();
+            stats.add(new AvgValueStat(StatsMapper.SPAN_COUNT, avgSpanCount));
         }
 
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
@@ -295,7 +307,7 @@ public class StatsUtils {
                 .reduce(0.0, Double::sum) / values.size();
     }
 
-    private static Double avgFromList(List<BigDecimal> values) {
+    public static Double avgFromList(List<BigDecimal> values) {
         return values.stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .doubleValue() / values.size();

@@ -3,9 +3,7 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-import opik.dict_utils as dict_utils
 import opik.api_objects.attachment as attachment
-from .. import span
 import opik.datetime_helpers as datetime_helpers
 import opik.id_helpers as id_helpers
 import opik.llm_usage as llm_usage
@@ -16,6 +14,7 @@ from opik.types import (
     LLMProvider,
     SpanType,
 )
+from .. import span, data_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ class TraceData:
             if value is None:
                 continue
 
-            if key not in self.__dict__:
+            if key not in self.__dict__ and key != "prompts":
                 LOGGER.debug(
                     "An attempt to update span with parameter name it doesn't have: %s",
                     key,
@@ -105,39 +104,31 @@ class TraceData:
                 continue
 
             if key == "metadata":
-                self._update_metadata(value)
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=value
+                )
                 continue
             elif key == "output":
-                self._update_output(value)
+                self.output = data_helpers.merge_outputs(self.output, new_outputs=value)
                 continue
             elif key == "input":
-                self._update_input(value)
+                self.input = data_helpers.merge_inputs(self.input, new_inputs=value)
                 continue
             elif key == "attachments":
                 self._update_attachments(value)
+                continue
+            elif key == "tags":
+                self.tags = data_helpers.merge_tags(self.tags, new_tags=value)
+                continue
+            elif key == "prompts":
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=new_data.get("metadata"), prompts=value
+                )
                 continue
 
             self.__dict__[key] = value
 
         return self
-
-    def _update_metadata(self, new_metadata: Dict[str, Any]) -> None:
-        if self.metadata is None:
-            self.metadata = new_metadata
-        else:
-            self.metadata = dict_utils.deepmerge(self.metadata, new_metadata)
-
-    def _update_output(self, new_output: Dict[str, Any]) -> None:
-        if self.output is None:
-            self.output = new_output
-        else:
-            self.output = dict_utils.deepmerge(self.output, new_output)
-
-    def _update_input(self, new_input: Dict[str, Any]) -> None:
-        if self.input is None:
-            self.input = new_input
-        else:
-            self.input = dict_utils.deepmerge(self.input, new_input)
 
     def init_end_time(self) -> "TraceData":
         self.end_time = datetime_helpers.local_timestamp()

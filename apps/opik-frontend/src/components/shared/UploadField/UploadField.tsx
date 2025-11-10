@@ -90,6 +90,7 @@ const UploadField: React.FC<UploadFieldProps> = ({
         <div className="flex items-center gap-2">
           <span className="comet-body-s-accented">{description}</span>
           <Button
+            type="button"
             size="sm"
             variant="secondary"
             disabled={disabled}
@@ -102,7 +103,7 @@ const UploadField: React.FC<UploadFieldProps> = ({
       {file && (
         <div className="mt-5 overflow-hidden rounded-sm bg-primary-foreground p-3">
           <div className="flex max-w-full flex-nowrap items-center justify-between gap-3 rounded">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(203,213,225,0.25)]">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-upload-icon-bg/25">
               <FileSpreadsheet className="size-5 text-muted-foreground" />
             </div>
             <div className="flex min-w-1 flex-auto flex-col justify-center">
@@ -110,13 +111,13 @@ const UploadField: React.FC<UploadFieldProps> = ({
                 {file.name}
               </span>
               {errorText && (
-                <div className="comet-body-xs flex text-[#EF6868]">
+                <div className="comet-body-xs flex text-destructive">
                   <TriangleAlert className="my-0.5 mr-1 size-3 shrink-0" />
                   {errorText}
                 </div>
               )}
               {!errorText && successText && (
-                <span className="comet-body-xs flex items-center text-[#19A979]">
+                <span className="comet-body-xs flex items-center text-special-button">
                   <Check className="mr-1 size-3 shrink-0" />
                   {successText}
                 </span>

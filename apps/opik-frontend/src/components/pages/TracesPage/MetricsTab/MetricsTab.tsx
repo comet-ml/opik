@@ -1,64 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
 import React, { useRef, useState } from "react";
-import {
-  METRIC_NAME_TYPE,
-  INTERVAL_TYPE,
-} from "@/api/projects/useProjectMetric";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import { formatCost } from "@/lib/money";
-import { formatDuration } from "@/lib/date";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import MetricContainerChart from "./MetricChart/MetricChartContainer";
 import {
   useMetricDateRangeWithQuery,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
-
-const DURATION_LABELS_MAP = {
-  "duration.p50": "Percentile 50",
-  "duration.p90": "Percentile 90",
-  "duration.p99": "Percentile 99",
-};
-
-const INTERVAL_DESCRIPTIONS = {
-  TOTALS: {
-    [INTERVAL_TYPE.HOURLY]: "Hourly totals",
-    [INTERVAL_TYPE.DAILY]: "Daily totals",
-    [INTERVAL_TYPE.WEEKLY]: "Weekly totals",
-  },
-  AVERAGES: {
-    [INTERVAL_TYPE.HOURLY]: "Hourly averages",
-    [INTERVAL_TYPE.DAILY]: "Daily averages",
-    [INTERVAL_TYPE.WEEKLY]: "Weekly averages",
-  },
-  QUANTILES: {
-    [INTERVAL_TYPE.HOURLY]: "Hourly quantiles in seconds",
-    [INTERVAL_TYPE.DAILY]: "Daily quantiles in seconds",
-    [INTERVAL_TYPE.WEEKLY]: "Weekly quantiles in seconds",
-  },
-  COST: {
-    [INTERVAL_TYPE.HOURLY]: "Total hourly cost in USD",
-    [INTERVAL_TYPE.DAILY]: "Total daily cost in USD",
-    [INTERVAL_TYPE.WEEKLY]: "Total weekly cost in USD",
-  },
-};
+import ProjectMetricsSection from "./ProjectMetricsSection";
+import ThreadMetricsSection from "./ThreadMetricsSection";
+import TraceMetricsSection from "./TraceMetricsSection";
 
 const METRICS_DATE_RANGE_KEY = "range";
-
-const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  formatCost(value as number);
-
-const renderDurationTooltipValue = ({
-  value,
-}: ChartTooltipRenderValueArguments) => formatDuration(value as number, false);
-
-const durationYTickFormatter = (value: number) => formatDuration(value, false);
 
 interface MetricsTabProps {
   projectId: string;
@@ -66,9 +21,6 @@ interface MetricsTabProps {
 
 const MetricsTab = ({ projectId }: MetricsTabProps) => {
   const [requestChartOpen, setRequestChartOpen] = useState(false);
-  const isGuardrailsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.GUARDRAILS_ENABLED,
-  );
 
   const {
     dateRange,
@@ -119,159 +71,15 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     return <NoTracesPage />;
   }
 
-  const renderCharts = () => {
-    const charts = [
-      ...(hasThreads
-        ? [
-            <MetricContainerChart
-              chartId="threads_feedback_scores_chart"
-              key="threads_feedback_scores_chart"
-              name="Threads feedback scores"
-              description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
-              metricName={METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="line"
-            />,
-            <MetricContainerChart
-              chartId="number_of_thread_chart"
-              key="number_of_thread_chart"
-              name="Number of threads"
-              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-              metricName={METRIC_NAME_TYPE.THREAD_COUNT}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="line"
-            />,
-            <MetricContainerChart
-              chartId="thread_duration_chart"
-              key="thread_duration_chart"
-              name="Thread duration"
-              description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
-              metricName={METRIC_NAME_TYPE.THREAD_DURATION}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              renderValue={renderDurationTooltipValue}
-              labelsMap={DURATION_LABELS_MAP}
-              customYTickFormatter={durationYTickFormatter}
-              chartType="line"
-            />,
-          ]
-        : []),
-      ...(hasTraces
-        ? [
-            <MetricContainerChart
-              chartId="feedback_scores_chart"
-              key="feedback_scores_chart"
-              name="Trace feedback scores"
-              description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
-              metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="line"
-            />,
-            <MetricContainerChart
-              chartId="number_of_traces_chart"
-              key="number_of_traces_chart"
-              name="Number of traces"
-              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-              metricName={METRIC_NAME_TYPE.TRACE_COUNT}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="line"
-            />,
-            <MetricContainerChart
-              chartId="duration_chart"
-              key="duration_chart"
-              name="Trace duration"
-              description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
-              metricName={METRIC_NAME_TYPE.TRACE_DURATION}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              renderValue={renderDurationTooltipValue}
-              labelsMap={DURATION_LABELS_MAP}
-              customYTickFormatter={durationYTickFormatter}
-              chartType="line"
-            />,
-            <MetricContainerChart
-              chartId="token_usage_chart"
-              key="token_usage_chart"
-              name="Token usage"
-              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-              metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="line"
-            />,
-            <MetricContainerChart
-              chartId="estimated_cost_chart"
-              key="estimated_cost_chart"
-              name="Estimated cost"
-              description={INTERVAL_DESCRIPTIONS.COST[interval]}
-              metricName={METRIC_NAME_TYPE.COST}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              renderValue={renderCostTooltipValue}
-              chartType="line"
-            />,
-          ]
-        : []),
-      ...(hasTraces && isGuardrailsEnabled
-        ? [
-            <MetricContainerChart
-              chartId="failed_guardrails_chart"
-              key="failed_guardrails_chart"
-              name="Failed guardrails"
-              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-              metricName={METRIC_NAME_TYPE.FAILED_GUARDRAILS}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="bar"
-            />,
-          ]
-        : []),
-    ];
-    return charts.map((chart, index) => (
-      <div
-        key={chart.key}
-        className={
-          charts.length % 2 === 1 && index === charts.length - 1
-            ? "md:col-span-2"
-            : ""
-        }
-      >
-        {chart}
-      </div>
-    ));
-  };
-
   return (
-    <div className="px-6">
+    <div className="px-6 pb-6">
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
           size="sm"
           onClick={() => setRequestChartOpen(true)}
         >
-          <ChartLineIcon className="mr-2 size-3.5" />
+          <ChartLineIcon className="mr-1.5 size-3.5" />
           Request a chart
         </Button>
         <MetricDateRangeSelect
@@ -281,12 +89,31 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           maxDate={maxDate}
         />
       </div>
-      <div
-        className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2"
-        style={{ "--chart-height": "230px" } as React.CSSProperties}
-      >
-        {renderCharts()}
-      </div>
+
+      <ProjectMetricsSection
+        projectId={projectId}
+        interval={interval}
+        intervalStart={intervalStart}
+        intervalEnd={intervalEnd}
+        hasTraces={hasTraces}
+      />
+
+      <ThreadMetricsSection
+        projectId={projectId}
+        interval={interval}
+        intervalStart={intervalStart}
+        intervalEnd={intervalEnd}
+        hasThreads={hasThreads}
+      />
+
+      <TraceMetricsSection
+        projectId={projectId}
+        interval={interval}
+        intervalStart={intervalStart}
+        intervalEnd={intervalEnd}
+        hasTraces={hasTraces}
+      />
+
       <RequestChartDialog
         key={`request-chart-${resetKeyRef.current}`}
         open={requestChartOpen}

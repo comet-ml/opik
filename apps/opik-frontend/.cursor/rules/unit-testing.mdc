@@ -1,0 +1,459 @@
+---
+description: Unit testing guidelines and patterns for complex cases using Vitest
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+
+# Unit Testing Guidelines
+
+## Testing Framework Setup
+
+### Core Technologies
+
+- **Vitest** - Testing framework (fast, ESM-first)
+- **@testing-library/react** - React component testing
+- **@testing-library/jest-dom** - Additional DOM matchers
+- **happy-dom** - Lightweight DOM environment
+
+### Test File Organization
+
+```
+src/
+├── lib/
+│   ├── utils.ts
+│   └── utils.test.ts          # Co-located with implementation
+├── components/
+│   ├── shared/
+│   │   ├── DataTable/
+│   │   │   ├── DataTable.tsx
+│   │   │   └── DataTable.test.tsx
+│   └── pages/
+│       └── ComponentName/
+│           ├── ComponentName.tsx
+│           └── ComponentName.test.tsx
+```
+
+## When to Write Unit Tests
+
+### **ALWAYS** Test Complex Cases:
+
+1. **Utility Functions** with multiple scenarios
+2. **Data Processing Logic** with edge cases
+3. **Parsing/Transformation Functions** with various inputs
+4. **Filter/Search Logic** with complex conditions
+5. **Business Logic** with multiple branches
+
+### **Consider** Testing:
+
+- Custom hooks with complex state logic
+- Components with significant conditional rendering
+- API response transformations
+- Validation functions
+
+### **Don't** Test:
+
+- Simple UI components without logic
+- Third-party library integrations
+- Trivial getters/setters
+- Pure presentational components
+
+## Test Patterns
+
+### Comprehensive Test Coverage for Complex Functions
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { isStringMarkdown } from "./utils";
+
+describe("isStringMarkdown", () => {
+  // Test categories: group related scenarios
+  describe("non-string inputs", () => {
+    it("should return false for null", () => {
+      expect(isStringMarkdown(null)).toBe(false);
+    });
+
+    it("should return false for undefined", () => {
+      expect(isStringMarkdown(undefined)).toBe(false);
+    });
+
+    it("should return false for numbers", () => {
+      expect(isStringMarkdown(123)).toBe(false);
+    });
+  });
+
+  describe("markdown detection", () => {
+    it("should identify headers", () => {
+      expect(isStringMarkdown("# Header")).toBe(true);
+      expect(isStringMarkdown("## Header 2")).toBe(true);
+    });
+
+    it("should identify emphasis", () => {
+      expect(isStringMarkdown("**bold text**")).toBe(true);
+      expect(isStringMarkdown("*italic text*")).toBe(true);
+    });
+
+    it("should identify complex markdown", () => {
+      const complex = `# Markdown Example
+
+This is a paragraph with **bold** and *italic* text.
+
+## Lists
+- Item 1
+- Item 2
+  - Nested item
+
+## Code
+\`\`\`javascript
+function hello() {
+  console.log("Hello world!");
+}
+\`\`\`
+
+> This is a blockquote.`;
+
+      expect(isStringMarkdown(complex)).toBe(true);
+    });
+  });
+
+  describe("false positives", () => {
+    it("should not identify regular text as markdown", () => {
+      expect(isStringMarkdown("This is just regular text.")).toBe(false);
+      expect(
+        isStringMarkdown("This contains an asterisk * but is not markdown."),
+      ).toBe(false);
+      expect(
+        isStringMarkdown("This contains a hash # but is not markdown."),
+      ).toBe(false);
+    });
+  });
+});
+```
+
+### Testing Data Processing Functions
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { parsePythonMethodParameters } from "./pythonArgumentsParser";
+
+describe("parsePythonMethodParameters", () => {
+  describe("basic method signatures", () => {
+    it("should parse method without parameters", () => {
+      const code = "def simple_method():";
+      const result = parsePythonMethodParameters(code, "simple_method");
+      expect(result).toEqual([]);
+    });
+
+    it("should parse method with basic parameters", () => {
+      const code = "def method_with_params(a, b, c):";
+      const result = parsePythonMethodParameters(code, "method_with_params");
+      expect(result).toEqual([
+        { name: "a", type: "any", optional: false },
+        { name: "b", type: "any", optional: false },
+        { name: "c", type: "any", optional: false },
+      ]);
+    });
+  });
+
+  describe("typed parameters", () => {
+    it("should parse type annotations", () => {
+      const code = "def typed_method(a: int, b: str):";
+      const result = parsePythonMethodParameters(code, "typed_method");
+      expect(result).toEqual([
+        { name: "a", type: "int", optional: false },
+        { name: "b", type: "str", optional: false },
+      ]);
+    });
+
+    it("should handle complex types", () => {
+      const code = "def complex_method(data: Dict[str, List[int]]):";
+      const result = parsePythonMethodParameters(code, "complex_method");
+      expect(result).toEqual([
+        { name: "data", type: "Dict[str, List[int]]", optional: false },
+      ]);
+    });
+  });
+
+  describe("optional parameters", () => {
+    it("should handle default values", () => {
+      const code = "def method(input: str, count: int = 0):";
+      const result = parsePythonMethodParameters(code, "method");
+      expect(result).toEqual([
+        { name: "input", type: "str", optional: false },
+        { name: "count", type: "int", optional: true },
+      ]);
+    });
+  });
+
+  describe("edge cases", () => {
+    it("should ignore self parameter", () => {
+      const code = "def score(self, input: str):";
+      const result = parsePythonMethodParameters(code, "score");
+      expect(result).toEqual([{ name: "input", type: "str", optional: false }]);
+    });
+
+    it("should throw when method not found", () => {
+      const code = "def other_method():";
+      expect(() =>
+        parsePythonMethodParameters(code, "missing_method"),
+      ).toThrowError("Method missing_method not found");
+    });
+  });
+});
+```
+
+### Testing Complex Filter Logic
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { filterFunction } from "./helpers";
+import { COLUMN_TYPE } from "@/types/shared";
+
+describe("filterFunction", () => {
+  const mockData = {
+    id: "test-1",
+    name: "Test Item",
+    type: "llm",
+    createdAt: "2024-01-01T00:00:00Z",
+    tags: ["tag1", "tag2"],
+    metrics: { cost: 0.05, tokens: 100 },
+  };
+
+  describe("string column filtering", () => {
+    it("should filter with equals operator", () => {
+      const filter = [
+        {
+          field: "name",
+          operator: "=",
+          value: "Test Item",
+          type: COLUMN_TYPE.string,
+        },
+      ];
+
+      expect(filterFunction(mockData, filter)).toBe(true);
+    });
+
+    it("should filter with contains operator", () => {
+      const filter = [
+        {
+          field: "name",
+          operator: "contains",
+          value: "Test",
+          type: COLUMN_TYPE.string,
+        },
+      ];
+
+      expect(filterFunction(mockData, filter)).toBe(true);
+    });
+
+    it("should handle case sensitivity", () => {
+      const filter = [
+        {
+          field: "name",
+          operator: "contains",
+          value: "test",
+          type: COLUMN_TYPE.string,
+        },
+      ];
+
+      expect(filterFunction(mockData, filter)).toBe(true); // Case insensitive
+    });
+  });
+
+  describe("category column filtering", () => {
+    it("should filter categories with equals", () => {
+      const filter = [
+        {
+          field: "type",
+          operator: "=",
+          value: "llm",
+          type: COLUMN_TYPE.category,
+        },
+      ];
+
+      expect(filterFunction(mockData, filter)).toBe(true);
+    });
+
+    it("should handle empty/not empty operators", () => {
+      const isEmptyFilter = [
+        {
+          field: "type",
+          operator: "is_empty",
+          value: "",
+          type: COLUMN_TYPE.category,
+        },
+      ];
+
+      const isNotEmptyFilter = [
+        {
+          field: "type",
+          operator: "is_not_empty",
+          value: "",
+          type: COLUMN_TYPE.category,
+        },
+      ];
+
+      expect(filterFunction(mockData, isEmptyFilter)).toBe(false);
+      expect(filterFunction(mockData, isNotEmptyFilter)).toBe(true);
+    });
+  });
+
+  describe("multiple filters", () => {
+    it("should apply AND logic for multiple filters", () => {
+      const filters = [
+        {
+          field: "name",
+          operator: "contains",
+          value: "Test",
+          type: COLUMN_TYPE.string,
+        },
+        {
+          field: "type",
+          operator: "=",
+          value: "llm",
+          type: COLUMN_TYPE.category,
+        },
+      ];
+
+      expect(filterFunction(mockData, filters)).toBe(true);
+    });
+
+    it("should fail when any filter doesn't match", () => {
+      const filters = [
+        {
+          field: "name",
+          operator: "=",
+          value: "Test Item",
+          type: COLUMN_TYPE.string,
+        },
+        {
+          field: "type",
+          operator: "=",
+          value: "embedding", // Wrong type
+          type: COLUMN_TYPE.category,
+        },
+      ];
+
+      expect(filterFunction(mockData, filters)).toBe(false);
+    });
+  });
+});
+```
+
+## Testing Best Practices
+
+### Test Structure (AAA Pattern)
+
+```typescript
+describe("ComponentName", () => {
+  describe("feature group", () => {
+    it("should do something when condition", () => {
+      // Arrange - Set up test data
+      const input = createTestData();
+      const expectedOutput = {
+        /* expected result */
+      };
+
+      // Act - Execute the function
+      const result = functionUnderTest(input);
+
+      // Assert - Verify the outcome
+      expect(result).toEqual(expectedOutput);
+    });
+  });
+});
+```
+
+### Test Naming Conventions
+
+- **Describe blocks**: Use feature names or function names
+- **Test names**: Use "should [behavior] when [condition]" or just "[behavior]" for simple cases
+- **Be descriptive**: Names should clearly indicate what's being tested
+
+### Edge Case Testing
+
+Always test these scenarios for complex functions:
+
+```typescript
+describe("edge cases", () => {
+  it("should handle empty input", () => {
+    expect(processData([])).toEqual([]);
+  });
+
+  it("should handle null/undefined input", () => {
+    expect(processData(null)).toEqual(null);
+    expect(processData(undefined)).toEqual(undefined);
+  });
+
+  it("should handle large datasets", () => {
+    const largeArray = Array(1000)
+      .fill()
+      .map((_, i) => ({ id: i }));
+    const result = processData(largeArray);
+    expect(result).toHaveLength(1000);
+  });
+
+  it("should handle malformed data", () => {
+    const malformedData = { invalidProperty: "value" };
+    expect(() => processData(malformedData)).toThrowError();
+  });
+});
+```
+
+### Mock Data Generation
+
+```typescript
+// Create realistic test data
+const createMockUser = (overrides = {}) => ({
+  id: "user-1",
+  name: "John Doe",
+  email: "john@example.com",
+  role: "admin",
+  createdAt: "2024-01-01T00:00:00Z",
+  ...overrides,
+});
+
+// Use in tests
+it("should process user data", () => {
+  const user = createMockUser({ role: "guest" });
+  const result = processUser(user);
+  expect(result.hasAdminAccess).toBe(false);
+});
+```
+
+### Testing Utilities and Helpers
+
+For utilities in `src/lib/`, always include comprehensive tests:
+
+```typescript
+// Test all public functions
+// Test all code paths
+// Test error conditions
+// Test performance for large inputs
+// Document complex test cases with comments
+```
+
+## Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:ui
+
+# Run specific test file
+npm test -- utils.test.ts
+
+# Run tests with coverage
+npm test -- --coverage
+```
+
+## Test Performance Guidelines
+
+1. **Keep tests fast** - Unit tests should run in milliseconds
+2. **Avoid real API calls** - Use mocks and stubs
+3. **Don't test implementation details** - Test public interfaces
+4. **Group related tests** - Use describe blocks for organization
+5. **Clean up after tests** - Reset mocks, clear state
+
+When in doubt, write the test. Complex functions should have comprehensive test coverage to prevent regressions and ensure reliability.

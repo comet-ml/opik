@@ -1,5 +1,6 @@
 import { LLMJudgeSchema, ProviderMessageType } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { Filters } from "@/types/filters";
 
 export enum EVALUATORS_RULE_TYPE {
   llm_judge = "llm_as_judge",
@@ -21,6 +22,7 @@ export enum UI_EVALUATORS_RULE_TYPE {
 export interface LLMJudgeModel {
   name: PROVIDER_MODEL_TYPE;
   temperature: number;
+  seed?: number | null;
 }
 
 export interface LLMJudgeObject {
@@ -63,6 +65,7 @@ export type EvaluatorsRule = {
   project_name?: string;
   sampling_rate: number;
   enabled?: boolean;
+  filters?: Filters;
   created_at: string;
   created_by: string;
   last_updated_at: string;
@@ -81,4 +84,9 @@ export interface EvaluatorRuleLogItem {
   timestamp: string;
   level: EVALUATOR_LOG_LEVEL;
   message: string;
+  markers?: Record<string, string>;
+}
+
+export interface EvaluatorRuleLogItemWithId extends EvaluatorRuleLogItem {
+  id: string;
 }

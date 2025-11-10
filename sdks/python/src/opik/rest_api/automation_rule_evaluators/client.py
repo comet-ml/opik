@@ -34,7 +34,10 @@ class AutomationRuleEvaluatorsClient:
         self,
         *,
         project_id: typing.Optional[str] = None,
+        id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -46,7 +49,13 @@ class AutomationRuleEvaluatorsClient:
         ----------
         project_id : typing.Optional[str]
 
+        id : typing.Optional[str]
+
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -67,7 +76,14 @@ class AutomationRuleEvaluatorsClient:
         client.automation_rule_evaluators.find_evaluators()
         """
         _response = self._raw_client.find_evaluators(
-            project_id=project_id, name=name, page=page, size=size, request_options=request_options
+            project_id=project_id,
+            id=id,
+            name=name,
+            filters=filters,
+            sorting=sorting,
+            page=page,
+            size=size,
+            request_options=request_options,
         )
         return _response.data
 
@@ -249,7 +265,10 @@ class AsyncAutomationRuleEvaluatorsClient:
         self,
         *,
         project_id: typing.Optional[str] = None,
+        id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -261,7 +280,13 @@ class AsyncAutomationRuleEvaluatorsClient:
         ----------
         project_id : typing.Optional[str]
 
+        id : typing.Optional[str]
+
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -285,7 +310,14 @@ class AsyncAutomationRuleEvaluatorsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_evaluators(
-            project_id=project_id, name=name, page=page, size=size, request_options=request_options
+            project_id=project_id,
+            id=id,
+            name=name,
+            filters=filters,
+            sorting=sorting,
+            page=page,
+            size=size,
+            request_options=request_options,
         )
         return _response.data
 

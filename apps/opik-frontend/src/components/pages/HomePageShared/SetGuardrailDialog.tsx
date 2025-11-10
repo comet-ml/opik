@@ -99,7 +99,7 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
             </GuardrailConfig>
             <Separator className="my-1" />
           </div>
-          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
+          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <GuardrailConfigCode
               codeImportNames={importCodeNames}
               codeList={codeList}

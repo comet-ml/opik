@@ -1,0 +1,108 @@
+---
+description: Code Style guidelines
+globs: apps/opik-backend/**/*
+alwaysApply: false
+---
+# Backend Java Code Style Guidelines
+
+## Comment Hygiene
+
+### Clean Up Unused Code
+
+**Rule**: Remove commented-out constants and unused field declarations instead of leaving them in the codebase.
+
+```java
+// ❌ BAD: Leaving commented-out sensitive field
+private static final String WEBHOOK_URL_DB = "webhook_url";
+// private static final String WEBHOOK_SECRET_TOKEN_DB = "webhook_secret_token"; // Don't expose
+
+// ✅ GOOD: Just remove it completely
+private static final String WEBHOOK_URL_DB = "webhook_url";
+// Webhook secret token is intentionally not included for security reasons
+```
+
+**When to keep comments**:
+- Explaining WHY something was removed (in PR description)
+- Documenting business decisions
+- Clarifying non-obvious security constraints
+
+## Method Parameter Formatting
+
+### Consistent Parameter Alignment
+
+For methods with multiple parameters, use consistent line breaks:
+
+```java
+// ✅ GOOD: Each parameter on its own line when breaking
+public Response find(
+        @QueryParam("project_id") UUID projectId,
+        @QueryParam("id") 
+        @Schema(description = "Filter by rule ID (partial match)") 
+        String id,
+        @QueryParam("filters") String filters,
+        @QueryParam("sorting") String sorting,
+        @QueryParam("page") @DefaultValue("1") int page,
+        @QueryParam("size") @DefaultValue("10") int size) {
+    // method body
+}
+```
+
+## Enum and Map Initialization
+
+### ImmutableMap Patterns
+
+Use consistent formatting for map initialization:
+
+```java
+// ✅ GOOD: Consistent formatting with clear structure
+private static final Map<Field, String> FIELD_MAP = new EnumMap<>(
+    ImmutableMap.<Field, String>builder()
+        .put(Field.ID, RULE_PREFIX.formatted(ID_DB))
+        .put(Field.NAME, RULE_PREFIX.formatted(NAME_DB))
+        .put(Field.TYPE, EVALUATOR_PREFIX.formatted(TYPE_DB))
+        .build());
+```
+
+## Import Statements
+
+### Use Imports Instead of Inline Fully-Qualified Class Names
+
+**Rule**: Always use import statements at the top of the file instead of inline fully-qualified class names, unless there is a name collision.
+
+```java
+// ❌ BAD: Using inline fully-qualified class name
+public void processMessage(String message) {
+    lenient().when(stream.listPending(any(org.redisson.api.stream.StreamPendingRangeArgs.class)))
+        .thenReturn(Mono.just(List.of()));
+}
+
+// ✅ GOOD: Using import statement
+import org.redisson.api.stream.StreamPendingRangeArgs;
+
+public void processMessage(String message) {
+    lenient().when(stream.listPending(any(StreamPendingRangeArgs.class)))
+        .thenReturn(Mono.just(List.of()));
+}
+```
+
+**Exception - Name Collision**: Only use fully-qualified names when there's a naming conflict:
+
+```java
+// ✅ ACCEPTABLE: When two classes have the same name
+import com.comet.opik.api.User;
+
+public void processUsers(com.external.lib.User externalUser, User internalUser) {
+    // Both User classes needed, one must be fully-qualified
+}
+```
+
+**Benefits**:
+- Improves code readability
+- Makes dependencies clear at the top of the file
+- Follows Java conventions
+- Easier to maintain and refactor
+
+## Related Rules
+
+- [Code Quality Guidelines](mdc:apps/opik-backend/.cursor/rules/code_quality.mdc)
+- [General Guidelines](mdc:apps/opik-backend/.cursor/rules/general.mdc)

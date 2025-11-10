@@ -295,27 +295,25 @@ export class Traces {
     }
 
     /**
-     * Close trace thread
+     * Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
      *
-     * @param {OpikApi.TraceThreadIdentifier} request
+     * @param {OpikApi.TraceThreadBatchIdentifier} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.traces.closeTraceThread({
-     *         threadId: "thread_id"
-     *     })
+     *     await client.traces.closeTraceThread()
      */
     public closeTraceThread(
-        request: OpikApi.TraceThreadIdentifier,
+        request: OpikApi.TraceThreadBatchIdentifier = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__closeTraceThread(request, requestOptions));
     }
 
     private async __closeTraceThread(
-        request: OpikApi.TraceThreadIdentifier,
+        request: OpikApi.TraceThreadBatchIdentifier = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -339,7 +337,7 @@ export class Traces {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.TraceThreadIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.TraceThreadBatchIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
@@ -401,7 +399,19 @@ export class Traces {
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePagePublic>> {
-        const { page, size, projectName, projectId, filters, truncate, sorting, exclude } = request;
+        const {
+            page,
+            size,
+            projectName,
+            projectId,
+            filters,
+            truncate,
+            stripAttachments,
+            sorting,
+            exclude,
+            fromTime,
+            toTime,
+        } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -427,12 +437,24 @@ export class Traces {
             _queryParams["truncate"] = truncate.toString();
         }
 
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
+        }
+
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
         }
 
         if (exclude != null) {
             _queryParams["exclude"] = exclude;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -661,6 +683,7 @@ export class Traces {
      * Get trace by id
      *
      * @param {string} id
+     * @param {OpikApi.GetTraceByIdRequest} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -668,15 +691,23 @@ export class Traces {
      */
     public getTraceById(
         id: string,
+        request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.TracePublic> {
-        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, request, requestOptions));
     }
 
     private async __getTraceById(
         id: string,
+        request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePublic>> {
+        const { stripAttachments } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -697,6 +728,7 @@ export class Traces {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
@@ -1577,7 +1609,7 @@ export class Traces {
         request: OpikApi.GetTraceStatsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, filters } = request;
+        const { projectId, projectName, filters, fromTime, toTime } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
             _queryParams["project_id"] = projectId;
@@ -1589,6 +1621,14 @@ export class Traces {
 
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -1960,7 +2000,8 @@ export class Traces {
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
-        const { page, size, projectName, projectId, truncate, filters, sorting } = request;
+        const { page, size, projectName, projectId, truncate, stripAttachments, filters, sorting, fromTime, toTime } =
+            request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -1982,12 +2023,24 @@ export class Traces {
             _queryParams["truncate"] = truncate.toString();
         }
 
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
+        }
+
         if (filters != null) {
             _queryParams["filters"] = filters;
         }
 
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({
@@ -2143,10 +2196,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfThreads({
      *         scores: [{
-     *                 threadId: "thread_id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 threadId: "thread_id"
      *             }]
      *     })
      */
@@ -2228,10 +2281,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfTraces({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 id: "id"
      *             }]
      *     })
      */
@@ -2467,19 +2520,17 @@ export class Traces {
      * Update thread
      *
      * @param {string} threadModelId
-     * @param {OpikApi.Comment} request
+     * @param {OpikApi.TraceThreadUpdate} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.traces.updateThread("threadModelId", {
-     *         text: "text"
-     *     })
+     *     await client.traces.updateThread("threadModelId")
      */
     public updateThread(
         threadModelId: string,
-        request: OpikApi.Comment,
+        request: OpikApi.TraceThreadUpdate = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__updateThread(threadModelId, request, requestOptions));
@@ -2487,7 +2538,7 @@ export class Traces {
 
     private async __updateThread(
         threadModelId: string,
-        request: OpikApi.Comment,
+        request: OpikApi.TraceThreadUpdate = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -2511,7 +2562,7 @@ export class Traces {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.Comment.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.TraceThreadUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

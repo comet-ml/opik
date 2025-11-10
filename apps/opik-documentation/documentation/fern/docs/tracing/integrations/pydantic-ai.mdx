@@ -1,19 +1,54 @@
+---
+title: Observability for Pydantic AI with Opik
+description: Start here to integrate Opik into your Pydantic AI-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [Pydantic AI](https://ai.pydantic.dev/) is a Python agent framework designed to
 build production grade applications with Generative AI.
 
 Pydantic AI's primary advantage is its integration of Pydantic's type-safe data
 validation, ensuring structured and reliable responses in AI applications.
 
-## Getting started
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=pydantic-ai&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=pydantic-ai&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=pydantic-ai&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
 
 To use the Pydantic AI integration with Opik, you will need to have Pydantic AI
 and logfire installed:
 
 ```bash
-pip install --upgrade --quiet pydantic-ai logfire 'logfire[httpx]'
+pip install --upgrade pydantic-ai logfire 'logfire[httpx]'
 ```
 
-In addition you will need to set the following environment variables to make
+### Configuring Pydantic AI
+
+In order to use Pydantic AI, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI. You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+
+You can set them as environment variables:
+
+```bash
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```
+
+### Configuring OpenTelemetry
+
+You will need to set the following environment variables to make
 sure the data is logged to Opik:
 
 <Tabs>
@@ -24,6 +59,7 @@ sure the data is logged to Opik:
         ```bash
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        export OTEL_METRICS_EXPORTER=none
         ```
 
         <Tip>
@@ -37,12 +73,36 @@ sure the data is logged to Opik:
             to a different workspace.
         </Tip>
     </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        export OTEL_METRICS_EXPORTER=none
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
 
     If you are self-hosting Opik, you will need to set the following environment variables:
 
     ```bash
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    export OTEL_METRICS_EXPORTER=none
     ```
 
     <Tip>
@@ -71,10 +131,30 @@ logfire.configure(
 logfire.instrument_httpx(capture_all=True)
 ```
 
-This combined with the environment variables above will log your traces to Opik:
+## Practical Example
+
+Now that everything is configured, you can create and run Pydantic AI agents:
+
+```python
+import nest_asyncio
+from pydantic_ai import Agent
+
+# Enable async support in Jupyter notebooks
+nest_asyncio.apply()
+
+# Create a simple agent
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt="Be concise, reply with one sentence.",
+)
+
+# Run the agent
+result = agent.run_sync('Where does "hello world" come from?')
+print(result.data)
+```
 
 <Frame>
-  <img src="/img/tracing/pydantic-ai.png" alt="Pydantic AI tracing" />
+  <img src="/img/cookbook/pydantic-ai_trace_cookbook.png" alt="Pydantic AI tracing" />
 </Frame>
 
 ## Advanced usage
@@ -92,3 +172,8 @@ logfire.instrument_httpx(capture_all=False)
 
 When this parameter is set to `False`, we will not log the exact request made
 to the LLM provider.
+
+## Further improvements
+
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

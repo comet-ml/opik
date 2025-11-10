@@ -15,17 +15,21 @@ on:
           - all
           - openai
           - langchain
+          - langchain_legacy
           - llama_index
           - anthropic
           - aisuite
           - haystack
           - guardrails
           - dspy
-          - crewai
+          - crewai_v0
+          - crewai_v1
           - genai
           - adk
           - adk_legacy_1_3_0
           - metrics
+          - bedrock
+          - litellm
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -46,6 +50,7 @@ jobs:
   init_environment:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       LIBS: ${{ steps.init.outputs.LIBS }}
 
@@ -65,6 +70,12 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-tests.yml
+    secrets: inherit
+  
+  langchain_legacy_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["langchain_legacy", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-langchain-legacy-tests.yml
     secrets: inherit
   
   llama_index_tests:
@@ -103,10 +114,16 @@ jobs:
     uses: ./.github/workflows/lib-dspy-tests.yml
     secrets: inherit
 
-  crewai_tests:
+  crewai_v0_tests:
     needs: [init_environment]
-    if: contains(fromJSON('["crewai", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-crewai-tests.yml
+    if: contains(fromJSON('["crewai_v0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v0-tests.yml
+    secrets: inherit
+
+  crewai_v1_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["crewai_v1", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v1-tests.yml
     secrets: inherit
   
   genai_tests:
@@ -131,4 +148,16 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["metrics", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-metrics-with-llm-judge-tests.yml
+    secrets: inherit
+
+  bedrock_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["bedrock", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-bedrock-tests.yml
+    secrets: inherit
+
+  litellm_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["litellm", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-litellm-tests.yml
     secrets: inherit

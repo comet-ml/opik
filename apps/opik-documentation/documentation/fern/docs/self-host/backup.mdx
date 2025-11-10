@@ -1,0 +1,406 @@
+---
+subtitle: Comprehensive guide for ClickHouse backup options in Opik Kubernetes deployments
+---
+
+# ClickHouse Backup Guide
+
+This guide covers the two backup options available for ClickHouse in Opik's Kubernetes deployment:
+
+1. **SQL-based Backup** - Uses ClickHouse's native `BACKUP` command with S3
+2. **ClickHouse Backup Tool** - Uses the dedicated `clickhouse-backup` tool
+
+## Overview
+
+ClickHouse backup is essential for data protection and disaster recovery. Opik provides two different approaches to handle backups, each with its own advantages:
+
+- **SQL-based Backup**: Simple, uses ClickHouse's built-in backup functionality
+- **ClickHouse Backup Tool**: More advanced, provides additional features like compression and incremental backups
+
+## Option 1: SQL-based Backup (Default)
+
+This is the default backup method that uses ClickHouse's native `BACKUP` command to create backups directly to S3-compatible storage.
+
+### Features
+
+- Uses ClickHouse's built-in `BACKUP ALL EXCEPT DATABASE system` command
+- Direct S3 upload with timestamped backup names
+- Configurable schedule via CronJob
+- Supports both AWS S3 and S3-compatible storage (like MinIO)
+
+### Configuration
+
+#### Basic Setup
+
+#### With AWS S3 Credentials
+
+Create a Kubernetes secret with your S3 credentials:
+
+```bash
+kubectl create secret generic clickhouse-backup-secret \
+  --from-literal=access_key_id=YOUR_ACCESS_KEY \
+  --from-literal=access_key_secret=YOUR_SECRET_KEY
+```
+
+Then configure the backup:
+
+```yaml
+clickhouse:
+  backup:
+    enabled: true
+    bucketURL: "https://your-bucket.s3.region.amazonaws.com"
+    secretName: "clickhouse-backup-secret"
+    schedule: "0 0 * * *"
+```
+
+#### With IAM Role (AWS EKS)
+
+For AWS EKS clusters, you can use IAM roles instead of access keys:
+
+```yaml
+clickhouse:
+  serviceAccount:
+    create: true
+    name: "opik-clickhouse"
+    annotations:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT:role/clickhouse-backup-role"
+  backup:
+    enabled: true
+    bucketURL: "https://your-bucket.s3.region.amazonaws.com"
+    schedule: "0 0 * * *"
+```
+
+**Required IAM Policy:**
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::your-bucket", "arn:aws:s3:::your-bucket/*"]
+    }
+  ]
+}
+```
+
+**Trust Relationship Policy:**
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::ACCOUNT:oidc-provider/oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID:sub": "system:serviceaccount:YOUR_NAMESPACE:opik-clickhouse",
+          "oidc.eks.REGION.amazonaws.com/id/OIDCPROVIDERID:aud": "sts.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### Custom Backup Command
+
+You can customize the backup command if needed:
+
+```yaml
+clickhouse:
+  backup:
+    enabled: true
+    bucketURL: "https://your-bucket.s3.region.amazonaws.com"
+    command:
+      - /bin/bash
+      - "-cx"
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+```
+
+### Backup Process
+
+The SQL-based backup:
+
+1. Creates a timestamped backup name (format: `backupYYYYMMDDHHMM`)
+2. Executes `BACKUP ALL EXCEPT DATABASE system TO S3(...)` command
+3. Uploads all databases except the `system` database to S3
+4. Uses ClickHouse's native backup format
+
+### Restore Process
+
+To restore from a SQL-based backup:
+
+```bash
+# Connect to ClickHouse
+kubectl exec -it deployment/clickhouse-opik-clickhouse -- clickhouse-client
+
+# Restore from S3 backup
+RESTORE ALL FROM S3('https://your-bucket.s3.region.amazonaws.com/backup202401011200/', 'ACCESS_KEY', 'SECRET_KEY');
+```
+
+## Option 2: ClickHouse Backup Tool
+
+The ClickHouse Backup Tool provides more advanced backup features including compression, incremental backups, and better restore capabilities.
+
+### Features
+
+- Advanced backup management with compression
+- Incremental backup support
+- REST API for backup operations
+- Better restore capabilities
+- Backup metadata and validation
+
+### Configuration
+
+#### Enable Backup Server
+
+```yaml
+clickhouse:
+  backupServer:
+    enabled: true
+    image: "altinity/clickhouse-backup:2.6.23"
+    port: 7171
+    env:
+      LOG_LEVEL: "info"
+      ALLOW_EMPTY_BACKUPS: true
+      API_LISTEN: "0.0.0.0:7171"
+      API_CREATE_INTEGRATION_TABLES: true
+```
+
+#### Configure S3 Storage
+
+Set up S3 configuration for the backup tool:
+
+```yaml
+clickhouse:
+  backupServer:
+    enabled: true
+    env:
+      S3_BUCKET: "your-backup-bucket"
+      S3_ACCESS_KEY: "your-access-key" # can be ignored when use role
+      S3_SECRET_KEY: "your-secret-key"
+      S3_REGION: "us-west-2"
+      S3_ENDPOINT: "https://s3.us-west-2.amazonaws.com" # Optional: for S3-compatible storage
+```
+
+#### With Kubernetes Secrets
+
+Use Kubernetes secrets for sensitive data:
+
+(can be ignored when using IAM roles)
+
+```bash
+kubectl create secret generic clickhouse-backup-tool-secret \
+  --from-literal=S3_ACCESS_KEY=YOUR_ACCESS_KEY \
+  --from-literal=S3_SECRET_KEY=YOUR_SECRET_KEY
+```
+
+```yaml
+clickhouse:
+  backupServer:
+    enabled: true
+    env:
+      S3_BUCKET: "your-backup-bucket"
+      S3_REGION: "us-west-2"
+    envFrom:
+      - secretRef:
+          name: "clickhouse-backup-tool-secret"
+```
+
+### Using the Backup Tool
+
+#### Create Backup
+
+```bash
+# Port-forward to access the backup server
+kubectl port-forward svc/clickhouse-opik-clickhouse 7171:7171
+
+# Create a backup
+curl -X POST "http://localhost:7171/backup/create?name=backup-$(date +%Y%m%d-%H%M%S)"
+
+# List available backups
+curl "http://localhost:7171/backup/list"
+```
+
+#### Upload Backup to S3
+
+```bash
+# Upload backup to S3
+curl -X POST "http://localhost:7171/backup/upload/backup-20240101-120000"
+```
+
+#### Download and Restore
+
+```bash
+# Download backup from S3
+curl -X POST "http://localhost:7171/backup/download/backup-20240101-120000"
+
+# Restore backup
+curl -X POST "http://localhost:7171/backup/restore/backup-20240101-120000"
+```
+
+### Automated Backup with CronJob
+
+You can create a custom CronJob to automate the backup tool:
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clickhouse-backup-tool-job
+spec:
+  schedule: "0 2 * * *" # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup-tool
+              image: altinity/clickhouse-backup:2.6.23
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  BACKUP_NAME="backup-$(date +%Y%m%d-%H%M%S)"
+                  curl -X POST "http://clickhouse-opik-clickhouse:7171/backup/create?name=$BACKUP_NAME"
+                  sleep 30
+                  curl -X POST "http://clickhouse-opik-clickhouse:7171/backup/upload/$BACKUP_NAME"
+          restartPolicy: OnFailure
+```
+
+## Comparison
+
+| Feature                 | SQL-based Backup | ClickHouse Backup Tool |
+| ----------------------- | ---------------- | ---------------------- |
+| **Setup Complexity**    | Simple           | Moderate               |
+| **Compression**         | No               | Yes                    |
+| **Incremental Backups** | No               | Yes                    |
+| **Backup Validation**   | Basic            | Advanced               |
+| **REST API**            | No               | Yes                    |
+| **Restore Flexibility** | Basic            | Advanced               |
+| **Resource Usage**      | Low              | Moderate               |
+| **S3 Compatibility**    | Native           | Native                 |
+
+## Best Practices
+
+### General Recommendations
+
+1. **Test Restores**: Regularly test backup restoration procedures
+2. **Monitor Backup Jobs**: Set up monitoring for backup job failures
+3. **Retention Policy**: Implement backup retention policies
+4. **Cross-Region**: Consider cross-region backup replication for disaster recovery
+
+### Security
+
+1. **Access Control**: Use IAM roles when possible instead of access keys
+2. **Encryption**: Enable S3 server-side encryption for backup storage
+3. **Network Security**: Use VPC endpoints for S3 access when available
+
+### Performance
+
+1. **Schedule**: Run backups during low-traffic periods
+2. **Resource Limits**: Set appropriate resource limits for backup jobs
+3. **Storage Class**: Use appropriate S3 storage classes for cost optimization
+
+## Troubleshooting
+
+### Common Issues
+
+#### Backup Job Fails
+
+```bash
+# Check backup job logs
+kubectl logs -l app=clickhouse-backup
+
+# Check CronJob status
+kubectl get cronjobs
+kubectl describe cronjob clickhouse-backup
+```
+
+#### S3 Access Issues
+
+```bash
+# Test S3 connectivity
+kubectl exec -it deployment/clickhouse-opik-clickhouse -- \
+  clickhouse-client --query "SELECT * FROM system.disks WHERE name='s3'"
+```
+
+#### Backup Tool API Issues
+
+```bash
+# Check backup server logs
+kubectl logs -l app=clickhouse-backup-server
+
+# Test API connectivity
+kubectl port-forward svc/clickhouse-opik-clickhouse 7171:7171
+curl "http://localhost:7171/backup/list"
+```
+
+### Monitoring
+
+Set up monitoring for backup operations:
+
+```yaml
+# Example Prometheus alerts
+- alert: ClickHouseBackupFailed
+  expr: increase(kube_job_status_failed{job_name=~".*clickhouse-backup.*"}[5m]) > 0
+  for: 0m
+  labels:
+    severity: warning
+  annotations:
+    summary: "ClickHouse backup job failed"
+    description: "ClickHouse backup job {{ $labels.job_name }} has failed"
+```
+
+## Migration Between Backup Methods
+
+### From SQL-based to ClickHouse Backup Tool
+
+1. Enable the backup server:
+
+   ```yaml
+   clickhouse:
+     backupServer:
+       enabled: true
+   ```
+
+2. Create initial backup with the tool
+3. Disable SQL-based backup:
+   ```yaml
+   clickhouse:
+     backup:
+       enabled: false
+   ```
+
+### From ClickHouse Backup Tool to SQL-based
+
+1. Disable backup server:
+
+   ```yaml
+   clickhouse:
+     backupServer:
+       enabled: false
+   ```
+
+2. Enable SQL-based backup:
+   ```yaml
+   clickhouse:
+     backup:
+       enabled: true
+   ```
+
+## Support
+
+For additional help with ClickHouse backups:
+
+- [ClickHouse Backup Documentation](https://github.com/Altinity/clickhouse-backup)
+- [ClickHouse Backup Command Reference](https://clickhouse.com/docs/operations/backup)
+- [Opik Community Support](https://github.com/comet-ml/opik/issues)

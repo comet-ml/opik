@@ -20,12 +20,20 @@ const useDatasetCreateMutation = () => {
         ...dataset,
       });
 
-      return data
-        ? data
-        : {
-            ...dataset,
-            id: extractIdFromLocation(headers?.location),
-          };
+      if (data) {
+        return data;
+      }
+
+      const extractedId = extractIdFromLocation(headers?.location);
+
+      if (!extractedId) {
+        throw new Error("Failed to create dataset: No ID returned from server");
+      }
+
+      return {
+        ...dataset,
+        id: extractedId,
+      };
     },
     onError: (error: AxiosError) => {
       const message = get(

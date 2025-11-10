@@ -11,7 +11,7 @@ const Checkbox = React.forwardRef<
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
-      "peer size-4 shrink-0 rounded-sm border border-border ring-offset-background focus-visible:outline-none focus-visible:border-primary-active focus-visible:data-[state=checked]:border-primary-active focus-visible:data-[state=checked]:bg-primary-active  focus-visible:data-[state=indeterminate]:border-primary-active focus-visible:data-[state=indeterminate]:bg-primary-active  disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:text-primary-foreground",
+      "peer size-4 shrink-0 rounded-sm border border-border ring-offset-background focus-visible:outline-none focus-visible:border-primary-active focus-visible:data-[state=checked]:border-primary-active focus-visible:data-[state=checked]:bg-primary-active  focus-visible:data-[state=indeterminate]:border-primary-active focus-visible:data-[state=indeterminate]:bg-primary-active  disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground data-[state=checked]:dark:text-foreground data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:text-primary-foreground data-[state=indeterminate]:dark:text-foreground",
       className,
     )}
     checked={checked}

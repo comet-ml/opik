@@ -1,8 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Info, RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
+  GroupingState,
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -37,6 +44,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { Filter } from "@/types/filters";
+import { Optimization } from "@/types/optimizations";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
@@ -52,26 +60,35 @@ import { Separator } from "@/components/ui/separator";
 import useGroupedOptimizationsList, {
   GroupedOptimization,
 } from "@/hooks/useGroupedOptimizationsList";
+import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
-  checkIsMoreRowId,
-  generateGroupedNameColumDef,
-  generateGroupedCellDef,
-  getIsCustomRow,
+  generateActionsColumDef,
+  generateGroupedRowCellDef,
+  generateDataRowCellDef,
+  getIsGroupRow,
   getRowId,
   getSharedShiftCheckboxClickHandler,
-  GROUPING_CONFIG,
   renderCustomRow,
-} from "@/components/pages-shared/experiments/table";
-import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
+} from "@/components/shared/DataTable/utils";
+import { checkIsGroupRowType } from "@/lib/groups";
+import {
+  DEFAULT_GROUPS_PER_PAGE,
+  DELETED_DATASET_ID,
+  GROUPING_COLUMN,
+} from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
 const COLUMNS_ORDER_KEY = "optimizations-columns-order";
+
+export const GROUPING_CONFIG = {
+  groupedColumnMode: false as const,
+  grouping: [GROUPING_COLUMN] as GroupingState,
+};
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
   {
@@ -245,19 +262,32 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const selectedRows: Array<GroupedOptimization> = useMemo(() => {
     return optimizations.filter(
-      (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
+      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
     );
   }, [rowSelection, optimizations]);
 
   const columns = useMemo(() => {
     return [
-      generateGroupedNameColumDef<GroupedOptimization>(
+      generateDataRowCellDef<GroupedOptimization>(
+        {
+          id: COLUMN_NAME_ID,
+          label: "Name",
+          type: COLUMN_TYPE.string,
+          cell: ResourceCell as never,
+          customMeta: {
+            nameKey: "name",
+            idKey: "dataset_id",
+            resource: RESOURCE_TYPE.optimization,
+            getSearch: (data: Optimization) => ({
+              optimizations: [data.id],
+            }),
+          },
+          headerCheckbox: true,
+          size: 200,
+        },
         checkboxClickHandler,
-        false,
-        RESOURCE_TYPE.optimization,
-        "optimizations",
       ),
-      generateGroupedCellDef<GroupedOptimization, unknown>(
+      generateGroupedRowCellDef<GroupedOptimization, unknown>(
         {
           id: GROUPING_COLUMN,
           label: "Dataset",
@@ -309,9 +339,29 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [navigate, workspaceName],
   );
 
-  const expandingConfig = useExpandingConfig({
-    groupIds,
-  });
+  const expandingConfig = useExpandingConfig({});
+
+  const openGroupsRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    const updateForExpandedState: Record<string, boolean> = {};
+    groupIds.forEach((groupId) => {
+      const id = `${GROUPING_COLUMN}:${groupId}`;
+      if (!openGroupsRef.current[id]) {
+        openGroupsRef.current[id] = true;
+        updateForExpandedState[id] = true;
+      }
+    });
+
+    if (Object.keys(updateForExpandedState).length) {
+      expandingConfig.setExpanded((state) => {
+        if (state === true) return state;
+        return {
+          ...state,
+          ...updateForExpandedState,
+        };
+      });
+    }
+  }, [expandingConfig, groupIds]);
 
   const handleNewOptimizationClick = useCallback(() => {
     setOpenDialog(true);
@@ -319,11 +369,57 @@ const OptimizationsPage: React.FunctionComponent = () => {
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedOptimization>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
+    (row: Row<GroupedOptimization>) => {
+      return renderCustomRow(row, setGroupLimit);
     },
     [setGroupLimit],
   );
+
+  const chartsData = useMemo(() => {
+    const groupsMap: Record<string, ChartData> = {};
+    const indexMap: Record<string, number> = {};
+    let index = 0;
+
+    optimizations.forEach((optimization) => {
+      const key = optimization[GROUPING_COLUMN];
+      if (key !== DELETED_DATASET_ID) {
+        if (!groupsMap[key]) {
+          indexMap[key] = index;
+          groupsMap[key] = {
+            id: key,
+            name: optimization.dataset.name,
+            data: [],
+            lines: [],
+          };
+          index += 1;
+        }
+
+        // Only include the main objective score in the chart
+        const objectiveName = optimization.objective_name;
+        const objectiveScore = optimization.feedback_scores?.find(
+          (score) => score.name === objectiveName,
+        );
+
+        groupsMap[key].data.unshift({
+          entityId: optimization.id,
+          entityName: optimization.name,
+          createdDate: formatDate(optimization.created_at),
+          scores: objectiveScore
+            ? { [objectiveScore.name]: objectiveScore.value }
+            : {},
+        });
+
+        // Only add the objective name to lines
+        if (objectiveName && !groupsMap[key].lines.includes(objectiveName)) {
+          groupsMap[key].lines.push(objectiveName);
+        }
+      }
+    });
+
+    return Object.values(groupsMap).sort(
+      (g1, g2) => indexMap[g1.id] - indexMap[g2.id],
+    );
+  }, [optimizations]);
 
   if (isPending) {
     return <Loader />;
@@ -381,20 +477,20 @@ const OptimizationsPage: React.FunctionComponent = () => {
             size="sm"
             onClick={handleNewOptimizationClick}
           >
-            <Info className="mr-2 size-3.5" />
+            <Info className="mr-1.5 size-3.5" />
             Create new optimization
           </Button>
         </div>
       </div>
       {Boolean(optimizations.length) && (
-        <FeedbackScoresChartsWrapper entities={optimizations} />
+        <FeedbackScoresChartsWrapper chartsData={chartsData} />
       )}
       <DataTable
         columns={columns}
         data={optimizations}
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
+        getIsCustomRow={getIsGroupRow}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

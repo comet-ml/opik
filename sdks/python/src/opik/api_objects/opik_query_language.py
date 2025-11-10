@@ -26,15 +26,31 @@ COLUMNS = {
     "created_by": "string",
     "thread_id": "string",
     "total_estimated_cost": "number",
+    "type": "string",
+    "model": "string",
+    "provider": "string",
 }
 
 SUPPORTED_OPERATORS = {
-    "id": ["=", "contains", "not_contains"],
-    "name": ["=", "contains", "not_contains"],
+    "id": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
+    "name": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
     "status": ["=", "contains", "not_contains"],
     "start_time": ["=", ">", "<", ">=", "<="],
     "end_time": ["=", ">", "<", ">=", "<="],
-    "input": ["=", "contains", "not_contains"],
+    "input": [
+        "=",
+        "contains",
+        "not_contains",
+    ],
     "output": ["=", "contains", "not_contains"],
     "metadata": ["=", "contains", ">", "<"],
     "feedback_scores": ["=", ">", "<", ">=", "<="],
@@ -44,9 +60,67 @@ SUPPORTED_OPERATORS = {
     "usage.completion_tokens": ["=", "!=", ">", "<", ">=", "<="],
     "duration": ["=", "!=", ">", "<", ">=", "<="],
     "number_of_messages": ["=", "!=", ">", "<", ">=", "<="],
-    "created_by": ["=", "contains", "not_contains"],
-    "thread_id": ["=", "contains", "not_contains"],
+    "created_by": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
+    "thread_id": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
     "total_estimated_cost": ["=", "!=", ">", "<", ">=", "<="],
+    "type": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
+    "model": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
+    "provider": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
+    "default": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
 }
 
 
@@ -188,15 +262,24 @@ class OpikQueryLanguage:
                         "key": "",
                         "type": COLUMNS[f"usage.{key}"],
                     }
-            else:
+            elif field in COLUMNS:
                 return {"field": field, "key": key, "type": COLUMNS[field]}
+            else:
+                # defaults to string
+                return {"field": field, "key": key, "type": "string"}
 
-        else:
+        elif field in COLUMNS:
             return {"field": field, "key": "", "type": COLUMNS[field]}
+        else:
+            # defaults to string
+            return {"field": field, "key": "", "type": "string"}
 
     def _parse_operator(self, parsed_field: str) -> Dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
+
+        if parsed_field not in SUPPORTED_OPERATORS:
+            parsed_field = "default"
 
         # Parse the operator
         if self.query_string[self._cursor] == "=":
@@ -226,7 +309,7 @@ class OpikQueryLanguage:
                 self._cursor += 1
 
             operator = self.query_string[start : self._cursor]
-            if operator not in ["contains", "not_contains"]:
+            if operator not in SUPPORTED_OPERATORS[parsed_field]:
                 raise ValueError(
                     f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
                 )

@@ -6,9 +6,10 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment_public import CommentPublic
+from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
 from .feedback_score_average_public import FeedbackScoreAveragePublic
-from .json_node_public import JsonNodePublic
+from .json_list_string_public import JsonListStringPublic
 from .percentage_values_public import PercentageValuesPublic
 from .prompt_version_link_public import PromptVersionLinkPublic
 
@@ -18,7 +19,7 @@ class ExperimentPublic(UniversalBaseModel):
     dataset_name: str
     dataset_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
-    metadata: typing.Optional[JsonNodePublic] = None
+    metadata: typing.Optional[JsonListStringPublic] = None
     type: typing.Optional[ExperimentPublicType] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
@@ -32,6 +33,7 @@ class ExperimentPublic(UniversalBaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
+    status: typing.Optional[ExperimentPublicStatus] = None
     prompt_version: typing.Optional[PromptVersionLinkPublic] = None
     prompt_versions: typing.Optional[typing.List[PromptVersionLinkPublic]] = None
 

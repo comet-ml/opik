@@ -50,6 +50,7 @@ public class WorkspacesResource {
     private final @NonNull WorkspaceConfigurationService workspaceConfigurationService;
     private final @NonNull Provider<RequestContext> requestContext;
 
+    @Deprecated
     @POST
     @Path("/metrics/summaries")
     @Operation(operationId = "metricsSummary", summary = "Get metrics summary", description = "Get metrics summary", responses = {
@@ -72,6 +73,7 @@ public class WorkspacesResource {
         return Response.ok().entity(response).build();
     }
 
+    @Deprecated
     @POST
     @Path("/metrics")
     @Operation(operationId = "getMetric", summary = "Get metric daily data", description = "Get metric daily data", responses = {

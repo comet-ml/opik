@@ -14,4 +14,6 @@ export interface GetSpanStatsRequest {
     traceId?: string;
     type?: OpikApi.GetSpanStatsRequestType;
     filters?: string;
+    fromTime?: Date;
+    toTime?: Date;
 }

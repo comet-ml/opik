@@ -1,0 +1,162 @@
+---
+title: "Hierarchical Reflective Optimizer"
+subtitle: "Hierarchical root cause analysis for targeted prompt improvement"
+description: "Learn how to use the Hierarchical Reflective Optimizer to improve prompts through systematic root cause analysis of failure modes and targeted refinement."
+---
+
+The `HierarchicalReflectiveOptimizer` uses hierarchical root cause analysis to identify and address
+specific failure modes in your prompts. It analyzes evaluation results, identifies patterns in
+failures, and generates targeted improvements to address each failure mode systematically.
+
+<Note>
+  `HierarchicalReflectiveOptimizer` is ideal when you have a complex prompt that you want to refine
+  based on understanding *why* it's failing. Unlike optimizers that generate many random variations,
+  this optimizer systematically analyzes failures, identifies root causes, and makes surgical
+  improvements to address each specific issue.
+</Note>
+
+## How It Works
+
+The Hiearchical Reflective Optimizer has been developed by the Opik team to improve prompts that
+might have already gone through a few rounds of manual prompt engineering. It focuses on identifying
+why a prompt is failing and then updating the prompts to address the issues.
+
+As datasets can be large, we split the analysis into batches and analyze them in parallel. We then
+synthesize the findings across all batches to identify the core issues with the prompt.
+
+<Frame>
+  <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="Hierarchical Reflective Optimizer" />
+</Frame>
+
+<Tip>
+The optimizer is open-source, you can check out the root cause analysis code and prompts in the
+[Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/hierarchical_reflective_optimizer).
+</Tip>
+
+## Quickstart
+
+You can use the `HierarchicalReflectiveOptimizer` to optimize a prompt:
+
+```python maxLines=1000
+from opik_optimizer import HierarchicalReflectiveOptimizer, ChatPrompt, datasets
+from opik.evaluation.metrics.score_result import ScoreResult
+
+# 1. Define your evaluation dataset
+dataset = datasets.hotpot_300()  # or use your own dataset
+
+# 2. Configure the evaluation metric (MUST return reasons!)
+def answer_quality_metric(dataset_item, llm_output):
+    reference = dataset_item.get("answer", "")
+
+    # Your scoring logic
+    is_correct = reference.lower() in llm_output.lower()
+    score = 1.0 if is_correct else 0.0
+
+    # IMPORTANT: Provide detailed reasoning
+    if is_correct:
+        reason = f"Output contains the correct answer: '{reference}'"
+    else:
+        reason = f"Output does not contain expected answer '{reference}'. Output was too vague or incorrect."
+
+    return ScoreResult(
+        name="answer_quality",
+        value=score,
+        reason=reason  # Critical for root cause analysis!
+    )
+
+# 3. Define your initial prompt
+initial_prompt = ChatPrompt(
+    project_name="reflective_optimization",
+    messages=[
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that answers questions accurately."
+        },
+        {
+            "role": "user",
+            "content": "Question: {question}\n\nProvide a concise answer."
+        }
+    ]
+)
+
+# 4. Initialize the HierarchicalReflectiveOptimizer
+optimizer = HierarchicalReflectiveOptimizer(
+    model="gpt-4o",
+    n_threads=8,
+    max_parallel_batches=5,
+    seed=42,
+    model_parameters={"temperature": 0.7}
+)
+
+# 5. Run the optimization
+optimization_result = optimizer.optimize_prompt(
+    prompt=initial_prompt,
+    dataset=dataset,
+    metric=answer_quality_metric,
+    n_samples=100,
+    max_trials=5,
+    max_retries=2
+)
+
+# 6. View the results
+optimization_result.display()
+```
+
+
+## Configuration Options
+
+### Optimizer parameters
+
+The optimizer has the following parameters:
+
+
+<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
+<ParamField path="n_threads" type="int" optional={true} defaultValue="12" />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
+<ParamField path="max_parallel_batches" type="int" optional={true} defaultValue="5" />
+<ParamField path="batch_size" type="int" optional={true} defaultValue="25" />
+<ParamField path="convergence_threshold" type="float" optional={true} defaultValue="0.01" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
+
+### `optimize_prompt` parameters
+
+The `optimize_prompt` method has the following parameters:
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
+<ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="project_name" type="str" optional={true} defaultValue="Optimization" />
+<ParamField path="max_trials" type="int" optional={true} defaultValue="5" />
+<ParamField path="max_retries" type="int" optional={true} defaultValue="2" />
+<ParamField path="kwargs" type="Any" />
+
+### Model Support
+
+There are two models to consider when using the `HierarchicalReflectiveOptimizer`:
+- `HierarchicalReflectiveOptimizer.model`: The model used for the root cause analysis and failure mode synthesis.
+- `ChatPrompt.model`: The model used to evaluate the prompt.
+
+The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
+`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
+using the `model_parameters` parameter:
+
+```python
+optimizer = HierarchicalReflectiveOptimizer(
+    model="anthropic/claude-3-opus-20240229",
+    model_parameters={
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
+)
+```
+
+## Next Steps
+
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

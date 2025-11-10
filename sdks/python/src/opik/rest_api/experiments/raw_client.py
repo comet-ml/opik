@@ -12,8 +12,10 @@ from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
+from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from ..types.experiment_group_response import ExperimentGroupResponse
 from ..types.experiment_item import ExperimentItem
 from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -22,8 +24,12 @@ from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import 
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
-from ..types.json_node_write import JsonNodeWrite
+from ..types.json_list_string_write import JsonListStringWrite
+from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
+from .types.experiment_update_status import ExperimentUpdateStatus
+from .types.experiment_update_type import ExperimentUpdateType
+from .types.experiment_write_status import ExperimentWriteStatus
 from .types.experiment_write_type import ExperimentWriteType
 
 # this is used as the default value for optional parameters
@@ -131,9 +137,10 @@ class RawExperimentsClient:
         dataset_name: str,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
+        status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -149,11 +156,13 @@ class RawExperimentsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         type : typing.Optional[ExperimentWriteType]
 
         optimization_id : typing.Optional[str]
+
+        status : typing.Optional[ExperimentWriteStatus]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -173,9 +182,12 @@ class RawExperimentsClient:
                 "id": id,
                 "dataset_name": dataset_name,
                 "name": name,
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "type": type,
                 "optimization_id": optimization_id,
+                "status": status,
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version, annotation=PromptVersionLinkWrite, direction="write"
                 ),
@@ -319,6 +331,7 @@ class RawExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -331,6 +344,9 @@ class RawExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -345,6 +361,7 @@ class RawExperimentsClient:
             json={
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
+                "experiment_id": experiment_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
                     annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
@@ -362,6 +379,17 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -495,6 +523,121 @@ class RawExperimentsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ExperimentGroupAggregationsResponse]:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ExperimentGroupAggregationsResponse]
+            Experiment groups with aggregations
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/groups/aggregations",
+            method="GET",
+            params={
+                "groups": groups,
+                "types": types,
+                "name": name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentGroupAggregationsResponse,
+                    parse_obj_as(
+                        type_=ExperimentGroupAggregationsResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def finish_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Finish experiments and trigger alert events
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/finish",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[ExperimentPublic]:
@@ -528,6 +671,84 @@ class RawExperimentsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def update_experiment(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNode] = OMIT,
+        type: typing.Optional[ExperimentUpdateType] = OMIT,
+        status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update experiment by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNode]
+
+        type : typing.Optional[ExperimentUpdateType]
+
+        status : typing.Optional[ExperimentUpdateStatus]
+            The status of the experiment
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/experiments/{jsonable_encoder(id)}",
+            method="PATCH",
+            json={
+                "name": name,
+                "metadata": metadata,
+                "type": type,
+                "status": status,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -820,9 +1041,10 @@ class AsyncRawExperimentsClient:
         dataset_name: str,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
-        metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        metadata: typing.Optional[JsonListStringWrite] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
+        status: typing.Optional[ExperimentWriteStatus] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -838,11 +1060,13 @@ class AsyncRawExperimentsClient:
 
         name : typing.Optional[str]
 
-        metadata : typing.Optional[JsonNodeWrite]
+        metadata : typing.Optional[JsonListStringWrite]
 
         type : typing.Optional[ExperimentWriteType]
 
         optimization_id : typing.Optional[str]
+
+        status : typing.Optional[ExperimentWriteStatus]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -862,9 +1086,12 @@ class AsyncRawExperimentsClient:
                 "id": id,
                 "dataset_name": dataset_name,
                 "name": name,
-                "metadata": metadata,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
                 "type": type,
                 "optimization_id": optimization_id,
+                "status": status,
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version, annotation=PromptVersionLinkWrite, direction="write"
                 ),
@@ -1008,6 +1235,7 @@ class AsyncRawExperimentsClient:
         experiment_name: str,
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+        experiment_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1020,6 +1248,9 @@ class AsyncRawExperimentsClient:
         dataset_name : str
 
         items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
+
+        experiment_id : typing.Optional[str]
+            Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1034,6 +1265,7 @@ class AsyncRawExperimentsClient:
             json={
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
+                "experiment_id": experiment_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
                     annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
@@ -1051,6 +1283,17 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -1184,6 +1427,121 @@ class AsyncRawExperimentsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def find_experiment_groups_aggregations(
+        self,
+        *,
+        groups: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ExperimentGroupAggregationsResponse]:
+        """
+        Find experiments grouped by specified fields with aggregation metrics
+
+        Parameters
+        ----------
+        groups : typing.Optional[str]
+
+        types : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ExperimentGroupAggregationsResponse]
+            Experiment groups with aggregations
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/groups/aggregations",
+            method="GET",
+            params={
+                "groups": groups,
+                "types": types,
+                "name": name,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExperimentGroupAggregationsResponse,
+                    parse_obj_as(
+                        type_=ExperimentGroupAggregationsResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def finish_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Finish experiments and trigger alert events
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/finish",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[ExperimentPublic]:
@@ -1217,6 +1575,84 @@ class AsyncRawExperimentsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def update_experiment(
+        self,
+        id: str,
+        *,
+        name: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[JsonNode] = OMIT,
+        type: typing.Optional[ExperimentUpdateType] = OMIT,
+        status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update experiment by id
+
+        Parameters
+        ----------
+        id : str
+
+        name : typing.Optional[str]
+
+        metadata : typing.Optional[JsonNode]
+
+        type : typing.Optional[ExperimentUpdateType]
+
+        status : typing.Optional[ExperimentUpdateStatus]
+            The status of the experiment
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/experiments/{jsonable_encoder(id)}",
+            method="PATCH",
+            json={
+                "name": name,
+                "metadata": metadata,
+                "type": type,
+                "status": status,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),

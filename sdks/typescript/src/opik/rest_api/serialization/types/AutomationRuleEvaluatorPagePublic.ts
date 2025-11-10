@@ -15,6 +15,10 @@ export const AutomationRuleEvaluatorPagePublic: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     content: core.serialization.list(AutomationRuleEvaluatorObjectPublic).optional(),
+    sortableBy: core.serialization.property(
+        "sortable_by",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
 });
 
 export declare namespace AutomationRuleEvaluatorPagePublic {
@@ -23,5 +27,6 @@ export declare namespace AutomationRuleEvaluatorPagePublic {
         size?: number | null;
         total?: number | null;
         content?: AutomationRuleEvaluatorObjectPublic.Raw[] | null;
+        sortable_by?: string[] | null;
     }
 }

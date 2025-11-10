@@ -1,8 +1,13 @@
 ## Details
 
+## Change checklist
+- [ ] User facing
+- [ ] Documentation update
+
 ## Issues
 
-Resolves #
+- Resolves #
+- OPIK-
 
 ## Testing
 

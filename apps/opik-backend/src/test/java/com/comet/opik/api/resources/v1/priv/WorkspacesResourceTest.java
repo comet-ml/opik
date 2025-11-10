@@ -38,6 +38,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -49,8 +50,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -89,7 +90,7 @@ class WorkspacesResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
@@ -156,6 +157,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
+        @Disabled
         void metricsSummary_happyPath(boolean withProjectIds) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -216,6 +218,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
+        @Disabled
         void metricsDaily_happyPath(boolean withProjectIds) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();

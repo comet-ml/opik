@@ -8,14 +8,11 @@ type UseDebouncedValueArgs = {
   onChange?: () => void;
 };
 export const useDebouncedValue = ({
-  initialValue,
   onDebouncedChange,
   delay = 300,
   onChange,
 }: UseDebouncedValueArgs) => {
-  const [inputValue, setInputValue] = useState<string | undefined>(
-    initialValue,
-  );
+  const [inputValue, setInputValue] = useState<string | undefined>();
 
   const debouncedCallback = useMemo(
     () => debounce(onDebouncedChange, delay),
@@ -32,18 +29,14 @@ export const useDebouncedValue = ({
     [debouncedCallback, onChange],
   );
 
-  const resetValue = useCallback(() => {
-    setInputValue("");
-  }, []);
-
   const onReset = useCallback(() => {
-    resetValue();
+    setInputValue("");
     debouncedCallback("");
-  }, [debouncedCallback, resetValue]);
+  }, [debouncedCallback]);
 
   return {
-    resetValue,
     value: inputValue,
+    setInputValue,
     onChange: handleInputChange,
     onReset,
   };

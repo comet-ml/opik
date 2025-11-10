@@ -6,10 +6,9 @@ import com.comet.opik.api.attachment.AttachmentInfoHolder;
 import com.comet.opik.api.attachment.AttachmentSearchCriteria;
 import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.ClickhouseUtils;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -20,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -43,6 +41,8 @@ public interface AttachmentDAO {
     Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(EntityType entityType, Set<UUID> entityIds);
 
     Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    Mono<Long> deleteByFileNames(EntityType entityType, Set<UUID> entityIds, Set<String> fileNames);
 }
 
 @Singleton
@@ -62,7 +62,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
                 created_by,
                 last_updated_by,
                 last_updated_at
-            ) <settings_clause>
+            )
             VALUES
             (
                  :entity_id,
@@ -130,6 +130,15 @@ class AttachmentDAOImpl implements AttachmentDAO {
             ;
             """;
 
+    private static final String DELETE_ATTACHMENTS_BY_FILE_NAMES = """
+            DELETE FROM attachments
+            WHERE workspace_id = :workspace_id
+              AND entity_id IN :entity_ids
+              AND entity_type = :entity_type
+              AND file_name IN :file_names
+            ;
+            """;
+
     private static final String ATTACHMENTS_BY_ENTITY_IDS = """
             SELECT container_id, entity_id, file_name
             FROM attachments
@@ -140,18 +149,13 @@ class AttachmentDAOImpl implements AttachmentDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     public Mono<Long> addAttachment(@NonNull AttachmentInfoHolder attachmentInfo,
             @NonNull String mimeType, long fileSize) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(INSERT_ATTACHMENT);
-
-            ClickhouseUtils.checkAsyncConfig(template, opikConfiguration.getAsyncInsert());
-
-            var statement = connection.createStatement(template.render());
+            var statement = connection.createStatement(INSERT_ATTACHMENT);
 
             statement.bind("entity_id", attachmentInfo.entityId())
                     .bind("entity_type", attachmentInfo.entityType().getValue())
@@ -198,6 +202,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(@NonNull EntityType entityType,
             @NonNull Set<UUID> entityIds) {
         if (CollectionUtils.isEmpty(entityIds)) {
@@ -234,6 +239,27 @@ class AttachmentDAOImpl implements AttachmentDAO {
 
             statement.bind("entity_ids", entityIds.toArray(UUID[]::new))
                     .bind("entity_type", entityType.getValue());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> deleteByFileNames(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds,
+            @NonNull Set<String> fileNames) {
+        if (CollectionUtils.isEmpty(entityIds) || CollectionUtils.isEmpty(fileNames)) {
+            return Mono.just(0L);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_ATTACHMENTS_BY_FILE_NAMES);
+            statement
+                    .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                    .bind("entity_type", entityType.getValue())
+                    .bind("file_names", fileNames.toArray(String[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)

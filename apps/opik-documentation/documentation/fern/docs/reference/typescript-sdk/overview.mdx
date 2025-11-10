@@ -1,6 +1,45 @@
+The Opik TypeScript SDK provides a powerful and easy-to-use interface for tracing, monitoring, and debugging your JavaScript and TypeScript applications. It offers comprehensive observability for LLM applications, agent workflows, and AI-powered systems.
+
+## Integrations
+
+Opik provides seamless integrations with popular JavaScript/TypeScript frameworks and libraries:
+
+**Frameworks:**
+
+- **[Agno](/integrations/agno)** - Trace and monitor your Agno AI agent applications
+- **[BeeAI](/integrations/beeai)** - Trace and monitor your BeeAI agent applications
+- **[LangChain](/integrations/langchainjs)** - Trace and monitor your LangChain applications, including chains, agents, tools, and retrievers
+- **[Mastra](/integrations/mastra)** - Trace and monitor your Mastra AI applications
+- **[Vercel AI SDK](/integrations/vercel-ai-sdk)** - Integrate Opik with Vercel AI SDK for monitoring AI-powered applications
+
+**Model Providers:**
+
+- **[Cloudflare Workers AI](/integrations/cloudflare-workers-ai)** - Trace and monitor your Cloudflare Workers AI applications
+- **[Gemini](/integrations/gemini-typescript)** - Trace and monitor your applications using the Google Generative AI Node.js SDK
+- **[OpenAI](/integrations/openai-typescript)** - Trace and monitor your applications using the official OpenAI Node.js SDK
+
+For a complete list of TypeScript/JavaScript integrations and other language integrations, see the [Integrations Overview](/integrations/overview).
+
 ## Installation
 
-You can install the `opik` package using your favorite package manager.
+### Option 1: Using the Opik TS (Recommended)
+
+The fastest way to get started is using the [Opik TS](/reference/typescript-sdk/opik-ts), an interactive CLI tool that sets up Opik automatically in your project:
+
+```bash
+npx opik-ts configure
+```
+
+The CLI will:
+
+- Detect your project setup
+- Install Opik SDK and integration packages
+- Configure environment variables
+- Set up Opik client for your LLM integrations
+
+### Option 2: Manual Installation
+
+You can also install the `opik` package manually using your favorite package manager:
 
 ```bash
 npm install opik
@@ -38,7 +77,10 @@ const client = new Opik({
 
 ## Usage
 
-<Tip>You can find the full Typescript reference documentation [here](https://www.jsdocs.io/package/opik).</Tip>
+<Tip>
+  You can find the full Typescript reference documentation
+  [here](https://www.jsdocs.io/package/opik).
+</Tip>
 
 ```typescript
 import { Opik } from "opik";

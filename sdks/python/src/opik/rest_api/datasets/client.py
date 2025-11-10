@@ -4,6 +4,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.dataset_expansion_response import DatasetExpansionResponse
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
@@ -11,6 +12,8 @@ from ..types.dataset_item_write import DatasetItemWrite
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
+from ..types.project_stats_public import ProjectStatsPublic
+from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -176,6 +179,45 @@ class DatasetsClient:
         """
         _response = self._raw_client.create_or_update_dataset_items(
             items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import TraceEnrichmentOptions
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.create_dataset_items_from_traces(dataset_id='dataset_id', trace_ids=['trace_ids'], enrichment_options=TraceEnrichmentOptions(), )
+        """
+        _response = self._raw_client.create_dataset_items_from_traces(
+            dataset_id, trace_ids=trace_ids, enrichment_options=enrichment_options, request_options=request_options
         )
         return _response.data
 
@@ -349,6 +391,64 @@ class DatasetsClient:
         _response = self._raw_client.delete_datasets_batch(ids=ids, request_options=request_options)
         return _response.data
 
+    def expand_dataset(
+        self,
+        id: str,
+        *,
+        model: str,
+        sample_count: typing.Optional[int] = OMIT,
+        preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
+        variation_instructions: typing.Optional[str] = OMIT,
+        custom_prompt: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetExpansionResponse:
+        """
+        Generate synthetic dataset samples using LLM based on existing data patterns
+
+        Parameters
+        ----------
+        id : str
+
+        model : str
+            The model to use for synthetic data generation
+
+        sample_count : typing.Optional[int]
+            Number of synthetic samples to generate
+
+        preserve_fields : typing.Optional[typing.Sequence[str]]
+            Fields to preserve patterns from original data
+
+        variation_instructions : typing.Optional[str]
+            Additional instructions for data variation
+
+        custom_prompt : typing.Optional[str]
+            Custom prompt to use for generation instead of auto-generated one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetExpansionResponse
+            Generated synthetic samples
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.expand_dataset(id='id', model='gpt-4', )
+        """
+        _response = self._raw_client.expand_dataset(
+            id,
+            model=model,
+            sample_count=sample_count,
+            preserve_fields=preserve_fields,
+            variation_instructions=variation_instructions,
+            custom_prompt=custom_prompt,
+            request_options=request_options,
+        )
+        return _response.data
+
     def find_dataset_items_with_experiment_items(
         self,
         id: str,
@@ -357,6 +457,8 @@ class DatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
@@ -374,6 +476,10 @@ class DatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -397,6 +503,8 @@ class DatasetsClient:
             page=page,
             size=size,
             filters=filters,
+            sorting=sorting,
+            search=search,
             truncate=truncate,
             request_options=request_options,
         )
@@ -428,6 +536,44 @@ class DatasetsClient:
         """
         _response = self._raw_client.get_dataset_by_identifier(
             dataset_name=dataset_name, request_options=request_options
+        )
+        return _response.data
+
+    def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Experiment items stats resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.get_dataset_experiment_items_stats(id='id', experiment_ids='experiment_ids', )
+        """
+        _response = self._raw_client.get_dataset_experiment_items_stats(
+            id, experiment_ids=experiment_ids, filters=filters, request_options=request_options
         )
         return _response.data
 
@@ -464,6 +610,7 @@ class DatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPagePublic:
@@ -477,6 +624,8 @@ class DatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -495,7 +644,7 @@ class DatasetsClient:
         client.datasets.get_dataset_items(id='id', )
         """
         _response = self._raw_client.get_dataset_items(
-            id, page=page, size=size, truncate=truncate, request_options=request_options
+            id, page=page, size=size, filters=filters, truncate=truncate, request_options=request_options
         )
         return _response.data
 
@@ -739,6 +888,48 @@ class AsyncDatasetsClient:
         )
         return _response.data
 
+    async def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import TraceEnrichmentOptions
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.create_dataset_items_from_traces(dataset_id='dataset_id', trace_ids=['trace_ids'], enrichment_options=TraceEnrichmentOptions(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_dataset_items_from_traces(
+            dataset_id, trace_ids=trace_ids, enrichment_options=enrichment_options, request_options=request_options
+        )
+        return _response.data
+
     async def get_dataset_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetPublic:
@@ -931,6 +1122,67 @@ class AsyncDatasetsClient:
         _response = await self._raw_client.delete_datasets_batch(ids=ids, request_options=request_options)
         return _response.data
 
+    async def expand_dataset(
+        self,
+        id: str,
+        *,
+        model: str,
+        sample_count: typing.Optional[int] = OMIT,
+        preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
+        variation_instructions: typing.Optional[str] = OMIT,
+        custom_prompt: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetExpansionResponse:
+        """
+        Generate synthetic dataset samples using LLM based on existing data patterns
+
+        Parameters
+        ----------
+        id : str
+
+        model : str
+            The model to use for synthetic data generation
+
+        sample_count : typing.Optional[int]
+            Number of synthetic samples to generate
+
+        preserve_fields : typing.Optional[typing.Sequence[str]]
+            Fields to preserve patterns from original data
+
+        variation_instructions : typing.Optional[str]
+            Additional instructions for data variation
+
+        custom_prompt : typing.Optional[str]
+            Custom prompt to use for generation instead of auto-generated one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetExpansionResponse
+            Generated synthetic samples
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.expand_dataset(id='id', model='gpt-4', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.expand_dataset(
+            id,
+            model=model,
+            sample_count=sample_count,
+            preserve_fields=preserve_fields,
+            variation_instructions=variation_instructions,
+            custom_prompt=custom_prompt,
+            request_options=request_options,
+        )
+        return _response.data
+
     async def find_dataset_items_with_experiment_items(
         self,
         id: str,
@@ -939,6 +1191,8 @@ class AsyncDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
@@ -956,6 +1210,10 @@ class AsyncDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -982,6 +1240,8 @@ class AsyncDatasetsClient:
             page=page,
             size=size,
             filters=filters,
+            sorting=sorting,
+            search=search,
             truncate=truncate,
             request_options=request_options,
         )
@@ -1016,6 +1276,47 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.get_dataset_by_identifier(
             dataset_name=dataset_name, request_options=request_options
+        )
+        return _response.data
+
+    async def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Experiment items stats resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.get_dataset_experiment_items_stats(id='id', experiment_ids='experiment_ids', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_dataset_experiment_items_stats(
+            id, experiment_ids=experiment_ids, filters=filters, request_options=request_options
         )
         return _response.data
 
@@ -1055,6 +1356,7 @@ class AsyncDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPagePublic:
@@ -1068,6 +1370,8 @@ class AsyncDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1089,7 +1393,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_dataset_items(
-            id, page=page, size=size, truncate=truncate, request_options=request_options
+            id, page=page, size=size, filters=filters, truncate=truncate, request_options=request_options
         )
         return _response.data
 

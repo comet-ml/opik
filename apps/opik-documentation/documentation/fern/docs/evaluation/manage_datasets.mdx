@@ -7,6 +7,7 @@ with any key value pairs. When getting started, we recommend having an `input` a
 example. These datasets can be created from:
 
 - Python SDK: You can use the Python SDK to create a dataset and add items to it.
+- TypeScript SDK: You can use the TypeScript SDK to create a dataset and add items to it.
 - Traces table: You can add existing logged traces (from a production application for example) to a dataset.
 - The Opik UI: You can manually create a dataset and add items to it.
 
@@ -15,47 +16,104 @@ on the test cases in the dataset using an evaluation metric and report the resul
 
 ## Create a dataset via the UI
 
-The simplest and fastest way to create a dataset is directly in the Opik UI. 
+The simplest and fastest way to create a dataset is directly in the Opik UI.
 This is ideal for quickly bootstrapping datasets from CSV files without needing to write any code.
 
 Steps:
-	1. Navigate to Evaluation > Datasets in the Opik UI.
-	2. Click Create new dataset.
-	3. In the pop-up modal:
-    * Provide a name and an optional description
-    * Optionally, upload a CSV file with your data
-	4. Click Create dataset.
+
+1. Navigate to **Evaluation > Datasets** in the Opik UI.
+2. Click **Create new dataset**.
+3. In the pop-up modal:
+   - Provide a name and an optional description
+   - Optionally, upload a CSV file with your data
+4. Click **Create dataset**.
 
 <Frame>
   <img src="/img/evaluation/create_dataset.png" />
 </Frame>
 
-CSV Format Requirements:
-* Your CSV must contain exactly two columns:
-    * input
-    * output
-* Maximum of 1,000 rows per upload.
+If you need to create a dataset with more than 1,000 rows, you [can use the SDK](/evaluation/manage_datasets#creating-a-dataset-using-the-sdk).
 
 <Tip>
   The UI dataset creation has some limitations:
-    * Only two columns are allowed.
     * File size is limited to 1,000 rows via the UI.
     * No support for nested JSON structures in the CSV itself.
 
-  For datasets requiring rich metadata, complex schemas, or programmatic control, use the SDK instead (see the next section).
+For datasets requiring rich metadata, complex schemas, or programmatic control, use the SDK instead (see the next section).
+
 </Tip>
+
+## Adding traces to a dataset
+
+One of the most powerful ways to build evaluation datasets is by converting production traces into dataset items. This allows you to leverage real-world interactions from your LLM application to create test cases for evaluation.
+
+### Adding traces via the UI
+
+To add traces to a dataset from the Opik UI:
+
+1. Navigate to the traces page
+2. Select one or more traces you want to add to a dataset
+3. Click the **Add to dataset** button in the toolbar
+4. In the dialog that appears:
+   - Select an existing dataset or create a new one
+   - Choose which trace metadata to include:
+     - **Nested spans**: Include all child spans within the trace
+     - **Tags**: Include trace tags
+     - **Feedback scores**: Include any feedback scores attached to the trace
+     - **Comments**: Include comments added to the trace
+     - **Usage metrics**: Include token usage and cost information
+     - **Metadata**: Include custom metadata fields
+5. Click on the dataset name to add the selected traces
+
+<Frame>
+  <img src="/img/evaluation/add_traces_to_dataset.png" alt="Add traces to dataset modal" />
+</Frame>
+
+<Tip>
+  By default, all metadata options are enabled. You can uncheck any options you don't need. The trace's input and output are always included.
+</Tip>
+
+### What gets added to the dataset
+
+When you add a trace to a dataset, the following structure is created:
+
+- **input**: The trace's input data
+- **expected_output**: The trace's output data (stored as `expected_output` for evaluation purposes)
+- **spans** (optional): Array of nested spans with their inputs, outputs, and metadata
+- **tags** (optional): Array of tags associated with the trace
+- **feedback_scores** (optional): Array of feedback scores with name, value, and source
+- **comments** (optional): Array of comments with text and ID
+- **usage** (optional): Token usage and cost information
+- **metadata** (optional): Custom metadata fields
+
+This rich structure allows you to:
+- Evaluate complex multi-step workflows by including nested spans
+- Filter and analyze based on tags and metadata
+- Use existing feedback scores as ground truth for evaluation
+- Preserve context through comments and annotations
 
 ## Creating a dataset using the SDK
 
 You can create a dataset and log items to it using the `get_or_create_dataset` method:
 
-```python
+<CodeBlocks>
+```typescript title="TypeScript SDK" language="typescript"
+import { Opik } from "opik";
+
+// Create a dataset
+const client = new Opik();
+const dataset = await client.getOrCreateDataset("My dataset");
+```
+
+```python title="Python SDK" language="python"
 from opik import Opik
 
 # Create a dataset
 client = Opik()
 dataset = client.get_or_create_dataset(name="My dataset")
 ```
+
+</CodeBlocks>
 
 If a dataset with the given name already exists, the existing dataset will be returned.
 
@@ -65,11 +123,23 @@ If a dataset with the given name already exists, the existing dataset will be re
 
 You can insert items to a dataset using the `insert` method:
 
-```python
-from opik import Opik
+<CodeBlocks>
+```typescript title="TypeScript" language="typescript"
+import { Opik } from "opik";
+const client = new Opik();
+const dataset = await client.getOrCreateDataset("My dataset");
+
+dataset.insert([
+  { user_question: "Hello, world!", expected_output: { assistant_answer: "Hello, world!" } },
+  { user_question: "What is the capital of France?", expected_output: { assistant_answer: "Paris" } },
+]);
+```
+
+```python title="Python" language="python"
+import opik
 
 # Get or create a dataset
-client = Opik()
+client = opik.Opik()
 dataset = client.get_or_create_dataset(name="My dataset")
 
 # Add dataset items to it
@@ -79,13 +149,15 @@ dataset.insert([
 ])
 ```
 
+</CodeBlocks>
+
 <Tip>
   Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you
-  can insert the same item multiple times without duplicating it in the dataset. This combined with the
-  `get_or_create_dataset` method means that you can use the SDK to manage your datasets in a "fire and forget" manner.
+  can insert the same item multiple times without duplicating it in the dataset. This combined with the `get or create
+  dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner.
 </Tip>
 
-Once the items have been inserted, you can view them them in the Opik UI:
+Once the items have been inserted, you can view them in the Opik UI:
 
 <Frame>
   <img src="/img/evaluation/dataset_items_page.png" />
@@ -95,82 +167,153 @@ Once the items have been inserted, you can view them them in the Opik UI:
 
 You can also insert items from a JSONL file:
 
-```python {pytest_codeblocks_skip=true}
+<CodeBlocks>
+  ```python title="Python" language="python"
+  import opik
+
+  client = opik.Opik()
+  dataset = client.get_or_create_dataset(name="My dataset")
+
 dataset.read_jsonl_from_file("path/to/file.jsonl")
-```
-
-The format of the JSONL file should be a JSON object per line. For example:
 
 ```
-{"user_question": "Hello, world!"}
-{"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}}
-```
+</CodeBlocks>
 
 #### Inserting items from a Pandas DataFrame
 
 You can also insert items from a Pandas DataFrame:
 
-```python {pytest_codeblocks_skip=true}
+<CodeBlocks>
+```python title="Python" language="python"
+import opik
+
+client = opik.Opik()
+dataset = client.get_or_create_dataset(name="My dataset")
+
 dataset.insert_from_pandas(dataframe=df)
-```
 
-The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, this can be useful if you want to rename columns before inserting them into the dataset:
-
-```python {pytest_codeblocks_skip=true}
+# You can also specify an optional keys_mapping parameter
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
 ```
+
+</CodeBlocks>
 
 ### Deleting items
 
 You can delete items in a dataset by using the `delete` method:
 
-```python {pytest_codeblocks_skip=true}
-from opik import Opik
+<CodeBlocks>
+  ```typescript title="TypeScript" language="typescript"
+  import { Opik } from "opik";
 
-# Get or create a dataset
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  // Get or create a dataset
+  client = new Opik();
+  dataset = await client.getDataset("My dataset")
 
-dataset.delete(items_ids=["123", "456"])
-```
+  await dataset.delete(["123", "456"])
 
-<Tip>
-You can also remove all the items in a dataset by using the `clear` method:
+  // Or to delete all items
+  await dataset.clear()
+  ```
 
-```python {pytest_codeblocks_skip=true}
-from opik import Opik
+  ```python title="Python" language="python"
+  from opik import Opik
 
-# Get or create a dataset
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  # Get or create a dataset
+  client = Opik()
+  dataset = client.get_dataset(name="My dataset")
 
-dataset.clear()
-```
+  dataset.delete(items_ids=["123", "456"])
 
-</Tip>
+  # Or to delete all items
+  dataset.clear()
+  ```
+</CodeBlocks>
 
 ## Downloading a dataset from Opik
 
 You can download a dataset from Opik using the `get_dataset` method:
 
-```python {pytest_codeblocks_skip=true}
-from opik import Opik
+<CodeBlocks>
+  ```typescript title="TypeScript" language="typescript"
+  import { Opik } from "opik";
 
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
-```
+  const client = new Opik();
+  const dataset = await client.getDataset("My dataset");
 
-Once the dataset has been retrieved, you can access it's items using the `to_pandas()` or `to_json` methods:
+  const items = await dataset.getItems();
+  console.log(items);
+  ```
 
-```python {pytest_codeblocks_skip=true}
-from opik import Opik
+  ```python title="Python" language="python"
+  from opik import Opik
 
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  client = Opik()
+  dataset = client.get_dataset(name="My dataset")
 
-# Convert to a Pandas DataFrame
-dataset.to_pandas()
+  # Get items as list of DatasetItem objects
+  items = dataset.get_items()
 
-# Convert to a JSON array
-dataset.to_json()
-```
+  # Convert to a Pandas DataFrame
+  dataset.to_pandas()
+
+  # Convert to a JSON array
+  dataset.to_json()
+  ```
+</CodeBlocks>
+
+## Expanding a dataset with AI
+
+Dataset expansion allows you to use AI to generate additional synthetic samples based on your existing dataset. This is particularly useful when you have a small dataset and want to create more diverse test cases to improve your evaluation coverage.
+
+The AI analyzes the patterns in your existing data and generates new samples that follow similar structures while introducing variations. This helps you:
+
+- **Increase dataset size** for more comprehensive evaluation
+- **Create edge cases** and variations you might not have considered
+- **Improve model robustness** by testing against diverse inputs
+- **Scale your evaluation** without manual data creation
+
+### How to expand a dataset
+
+To expand a dataset with AI:
+
+1. **Navigate to your dataset** in the Opik UI (Evaluation > Datasets > [Your Dataset])
+2. **Click the "Expand with AI" button** in the dataset view
+3. **Configure the expansion settings**:
+   - **Model**: Choose the LLM model to use for generation (supports GPT-4, GPT-5, Claude, and other models)
+   - **Sample Count**: Specify how many new samples to generate (1-100)
+   - **Preserve Fields**: Select which fields from your original data to keep unchanged
+   - **Variation Instructions**: Provide specific guidance on how to vary the data (e.g., "Create variations that test edge cases" or "Generate examples with different complexity levels")
+   - **Custom Prompt**: Optionally provide a custom prompt template instead of the auto-generated one
+4. **Start the expansion** - The AI will analyze your data and generate new samples
+5. **Review the results** - New samples will be added to your dataset and can be reviewed, edited, or removed as needed
+
+<Frame>
+  <img src="/img/evaluation/dataset_expansion_modal.png" />
+</Frame>
+
+### Configuration options
+
+**Sample Count**: Start with a smaller number (10-20) to review the quality before generating larger batches.
+
+**Preserve Fields**: Use this to maintain consistency in certain fields while allowing variation in others. For example, preserve the `category` field while varying the `input` and `expected_output`.
+
+**Variation Instructions**: Provide specific guidance such as:
+
+- "Create variations with different difficulty levels"
+- "Generate edge cases and error scenarios"
+- "Add examples with different input formats"
+- "Include multilingual variations"
+
+### Best practices
+
+- **Start small**: Generate 10-20 samples first to evaluate quality before scaling up
+- **Review generated content**: Always review AI-generated samples for accuracy and relevance
+- **Use variation instructions**: Provide clear guidance on the type of variations you want
+- **Preserve key fields**: Use field preservation to maintain important categorizations or metadata
+- **Iterate and refine**: Use the custom prompt option to fine-tune generation for your specific needs
+
+<Tip>
+  Dataset expansion works best when you have at least 5-10 high-quality examples in your original dataset. The AI uses
+  these examples to understand the patterns and generate similar but varied content.
+</Tip>

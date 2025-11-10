@@ -1,7 +1,7 @@
 ---
 description: Business Logic Guidelines
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 
 # Business Logic Guidelines

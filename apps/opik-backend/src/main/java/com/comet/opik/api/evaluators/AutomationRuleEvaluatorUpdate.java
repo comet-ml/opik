@@ -1,5 +1,6 @@
 package com.comet.opik.api.evaluators;
 
+import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
@@ -15,6 +16,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
 
+import java.util.List;
 import java.util.UUID;
 
 @AllArgsConstructor
@@ -46,6 +48,9 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
 
     @Builder.Default
     private final boolean enabled = true;
+
+    @Builder.Default
+    private final List<TraceFilter> filters = List.of();
 
     @JsonIgnore
     @NotNull private final T code;

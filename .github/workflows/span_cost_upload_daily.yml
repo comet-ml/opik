@@ -2,45 +2,67 @@ name: Update Span Cost Daily
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight UTC
+    - cron: '0 0 * * 1-5' # Runs at midnight UTC, Monday to Friday
   workflow_dispatch: # Allows manual trigger
 
 jobs:
   update-span-cost:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        # with:
-        #   persist-credentials: false # Prevent issues with GitHub token
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
       - name: Set branch name and update the file
         run: |
-          echo "BRANCH_NAME=span-cost-update-$(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "BRANCH_NAME=github-actions/NA-automatically-update-model-prices-file-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
+          cp apps/opik-backend/src/main/resources/model_prices_and_context_window.json apps/opik-frontend/src/data/model_prices_and_context_window.json
 
       - name: Create branch
         uses: JosiahSiegel/remote-branch-action@v1.2.0
         with:
           branch: ${{ env.BRANCH_NAME }}
 
-      - name: Push updated file
-        uses: comet-ml/push-files@main
-        with:
-          branch: ${{ env.BRANCH_NAME }}
-          files: apps/opik-backend/src/main/resources/model_prices_and_context_window.json:apps/opik-backend/src/main/resources/model_prices_and_context_window.json
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-          repository: 'comet-ml/opik'
-          commit_user_email: github-actions@comet.com
-          commit_user_name: 'Github Actions (${{ github.actor }})'
-          commit_message: "Update span cost file"
+      - name: Commit files
+        run: |
+          set -ex
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "Github Actions (${{ github.actor }})"
+          git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
+          git add apps/opik-frontend/src/data/model_prices_and_context_window.json
+          git commit --allow-empty -m "[NA] [BE] Update model prices file"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ env.BRANCH_NAME }}
-          title: "Update span cost from LiteLLM"
-          body: "Automated update of model_prices_and_context_window.json file, which includes span prices information from the LiteLLM repo."
+          title: "[NA] [BE] Update model prices file"
+          body: |
+            ## Details
+            Automated update of `model_prices_and_context_window.json` file and regeneration of supported models documentation.
+            
+            **Files updated:**
+            - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` - Latest model pricing data from LiteLLM
+            - `apps/opik-frontend/src/data/model_prices_and_context_window.json` - Frontend copy kept in sync with backend
+            
+            ## Change checklist
+            - [X] User facing change
+            - [X] Documentation update
+          
+            ## Issues
+            N/A
+          
+            ## Testing
+            - Passed CI
+          
+            ## Documentation
+            - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
           base: main

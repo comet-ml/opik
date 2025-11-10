@@ -1,0 +1,97 @@
+---
+description: Learn how to create custom metrics for evaluating multi-turn conversations
+toc_max_heading_level: 4
+---
+
+# Custom Conversation (Multi-turn) Metrics
+
+Conversation metrics evaluate multi-turn conversations rather than single input-output pairs. These metrics are particularly useful for evaluating chatbots, conversational agents, and any multi-turn dialogue systems.
+
+## Understanding the Conversation Format
+
+Conversation thread metrics work with a standardized conversation format:
+
+```python
+from typing import List, Dict, Literal
+
+# Type definition
+ConversationDict = Dict[Literal["role", "content"], str]
+Conversation = List[ConversationDict]
+
+# Example conversation
+conversation = [
+    {"role": "user", "content": "Hello! Can you help me?"},
+    {"role": "assistant", "content": "Hi there! I'd be happy to help. What do you need?"},
+    {"role": "user", "content": "I need information about Python"},
+    {"role": "assistant", "content": "Python is a versatile programming language..."},
+]
+```
+
+## Creating a Custom Conversation Metric
+
+To create a custom conversation metric, subclass [`ConversationThreadMetric`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/ConversationThreadMetric.html) and implement the `score` method:
+
+```python
+from typing import Any
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import (
+    ConversationThreadMetric,
+    types as conversation_types,
+)
+
+
+class ConversationLengthMetric(ConversationThreadMetric):
+    """
+    A simple metric that counts the number of conversation turns.
+    """
+
+    def __init__(self, name: str = "conversation_length_score"):
+        super().__init__(name)
+
+    def score(
+        self, conversation: conversation_types.Conversation, **kwargs: Any
+    ) -> score_result.ScoreResult:
+        """
+        Score based on conversation length.
+        
+        Args:
+            conversation: List of conversation messages with 'role' and 'content'.
+            **kwargs: Additional arguments (ignored).
+        """
+        # Count assistant responses (each represents one conversation turn)
+        num_turns = sum(1 for msg in conversation if msg["role"] == "assistant")
+        
+        return score_result.ScoreResult(
+            name=self.name,
+            value=num_turns,
+            reason=f"Conversation has {num_turns} turns"
+        )
+```
+
+## Using Custom Conversation Metrics
+
+You can use this metric with `evaluate_threads`:
+
+```python
+from opik.evaluation import evaluate_threads
+
+# Initialize the metric
+conversation_length_metric = ConversationLengthMetric()
+
+# Evaluate threads in your project
+results = evaluate_threads(
+    project_name="my_chatbot_project",
+    filter_string='status = "inactive"',
+    eval_project_name="chatbot_evaluation",
+    metrics=[conversation_length_metric],
+    trace_input_transform=lambda x: x["input"],
+    trace_output_transform=lambda x: x["output"],
+)
+```
+
+For more details on evaluating conversation threads, see the [Evaluate Threads guide](/evaluation/evaluate_threads).
+
+## Next Steps
+
+- Learn about [built-in conversation metrics](/evaluation/metrics/conversation_threads_metrics)
+- Read the [Evaluate Threads guide](/evaluation/evaluate_threads)

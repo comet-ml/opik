@@ -64,6 +64,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       tags={tags}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
+      size="sm"
     />
   );
 };

@@ -14,7 +14,7 @@ export interface Trace {
     endTime?: Date;
     input?: OpikApi.JsonListString;
     output?: OpikApi.JsonListString;
-    metadata?: OpikApi.JsonNode;
+    metadata?: OpikApi.JsonListString;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfo;
     usage?: Record<string, number>;
@@ -32,4 +32,6 @@ export interface Trace {
     threadId?: string;
     visibilityMode?: OpikApi.TraceVisibilityMode;
     llmSpanCount?: number;
+    /** List of unique provider names from all spans in this trace, sorted alphabetically */
+    providers?: string[];
 }

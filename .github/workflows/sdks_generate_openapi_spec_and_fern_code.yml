@@ -2,12 +2,13 @@ name: SDKs Generate OpenAPI spec and Fern code
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight UTC
+    - cron: '0 0 * * 1-5' # Runs at midnight UTC, Monday to Friday
   workflow_dispatch: # Allows manual trigger
 
 jobs:
   update-open-api-spec-and-fern-code:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Repository
@@ -25,7 +26,7 @@ jobs:
 
       - name: Set branch name
         run: |
-          echo "BRANCH_NAME=github-actions/update-openapi-spec-and-fern-code-$(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
 
       - name: Create branch
         uses: JosiahSiegel/remote-branch-action@v1.2.0
@@ -46,18 +47,33 @@ jobs:
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "github-actions"
+          git config --local user.name "Github Actions (${{ github.actor }})"
           git add sdks/python/src/opik/rest_api/
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml
           git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
-          git commit --allow-empty -m "Update OpenAPI spec and Fern code"
+          git commit --allow-empty -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ env.BRANCH_NAME }}
-          title: "Update OpenAPI spec and Fern code"
-          body: "Automated update of Open API spec and Fern Code after running `./scripts/generate_openapi.sh`"
+          title: "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
+          body: |
+            ## Details
+            Automated update of OpenAPI spec and Fern code after running `./scripts/generate_openapi.sh`.
+          
+            ## Change checklist
+            - [ ] User facing changes
+            - [X] Documentation updated
+          
+            ## Issues
+            N/A
+          
+            ## Testing
+            - Passed CI
+          
+            ## Documentation
+            - https://buildwithfern.com/learn/cli-api-reference/cli-reference/commands#fern-generate
           base: main

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import get from "lodash/get";
 import isEmpty from "lodash/isEmpty";
 import { ColumnDef, createColumnHelper } from "@tanstack/react-table";
@@ -17,6 +17,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import PlaygroundVariableCell from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
@@ -45,12 +46,39 @@ const PlaygroundOutputTable = ({
     defaultValue: {},
   });
 
+  const hydrateDatasetItemData = useHydrateDatasetItemData();
+  const [hydratedDatasetItems, setHydratedDatasetItems] = useState<
+    DatasetItem[]
+  >([]);
+
+  // Hydrate dataset items when they change
+  useEffect(() => {
+    const hydrateItems = async () => {
+      const hydratedItems = await Promise.all(
+        datasetItems.map(async (item) => {
+          const hydratedData = await hydrateDatasetItemData(item);
+          return {
+            ...item,
+            data: hydratedData,
+          };
+        }),
+      );
+      setHydratedDatasetItems(hydratedItems);
+    };
+
+    if (datasetItems.length > 0) {
+      hydrateItems();
+    } else {
+      setHydratedDatasetItems([]);
+    }
+  }, [datasetItems, hydrateDatasetItemData]);
+
   const noDataMessage = isLoadingDatasetItems
     ? "Loading..."
     : "No dataset items";
 
   const rows = useMemo(() => {
-    return datasetItems.map((di) => {
+    return hydratedDatasetItems.map((di) => {
       return {
         id: di.id,
         dataItemId: di.id,
@@ -59,7 +87,7 @@ const PlaygroundOutputTable = ({
         },
       };
     });
-  }, [datasetItems]);
+  }, [hydratedDatasetItems]);
 
   const columns = useMemo(() => {
     if (isEmpty(datasetColumns)) {
@@ -118,7 +146,7 @@ const PlaygroundOutputTable = ({
 
     retVal.push(
       columnHelper.group({
-        id: "output",
+        id: "playground-output",
         meta: {
           header: "Output",
         },
@@ -144,7 +172,7 @@ const PlaygroundOutputTable = ({
 
   return (
     <div
-      className="pt-10"
+      className="playground-table pt-10" // eslint-disable-line tailwindcss/no-custom-classname
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       <DataTable

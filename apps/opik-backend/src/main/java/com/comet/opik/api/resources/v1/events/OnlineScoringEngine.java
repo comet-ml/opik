@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,7 +15,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -23,6 +26,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -55,13 +60,17 @@ public class OnlineScoringEngine {
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile(
+            Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_START) + "(.*?)"
+                    + Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_END),
+            Pattern.DOTALL);
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
      * Trace variables and with the proper structured output format.
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
-     * @param trace the sampled Trace to be scored
+     * @param trace         the sampled Trace to be scored
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
@@ -77,7 +86,7 @@ public class OnlineScoringEngine {
      * Trace variables and with the proper structured output format.
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
-     * @param traces the sampled traces from the trace threads to be scored
+     * @param traces        the sampled traces from the trace threads to be scored
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
@@ -116,7 +125,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -150,7 +159,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -211,6 +220,51 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
+    private UserMessage buildUserMessage(String content) {
+        var matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
+        var foundAny = false;
+
+        var builder = UserMessage.builder();
+        var lastIndex = 0;
+
+        while (matcher.find()) {
+            foundAny = true;
+
+            if (matcher.start() > lastIndex) {
+                var textSegment = content.substring(lastIndex, matcher.start());
+                appendTextContent(builder, textSegment);
+            }
+
+            var url = matcher.group(1).trim();
+            if (!url.isEmpty()) {
+                // Unescape HTML entities for backward compatibility with templates using {{variable}}
+                // RECOMMENDED: Use {{{variable}}} (triple braces) or {{&variable}} in Mustache templates
+                // to prevent HTML escaping of URLs in the first place
+                var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
+                builder.addContent(ImageContent.from(unescapedUrl));
+            }
+
+            lastIndex = matcher.end();
+        }
+
+        if (!foundAny) {
+            return UserMessage.from(content);
+        }
+
+        if (lastIndex < content.length()) {
+            var trailingText = content.substring(lastIndex);
+            appendTextContent(builder, trailingText);
+        }
+
+        return builder.build();
+    }
+
+    private void appendTextContent(UserMessage.Builder builder, String textSegment) {
+        if (StringUtils.isNotBlank(textSegment)) {
+            builder.addContent(TextContent.from(textSegment));
+        }
+    }
+
     private static String extractFromJson(JsonNode json, String path) {
         Map<String, Object> forcedObject;
         try {
@@ -263,8 +317,8 @@ public class OnlineScoringEngine {
             return Collections.emptyList();
         }
         var spliterator = Spliterators.spliteratorUnknownSize(
-                structuredResponse.fields(), Spliterator.ORDERED | Spliterator.NONNULL);
-        return StreamSupport.stream(spliterator, false)
+                structuredResponse.properties().iterator(), Spliterator.ORDERED | Spliterator.NONNULL);
+        List<FeedbackScoreBatchItem> results = StreamSupport.stream(spliterator, false)
                 .map(scoreMetric -> {
                     var scoreName = scoreMetric.getKey();
                     var scoreNested = scoreMetric.getValue();
@@ -286,6 +340,18 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+        if (results.isEmpty()) {
+            var topLevelKeys = StreamSupport.stream(
+                    Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
+                            Spliterator.ORDERED | Spliterator.NONNULL),
+                    false)
+                    .toList();
+            var truncated = content.length() > 500 ? content.substring(0, 500) + "..." : content;
+            log.warn(
+                    "Invalid LLM output format for feedback scores. Expected structure: { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }. Top-level keys: '{}'. Raw response (truncated): '{}'",
+                    topLevelKeys, truncated);
+        }
+        return results;
     }
 
     private static String extractJson(String response) {

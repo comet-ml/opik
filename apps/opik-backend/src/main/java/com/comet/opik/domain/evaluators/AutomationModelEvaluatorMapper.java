@@ -4,9 +4,15 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
+
+import java.util.List;
 
 @Mapper
 interface AutomationModelEvaluatorMapper {
@@ -56,4 +62,26 @@ interface AutomationModelEvaluatorMapper {
 
     TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode map(
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode code);
+
+    default List<TraceFilter> map(String filtersJson) {
+        if (StringUtils.isBlank(filtersJson)) {
+            return List.of();
+        }
+        try {
+            return JsonUtils.getMapper().readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to parse filters JSON", e);
+        }
+    }
+
+    default String map(List<TraceFilter> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return null;
+        }
+        try {
+            return JsonUtils.getMapper().writeValueAsString(filters);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize filters to JSON", e);
+        }
+    }
 }

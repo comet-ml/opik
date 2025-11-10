@@ -1,6 +1,5 @@
 import time
 import uuid
-import os
 import pytest
 
 from opik import synchronization
@@ -8,6 +7,8 @@ from opik.api_objects.threads import threads_client
 from opik.evaluation import metrics
 from opik.evaluation.threads import evaluator
 from opik.types import FeedbackScoreDict
+
+from ...testlib import environment
 from .. import verifiers
 
 
@@ -83,7 +84,7 @@ def eval_project_name(temporary_project_name: str) -> str:
 
 
 @pytest.mark.skipif(
-    "OPENAI_API_KEY" not in os.environ, reason="OPENAI_API_KEY is not set"
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
 def test_evaluate_threads__happy_path(
     opik_client, active_thread_and_project_name, eval_project_name

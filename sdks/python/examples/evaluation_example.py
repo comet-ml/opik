@@ -59,10 +59,12 @@ def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-evaluate(
+results = evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=llm_task,
     nb_samples=2,
     scoring_metrics=[is_json, hallucination],
 )
+
+print(results)

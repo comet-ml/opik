@@ -2,8 +2,8 @@ from typing import List, Optional
 
 from opik.api_objects import experiment, opik_client
 from opik.types import FeedbackScoreDict
-from . import test_case, test_result
-from .metrics import arguments_helpers
+from . import test_case
+from .metrics import arguments_helpers, score_result
 from .types import ScoringKeyMappingType
 
 
@@ -72,22 +72,23 @@ def get_experiment_test_cases(
     return test_cases
 
 
-def log_test_result_scores(
+def log_test_result_feedback_scores(
     client: opik_client.Opik,
-    test_result: test_result.TestResult,
+    score_results: List[score_result.ScoreResult],
+    trace_id: str,
     project_name: Optional[str],
 ) -> None:
     all_trace_scores: List[FeedbackScoreDict] = []
 
-    for score_result in test_result.score_results:
-        if score_result.scoring_failed:
+    for score_result_ in score_results:
+        if score_result_.scoring_failed:
             continue
 
         trace_score = FeedbackScoreDict(
-            id=test_result.test_case.trace_id,
-            name=score_result.name,
-            value=score_result.value,
-            reason=score_result.reason,
+            id=trace_id,
+            name=score_result_.name,
+            value=score_result_.value,
+            reason=score_result_.reason,
         )
         all_trace_scores.append(trace_score)
 

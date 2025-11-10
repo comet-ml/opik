@@ -1,0 +1,206 @@
+---
+title: "Tracing Core Concepts"
+subtitle: "Understanding the fundamental concepts behind Opik's tracing platform"
+description: "Learn about the core concepts of Opik's tracing system, including traces, spans, threads, and how they work together to provide comprehensive observability for your LLM applications."
+---
+
+<Tip>
+  If you want to jump straight to logging traces, you can head to the [Log traces](/tracing/log_traces) or [Log agents](/tracing/log_agents) guides.
+</Tip>
+
+Tracing is the foundation of observability in Opik. It allows you to monitor, debug, and optimize your LLM applications by capturing detailed information about their execution. Understanding these core concepts is essential for effectively using Opik's tracing capabilities.
+
+## Overview
+
+When working with LLM applications, understanding what's happening under the hood is crucial for debugging issues, optimizing performance, and ensuring reliability. Opik's tracing system provides comprehensive observability by capturing detailed execution information at multiple levels.
+
+In order to effectively use Opik's tracing capabilities, it's important to understand these key concepts:
+
+1. **Trace**: A complete execution path representing a single interaction with an LLM or agent
+2. **Span**: Individual operations or steps within a trace that represent specific actions or computations
+3. **Thread**: A collection of related traces that form a coherent conversation or workflow
+4. **Metric**: Quantitative measurements that provide objective assessments of your AI models' performance
+5. **Optimization**: The systematic process of refining and evaluating LLM prompts and configurations
+6. **Evaluation**: A framework for systematically testing your prompts and models against datasets
+
+## Traces
+
+A **trace** represents a complete execution path for a single interaction with an LLM or agent. Think of it as a detailed record of everything that happened during one request-response cycle. Each trace captures the full context of the interaction, including inputs, outputs, timing, and any intermediate steps.
+
+### Key Characteristics of Traces:
+
+- **Unique Identity**: Each trace has a unique identifier that allows you to track and reference it
+- **Complete Context**: Contains all the information needed to understand what happened during the interaction
+- **Timing Information**: Records when the interaction started, ended, and how long each part took
+- **Input/Output Data**: Captures the exact prompts sent to the LLM and the responses received
+- **Metadata**: Includes additional context like model used, temperature settings, and custom tags
+
+### Example Use Cases:
+
+- **Debugging**: When an LLM produces unexpected output, you can examine the trace to understand what went wrong
+- **Performance Analysis**: Identify bottlenecks and slow operations by analyzing trace timing
+- **Cost Tracking**: Monitor token usage and associated costs for each interaction
+- **Quality Assurance**: Review traces to ensure your application is behaving as expected
+
+## Spans
+
+A **span** represents an individual operation or step within a trace. While a trace shows the complete picture, spans break down the execution into granular, measurable components. This hierarchical structure allows you to understand both the high-level flow and the detailed operations within your LLM application.
+
+### Key Characteristics of Spans:
+
+- **Hierarchical Structure**: Spans can contain other spans, creating a tree-like structure within a trace
+- **Specific Operations**: Each span represents a distinct action, such as a function call, API request, or data processing step
+- **Detailed Timing**: Precise start and end times for each operation
+- **Context Preservation**: Maintains the relationship between parent and child operations
+- **Custom Attributes**: Can include additional metadata specific to the operation
+
+### Common Span Types:
+
+- **LLM Calls**: Individual requests to language models
+- **Function Calls**: Tool or function invocations within an agent
+- **Data Processing**: Transformations or manipulations of data
+- **External API Calls**: Requests to third-party services
+- **Custom Operations**: Any user-defined operation you want to track
+
+### Example Span Hierarchy:
+
+```
+Trace: "Customer Support Chat"
+├── Span: "Parse User Intent"
+├── Span: "Query Knowledge Base"
+│   ├── Span: "Search Vector Database"
+│   └── Span: "Rank Results"
+├── Span: "Generate Response"
+│   ├── Span: "LLM Call: GPT-4"
+│   └── Span: "Post-process Response"
+└── Span: "Log Interaction"
+```
+
+## Threads
+
+A **thread** is a collection of related traces that form a coherent conversation or workflow. Threads are essential for understanding multi-turn interactions and maintaining context across multiple LLM calls. They provide a way to group related traces together, making it easier to analyze conversational patterns and user journeys.
+
+### Key Characteristics of Threads:
+
+- **Conversation Context**: Maintains the flow of multi-turn interactions
+- **Trace Grouping**: Organizes related traces under a single thread identifier
+- **Temporal Ordering**: Traces within a thread are ordered chronologically
+- **Shared Context**: Allows you to see how context evolves throughout a conversation
+- **Cross-Trace Analysis**: Enables analysis of patterns across multiple related interactions
+
+### When to Use Threads:
+
+- **Chat Applications**: Group all messages in a conversation
+- **Multi-Step Workflows**: Track complex processes that span multiple LLM calls
+- **User Sessions**: Organize all interactions from a single user session
+- **Agent Conversations**: Follow the complete interaction between an agent and a user
+
+### Thread Management:
+
+Threads are created by defining a `thread_id` and referencing it in your traces. This allows you to:
+
+- **Maintain Context**: Keep track of conversation history and user state
+- **Debug Conversations**: Understand how a conversation evolved over time
+- **Analyze Patterns**: Identify common conversation flows and user behaviors
+- **Optimize Performance**: Find bottlenecks in multi-turn interactions
+
+## Metrics
+
+**Metrics** provide quantitative assessments of your AI models' outputs, enabling objective comparisons and performance tracking over time. They are essential for understanding how well your LLM applications are performing and identifying areas for improvement.
+
+### Key Characteristics of Metrics:
+
+- **Quantitative Measurement**: Provide numerical scores that can be compared and tracked
+- **Objective Assessment**: Remove subjective bias from performance evaluation
+- **Trend Analysis**: Enable tracking of performance changes over time
+- **Comparative Analysis**: Allow comparison between different models, prompts, or configurations
+- **Automated Evaluation**: Can be computed automatically without human intervention
+
+### Common Metric Types:
+
+- **Accuracy Metrics**: Measure how often the model produces correct outputs
+- **Quality Metrics**: Assess the quality of generated text (e.g., coherence, relevance)
+- **Efficiency Metrics**: Track performance characteristics like latency and throughput
+- **Cost Metrics**: Monitor token usage and associated costs
+- **Custom Metrics**: Domain-specific measurements tailored to your use case
+
+## Optimization
+
+**Optimization** is the systematic process of refining and evaluating LLM prompts and configurations to improve performance. It involves iteratively testing different approaches and using data-driven insights to make improvements.
+
+### Key Aspects of Optimization:
+
+- **Prompt Engineering**: Refining the instructions given to LLMs
+- **Parameter Tuning**: Adjusting model settings like temperature, top-p, and max tokens
+- **Few-shot Learning**: Optimizing example selection for in-context learning
+- **Tool Integration**: Improving how LLMs interact with external tools and functions
+- **Performance Monitoring**: Tracking improvements and regressions over time
+
+## Evaluation
+
+**Evaluation** provides a framework for systematically testing your prompts and models against datasets using various metrics to measure performance. It's the foundation for making data-driven decisions about your LLM applications.
+
+### Key Components of Evaluation:
+
+- **Datasets**: Collections of test cases with inputs and expected outputs
+- **Experiments**: Individual evaluation runs that test specific configurations
+- **Metrics**: Quantitative measures of performance
+- **Comparative Analysis**: Side-by-side comparison of different approaches
+- **Statistical Significance**: Ensuring results are reliable and reproducible
+
+## Learn More
+
+Now that you understand the core concepts, explore these resources to dive deeper:
+
+### Tracing and Observability:
+- [Log traces](/tracing/log_traces) - Learn how to capture traces in your applications
+- [Log agents](/tracing/log_agents) - Understand how to trace agent-based applications
+- [Annotate traces](/tracing/annotate_traces) - Add custom metadata to your traces
+- [Cost tracking](/tracing/cost_tracking) - Monitor and analyze costs
+
+### Evaluation and Testing:
+- [Evaluation concepts](/evaluation/concepts) - Deep dive into evaluation concepts
+- [Evaluate prompts](/evaluation/evaluate_prompt) - Test and compare different prompts
+- [Evaluate agents](/evaluation/evaluate_agents) - Evaluate complex agent systems
+- [Metrics overview](/evaluation/metrics/overview) - Available evaluation metrics
+
+### Optimization:
+- [Agent Optimization concepts](/agent_optimization/optimizer-concepts) - Core optimization concepts
+- [Optimization algorithms](/agent_optimization/overview) - Available optimization strategies
+- [Best practices](/agent_optimization/best_practices/prompt_engineering) - Optimization best practices
+
+### Integration Guides:
+- [SDK Configuration](/tracing/sdk_configuration) - Configure Opik in your applications
+- [Supported Models](/tracing/supported_models) - Models compatible with Opik
+- [Integrations](/integrations/overview) - Framework-specific integration guides
+
+## Best Practices for Tracing
+
+<Steps>
+  <Step title="1. Start with Clear Trace Boundaries">
+    Define clear boundaries for what constitutes a single trace. Typically, this should align with a complete user interaction or business operation.
+  </Step>
+  <Step title="2. Use Meaningful Span Names">
+    Choose descriptive names for your spans that clearly indicate what operation is being performed. This makes debugging much easier.
+  </Step>
+  <Step title="3. Leverage Thread IDs for Conversations">
+    Use consistent thread IDs for related interactions. This is especially important for chat applications and multi-step workflows.
+  </Step>
+  <Step title="4. Add Relevant Metadata">
+    Include custom attributes and metadata that will be useful for analysis. Consider adding user IDs, session information, and business context.
+  </Step>
+  <Step title="5. Monitor Performance Continuously">
+    Set up alerts and dashboards to monitor trace performance, error rates, and costs. This helps you catch issues early.
+  </Step>
+  <Step title="6. Use Traces for Optimization">
+    Regularly analyze your traces to identify optimization opportunities, such as reducing latency or improving prompt effectiveness.
+  </Step>
+</Steps>
+
+<Tip>
+  **Pro Tip**: Start with basic tracing and gradually add more detailed spans as you identify areas that need deeper observability. Don't try to trace everything at once - focus on the most critical paths first.
+</Tip>
+
+<Warning>
+  **Important**: Be mindful of sensitive data when tracing. Avoid logging personally identifiable information (PII) or sensitive business data in your traces. Use Opik's data filtering capabilities to protect sensitive information.
+</Warning>

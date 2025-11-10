@@ -74,7 +74,6 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "optimizer",
   "prompt",
-  "examples",
   "objective_name",
   COLUMN_CREATED_AT_ID,
 ];

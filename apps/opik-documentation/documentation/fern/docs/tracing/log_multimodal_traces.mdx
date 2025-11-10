@@ -63,6 +63,41 @@ supported content type for the attachment. We support the following content type
 
 </Note>
 
+## Managing Attachments Programmatically
+
+You can also manage attachments programmatically using the [`AttachmentClient`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/AttachmentClient.html):
+
+```python wordWrap
+import opik
+
+opik_client = opik.Opik()
+attachment_client = opik_client.get_attachment_client()
+
+# Get list of attachments
+attachments_details = attachment_client.get_attachment_list(
+    project_name="my-project",
+    entity_id="some-trace-uuid-7",
+    entity_type="trace"
+)
+
+# Download an attachment
+attachment_data = attachment_client.download_attachment(
+    project_name="my-project",
+    entity_type="trace",
+    entity_id="some-trace-uuid-7",
+    file_name="report.pdf",
+    mime_type="application/pdf"
+)
+
+# Upload a new attachment
+attachment_client.upload_attachment(
+    project_name="my-project",
+    entity_type="trace", 
+    entity_id="some-trace-uuid-7",
+    file_path="/path/to/document.pdf"
+)
+```
+
 ## Previewing base64 encoded images and image URLs
 
 Opik automatically detects base64 encoded images and URLs logged to the platform,
@@ -107,11 +142,44 @@ print(response.choices[0])
   <img src="/img/tracing/image_trace.png" />
 </Frame>
 
+## Embedded Attachments
+
+When you embed base64-encoded media directly in your trace/span `input`, `output`, or `metadata` fields, Opik automatically optimizes storage and retrieval for performance.
+
+### How It Works
+
+For base64-encoded content larger than 250KB, Opik automatically extracts and stores it separately. This happens transparently - you don't need to change your code.
+
+When you retrieve your traces or spans later, the attachments are automatically included by default. For faster queries when you don't need the attachment data, use the `strip_attachments=true` parameter.
+
+### Size Limits
+
+Opik Cloud supports embedded attachments up to **100MB per field**. This limit applies to individual string values in your `input`, `output`, or `metadata` fields.
+
+<Note>
+Base64 encoding increases file size by about 33%. For example, a 75MB video becomes ~100MB when base64-encoded.
+</Note>
+
+If you need to work with larger files:
+
+1. **Use the Attachment API** - Upload files separately using `AttachmentClient` (recommended for files >50MB). See [Managing Attachments Programmatically](#managing-attachments-programmatically)
+
+2. **Contact us** - [Get in touch](https://www.comet.com/site/about-us/contact-us/) if you need higher limits
+
+3. **Self-host Opik** - Configure your own limits. See the [Self-hosting Guide](/self-host/overview)
+
+### Best Practices
+
+- Embed smaller files directly - Opik handles them efficiently
+- For files >50MB, use the Attachment API for better performance  
+- Use `strip_attachments=true` when querying if you don't need the attachment data
+
 ## Downloading attachments
 
-You can download attachments from the UI by hovering over the attachments and
-clicking on the download icon. SDKs methods are not yet available but it's
-coming soon !
+You can download attachments in two ways:
+
+1. **From the UI**: Hover over the attachments and click on the download icon
+2. **Programmatically**: Use the `AttachmentClient` as shown in the examples above
 
 <Tip>
   Let's us know on [Github](https://github.com/comet-ml/opik/issues/new/choose) if you would like to us to support

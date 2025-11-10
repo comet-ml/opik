@@ -1,3 +1,8 @@
+---
+title: Observability for LlamaIndex with Opik
+description: Start here to integrate Opik into your LlamaIndex-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [LlamaIndex](https://github.com/run-llama/llama_index) is a flexible data framework for building LLM applications:
 
     LlamaIndex is a "data framework" to help you build LLM apps. It provides the following tools:
@@ -7,25 +12,15 @@
     - Provides an advanced retrieval/query interface over your data: Feed in any LLM input prompt, get back retrieved context and knowledge-augmented output.
     - Allows easy integrations with your outer application framework (e.g. with LangChain, Flask, Docker, ChatGPT, anything else).
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex&utm_campaign=opik) for more information.
 
 ## Getting Started
+
+### Installation
 
 To use the Opik integration with LlamaIndex, you'll need to have both the `opik` and `llama_index` packages installed. You can install them using pip:
 
@@ -33,10 +28,33 @@ To use the Opik integration with LlamaIndex, you'll need to have both the `opik`
 pip install opik llama-index llama-index-agent-openai llama-index-llms-openai llama-index-callbacks-opik
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring LlamaIndex
+
+In order to use LlamaIndex, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI. You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+
+You can set them as environment variables:
 
 ```bash
-opik configure
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 ## Using the Opik integration
@@ -60,7 +78,11 @@ To showcase the integration, we will create a new a query engine that will use P
 Configure the Opik integration:
 
 ```python
+import os
 from llama_index.core import global_handler, set_global_handler
+
+# Set project name for better organization
+os.environ["OPIK_PROJECT_NAME"] = "llamaindex-integration-demo"
 
 set_global_handler("opik")
 opik_callback_handler = global_handler
@@ -113,5 +135,18 @@ print(response)
 Given that the integration with Opik has been set up, all the traces are logged to the Opik platform:
 
 <Frame>
-  <img src="/img/tracing/llama_index_integration.png" />
+  <img src="/img/cookbook/llamaIndex_cookbook.png" />
 </Frame>
+
+## Cost Tracking
+
+The Opik integration with LlamaIndex automatically tracks token usage and cost for all supported LLM models used within LlamaIndex applications.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on model pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>

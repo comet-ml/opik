@@ -68,13 +68,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100
-
-# Configuration for ClickHouse async insert functionality
-asyncInsert:
-  # Default: false
-  # Description: Enable async insert for individual write operations to ClickHouse.
-  enabled: false
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -140,7 +134,7 @@ authentication:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
-  # Description: Whether to enable virtual threads for Jetty’s thread pool.
+  # Description: Whether to enable virtual threads for Jetty's thread pool.
   enableVirtualThreads: false
   # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
@@ -148,6 +142,30 @@ server:
     # Description: If true, all requests with gzip in the Accept-Encoding header will have their response entities
     # compressed and requests with gzip in the Content-Encoding header will have their request entities decompressed.
     enabled: true
+  # HTTP connector configuration for handling large request headers
+  # Default: 16KB (16000 bytes) - matches ALB/Nginx request line limit
+  # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
+  applicationConnectors:
+    - type: http
+      # Default: 8080
+      # Description: The port on which the application HTTP connector listens
+      port: 8080
+      maxRequestHeaderSize: 16KB
+  adminConnectors:
+    - type: http
+      # Default: 8081
+      # Description: The port on which the admin HTTP connector listens
+      port: 8081
+
+# Jackson JSON processing configuration
+# Controls limits for JSON deserialization to prevent memory exhaustion
+jacksonConfig:
+  # Default: 104857600 (100MB)
+  # Description: Maximum size for individual string values during JSON deserialization. 
+  #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
+  #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
+  maxStringLength: 262144000 
 
 # Configuration for batch operations
 batchOperations:
@@ -200,20 +218,78 @@ encryption:
 onlineScoring:
   # Default: 500 ms
   # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
+  # This is the global default value, can be overridden per stream
   poolingInterval: 500ms
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  # This is the global default value, can be overridden per stream
+  longPollingDuration: 5s
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: 'online_scoring'
-  # Default: 3
+  # Default: 5
   # Description: Maximum number of messages returned within a Redis Stream get
-  consumerBatchSize: 3
+  # This is the global default value, can be overridden per stream
+  consumerBatchSize: 5
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals (global default)
+  claimIntervalRatio: 10
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming (global default)
+  pendingMessageDuration: 10m
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10, global default)
+  maxRetries: 3
+  ## scorer: options from AutomationRuleEvaluatorType
+  ## streamName: the name of the stream in redis
+  ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
+  ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
+  ## longPollingDuration: (optional, but highly recommended) per stream long polling duration, overrides global value
+  ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
+  ## claimIntervalRatio: (optional) per stream claim interval ratio, overrides global value
+  ## pendingMessageDuration: (optional) per stream pending message duration, overrides global value
+  ## maxRetries: (optional) per stream max retries, overrides global value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
+    - scorer: trace_thread_llm_as_judge
+      streamName: stream_scoring_trace_thread_llm_as_judge
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
+    - scorer: trace_thread_user_defined_metric_python
+      streamName: stream_scoring_trace_thread_user_defined_metric_python
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
 
 # LLM providers client configuration
 llmProviderClient:
@@ -265,6 +341,18 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
 
+workspaceSettings:
+  # Default: 50
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all workspace sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxSizeToAllowSorting: -1
+  # Default: 100
+  # Description: Maximum size of a project in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all project sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxProjectSizeToAllowSorting: -1
+
 # Configuration AWS S3
 s3Config:
   s3Region: 'us-east-1'
@@ -276,6 +364,12 @@ s3Config:
   s3Url: http://localhost:9000
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: true
+
+# Attachments configuration
+attachmentsConfig:
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # For tests, use 5KB (same as local dev default)
+  stripMinSize: 5000
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -293,9 +387,18 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
+  # Default: false
+  # Description: Whether or not OpikAI feature is enabled
+  opikAIEnabled: "false"
+  # Default: false
+  # Description: Whether or not Alert feature is enabled
+  alertsEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:
+  # Default: false for testing. Should be enabled for specific test scenarios when needed.
+  # Description: Whether the trace thread closing job is enabled
+  enabled: false
   # Default: 1s
   # Description: Inactive thread timeout. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: 1s
@@ -305,9 +408,12 @@ traceThreadConfig:
   # Default: 100
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: 100
-  # Default: 200 ms
+  # Default: 500ms
   # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
-  poolingInterval: 200ms
+  poolingInterval: 500ms
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: 5s
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: 'trace_thread_closing_stream'
@@ -320,9 +426,18 @@ traceThreadConfig:
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms
-  # Default: 1000
+  # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: 2000
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: 10
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: 10m
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10)
+  maxRetries: 3
 
 # Job timeout configuration
 jobTimeout:
@@ -332,3 +447,71 @@ jobTimeout:
   # Default: 30s
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: 30
+
+# Response formatting configuration
+responseFormatting:
+  # Default: 10001
+  # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
+  truncationSize: 10001
+
+# Queue configuration for Python RQ workers
+queues:
+  # Default: true
+  # Description: Whether queue functionality is enabled
+  enabled: true
+  # Default: 14 days
+  # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
+  defaultJobTtl: 14 days
+  # Per-queue specific configurations
+  queues:
+    # Optimizer cloud queue configuration
+    opik:optimizer-cloud:
+      # Job TTL for optimizer jobs
+      jobTTl: 1 day
+
+# Webhook configuration
+webhook:
+  # Default: false
+  # Description: Whether or not webhook functionality is enabled
+  enabled: true
+  # Default: webhook-events
+  # Description: Redis stream name for webhook events
+  streamName: webhook-events
+  # Default: webhook-consumers
+  # Description: Consumer group name for webhook event processing
+  consumerGroupName: webhook-consumers
+  # Default: 10
+  # Description: Maximum number of messages to consume in a single batch (1-100)
+  consumerBatchSize: 10
+  # Default: 1s
+  # Description: How often webhook consumer will check Redis for new messages
+  poolingInterval: 1s
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  # Note: In tests, set this <= poolingInterval to avoid backpressure drops
+  longPollingDuration: 500ms
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed webhooks (1-10)
+  maxRetries: 3
+  # Default: 100ms
+  # Description: Initial delay between retry attempts
+  initialRetryDelay: 100ms
+  # Default: 5s
+  # Description: Maximum delay between retry attempts
+  maxRetryDelay: 5s
+  # Default: 1s
+  # Description: HTTP request timeout for webhook calls
+  requestTimeout: 1s
+  # Default: 1s
+  # Description: HTTP connection timeout for webhook calls
+  connectionTimeout: 1s
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: 10
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: 10m
+  debouncing:
+    # Default: {}
+    # Description: Period for events aggregation before sending to webhook endpoint
+    windowSize: 1s

@@ -25,6 +25,8 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
+import { parseCompletionOutput } from "@/lib/playground";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -35,6 +37,8 @@ export interface LogQueueParams extends RunStreamingReturn {
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
+  selectedRuleIds: string[] | null;
+  datasetItemData?: object;
 }
 
 export interface LogProcessorArgs {
@@ -71,7 +75,6 @@ const createBatchExperimentItems = async (
   });
 };
 
-const PLAYGROUND_PROJECT_NAME = "playground";
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",
@@ -80,15 +83,33 @@ const USAGE_FIELDS_TO_SEND = [
 ];
 
 const getTraceFromRun = (run: LogQueueParams): LogTrace => {
-  return {
+  const trace: LogTrace = {
     id: v7(),
     projectName: PLAYGROUND_PROJECT_NAME,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
     input: { messages: run.providerMessages },
-    output: { output: run.result || run.providerError },
+    output: { output: parseCompletionOutput(run) },
   };
+
+  // Add selected_rule_ids to trace metadata if provided
+  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
+    trace.metadata = {
+      ...trace.metadata,
+      selected_rule_ids: run.selectedRuleIds,
+    };
+  }
+
+  // Add dataset_item_data to trace metadata if provided
+  if (run.datasetItemData) {
+    trace.metadata = {
+      ...trace.metadata,
+      dataset_item_data: run.datasetItemData,
+    };
+  }
+
+  return trace;
 };
 
 const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
@@ -115,14 +136,21 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
 };
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
+  const experimentMetadata: Record<string, unknown> = {
+    model: run.model,
+    messages: JSON.stringify(run.providerMessages),
+    model_config: run.configs,
+  };
+
+  // Add selected_rule_ids to experiment metadata if provided
+  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
+    experimentMetadata.selected_rule_ids = run.selectedRuleIds;
+  }
+
   return {
     id: v7(),
     datasetName: run.datasetName!,
-    metadata: {
-      model: run.model,
-      messages: JSON.stringify(run.providerMessages),
-      model_config: run.configs,
-    },
+    metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,
     }),

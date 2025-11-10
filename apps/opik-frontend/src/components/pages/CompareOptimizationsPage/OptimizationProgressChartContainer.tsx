@@ -24,7 +24,7 @@ const OptimizationProgressChartContainer: React.FC<
   const chartData = useMemo(() => {
     const retVal: ChartData = {
       data: [],
-      line: objectiveName,
+      objectiveName,
     };
 
     experiments
@@ -41,6 +41,10 @@ const OptimizationProgressChartContainer: React.FC<
           entityName: experiment.name,
           createdDate: formatDate(experiment.created_at),
           value: isUndefined(value) ? null : value,
+          allFeedbackScores:
+            experiment.feedback_scores
+              ?.map((score) => ({ name: score.name, value: score.value }))
+              ?.filter((score) => score.name !== objectiveName) || [],
         });
       });
 

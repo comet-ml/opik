@@ -8,8 +8,10 @@ public class ConfigurationModule extends DropwizardAwareModule<OpikConfiguration
     protected void configure() {
         var batchOperationsConfig = configuration(BatchOperationsConfig.class);
         var workspaceSettings = configuration(WorkspaceSettings.class);
+        var webhookConfig = configuration(WebhookConfig.class);
 
         bind(BatchOperationsConfig.class).toInstance(batchOperationsConfig);
         bind(WorkspaceSettings.class).toInstance(workspaceSettings);
+        bind(WebhookConfig.class).toInstance(webhookConfig);
     }
 }

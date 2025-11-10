@@ -40,6 +40,8 @@ EXPECTED_ANTHROPIC_USAGE_DICT = {
     "original_usage.output_tokens": ANY_BUT_NONE,
     "original_usage.cache_creation_input_tokens": ANY_BUT_NONE,
     "original_usage.cache_read_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation.ephemeral_5m_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation.ephemeral_1h_input_tokens": ANY_BUT_NONE,
 }
 
 MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
@@ -878,6 +880,83 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("anthropic-integration-test", "anthropic-integration-test"),
+    ],
+)
+@retry_on_internal_server_errors
+def test_anthropic_messages_create__opik_args__happyflow(
+    fake_backend, project_name, expected_project_name
+):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(
+        anthropic_client=client,
+        project_name=project_name,
+    )
+    messages = [{"role": "user", "content": "Tell a short fact"}]
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    response = wrapped_client.messages.create(
+        model=MODEL_FOR_TESTS_FULL,
+        messages=messages,
+        max_tokens=10,
+        system="You are a helpful assistant",
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_messages_create",
+        input={"messages": messages, "system": "You are a helpful assistant"},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_messages_create",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),

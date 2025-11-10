@@ -17,6 +17,7 @@ jobs:
     run_tests:
         name: "Quickstart Guide Snippets Tests"
         runs-on: ubuntu-latest
+        timeout-minutes: 15
 
         steps:
             - name: Checkout repo
