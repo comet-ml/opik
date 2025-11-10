@@ -71,8 +71,6 @@ public interface PromptService {
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
-    PromptVersion retrievePromptVersion(String name, String commit);
-
     PromptVersion retrievePromptVersion(String name, String commit, TemplateStructure templateStructure);
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
@@ -582,10 +580,6 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
-        return retrievePromptVersion(name, commit, null);
-    }
-
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit,
             TemplateStructure templateStructure) {
         String workspaceId = requestContext.get().getWorkspaceId();
