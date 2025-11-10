@@ -3,8 +3,6 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
-import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.error.ErrorMessage;
@@ -18,15 +16,13 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,6 +31,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -46,11 +45,10 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -58,7 +56,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DatasetVersionResourceTest {
 
-    private static final String DATASET_RESOURCE_URI = "%s/v1/private/datasets";
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -95,13 +92,11 @@ class DatasetVersionResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
-    private ClientSupport client;
     private DatasetResourceClient datasetResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         this.baseURI = TestUtils.getBaseUrl(client);
-        this.client = client;
 
         ClientSupportUtils.config(client);
 
@@ -125,16 +120,7 @@ class DatasetVersionResourceTest {
                 .name(name)
                 .build();
 
-        try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .post(Entity.json(dataset))) {
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-            return getIdFromLocation(response.getLocation());
-        }
+        return datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
     }
 
     private void createDatasetItems(UUID datasetId, int count) {
@@ -156,16 +142,7 @@ class DatasetVersionResourceTest {
                 .items(itemsList)
                 .build();
 
-        try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                .path("items")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .put(Entity.json(batch))) {
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-        }
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
     }
 
     @Nested
@@ -173,110 +150,77 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateVersion {
 
-        @Test
-        @DisplayName("Success: Create version without tag")
-        void createVersion__whenValidRequest__thenReturnCreated() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 5);
-
-            var versionCreate = DatasetVersionCreate.builder()
-                    .changeDescription("Initial version")
-                    .build();
-
-            // When
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-
-                var version = response.readEntity(DatasetVersion.class);
-                assertThat(version.id()).isNotNull();
-                assertThat(version.datasetId()).isEqualTo(datasetId);
-                assertThat(version.versionHash()).isNotEmpty();
-                assertThat(version.tags()).contains("latest"); // Automatically added
-                // TODO OPIK-3015: Assert on actual item counts once snapshot creation is implemented
-                assertThat(version.itemsCount()).isEqualTo(0);
-                assertThat(version.itemsAdded()).isEqualTo(0);
-                assertThat(version.itemsModified()).isEqualTo(0);
-                assertThat(version.itemsDeleted()).isEqualTo(0);
-                assertThat(version.changeDescription()).isEqualTo("Initial version");
-                assertThat(version.createdBy()).isEqualTo(USER);
-                assertThat(version.createdAt()).isNotNull();
-            }
+        static Stream<Arguments> versionCreateTestCases() {
+            return Stream.of(
+                    // Test case 1: Version without tag
+                    Arguments.of(
+                            "Create version without tag",
+                            DatasetVersionCreate.builder()
+                                    .changeDescription("Initial version")
+                                    .build(),
+                            List.of(DatasetVersionService.LATEST_TAG),
+                            null),
+                    // Test case 2: Version with tag
+                    Arguments.of(
+                            "Create version with tag",
+                            DatasetVersionCreate.builder()
+                                    .tag("baseline")
+                                    .changeDescription("Baseline version")
+                                    .build(),
+                            List.of("baseline", DatasetVersionService.LATEST_TAG),
+                            null),
+                    // Test case 3: Version with metadata
+                    Arguments.of(
+                            "Create version with metadata",
+                            DatasetVersionCreate.builder()
+                                    .changeDescription("Test version")
+                                    .metadata(Map.of(
+                                            "author", "test-user",
+                                            "purpose", "testing",
+                                            "version_number", "1"))
+                                    .build(),
+                            List.of(DatasetVersionService.LATEST_TAG),
+                            Map.of(
+                                    "author", "test-user",
+                                    "purpose", "testing",
+                                    "version_number", "1")));
         }
 
-        @Test
-        @DisplayName("Success: Create version with tag")
-        void createVersion__whenValidRequestWithTag__thenReturnCreatedWithTag() {
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("versionCreateTestCases")
+        @DisplayName("Success: Create version with various inputs")
+        void createVersion__whenValidRequest__thenReturnCreated(
+                String testName,
+                DatasetVersionCreate versionCreate,
+                List<String> expectedTags,
+                Map<String, String> expectedMetadata) {
             // Given
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 3);
 
-            var versionCreate = DatasetVersionCreate.builder()
-                    .tag("baseline")
-                    .changeDescription("Baseline version")
-                    .build();
-
             // When
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+            // Then - Common assertions
+            assertThat(version.id()).isNotNull();
+            assertThat(version.datasetId()).isEqualTo(datasetId);
+            assertThat(version.versionHash()).isNotEmpty();
+            assertThat(version.changeDescription()).isEqualTo(versionCreate.changeDescription());
+            assertThat(version.createdBy()).isEqualTo(USER);
+            assertThat(version.createdAt()).isNotNull();
+            // TODO OPIK-3015: Assert on actual item counts once snapshot creation is implemented
+            assertThat(version.itemsCount()).isEqualTo(0);
+            assertThat(version.itemsAdded()).isEqualTo(0);
+            assertThat(version.itemsModified()).isEqualTo(0);
+            assertThat(version.itemsDeleted()).isEqualTo(0);
 
-                var version = response.readEntity(DatasetVersion.class);
-                assertThat(version.tags()).contains("baseline", "latest"); // Custom tag + automatic latest tag
-                assertThat(version.changeDescription()).isEqualTo("Baseline version");
-            }
-        }
+            // Then - Tag assertions
+            assertThat(version.tags()).containsAll(expectedTags);
 
-        @Test
-        @DisplayName("Success: Create version with metadata")
-        void createVersion__whenValidRequestWithMetadata__thenReturnCreatedWithMetadata() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 2);
-
-            Map<String, String> metadata = Map.of(
-                    "author", "test-user",
-                    "purpose", "testing",
-                    "version_number", "1");
-
-            var versionCreate = DatasetVersionCreate.builder()
-                    .changeDescription("Test version")
-                    .metadata(metadata)
-                    .build();
-
-            // When
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-
-                var version = response.readEntity(DatasetVersion.class);
-                assertThat(version.changeDescription()).isEqualTo("Test version");
+            // Then - Metadata assertions (if expected)
+            if (expectedMetadata != null) {
                 assertThat(version.metadata()).isNotNull();
-                assertThat(version.metadata().get("author")).isEqualTo("test-user");
-                assertThat(version.metadata().get("purpose")).isEqualTo("testing");
-                assertThat(version.metadata().get("version_number")).isEqualTo("1");
+                expectedMetadata.forEach((key, value) -> assertThat(version.metadata().get(key)).isEqualTo(value));
             }
         }
 
@@ -293,20 +237,9 @@ class DatasetVersionResourceTest {
                     .changeDescription("Version 1")
                     .build();
 
-            UUID version1Id;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate1))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version1 = response.readEntity(DatasetVersion.class);
-                version1Id = version1.id();
-                assertThat(version1.tags()).contains("v1", "latest");
-            }
+            var version1 = datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
+            UUID version1Id = version1.id();
+            assertThat(version1.tags()).contains("v1", DatasetVersionService.LATEST_TAG);
 
             // Add more items to change the dataset
             createDatasetItems(datasetId, 2);
@@ -317,20 +250,10 @@ class DatasetVersionResourceTest {
                     .changeDescription("Version 2")
                     .build();
 
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate2))) {
-
-                // Then - Should create a new version (different hash due to changed items)
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version2 = response.readEntity(DatasetVersion.class);
-                assertThat(version2.id()).isNotEqualTo(version1Id); // Different version created
-                assertThat(version2.tags()).contains("v2", "latest"); // Latest tag moved to version 2
-            }
+            // Then - Should create a new version (different hash due to changed items)
+            var version2 = datasetResourceClient.commitVersion(datasetId, versionCreate2, API_KEY, TEST_WORKSPACE);
+            assertThat(version2.id()).isNotEqualTo(version1Id); // Different version created
+            assertThat(version2.tags()).contains("v2", DatasetVersionService.LATEST_TAG); // Latest tag moved to version 2
         }
 
         @Test
@@ -345,16 +268,7 @@ class DatasetVersionResourceTest {
                     .build();
 
             // Create first version with tag
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate1))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-            }
+            datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
 
             // Modify dataset by adding more items
             createDatasetItems(datasetId, 3);
@@ -365,18 +279,14 @@ class DatasetVersionResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate2))) {
+            try (var response = datasetResourceClient.callCommitVersion(datasetId, versionCreate2, API_KEY,
+                    TEST_WORKSPACE)) {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
                 var error = response.readEntity(ErrorMessage.class);
-                assertThat(error.errors()).contains("Tag 'v1.0' already exists for this dataset");
+                assertThat(error.errors())
+                        .contains(DatasetVersionService.ERROR_TAG_EXISTS.formatted("v1.0"));
             }
         }
 
@@ -393,20 +303,9 @@ class DatasetVersionResourceTest {
                     .changeDescription("First version")
                     .build();
 
-            String version1Hash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate1))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version1 = response.readEntity(DatasetVersion.class);
-                version1Hash = version1.versionHash();
-                assertThat(version1.tags()).contains("v1", "latest");
-            }
+            var version1 = datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
+            String version1Hash = version1.versionHash();
+            assertThat(version1.tags()).contains("v1", DatasetVersionService.LATEST_TAG);
 
             // When - Create second version
             var versionCreate2 = DatasetVersionCreate.builder()
@@ -414,50 +313,29 @@ class DatasetVersionResourceTest {
                     .changeDescription("Second version")
                     .build();
 
-            String version2Hash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate2))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version2 = response.readEntity(DatasetVersion.class);
-                version2Hash = version2.versionHash();
-                assertThat(version2.tags()).contains("v2", "latest");
-            }
+            var version2 = datasetResourceClient.commitVersion(datasetId, versionCreate2, API_KEY, TEST_WORKSPACE);
+            String version2Hash = version2.versionHash();
+            assertThat(version2.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
 
             // Then - List versions and verify tag assignments
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(page.content()).hasSize(2);
 
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content()).hasSize(2);
+            // Find versions by hash
+            var version1Retrieved = page.content().stream()
+                    .filter(v -> v.versionHash().equals(version1Hash))
+                    .findFirst()
+                    .orElseThrow();
+            var version2Retrieved = page.content().stream()
+                    .filter(v -> v.versionHash().equals(version2Hash))
+                    .findFirst()
+                    .orElseThrow();
 
-                // Find versions by hash
-                var version1 = page.content().stream()
-                        .filter(v -> v.versionHash().equals(version1Hash))
-                        .findFirst()
-                        .orElseThrow();
-                var version2 = page.content().stream()
-                        .filter(v -> v.versionHash().equals(version2Hash))
-                        .findFirst()
-                        .orElseThrow();
+            // Verify first version no longer has 'latest' tag
+            assertThat(version1Retrieved.tags()).contains("v1").doesNotContain(DatasetVersionService.LATEST_TAG);
 
-                // Verify first version no longer has 'latest' tag
-                assertThat(version1.tags()).contains("v1").doesNotContain("latest");
-
-                // Verify second version has 'latest' tag
-                assertThat(version2.tags()).contains("v2", "latest");
-            }
+            // Verify second version has 'latest' tag
+            assertThat(version2Retrieved.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
         }
     }
 
@@ -472,74 +350,39 @@ class DatasetVersionResourceTest {
             // Given
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 2);
+            final int VERSION_COUNT = 3;
 
-            // Create 3 versions
-            for (int i = 1; i <= 3; i++) {
+            // Create multiple versions
+            for (int i = 1; i <= VERSION_COUNT; i++) {
+                createDatasetItems(datasetId, 1);
+
                 var versionCreate = DatasetVersionCreate.builder()
                         .tag("v" + i)
                         .changeDescription("Version " + i)
                         .build();
 
-                try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                        .path(datasetId.toString())
-                        .path("versions")
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .post(Entity.json(versionCreate))) {
-
-                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                }
-
-                // Add items to change hash for next version
-                if (i < 3) {
-                    createDatasetItems(datasetId, 1);
-                }
+                datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
             }
 
             // When - Get first page with size 2
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .queryParam("page", 1)
-                    .queryParam("size", 2)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE, 1, 2);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            // Then
+            assertThat(page.page()).isEqualTo(1);
+            assertThat(page.size()).isEqualTo(2);
+            assertThat(page.total()).isEqualTo(VERSION_COUNT);
+            assertThat(page.content()).hasSize(2);
 
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.page()).isEqualTo(1);
-                assertThat(page.size()).isEqualTo(2);
-                assertThat(page.total()).isEqualTo(3);
-                assertThat(page.content()).hasSize(2);
-
-                // Verify versions are sorted by created_at DESC (newest first)
-                assertThat(page.content().get(0).tags()).contains("v3");
-                assertThat(page.content().get(1).tags()).contains("v2");
-            }
+            // Verify versions are sorted by created_at DESC (newest first)
+            assertThat(page.content().getFirst().tags()).contains("v3");
+            assertThat(page.content().get(1).tags()).contains("v2");
 
             // When - Get second page
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .queryParam("page", 2)
-                    .queryParam("size", 2)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var page2 = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE, 2, 2);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content()).hasSize(1);
-                assertThat(page.content().get(0).tags()).contains("v1");
-            }
+            // Then
+            assertThat(page2.content()).hasSize(1);
+            assertThat(page2.content().getFirst().tags()).contains("v1");
         }
 
         @Test
@@ -549,21 +392,11 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             // When
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content()).isEmpty();
-                assertThat(page.total()).isEqualTo(0);
-            }
+            // Then
+            assertThat(page.content()).isEmpty();
+            assertThat(page.total()).isEqualTo(0);
         }
     }
 
@@ -583,51 +416,19 @@ class DatasetVersionResourceTest {
                     .changeDescription("Version without tag")
                     .build();
 
-            String versionHash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version = response.readEntity(DatasetVersion.class);
-                versionHash = version.versionHash();
-            }
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+            String versionHash = version.versionHash();
 
             // When - Add tag to version
             var tag = DatasetVersionTag.builder()
                     .tag("production")
                     .build();
 
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .path(versionHash)
-                    .path("tags")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(tag))) {
+            datasetResourceClient.createVersionTag(datasetId, versionHash, tag, API_KEY, TEST_WORKSPACE);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
-
-            // Verify tag was added (along with automatic 'latest' tag)
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content().get(0).tags()).contains("production", "latest");
-            }
+            // Then - Verify tag was added (along with automatic 'latest' tag)
+            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(page.content().getFirst().tags()).contains("production", DatasetVersionService.LATEST_TAG);
         }
 
         @Test
@@ -641,39 +442,22 @@ class DatasetVersionResourceTest {
                     .tag("v1.0")
                     .build();
 
-            String versionHash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version = response.readEntity(DatasetVersion.class);
-                versionHash = version.versionHash();
-            }
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+            String versionHash = version.versionHash();
 
             // When - Try to add same tag again
             var tag = DatasetVersionTag.builder()
                     .tag("v1.0")
                     .build();
 
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .path(versionHash)
-                    .path("tags")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(tag))) {
+            try (var response = datasetResourceClient.callCreateVersionTag(datasetId, versionHash, tag, API_KEY,
+                    TEST_WORKSPACE)) {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
                 var error = response.readEntity(ErrorMessage.class);
-                assertThat(error.errors()).contains("Tag 'v1.0' already exists for this dataset");
+                assertThat(error.errors())
+                        .contains(DatasetVersionService.ERROR_TAG_EXISTS.formatted("v1.0"));
             }
         }
 
@@ -689,15 +473,8 @@ class DatasetVersionResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .path(nonExistentHash)
-                    .path("tags")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(tag))) {
+            try (var response = datasetResourceClient.callCreateVersionTag(datasetId, nonExistentHash, tag, API_KEY,
+                    TEST_WORKSPACE)) {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
@@ -715,48 +492,15 @@ class DatasetVersionResourceTest {
                     .tag("staging")
                     .build();
 
-            String versionHash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version = response.readEntity(DatasetVersion.class);
-                versionHash = version.versionHash();
-            }
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+            String versionHash = version.versionHash();
 
             // When - Delete tag
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .path(versionHash)
-                    .path("tags")
-                    .path("staging")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
+            datasetResourceClient.deleteVersionTag(datasetId, versionHash, "staging", API_KEY, TEST_WORKSPACE);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
-
-            // Verify tag was removed
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content().get(0).tags()).doesNotContain("staging");
-            }
+            // Then - Verify tag was removed
+            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(page.content().getFirst().tags()).doesNotContain("staging");
         }
 
         @Test
@@ -768,30 +512,12 @@ class DatasetVersionResourceTest {
 
             // Create a version to get a valid versionHash
             var versionCreate = DatasetVersionCreate.builder().build();
-            String versionHash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                var version = response.readEntity(DatasetVersion.class);
-                versionHash = version.versionHash();
-            }
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+            String versionHash = version.versionHash();
 
             // When - Try to delete a non-existent tag
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .path(versionHash)
-                    .path("tags")
-                    .path("nonexistent")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
+            try (var response = datasetResourceClient.callDeleteVersionTag(datasetId, versionHash, "nonexistent",
+                    API_KEY, TEST_WORKSPACE)) {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
@@ -810,56 +536,29 @@ class DatasetVersionResourceTest {
                     .tag("v1")
                     .build();
 
-            String versionHash;
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(versionCreate))) {
-
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-                var version = response.readEntity(DatasetVersion.class);
-                versionHash = version.versionHash();
-                assertThat(version.tags()).contains("v1", "latest");
-            }
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+            String versionHash = version.versionHash();
+            assertThat(version.tags()).contains("v1", DatasetVersionService.LATEST_TAG);
 
             // When - Try to delete 'latest' tag
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .path(versionHash)
-                    .path("tags")
-                    .path("latest")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
+            try (var response = datasetResourceClient.callDeleteVersionTag(datasetId, versionHash,
+                    DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)) {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 var error = response.readEntity(ErrorMessage.class);
-                assertThat(error.errors()).contains("Cannot delete 'latest' tag - it is automatically managed");
+                assertThat(error.errors()).contains(
+                        DatasetVersionService.ERROR_CANNOT_DELETE_LATEST_TAG
+                                .formatted(DatasetVersionService.LATEST_TAG));
             }
 
             // Verify 'latest' tag still exists on the version by listing versions
-            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("versions")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
+            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(page.content()).hasSize(1);
 
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content()).hasSize(1);
-
-                var version = page.content().get(0);
-                assertThat(version.versionHash()).isEqualTo(versionHash);
-                assertThat(version.tags()).contains("v1", "latest");
-            }
+            var versionFromList = page.content().getFirst();
+            assertThat(versionFromList.versionHash()).isEqualTo(versionHash);
+            assertThat(versionFromList.tags()).contains("v1", DatasetVersionService.LATEST_TAG);
         }
     }
 }
