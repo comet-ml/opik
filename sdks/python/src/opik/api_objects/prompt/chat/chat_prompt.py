@@ -44,9 +44,6 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._metadata = metadata
         self._type = type
         self._messages = messages
-        self._template_structure = (
-            "chat"  # ChatPrompt class always uses "chat" structure
-        )
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: str
         self.__internal_api__version_id__: str

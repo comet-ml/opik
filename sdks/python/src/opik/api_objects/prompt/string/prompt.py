@@ -36,9 +36,6 @@ class Prompt(base_prompt.BasePrompt):
         self._name = name
         self._metadata = metadata
         self._type = type
-        self._template_structure = (
-            "string"  # Prompt class always uses "string" structure
-        )
 
         self._sync_with_backend()
 
