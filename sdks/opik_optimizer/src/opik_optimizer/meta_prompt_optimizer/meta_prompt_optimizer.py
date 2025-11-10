@@ -30,6 +30,7 @@ from ..mcp_utils.mcp_workflow import (
     MCPSecondPassCoordinator,
     extract_tool_arguments,
 )
+from ..utils.message_content import is_multimodal_prompt
 from ..utils.multimodal import (
     get_multimodal_reasoning_guidance,
     get_multimodal_structure_guidance,
@@ -124,7 +125,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     DEFAULT_PROMPTS_PER_ROUND = 4
 
     # --- Reasoning System Prompt ---
-    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+    _BASE_REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
         Focus on making the prompt more effective by:
         1. Being clear and specific about what is expected
@@ -157,13 +158,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         }}
 
         """
-    _REASONING_SYSTEM_PROMPT = (
-        _REASONING_SYSTEM_PROMPT
-        + "\n\n"
-        + _MULTIMODAL_STRUCTURE_GUIDANCE
-        + "\n\n"
-        + _MULTIMODAL_REASONING_GUIDANCE
-    )
 
     def __init__(
         self,
@@ -190,6 +184,23 @@ class MetaPromptOptimizer(BaseOptimizer):
             "prompts_per_round": self.prompts_per_round,
             "enable_context": self.enable_context,
         }
+
+    def _get_reasoning_system_prompt(
+        self, prompt: chat_prompt.ChatPrompt
+    ) -> str:
+        try:
+            messages = prompt.get_messages()
+        except Exception:
+            messages = prompt.messages or []
+        if is_multimodal_prompt(messages):
+            return (
+                self._BASE_REASONING_SYSTEM_PROMPT
+                + "\n\n"
+                + _MULTIMODAL_STRUCTURE_GUIDANCE
+                + "\n\n"
+                + _MULTIMODAL_REASONING_GUIDANCE
+            )
+        return self._BASE_REASONING_SYSTEM_PROMPT
 
     def _evaluate_prompt(
         self,
@@ -967,9 +978,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call["optimizer_name"] = self.__class__.__name__
                 metadata_for_call["opik_call_type"] = "optimization_algorithm"
 
+                system_prompt = self._get_reasoning_system_prompt(current_prompt)
                 response = self._call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
                     optimization_id=optimization_id,
@@ -1095,9 +1107,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call_tools["optimizer_name"] = self.__class__.__name__
                 metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
 
+                system_prompt = self._get_reasoning_system_prompt(current_prompt)
                 response = self._call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": instruction},
                     ],
                     optimization_id=optimization_id,
