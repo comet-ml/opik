@@ -19,13 +19,18 @@ from opik_optimizer import ChatPrompt
 prompt = ChatPrompt(
     messages=[
         {"role": "system", "content": "Analyze the provided image and answer the question."},
-        {"role": "user", "content": "<image>{image_url}</image>\nQuestion: {question}"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Question: {question}"},
+                {"type": "image_url", "image_url": {"url": "{image_url}"}},
+            ],
+        },
     ],
     model="openai/gpt-4o-mini"
 )
 ```
 
-- Keep placeholders explicit (`{image_url}`) so optimizers can substitute dataset values.
 - Describe the expected output schema (JSON, markdown table, etc.) to reduce ambiguity.
 
 ## Metrics
