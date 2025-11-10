@@ -300,14 +300,24 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Retry attempt {attempt}: Using seed {attempt_seed} (base seed: {self.seed})"
             )
 
-        improve_prompt_response = self._call_model(
+        raw_response = self._call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.model,
             seed=attempt_seed,
-            response_model=ImprovedPrompt,
         )
 
-        return improve_prompt_response
+        if isinstance(raw_response, str):
+            try:
+                return ImprovedPrompt.model_validate_json(raw_response)
+            except Exception as exc:  # pragma: no cover - defensive parsing
+                raise ValueError(
+                    f"Failed to parse improved prompt response as JSON: {raw_response}"
+                ) from exc
+        if isinstance(raw_response, ImprovedPrompt):
+            return raw_response
+        raise ValueError(
+            f"Unexpected response type {type(raw_response)} while improving prompt"
+        )
 
     def _generate_and_evaluate_improvement(
         self,
