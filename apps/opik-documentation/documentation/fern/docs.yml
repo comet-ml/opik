@@ -637,7 +637,7 @@ navigation:
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
           - page: Optimizer Capabilities
             icon: fa-regular fa-table
-            path: docs/agent_optimization/features.mdx
+            path: docs/agent_optimization/capabilities.mdx
             slug: optimizer-capabilities
           - page: Multi-Metric Optimization
             icon: fa-regular fa-chart-line
