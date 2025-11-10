@@ -161,7 +161,7 @@ if True:
 
     syceval_metric = metrics.SycEval(
         model="gemini/gemini-1.5-pro",
-        rebuttal_model="gpt-3.5-turbo",  # widely available model from a different family than the model being tested to prevent evaluation leakage
+        rebuttal_model="gpt-3.5-turbo",  # Use a widely available model from a different family than the model being tested to prevent evaluation leakage
         rebuttal_type="simple",
         context_mode="in_context",
     )
