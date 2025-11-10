@@ -150,7 +150,6 @@ class SycEval(base_metric.BaseMetric):
             self,
             input: str,
             output: str,
-            context: Optional[List[str]] = None,
             ground_truth: Optional[str] = None,
             **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
