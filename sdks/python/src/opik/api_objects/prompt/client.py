@@ -264,10 +264,9 @@ class PromptClient:
                 content = prompts_page.content or []
                 if len(content) == 0:
                     break
-                prompt_info.extend([
-                    (p.name, p.template_structure or "string")
-                    for p in content
-                ])
+                prompt_info.extend(
+                    [(p.name, p.template_structure or "string") for p in content]
+                )
                 if len(content) < size:
                     break
                 page += 1
@@ -282,11 +281,13 @@ class PromptClient:
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(
                         name=prompt_name,
                     )
-                    results.append(PromptSearchResult(
-                        name=prompt_name,
-                        template_structure=template_structure,
-                        prompt_version_detail=latest_version
-                    ))
+                    results.append(
+                        PromptSearchResult(
+                            name=prompt_name,
+                            template_structure=template_structure,
+                            prompt_version_detail=latest_version,
+                        )
+                    )
                 except rest_api_core.ApiError as e:
                     # Skip prompts that can't be retrieved (e.g., deleted between search and retrieval)
                     if e.status_code == 404:
