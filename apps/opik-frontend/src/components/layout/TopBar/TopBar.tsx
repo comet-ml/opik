@@ -1,6 +1,6 @@
 import Breadcrumbs from "@/components/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
-import AppDebugInfo from "@/components/shared/AppDebugInfo/AppDebugInfo";
+import AppDebugInfo from "@/components/layout/AppDebugInfo/AppDebugInfo";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
 
 const TopBar = () => {
