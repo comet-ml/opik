@@ -161,25 +161,11 @@ public class ExperimentService {
             Stream<PromptVersionLink> promptVersionLinks = Optional.ofNullable(experiment.promptVersions())
                     .orElseGet(List::of)
                     .stream()
-                    .map(version -> {
-                        PromptVersionInfo info = promptVersionsInfo.get(version.id());
-                        return new PromptVersionLink(
-                                version.id(),
-                                info != null ? info.commit() : null,
-                                version.promptId(),
-                                info != null ? info.promptName() : null);
-                    });
+                    .map(version -> enrichPromptVersionLink(version, promptVersionsInfo.get(version.id())));
 
             Stream<PromptVersionLink> promptVersionLink = Optional.ofNullable(experiment.promptVersion())
                     .stream()
-                    .map(version -> {
-                        PromptVersionInfo info = promptVersionsInfo.get(version.id());
-                        return new PromptVersionLink(
-                                version.id(),
-                                info != null ? info.commit() : null,
-                                version.promptId(),
-                                info != null ? info.promptName() : null);
-                    });
+                    .map(version -> enrichPromptVersionLink(version, promptVersionsInfo.get(version.id())));
 
             List<PromptVersionLink> versionLinks = Stream.concat(promptVersionLinks, promptVersionLink).distinct()
                     .toList();
@@ -197,30 +183,26 @@ public class ExperimentService {
             PromptVersionLink versionLink = experiment.promptVersion();
 
             if (versionLink != null) {
-                PromptVersionInfo info = promptVersionsInfo.get(versionLink.id());
-                return new PromptVersionLink(
-                        versionLink.id(),
-                        info != null ? info.commit() : null,
-                        versionLink.promptId(),
-                        info != null ? info.promptName() : null);
+                return enrichPromptVersionLink(versionLink, promptVersionsInfo.get(versionLink.id()));
             } else {
                 return Optional.ofNullable(experiment.promptVersions())
                         .stream()
                         .flatMap(List::stream)
                         .findFirst()
-                        .map(version -> {
-                            PromptVersionInfo info = promptVersionsInfo.get(version.id());
-                            return new PromptVersionLink(
-                                    version.id(),
-                                    info != null ? info.commit() : null,
-                                    version.promptId(),
-                                    info != null ? info.promptName() : null);
-                        })
+                        .map(version -> enrichPromptVersionLink(version, promptVersionsInfo.get(version.id())))
                         .orElse(null);
             }
         }
 
         return null;
+    }
+
+    private PromptVersionLink enrichPromptVersionLink(PromptVersionLink version, PromptVersionInfo info) {
+        return new PromptVersionLink(
+                version.id(),
+                info != null ? info.commit() : null,
+                version.promptId(),
+                info != null ? info.promptName() : null);
     }
 
     private Set<UUID> getPromptVersionIds(List<Experiment> experiments) {
