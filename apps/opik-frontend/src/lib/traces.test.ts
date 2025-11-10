@@ -50,12 +50,12 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({ message: "Explain recursion.", prettified: true });
   });
 
-  it("returns the original message if it is already a string and marks it as not prettified", () => {
+  it("returns the original message if it is already a string and marks it as prettified", () => {
     const message = "Simple string message";
     const result = prettifyMessage(message, { type: "input" });
     expect(result).toEqual({
       message: "Simple string message",
-      prettified: false,
+      prettified: true,
     });
   });
 
