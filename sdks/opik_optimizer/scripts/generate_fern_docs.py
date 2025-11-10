@@ -372,7 +372,7 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 ## Key Features
 
 - **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
-- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt and GEPA
 - **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
@@ -383,13 +383,12 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
 
-- **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
-- **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
-- **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
-- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
+- **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
 - **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
+- **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
+- **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 
 ## Standardized Method Signatures
 
