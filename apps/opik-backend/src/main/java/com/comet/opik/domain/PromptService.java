@@ -22,6 +22,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -404,10 +405,12 @@ class PromptServiceImpl implements PromptService {
         String actualStructure = promptVersion.templateStructure();
 
         if (actualStructure != null && !expectedStructure.equals(actualStructure)) {
-            throw new IllegalArgumentException(
-                    String.format("Template structure mismatch: prompt has '%s' but version has '%s'. " +
+            var errorMessage = String.format(
+                    "Template structure mismatch: prompt '%s' has template_structure '%s' but new version has '%s'. " +
                             "Template structure is immutable and cannot be changed after prompt creation.",
-                            expectedStructure, actualStructure));
+                    prompt.name(), expectedStructure, actualStructure);
+            log.warn(errorMessage);
+            throw new BadRequestException(errorMessage);
         }
 
         // Ensure template_structure is set to match prompt if not provided
