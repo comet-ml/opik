@@ -267,13 +267,8 @@ const PlaygroundPrompt = ({
 
         // Update the prompt with new messages (overwrites existing)
         updatePrompt(promptId, { messages: newMessages });
-
-        // Reset selection
-        setSelectedChatPromptId(undefined);
       } catch (error) {
         console.error("Failed to parse chat prompt:", error);
-        // Reset selection even on error
-        setSelectedChatPromptId(undefined);
       }
     }
   }, [
