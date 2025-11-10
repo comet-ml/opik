@@ -10,6 +10,7 @@ Dataset: https://huggingface.co/datasets/DHPR/Driving-Hazard-Prediction-and-Reas
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import opik
@@ -30,6 +31,9 @@ except ModuleNotFoundError as exc:
 else:
     _PillowImage = _ImportedPillowImage
     _PIL_IMPORT_ERROR = None
+
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_pillow() -> Any:
@@ -209,12 +213,12 @@ def _load_dhpr_dataset(
                     "DHPR/Driving-Hazard-Prediction-and-Reasoning",
                     download_config=download_config,
                 )
-            except Exception as inner_e:
+            except Exception as inner_exc:
                 ds.enable_progress_bar()
                 raise ValueError(
-                    f"Failed to load DHPR dataset: {inner_e}. "
-                    f"Make sure you have internet connection and the dataset is accessible."
-                )
+                    f"Failed to load DHPR dataset: {inner_exc}. "
+                    "Make sure you have internet connection and the dataset is accessible."
+                ) from inner_exc
 
         # Process items
         data: list[dict[str, Any]] = []
@@ -230,9 +234,9 @@ def _load_dhpr_dataset(
                     image_quality=image_quality,
                 )
                 data.append(processed_item)
-            except Exception as e:
+            except Exception as exc:
                 # Log error but continue processing
-                print(f"Warning: Failed to process item {i}: {e}")
+                logger.warning("Failed to process DHPR item %s: %s", i, exc)
                 continue
 
         ds.enable_progress_bar()
