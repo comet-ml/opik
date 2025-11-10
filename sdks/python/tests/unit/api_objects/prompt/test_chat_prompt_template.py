@@ -1,4 +1,3 @@
-import pytest
 from opik.api_objects.prompt import ChatPromptTemplate, PromptType
 
 
@@ -15,9 +14,9 @@ def test_chat_prompt_template__format__simple_text_message__happyflow():
     
     result = tested.format({"name": "Harry", "city": "London"})
     
-    assert len(result) == 1
-    assert result[0]["role"] == "user"
-    assert result[0]["content"] == "Hi, my name is Harry and I live in London."
+    assert result == [
+        {"role": "user", "content": "Hi, my name is Harry and I live in London."}
+    ]
 
 
 def test_chat_prompt_template__format__multiple_messages__happyflow():
@@ -36,13 +35,11 @@ def test_chat_prompt_template__format__multiple_messages__happyflow():
         "capital": "Paris",
     })
     
-    assert len(result) == 3
-    assert result[0]["role"] == "system"
-    assert result[0]["content"] == "You are a helpful assistant in London."
-    assert result[1]["role"] == "user"
-    assert result[1]["content"] == "What is the capital of France?"
-    assert result[2]["role"] == "assistant"
-    assert result[2]["content"] == "The capital is Paris."
+    assert result == [
+        {"role": "system", "content": "You are a helpful assistant in London."},
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital is Paris."},
+    ]
 
 
 def test_chat_prompt_template__format__multimodal_content__happyflow():
@@ -65,14 +62,15 @@ def test_chat_prompt_template__format__multimodal_content__happyflow():
         supported_modalities={"vision": True}
     )
     
-    assert len(result) == 1
-    assert result[0]["role"] == "user"
-    assert isinstance(result[0]["content"], list)
-    assert len(result[0]["content"]) == 2
-    assert result[0]["content"][0]["type"] == "text"
-    assert result[0]["content"][0]["text"] == "Describe this painting:"
-    assert result[0]["content"][1]["type"] == "image_url"
-    assert result[0]["content"][1]["image_url"]["url"] == "https://example.com/image.jpg"
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this painting:"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}},
+            ],
+        }
+    ]
 
 
 def test_chat_prompt_template__format__jinja2_template__happyflow():
@@ -88,9 +86,9 @@ def test_chat_prompt_template__format__jinja2_template__happyflow():
     
     result = tested.format({"name": "Harry", "city": "London"})
     
-    assert len(result) == 1
-    assert result[0]["role"] == "user"
-    assert result[0]["content"] == "Hi, my name is Harry and I live in London."
+    assert result == [
+        {"role": "user", "content": "Hi, my name is Harry and I live in London."}
+    ]
 
 
 def test_chat_prompt_template__format__jinja2_with_control_flow():
@@ -152,9 +150,7 @@ def test_chat_prompt_template__format__empty_content():
     
     result = tested.format({"name": "Harry"})
     
-    assert len(result) == 1
-    assert result[0]["role"] == "user"
-    assert result[0]["content"] == ""
+    assert result == [{"role": "user", "content": ""}]
 
 
 def test_chat_prompt_template__format__message_without_role__skipped():
@@ -170,11 +166,10 @@ def test_chat_prompt_template__format__message_without_role__skipped():
     result = tested.format({"name": "Harry"})
     
     # Only messages with roles should be included
-    assert len(result) == 2
-    assert result[0]["role"] == "user"
-    assert result[0]["content"] == "Hello Harry"
-    assert result[1]["role"] == "assistant"
-    assert result[1]["content"] == "Hi there!"
+    assert result == [
+        {"role": "user", "content": "Hello Harry"},
+        {"role": "assistant", "content": "Hi there!"},
+    ]
 
 
 def test_chat_prompt_template__required_modalities__text_only():
@@ -272,12 +267,15 @@ def test_chat_prompt_template__format__supported_modality_preserved():
     # Format with vision supported
     result = tested.format({}, supported_modalities={"vision": True})
     
-    assert len(result) == 1
-    content = result[0]["content"]
-    assert isinstance(content, list)
-    assert len(content) == 2
-    assert content[0]["type"] == "text"
-    assert content[1]["type"] == "image_url"
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this image:"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+            ],
+        }
+    ]
 
 
 def test_chat_prompt_template__format__multimodal_with_template_variables():
@@ -299,11 +297,15 @@ def test_chat_prompt_template__format__multimodal_with_template_variables():
         supported_modalities={"vision": True}
     )
     
-    assert len(result) == 1
-    content = result[0]["content"]
-    assert isinstance(content, list)
-    assert content[0]["text"] == "Analyze this diagram:"
-    assert content[1]["image_url"]["url"] == "https://example.com/diagram.png"
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Analyze this diagram:"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/diagram.png"}},
+            ],
+        }
+    ]
 
 
 def test_chat_prompt_template__format__image_with_detail_parameter():
@@ -328,9 +330,15 @@ def test_chat_prompt_template__format__image_with_detail_parameter():
         supported_modalities={"vision": True}
     )
     
-    content = result[0]["content"]
-    assert isinstance(content, list)
-    assert content[1]["image_url"]["detail"] == "high"
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Analyze:"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg", "detail": "high"}},
+            ],
+        }
+    ]
 
 
 def test_chat_prompt_template__messages_property():
@@ -360,7 +368,9 @@ def test_chat_prompt_template__format__override_template_type():
         template_type=PromptType.JINJA2,
     )
     
-    assert result[0]["content"] == "Name: Harry, City: London"
+    assert result == [
+        {"role": "user", "content": "Name: Harry, City: London"}
+    ]
 
 
 def test_chat_prompt_template__format__one_placeholder_used_multiple_times():
@@ -376,7 +386,9 @@ def test_chat_prompt_template__format__one_placeholder_used_multiple_times():
     
     result = tested.format({"name": "Harry"})
     
-    assert result[0]["content"] == "My name is Harry. I repeat, my name is Harry."
+    assert result == [
+        {"role": "user", "content": "My name is Harry. I repeat, my name is Harry."}
+    ]
 
 
 def test_chat_prompt_template__format__empty_messages_list():
@@ -400,7 +412,5 @@ def test_chat_prompt_template__format__message_with_missing_content():
     
     result = tested.format({"name": "Harry"})
     
-    assert len(result) == 1
-    assert result[0]["role"] == "user"
-    assert result[0]["content"] == ""
+    assert result == [{"role": "user", "content": ""}]
 
