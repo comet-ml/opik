@@ -300,7 +300,7 @@ def _process_dhpr_item(
     # Encode to base64 data URI
     image_uri = encode_pil_to_base64_uri(
         image=pil_image,
-        format="JPEG",  # Use JPEG for dashcam photos to reduce size
+        format="JPEG",  # Use JPEG for dashcam photos to reduce size (PNG would preserve exact quality but be ~3-5x larger for similar visual quality)
         quality=image_quality,  # Configurable quality (default 60)
     )
 
