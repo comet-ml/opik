@@ -201,7 +201,6 @@ def _load_dhpr_dataset(
                 "DHPR/Driving-Hazard-Prediction-and-Reasoning",
                 streaming=True,
                 download_config=download_config,
-                trust_remote_code=True,  # May be needed for custom dataset scripts
             )
         except Exception:
             # Fallback: try without streaming if streaming fails
@@ -209,7 +208,6 @@ def _load_dhpr_dataset(
                 hf_dataset = ds.load_dataset(
                     "DHPR/Driving-Hazard-Prediction-and-Reasoning",
                     download_config=download_config,
-                    trust_remote_code=True,
                 )
             except Exception as inner_e:
                 ds.enable_progress_bar()
