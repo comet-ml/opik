@@ -61,7 +61,7 @@ class BasePrompt(ABC):
         pass
 
     @abstractmethod
-    def to_info_dict(self) -> Dict[str, Any]:
+    def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
         """
         Convert the prompt to an info dictionary for serialization.
 

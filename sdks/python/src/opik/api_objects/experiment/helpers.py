@@ -39,8 +39,8 @@ def build_metadata_and_prompt_versions(
 
         for prompt_obj in prompts:
             prompt_versions.append({"id": prompt_obj.__internal_api__version_id__})
-            # Use to_info_dict() to get the prompt content in a consistent way
-            prompt_info = prompt_obj.to_info_dict()
+            # Use __internal_api__to_info_dict__() to get the prompt content in a consistent way
+            prompt_info = prompt_obj.__internal_api__to_info_dict__()
             # Extract the template/messages from the version dict
             if "version" in prompt_info:
                 if "template" in prompt_info["version"]:
