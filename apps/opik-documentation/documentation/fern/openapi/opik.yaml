@@ -4305,6 +4305,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+            Must be provided together with 'to_time'.
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created up to this time (ISO-8601 format).
+            Must be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
       responses:
         "200":
           description: Trace threads resource
@@ -8643,6 +8657,16 @@ components:
           type: integer
           format: int32
           readOnly: true
+        providers:
+          type: array
+          description: "List of unique provider names from all spans in this trace,\
+            \ sorted alphabetically"
+          readOnly: true
+          items:
+            type: string
+            description: "List of unique provider names from all spans in this trace,\
+              \ sorted alphabetically"
+            readOnly: true
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -11765,6 +11789,16 @@ components:
           type: integer
           format: int32
           readOnly: true
+        providers:
+          type: array
+          description: "List of unique provider names from all spans in this trace,\
+            \ sorted alphabetically"
+          readOnly: true
+          items:
+            type: string
+            description: "List of unique provider names from all spans in this trace,\
+              \ sorted alphabetically"
+            readOnly: true
     TraceThread:
       type: object
       properties:
@@ -11987,6 +12021,16 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        from_time:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+            Must be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter trace threads created up to this time (ISO-8601 format).
+            Must be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -12018,6 +12062,16 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        from_time:
+          type: string
+          description: Filter traces created from this time (ISO-8601 format). Must
+            be provided together with 'to_time'.
+          format: date-time
+        to_time:
+          type: string
+          description: Filter traces created up to this time (ISO-8601 format). Must
+            be provided together with 'from_time' and must be after 'from_time'.
+          format: date-time
     TraceUpdate:
       type: object
       properties:

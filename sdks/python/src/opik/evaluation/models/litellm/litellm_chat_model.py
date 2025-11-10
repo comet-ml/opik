@@ -10,9 +10,11 @@ if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse
 
 import opik.semantic_version as semantic_version
+import opik.integrations.litellm as litellm_integration
+import opik.config as opik_config
 
 from .. import base_model
-from . import opik_monitor, warning_filters, util
+from . import warning_filters, util
 from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
@@ -59,9 +61,10 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         must_support_arguments: Optional[List[str]] = None,
         **completion_kwargs: Any,
     ) -> None:
+        import litellm
+
         """
         Initializes the base model with a given model name.
-        Wraps `litellm.completion` function.
         You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input.
 
         Args:
@@ -75,7 +78,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
             completion_kwargs: key-value arguments to always pass additionally into `litellm.completion` function.
         """
-
         super().__init__(model_name=model_name)
 
         self._check_model_name()
@@ -93,11 +95,21 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             # Litellm has already fixed that, but it is not released yet, so this filter
             # should be removed from here soon.
             warnings.simplefilter("ignore")
-            import litellm
 
         warning_filters.add_warning_filters()
 
-        self._engine = litellm
+        config = opik_config.OpikConfig()
+
+        if config.enable_litellm_models_monitoring:
+            self._litellm_completion = litellm_integration.track_completion()(
+                litellm.completion
+            )
+            self._litellm_acompletion = litellm_integration.track_completion()(
+                litellm.acompletion
+            )
+        else:
+            self._litellm_completion = litellm.completion
+            self._litellm_acompletion = litellm.acompletion
 
     @cached_property
     def supported_params(self) -> Set[str]:
@@ -280,12 +292,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
-        if (
-            opik_monitor.enabled_in_config()
-            and not opik_monitor.opik_is_misconfigured()
-        ):
-            all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
-
         retrying = tenacity.Retrying(
             reraise=True,
             stop=tenacity.stop_after_attempt(max_attempts),
@@ -293,7 +299,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         )
 
         return retrying(
-            self._engine.completion,
+            self._litellm_completion,
             model=self.model_name,
             messages=messages,
             **all_kwargs,
@@ -364,9 +370,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
-        if opik_monitor.enabled_in_config():
-            all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
-
         retrying = tenacity.AsyncRetrying(
             reraise=True,
             stop=tenacity.stop_after_attempt(max_attempts),
@@ -375,7 +378,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         async for attempt in retrying:
             with attempt:
-                return await self._engine.acompletion(
+                return await self._litellm_acompletion(
                     model=self.model_name, messages=messages, **all_kwargs
                 )
 

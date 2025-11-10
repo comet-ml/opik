@@ -35,10 +35,10 @@ on:
             ALLURE_USERNAME:
                 description: ALLURE_USERNAME service parameter. Leave blank.
 
-    # pull_request:
-    #   paths:
-    #     - 'sdks/code_generation/fern/openapi/openapi.yaml'
-    #     - 'tests_end_to_end/tests_end_to_end_ts/**'
+    pull_request:
+      paths:
+        - 'sdks/code_generation/fern/openapi/openapi.yaml'
+        - 'tests_end_to_end/tests_end_to_end_ts/**'
 
 run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'fullregression' }}
 

@@ -1264,11 +1264,7 @@ class TracesResourceTest {
             assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
 
-            assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
-            assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedSpans);
-            SpanAssertions.assertIgnoredFields(actualSpans, expectedSpans, USER);
+            SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
@@ -1642,7 +1638,7 @@ class TracesResourceTest {
                     .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Close thread
             Mono.delay(Duration.ofMillis(500)).block();
@@ -5229,7 +5225,7 @@ class TracesResourceTest {
                     .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Assert that the thread is created and open using getTraceThreads API
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {

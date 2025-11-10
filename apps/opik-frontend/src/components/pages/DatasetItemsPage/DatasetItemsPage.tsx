@@ -50,6 +50,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -356,7 +357,10 @@ const DatasetItemsPage = () => {
         )}
         {dataset?.created_at && (
           <div className="mb-2 flex gap-4 overflow-x-auto">
-            <DateTag date={dataset?.created_at} />
+            <DateTag
+              date={dataset?.created_at}
+              resource={RESOURCE_TYPE.dataset}
+            />
           </div>
         )}
         <DatasetTagsList

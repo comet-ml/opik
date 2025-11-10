@@ -27,6 +27,10 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
             choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
         )
 
+    async def acompletion(model, messages, **kwargs):
+        # Async version for testing
+        return await completion(model, messages, **kwargs)
+
     def get_supported_openai_params(model):
         return list(supported_params)
 
@@ -34,6 +38,7 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
         return ("openai", "openai")
 
     stub_module.completion = completion
+    stub_module.acompletion = acompletion
     stub_module.get_supported_openai_params = get_supported_openai_params
     stub_module.get_llm_provider = get_llm_provider
     stub_module.utils = SimpleNamespace(UnsupportedParamsError=Exception)
@@ -41,12 +46,22 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
     stub_module.callbacks = []
 
     monkeypatch.setitem(sys.modules, "litellm", stub_module)
+
+    # Mock the track_completion decorator to be a no-op for unit tests
+    def mock_track_completion(project_name=None):
+        def decorator(func):
+            # Mark as tracked to prevent actual tracking
+            func.opik_tracked = True
+            return func
+
+        return decorator
+
     monkeypatch.setattr(
-        litellm_chat_model.opik_monitor, "enabled_in_config", lambda: False
+        litellm_chat_model.litellm_integration,
+        "track_completion",
+        mock_track_completion,
     )
-    monkeypatch.setattr(
-        litellm_chat_model.opik_monitor, "opik_is_misconfigured", lambda: True
-    )
+
     return stub_module
 
 

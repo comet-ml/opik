@@ -2000,7 +2000,8 @@ export class Traces {
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
-        const { page, size, projectName, projectId, truncate, stripAttachments, filters, sorting } = request;
+        const { page, size, projectName, projectId, truncate, stripAttachments, filters, sorting, fromTime, toTime } =
+            request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -2032,6 +2033,14 @@ export class Traces {
 
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
         }
 
         const _response = await core.fetcher({

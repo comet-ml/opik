@@ -796,6 +796,47 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .get();
     }
 
+    public Response callGetTraceThreadsWithQueryParams(String projectName, UUID projectId,
+            Map<String, String> queryParams, String apiKey, String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads");
+
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+
+        if (projectName != null) {
+            target = target.queryParam("project_name", projectName);
+        }
+
+        target = addQueryParameters(target, queryParams);
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callSearchTraceThreadsWithRequest(TraceThreadSearchStreamRequest request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public List<TraceThread> searchTraceThreadsStream(TraceThreadSearchStreamRequest request, String apiKey,
+            String workspaceName) {
+        try (var actualResponse = callSearchTraceThreadsWithRequest(request, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return getStreamedTraceThreads(actualResponse);
+        }
+    }
+
     public Response callGetById(UUID id, String apiKey, String workspaceName, Map<String, String> queryParams) {
         WebTarget target = addQueryParameters(
                 client.target(RESOURCE_PATH.formatted(baseURI)).path(id.toString()),
