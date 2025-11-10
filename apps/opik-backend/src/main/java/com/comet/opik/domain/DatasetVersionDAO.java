@@ -8,14 +8,12 @@ import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
-import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -129,12 +127,5 @@ public interface DatasetVersionDAO {
                 AND dv.workspace_id = :workspace_id
             """)
     Optional<DatasetVersion> findByTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
-            @Bind("workspace_id") String workspaceId);
-
-    @SqlQuery("SELECT id FROM dataset_versions WHERE dataset_id = :dataset_id AND workspace_id = :workspace_id")
-    Set<UUID> getVersionIdsByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId);
-
-    @SqlQuery("SELECT id FROM dataset_versions WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id")
-    Set<UUID> getVersionIdsByDatasetIds(@BindList("dataset_ids") Set<UUID> datasetIds,
             @Bind("workspace_id") String workspaceId);
 }
