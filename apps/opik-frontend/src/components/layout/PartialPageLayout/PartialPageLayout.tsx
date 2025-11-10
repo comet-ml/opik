@@ -3,6 +3,7 @@ import useAppStore from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
 import Logo from "@/components/layout/Logo/Logo";
+import AppDebugInfo from "@/components/layout/AppDebugInfo/AppDebugInfo";
 import ThemeToggle from "@/components/layout/ThemeToggle/ThemeToggle";
 
 export const PartialPageLayout = ({
@@ -30,6 +31,7 @@ export const PartialPageLayout = ({
             </Link>
           </div>
 
+          <AppDebugInfo />
           {UserMenu ? <UserMenu /> : <ThemeToggle />}
         </nav>
 

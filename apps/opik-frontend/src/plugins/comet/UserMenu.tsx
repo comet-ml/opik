@@ -417,7 +417,7 @@ const UserMenu = () => {
             <LogOut className="mr-2 size-4" />
             <span>Logout</span>
           </DropdownMenuItem>
-          {APP_VERSION ? (
+          {APP_VERSION && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -433,7 +433,7 @@ const UserMenu = () => {
                 <Copy className="ml-2 size-3 shrink-0" />
               </DropdownMenuItem>
             </>
-          ) : null}
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );
