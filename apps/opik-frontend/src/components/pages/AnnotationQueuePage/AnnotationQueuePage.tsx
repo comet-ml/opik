@@ -10,9 +10,8 @@ import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueBy
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL";
 import DateTag from "@/components/shared/DateTag/DateTag";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import NavigationTag from "@/components/shared/NavigationTag";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import ConfigurationTab from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
@@ -95,11 +94,10 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       >
         <div className="mb-1 flex gap-4 overflow-x-auto">
           {annotationQueue?.created_at && (
-            <TooltipWrapper content="Annotation queue creation time">
-              <div>
-                <DateTag date={annotationQueue.created_at} />
-              </div>
-            </TooltipWrapper>
+            <DateTag
+              date={annotationQueue.created_at}
+              resource={RESOURCE_TYPE.annotationQueue}
+            />
           )}
           {annotationQueue?.scope && (
             <TooltipWrapper content="Annotation queue scope">
@@ -109,12 +107,10 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
             </TooltipWrapper>
           )}
           {annotationQueue?.project_id && (
-            <ResourceLink
+            <NavigationTag
               id={annotationQueue.project_id}
               name={annotationQueue.project_name}
               resource={RESOURCE_TYPE.project}
-              tooltipContent={`Navigate to project: ${annotationQueue.project_name}`}
-              asTag
             />
           )}
           {annotationQueue && (
