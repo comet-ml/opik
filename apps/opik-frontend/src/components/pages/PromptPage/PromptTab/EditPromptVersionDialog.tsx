@@ -34,7 +34,10 @@ import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
-import { parseContentWithImages, generateDefaultLLMPromptMessage } from "@/lib/llm";
+import {
+  parseContentWithImages,
+  generateDefaultLLMPromptMessage,
+} from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLMMessage } from "@/types/llm";
 
@@ -85,7 +88,10 @@ const EditPromptVersionDialog: React.FunctionComponent<
         return parsed.map((msg, index) => ({
           id: `msg-${index}`,
           role: msg.role,
-          content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
+          content:
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content),
         }));
       }
     } catch {
@@ -144,8 +150,10 @@ const EditPromptVersionDialog: React.FunctionComponent<
     setOpen(false);
   };
 
-  const templateHasChanges = isChatPrompt 
-    ? JSON.stringify(messages.map(m => ({ role: m.role, content: m.content }))) !== promptTemplate
+  const templateHasChanges = isChatPrompt
+    ? JSON.stringify(
+        messages.map((m) => ({ role: m.role, content: m.content })),
+      ) !== promptTemplate
     : template !== promptTemplate;
   const metadataHasChanges = metadata !== metadataString;
   const isValid = isChatPrompt
@@ -173,7 +181,9 @@ const EditPromptVersionDialog: React.FunctionComponent<
           />
           <div className="flex flex-col gap-2 pb-4">
             <div className="mt-3 flex items-center justify-between">
-              <Label htmlFor="promptTemplate">{isChatPrompt ? "Chat Messages" : "Prompt"}</Label>
+              <Label htmlFor="promptTemplate">
+                {isChatPrompt ? "Chat Messages" : "Prompt"}
+              </Label>
               {isChatPrompt ? (
                 <Button
                   variant="ghost"
@@ -224,16 +234,25 @@ const EditPromptVersionDialog: React.FunctionComponent<
                     id="template"
                     className="comet-code min-h-[400px]"
                     placeholder="Chat messages JSON"
-                    value={JSON.stringify(messages.map(m => ({ role: m.role, content: m.content })), null, 2)}
+                    value={JSON.stringify(
+                      messages.map((m) => ({
+                        role: m.role,
+                        content: m.content,
+                      })),
+                      null,
+                      2,
+                    )}
                     onChange={(event) => {
                       try {
                         const parsed = JSON.parse(event.target.value);
                         if (Array.isArray(parsed)) {
-                          setMessages(parsed.map((msg, index) => ({
-                            id: `msg-${index}`,
-                            role: msg.role,
-                            content: msg.content,
-                          })));
+                          setMessages(
+                            parsed.map((msg, index) => ({
+                              id: `msg-${index}`,
+                              role: msg.role,
+                              content: msg.content,
+                            })),
+                          );
                         }
                       } catch {
                         // Invalid JSON, don't update
@@ -241,7 +260,8 @@ const EditPromptVersionDialog: React.FunctionComponent<
                     }}
                   />
                   <Description>
-                    Edit the raw JSON representation of chat messages. Must be a valid JSON array.
+                    Edit the raw JSON representation of chat messages. Must be a
+                    valid JSON array.
                   </Description>
                 </>
               ) : (
@@ -262,7 +282,9 @@ const EditPromptVersionDialog: React.FunctionComponent<
                       className="comet-code"
                       placeholder="Prompt"
                       value={localText}
-                      onChange={(event) => handleContentChange(event.target.value)}
+                      onChange={(event) =>
+                        handleContentChange(event.target.value)
+                      }
                     />
                     <Description>
                       {
@@ -275,7 +297,10 @@ const EditPromptVersionDialog: React.FunctionComponent<
                 ) : (
                   <div className="flex flex-col gap-4">
                     <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
-                      <TextDiff content1={originalText} content2={currentText} />
+                      <TextDiff
+                        content1={originalText}
+                        content2={currentText}
+                      />
                     </div>
                     {imagesHaveChanges && (
                       <div className="flex flex-col gap-3 rounded-md border p-4">

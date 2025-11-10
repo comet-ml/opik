@@ -58,7 +58,11 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
-  onReplaceWithChatPrompt?: (messages: LLMMessage[], promptId: string, promptVersionId: string) => void;
+  onReplaceWithChatPrompt?: (
+    messages: LLMMessage[],
+    promptId: string,
+    promptVersionId: string,
+  ) => void;
   onClearOtherPromptLinks?: () => void;
   disableImages?: boolean;
   improvePromptConfig?: ImprovePromptConfig;

@@ -106,11 +106,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
-        <TryInPlaygroundButton 
-          prompt={prompt} 
-          activeVersion={activeVersion}
-        />
-        <ImproveInPlaygroundButton 
+        <TryInPlaygroundButton prompt={prompt} activeVersion={activeVersion} />
+        <ImproveInPlaygroundButton
           prompt={prompt}
           activeVersion={activeVersion}
         />
@@ -133,21 +130,21 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             <ChatPromptView template={activeVersion?.template || ""} />
           ) : (
             <>
-          <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-            {displayText}
-          </code>
-          {extractedImages.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Images
-              </p>
-              <PromptMessageImageTags
-                images={extractedImages}
-                setImages={() => {}}
-                editable={false}
-                preview={true}
-                align="start"
-              />
+              <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+                {displayText}
+              </code>
+              {extractedImages.length > 0 && (
+                <>
+                  <p className="comet-body-s-accented mt-4 text-foreground">
+                    Images
+                  </p>
+                  <PromptMessageImageTags
+                    images={extractedImages}
+                    setImages={() => {}}
+                    editable={false}
+                    preview={true}
+                    align="start"
+                  />
                 </>
               )}
             </>

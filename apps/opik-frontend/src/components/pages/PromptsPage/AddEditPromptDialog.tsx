@@ -61,7 +61,9 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const [description, setDescription] = useState(
     defaultPrompt?.description || "",
   );
-  const [templateStructure, setTemplateStructure] = useState<"string" | "chat">("string");
+  const [templateStructure, setTemplateStructure] = useState<"string" | "chat">(
+    "string",
+  );
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
   ]);
@@ -84,7 +86,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const isEdit = !!defaultPrompt;
   const isChatPrompt = templateStructure === "chat";
   const isValid = Boolean(
-    name.length && (isEdit || (isChatPrompt ? messages.length > 0 : template.length))
+    name.length &&
+      (isEdit || (isChatPrompt ? messages.length > 0 : template.length)),
   );
   const title = isEdit ? "Edit prompt" : "Create a new prompt";
   const submitText = isEdit ? "Update prompt" : "Create prompt";
@@ -121,7 +124,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           messages.map((m) => ({
             role: m.role,
             content: m.content,
-          }))
+          })),
         )
       : template;
 
@@ -190,23 +193,29 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
               <Label htmlFor="templateStructure">Prompt Type</Label>
               <RadioGroup
                 value={templateStructure}
-                onValueChange={(value) => setTemplateStructure(value as "string" | "chat")}
+                onValueChange={(value) =>
+                  setTemplateStructure(value as "string" | "chat")
+                }
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="string" id="string" />
-                  <Label htmlFor="string" className="font-normal cursor-pointer">
+                  <Label
+                    htmlFor="string"
+                    className="cursor-pointer font-normal"
+                  >
                     String prompt - Single text template
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="chat" id="chat" />
-                  <Label htmlFor="chat" className="font-normal cursor-pointer">
+                  <Label htmlFor="chat" className="cursor-pointer font-normal">
                     Chat prompt - Array of messages with roles
                   </Label>
                 </div>
               </RadioGroup>
               <Description>
-                Choose string for single text prompts or chat for conversation-style prompts with multiple messages.
+                Choose string for single text prompts or chat for
+                conversation-style prompts with multiple messages.
               </Description>
             </div>
           )}
@@ -266,16 +275,25 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                     id="template"
                     className="comet-code min-h-[400px]"
                     placeholder="Chat messages JSON"
-                    value={JSON.stringify(messages.map(m => ({ role: m.role, content: m.content })), null, 2)}
+                    value={JSON.stringify(
+                      messages.map((m) => ({
+                        role: m.role,
+                        content: m.content,
+                      })),
+                      null,
+                      2,
+                    )}
                     onChange={(event) => {
                       try {
                         const parsed = JSON.parse(event.target.value);
                         if (Array.isArray(parsed)) {
-                          setMessages(parsed.map((msg, index) => ({
-                            id: `msg-${index}`,
-                            role: msg.role,
-                            content: msg.content,
-                          })));
+                          setMessages(
+                            parsed.map((msg, index) => ({
+                              id: `msg-${index}`,
+                              role: msg.role,
+                              content: msg.content,
+                            })),
+                          );
                         }
                       } catch {
                         // Invalid JSON, don't update
@@ -283,7 +301,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                     }}
                   />
                   <Description>
-                    Edit the raw JSON representation of chat messages. Must be a valid JSON array.
+                    Edit the raw JSON representation of chat messages. Must be a
+                    valid JSON array.
                   </Description>
                 </>
               ) : (
@@ -297,7 +316,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                     />
                   </div>
                   <Description>
-                    Create your chat prompt with multiple messages. Each message has a role (system, user, assistant) and content.
+                    Create your chat prompt with multiple messages. Each message
+                    has a role (system, user, assistant) and content.
                   </Description>
                 </>
               )}

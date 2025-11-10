@@ -89,7 +89,10 @@ const useLoadPlayground = () => {
             newPrompt.messages = parsed.map((msg, index) => ({
               id: `msg-${index}-${Date.now()}`,
               role: msg.role as LLM_MESSAGE_ROLE,
-              content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
+              content:
+                typeof msg.content === "string"
+                  ? msg.content
+                  : JSON.stringify(msg.content),
               promptId,
               promptVersionId,
             }));
@@ -105,7 +108,7 @@ const useLoadPlayground = () => {
             ];
           }
         } catch (error) {
-          console.error('Failed to parse chat prompt:', error);
+          console.error("Failed to parse chat prompt:", error);
           // Fallback to single message if parsing fails
           newPrompt.messages = [
             generateDefaultLLMPromptMessage({
@@ -116,7 +119,7 @@ const useLoadPlayground = () => {
             }),
           ];
         }
-      } else{
+      } else {
         // For string prompts, create a single message
         newPrompt.messages = [
           generateDefaultLLMPromptMessage({

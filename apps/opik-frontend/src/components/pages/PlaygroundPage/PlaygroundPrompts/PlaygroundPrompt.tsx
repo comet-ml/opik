@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { CopyPlus, Trash, Download, Save, Database } from "lucide-react";
+import { CopyPlus, Trash, Save } from "lucide-react";
 import last from "lodash/last";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
@@ -79,28 +79,32 @@ const PlaygroundPrompt = ({
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
-  const [selectedChatPromptId, setSelectedChatPromptId] = useState<string | undefined>();
-  const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] = useState(false);
-  const [lastImportedPromptName, setLastImportedPromptName] = useState<string>("");
+  const [selectedChatPromptId, setSelectedChatPromptId] = useState<
+    string | undefined
+  >();
+  const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
+    useState(false);
+  const [lastImportedPromptName, setLastImportedPromptName] =
+    useState<string>("");
 
   // Fetch chat prompt data when selected
   const { data: chatPromptData } = usePromptByIdApi(
-    { 
-      promptId: selectedChatPromptId! 
+    {
+      promptId: selectedChatPromptId!,
     },
-    { 
-      enabled: !!selectedChatPromptId 
-    }
+    {
+      enabled: !!selectedChatPromptId,
+    },
   );
 
   // Fetch chat prompt version when chat prompt is loaded
   const { data: chatPromptVersionData } = usePromptVersionById(
-    { 
-      versionId: chatPromptData?.latest_version?.id! 
+    {
+      versionId: chatPromptData?.latest_version?.id || "",
     },
-    { 
-      enabled: !!chatPromptData?.latest_version?.id 
-    }
+    {
+      enabled: !!chatPromptData?.latest_version?.id,
+    },
   );
 
   const provider = providerResolver(model);
@@ -240,25 +244,30 @@ const PlaygroundPrompt = ({
 
   // Effect to populate messages when chat prompt data is loaded
   useEffect(() => {
-    if (chatPromptVersionData?.template && selectedChatPromptId && chatPromptData) {
+    if (
+      chatPromptVersionData?.template &&
+      selectedChatPromptId &&
+      chatPromptData
+    ) {
       try {
         // Parse the JSON string from template
         const parsedMessages = JSON.parse(chatPromptVersionData.template);
-        
+
         // Convert to LLMMessage format - this will OVERWRITE existing messages
-        const newMessages: LLMMessage[] = parsedMessages.map((msg: any) => 
-          generateDefaultLLMPromptMessage({
-            role: msg.role as LLM_MESSAGE_ROLE,
-            content: msg.content,
-          })
+        const newMessages: LLMMessage[] = parsedMessages.map(
+          (msg: { role: string; content: string }) =>
+            generateDefaultLLMPromptMessage({
+              role: msg.role as LLM_MESSAGE_ROLE,
+              content: msg.content,
+            }),
         );
-        
+
         // Save the imported prompt name for later use when saving
         setLastImportedPromptName(chatPromptData.name);
-        
+
         // Update the prompt with new messages (overwrites existing)
         updatePrompt(promptId, { messages: newMessages });
-        
+
         // Reset selection
         setSelectedChatPromptId(undefined);
       } catch (error) {
@@ -267,7 +276,13 @@ const PlaygroundPrompt = ({
         setSelectedChatPromptId(undefined);
       }
     }
-  }, [chatPromptVersionData, promptId, updatePrompt, selectedChatPromptId, chatPromptData]);
+  }, [
+    chatPromptVersionData,
+    promptId,
+    updatePrompt,
+    selectedChatPromptId,
+    chatPromptData,
+  ]);
 
   // Handler for saving chat prompt
   const handleSaveChatPrompt = useCallback(() => {
@@ -381,12 +396,14 @@ const PlaygroundPrompt = ({
           },
         }}
       />
-      
+
       <AddNewPromptVersionDialog
         open={showSaveChatPromptDialog}
         setOpen={setShowSaveChatPromptDialog}
         prompt={chatPromptData}
-        template={JSON.stringify(messages.map((msg) => ({ role: msg.role, content: msg.content })))}
+        template={JSON.stringify(
+          messages.map((msg) => ({ role: msg.role, content: msg.content })),
+        )}
         templateStructure="chat"
         defaultName={lastImportedPromptName}
         onSave={() => {

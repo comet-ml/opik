@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Database, FileTerminal, Plus, X } from "lucide-react";
+import { Database, Plus, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import useAppStore from "@/store/AppStore";
@@ -56,9 +56,11 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
 
   const promptsOptions = useMemo(() => {
     const filteredPrompts = filterByTemplateStructure
-      ? prompts.filter((p) => p.template_structure === filterByTemplateStructure)
+      ? prompts.filter(
+          (p) => p.template_structure === filterByTemplateStructure,
+        )
       : prompts;
-    
+
     return filteredPrompts.map(({ name, id }) => ({
       label: name,
       value: id,
@@ -90,7 +92,9 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         <div className="flex w-full items-center text-light-slate">
           <Database className="mr-2 size-4" />
           <span className="truncate font-normal">
-            {filterByTemplateStructure === "chat" ? "Load chat prompt" : "Load a prompt"}
+            {filterByTemplateStructure === "chat"
+              ? "Load chat prompt"
+              : "Load a prompt"}
           </span>
         </div>
       ),

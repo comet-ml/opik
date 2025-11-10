@@ -32,7 +32,8 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
 
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
-      promptContent: activeVersion?.template ?? prompt?.latest_version?.template ?? "",
+      promptContent:
+        activeVersion?.template ?? prompt?.latest_version?.template ?? "",
       promptId: prompt?.id,
       promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
       templateStructure: prompt?.template_structure,

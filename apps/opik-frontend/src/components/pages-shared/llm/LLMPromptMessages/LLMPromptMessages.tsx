@@ -85,7 +85,7 @@ const LLMPromptMessages = ({
   );
 
   const handleReplaceWithChatPrompt = useCallback(
-    (newMessages: LLMMessage[], promptId: string, promptVersionId: string) => {
+    (newMessages: LLMMessage[]) => {
       // Replace all messages with the chat prompt's messages
       onChange(newMessages);
     },
@@ -96,10 +96,10 @@ const LLMPromptMessages = ({
     (currentMessageId: string) => () => {
       // Clear prompt links from all messages except the current one
       onChange(
-        messages.map((m) => 
+        messages.map((m) =>
           m.id !== currentMessageId
             ? { ...m, promptId: undefined, promptVersionId: undefined }
-            : m
+            : m,
         ),
       );
     },
@@ -157,7 +157,9 @@ const LLMPromptMessages = ({
                   handleChangeMessage(message.id, changes)
                 }
                 onReplaceWithChatPrompt={handleReplaceWithChatPrompt}
-                onClearOtherPromptLinks={handleClearOtherPromptLinks(message.id)}
+                onClearOtherPromptLinks={handleClearOtherPromptLinks(
+                  message.id,
+                )}
                 message={message}
                 disableImages={disableImages}
                 improvePromptConfig={improvePromptConfig}

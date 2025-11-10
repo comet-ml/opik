@@ -91,7 +91,9 @@ const UseThisPromptDialog: React.FunctionComponent<
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Use this {isChatPrompt ? "chat " : ""}prompt</DialogTitle>
+          <DialogTitle>
+            Use this {isChatPrompt ? "chat " : ""}prompt
+          </DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
           <ExplainerDescription
@@ -99,10 +101,26 @@ const UseThisPromptDialog: React.FunctionComponent<
             {...EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_use_this_prompt]}
           />
           <div className="flex flex-col gap-2">
-            <div className="comet-body-accented mt-4">Creating a {isChatPrompt ? "chat " : ""}prompt</div>
-            <CodeHighlighter data={isChatPrompt ? getCreatingChatPrompt(promptName) : getCreatingPrompt(promptName)} />
-            <div className="comet-body-accented mt-4">Getting a {isChatPrompt ? "chat " : ""}prompt</div>
-            <CodeHighlighter data={isChatPrompt ? getGettingChatPrompt(promptName) : getGettingPrompt(promptName)} />
+            <div className="comet-body-accented mt-4">
+              Creating a {isChatPrompt ? "chat " : ""}prompt
+            </div>
+            <CodeHighlighter
+              data={
+                isChatPrompt
+                  ? getCreatingChatPrompt(promptName)
+                  : getCreatingPrompt(promptName)
+              }
+            />
+            <div className="comet-body-accented mt-4">
+              Getting a {isChatPrompt ? "chat " : ""}prompt
+            </div>
+            <CodeHighlighter
+              data={
+                isChatPrompt
+                  ? getGettingChatPrompt(promptName)
+                  : getGettingPrompt(promptName)
+              }
+            />
           </div>
         </DialogAutoScrollBody>
       </DialogContent>
