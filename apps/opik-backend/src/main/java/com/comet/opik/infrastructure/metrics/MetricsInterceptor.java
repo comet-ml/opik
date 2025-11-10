@@ -9,6 +9,11 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +30,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 
 /**
  * AOP interceptor that automatically collects OpenTelemetry metrics for methods annotated with {@link Metered}.
- * 
+ *
  * <p>This interceptor records the following metrics:
  * <ul>
  *   <li><b>opik.operation.count</b> - Counter of operations with status (success/error) and has_attachments labels</li>
@@ -35,12 +40,13 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  *   <li><b>opik.operation.payload_size</b> - Histogram of payload sizes in bytes</li>
  *   <li><b>opik.operation.attachments_count</b> - Histogram of attachment counts (when enabled)</li>
  * </ul>
- * 
+ *
  * <p>All metrics include the following labels:
  * <ul>
  *   <li><b>operation</b> - The operation name from the annotation</li>
  *   <li><b>entity_type</b> - The entity type from the annotation</li>
  *   <li><b>workspace_name</b> - The workspace name from the RequestContext</li>
+ *   <li><b>http_method</b> - The HTTP method (GET, POST, PUT, DELETE, PATCH) from JAX-RS annotations</li>
  * </ul>
  */
 @Slf4j
@@ -78,7 +84,8 @@ public class MetricsInterceptor implements MethodInterceptor {
 
     // Patterns for attachment detection
     private static final Pattern STRIPPED_ATTACHMENT_PATTERN = Pattern
-            .compile("\\[([^\\]]+\\.(png|jpg|jpeg|gif|pdf|txt|json|csv|mp4|webm|mp3|wav))\\]", Pattern.CASE_INSENSITIVE);
+            .compile("\\[([^\\]]+\\.(png|jpg|jpeg|gif|pdf|txt|json|csv|mp4|webm|mp3|wav))\\]",
+                    Pattern.CASE_INSENSITIVE);
     private static final Pattern DATA_URI_PATTERN = Pattern.compile("data:[^;]+;base64,");
 
     @Override
@@ -91,6 +98,7 @@ public class MetricsInterceptor implements MethodInterceptor {
         }
 
         Metered metered = method.getAnnotation(Metered.class);
+        String httpMethod = extractHttpMethod(method);
         long startTime = System.currentTimeMillis();
         boolean success = false;
         Throwable caughtException = null;
@@ -139,16 +147,16 @@ public class MetricsInterceptor implements MethodInterceptor {
 
             try {
                 // Record metrics
-                recordMetrics(metered, duration, success, caughtException, batchSize, payloadSize, attachmentCount,
-                        hasAttachments);
+                recordMetrics(metered, httpMethod, duration, success, caughtException, batchSize, payloadSize,
+                        attachmentCount, hasAttachments);
             } catch (Exception e) {
                 log.warn("Failed to record metrics for operation: '{}'", metered.operation(), e);
             }
         }
     }
 
-    private void recordMetrics(Metered metered, long duration, boolean success, Throwable exception, int batchSize,
-            long payloadSize, int attachmentCount, boolean hasAttachments) {
+    private void recordMetrics(Metered metered, String httpMethod, long duration, boolean success, Throwable exception,
+            int batchSize, long payloadSize, int attachmentCount, boolean hasAttachments) {
 
         String workspaceName = getWorkspaceName();
 
@@ -156,7 +164,8 @@ public class MetricsInterceptor implements MethodInterceptor {
         AttributesBuilder baseBuilder = Attributes.builder()
                 .put("operation", metered.operation())
                 .put("entity_type", metered.entity())
-                .put("workspace_name", workspaceName);
+                .put("workspace_name", workspaceName)
+                .put("http_method", httpMethod);
 
         Attributes baseAttributes = baseBuilder.build();
 
@@ -205,6 +214,24 @@ public class MetricsInterceptor implements MethodInterceptor {
             log.debug("Failed to get workspace name from context", e);
             return "unknown";
         }
+    }
+
+    /**
+     * Extracts HTTP method from JAX-RS annotations (@GET, @POST, @PUT, @DELETE, @PATCH).
+     */
+    private String extractHttpMethod(Method method) {
+        if (method.isAnnotationPresent(GET.class)) {
+            return "GET";
+        } else if (method.isAnnotationPresent(POST.class)) {
+            return "POST";
+        } else if (method.isAnnotationPresent(PUT.class)) {
+            return "PUT";
+        } else if (method.isAnnotationPresent(DELETE.class)) {
+            return "DELETE";
+        } else if (method.isAnnotationPresent(PATCH.class)) {
+            return "PATCH";
+        }
+        return "UNKNOWN";
     }
 
     /**
@@ -351,4 +378,3 @@ public class MetricsInterceptor implements MethodInterceptor {
     private record AttachmentInfo(boolean hasAttachments, int count) {
     }
 }
-

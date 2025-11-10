@@ -7,10 +7,10 @@ import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 
 /**
  * Guice module that registers the {@link MetricsInterceptor} for automatic metrics collection.
- * 
+ *
  * <p>This module sets up AOP interception for all methods annotated with {@link Metered},
  * enabling automatic collection of OpenTelemetry metrics without modifying business logic.
- * 
+ *
  * <p>The module is registered in {@code OpikApplication} and should not be manually instantiated.
  */
 public class MetricsModule extends DropwizardAwareModule<OpikConfiguration> {
@@ -23,4 +23,3 @@ public class MetricsModule extends DropwizardAwareModule<OpikConfiguration> {
         bindInterceptor(Matchers.any(), Matchers.annotatedWith(Metered.class), metricsInterceptor);
     }
 }
-
