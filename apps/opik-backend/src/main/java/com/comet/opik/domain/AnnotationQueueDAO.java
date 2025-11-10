@@ -680,11 +680,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> template.add("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> template.add("comments_enabled", true));
-        // Handle feedback_definitions explicitly, including empty arrays
-        if (update.feedbackDefinitionNames() != null) {
-            template.add("has_feedback_definitions", true);
-            template.add("feedback_definitions", update.feedbackDefinitionNames());
-        }
+        Optional.ofNullable(update.feedbackDefinitionNames())
+                .ifPresent(feedbackDefinitionNames -> {
+                    template.add("has_feedback_definitions", true);
+                    template.add("feedback_definitions", feedbackDefinitionNames.toArray(String[]::new));
+                });
 
         return template;
     }
@@ -699,13 +699,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> statement.bind("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> statement.bind("comments_enabled", update.commentsEnabled()));
-        // Always bind feedback_definitions if present (including empty arrays)
-        if (update.feedbackDefinitionNames() != null) {
-            String[] array = update.feedbackDefinitionNames().isEmpty()
-                    ? new String[]{}
-                    : update.feedbackDefinitionNames().toArray(String[]::new);
-            statement.bind("feedback_definitions", array);
-        }
+        Optional.ofNullable(update.feedbackDefinitionNames())
+                .ifPresent(feedbackDefinitionNames -> statement.bind("feedback_definitions",
+                        feedbackDefinitionNames.toArray(String[]::new)));
     }
 
     private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {

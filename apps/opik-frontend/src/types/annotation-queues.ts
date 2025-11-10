@@ -18,7 +18,7 @@ export interface AnnotationQueue {
   description?: string;
   instructions?: string;
   comments_enabled: boolean;
-  feedback_definition_names?: string[];
+  feedback_definition_names: string[];
   scope: ANNOTATION_QUEUE_SCOPE;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];

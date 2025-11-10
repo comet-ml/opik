@@ -62,7 +62,7 @@ const formSchema = z.object({
   instructions: z.string().optional(),
   scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
   comments_enabled: z.boolean(),
-  feedback_definition_names: z.array(z.string()).optional(),
+  feedback_definition_names: z.array(z.string()).default([]),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -294,7 +294,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         </FormLabel>
                         <FormControl>
                           <FeedbackDefinitionsSelectBox
-                            value={field.value || []}
+                            value={field.value}
                             onChange={field.onChange}
                             valueField="name"
                             multiselect

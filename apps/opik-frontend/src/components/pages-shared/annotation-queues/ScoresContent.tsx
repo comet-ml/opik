@@ -45,20 +45,17 @@ const ScoresContent: React.FunctionComponent<ScoresContentProps> = ({
       size: 1000,
     },
     {
-      enabled: (annotationQueue.feedback_definition_names?.length ?? 0) > 0,
+      enabled: annotationQueue.feedback_definition_names.length > 0,
     },
   );
 
   const feedbackDefinitions = useMemo(() => {
-    if (
-      !data?.content ||
-      !(annotationQueue.feedback_definition_names?.length ?? 0)
-    ) {
+    if (!data?.content || !annotationQueue.feedback_definition_names.length) {
       return [];
     }
 
     return data.content.filter((def) =>
-      annotationQueue.feedback_definition_names!.includes(def.name),
+      annotationQueue.feedback_definition_names.includes(def.name),
     );
   }, [data?.content, annotationQueue.feedback_definition_names]);
 
@@ -71,7 +68,7 @@ const ScoresContent: React.FunctionComponent<ScoresContentProps> = ({
     [],
   );
 
-  if (!(annotationQueue.feedback_definition_names?.length ?? 0)) {
+  if (!annotationQueue.feedback_definition_names.length) {
     return null;
   }
 
