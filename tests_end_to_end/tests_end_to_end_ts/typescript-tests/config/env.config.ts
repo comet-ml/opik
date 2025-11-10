@@ -30,7 +30,7 @@ export class EnvConfigManager {
     const isLocal = baseUrl.startsWith('http://localhost');
     const workspace = isLocal 
       ? 'default'
-      : (process.env.OPIK_TEST_USER_NAME || process.env.OPIK_TEST_WORKSPACE);
+      : (process.env.OPIK_TEST_USER_NAME || process.env.OPIK_TEST_WORKSPACE || '');
 
     return {
       baseUrl,
