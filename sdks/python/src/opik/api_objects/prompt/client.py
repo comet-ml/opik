@@ -1,11 +1,20 @@
 from typing import Any, Dict, List, Optional, Tuple
 import json
-
+import dataclasses
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 
 from . import types as prompt_types
+
+
+@dataclasses.dataclass
+class PromptSearchResult:
+    """Result from searching prompts, containing name, template structure, and latest version details."""
+
+    name: str
+    template_structure: str
+    prompt_version_detail: prompt_version_detail.PromptVersionDetail
 
 
 class PromptClient:
@@ -224,7 +233,7 @@ class PromptClient:
         *,
         name: Optional[str] = None,
         parsed_filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Tuple[str, prompt_version_detail.PromptVersionDetail]]:
+    ) -> List[PromptSearchResult]:
         """
         Search prompt containers by optional name substring and filters, then
         return the latest version detail for each matched prompt container.
@@ -234,17 +243,17 @@ class PromptClient:
             parsed_filters: List of parsed filters (OQL) that will be stringified for the backend.
 
         Returns:
-            List[Tuple[str, PromptVersionDetail]]: (prompt name, latest version) for each matched prompt container.
+            List[PromptSearchResult]: Each result contains name, template_structure, and prompt_version_detail.
         """
         try:
             filters_str = (
                 json.dumps(parsed_filters) if parsed_filters is not None else None
             )
 
-            # Page through all prompt containers
+            # Page through all prompt containers and collect name + template_structure
             page = 1
             size = 1000
-            all_prompt_names: List[str] = []
+            prompt_info: List[Tuple[str, str]] = []  # (name, template_structure)
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
                     page=page,
@@ -255,22 +264,29 @@ class PromptClient:
                 content = prompts_page.content or []
                 if len(content) == 0:
                     break
-                all_prompt_names.extend([p.name for p in content])
+                prompt_info.extend([
+                    (p.name, p.template_structure or "string")
+                    for p in content
+                ])
                 if len(content) < size:
                     break
                 page += 1
 
-            if len(all_prompt_names) == 0:
+            if len(prompt_info) == 0:
                 return []
 
             # Retrieve latest version for each container name
-            results: List[Tuple[str, prompt_version_detail.PromptVersionDetail]] = []
-            for prompt_name in all_prompt_names:
+            results: List[PromptSearchResult] = []
+            for prompt_name, template_structure in prompt_info:
                 try:
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(
                         name=prompt_name,
                     )
-                    results.append((prompt_name, latest_version))
+                    results.append(PromptSearchResult(
+                        name=prompt_name,
+                        template_structure=template_structure,
+                        prompt_version_detail=latest_version
+                    ))
                 except rest_api_core.ApiError as e:
                     # Skip prompts that can't be retrieved (e.g., deleted between search and retrieval)
                     if e.status_code == 404:

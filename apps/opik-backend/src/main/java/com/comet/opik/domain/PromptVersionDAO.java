@@ -20,9 +20,9 @@ import java.util.UUID;
 @RegisterConstructorMapper(PromptVersionId.class)
 interface PromptVersionDAO {
 
-    @SqlUpdate("INSERT INTO prompt_versions (id, prompt_id, commit, template, metadata, change_description, type, template_structure, created_by, workspace_id) "
+    @SqlUpdate("INSERT INTO prompt_versions (id, prompt_id, commit, template, metadata, change_description, type, created_by, workspace_id) "
             +
-            "VALUES (:bean.id, :bean.promptId, :bean.commit, :bean.template, :bean.metadata, :bean.changeDescription, :bean.type, :bean.templateStructure, :bean.createdBy, :workspace_id)")
+            "VALUES (:bean.id, :bean.promptId, :bean.commit, :bean.template, :bean.metadata, :bean.changeDescription, :bean.type, :bean.createdBy, :workspace_id)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") PromptVersion prompt);
 
     @SqlQuery("SELECT * FROM prompt_versions WHERE id IN (<ids>) AND workspace_id = :workspace_id")

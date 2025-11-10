@@ -458,7 +458,7 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion);
+            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
@@ -495,7 +495,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion);
+            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion, null);
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
@@ -788,7 +788,7 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion);
+            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -825,7 +825,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion);
+            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion, null);
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1441,7 +1441,7 @@ class PromptResourceTest {
                     var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
                             .build();
-                    var request = new CreatePromptVersion(prompt.name(), promptVersion);
+                    var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
                     createPromptVersion(request, apiKey, workspaceName);
                 }
             });
@@ -1579,7 +1579,7 @@ class PromptResourceTest {
                     var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
                             .build();
-                    var request = new CreatePromptVersion(prompt.name(), promptVersion);
+                    var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
                     createPromptVersion(request, apiKey, workspaceName);
                 }
             });
@@ -1781,7 +1781,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            promptVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion), API_KEY,
+            promptVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion, null), API_KEY,
                     TEST_WORKSPACE);
 
             Prompt expectedPrompt = prompt.toBuilder()
@@ -1881,7 +1881,7 @@ class PromptResourceTest {
                     .id(null)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion);
+            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion, null);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1908,7 +1908,7 @@ class PromptResourceTest {
                     .id(versionId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion);
+            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion, null);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1935,7 +1935,7 @@ class PromptResourceTest {
                     .id(versionId)
                     .build();
 
-            var request = new CreatePromptVersion(promptName, expectedPromptVersion);
+            var request = new CreatePromptVersion(promptName, expectedPromptVersion, null);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, apiKey, workspaceName);
 
@@ -1961,7 +1961,7 @@ class PromptResourceTest {
                     .id(versionId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1971,7 +1971,7 @@ class PromptResourceTest {
                     .build();
 
             assertPromptVersionConflict(
-                    new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion2),
+                    new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion2, null),
                     API_KEY, TEST_WORKSPACE, "Prompt version already exists");
         }
 
@@ -1989,7 +1989,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1999,7 +1999,7 @@ class PromptResourceTest {
                     .build();
 
             assertPromptVersionConflict(
-                    new CreatePromptVersion(prompt.name(), promptVersion2),
+                    new CreatePromptVersion(prompt.name(), promptVersion2, null),
                     API_KEY, TEST_WORKSPACE, "Prompt version already exists");
         }
 
@@ -2025,16 +2025,17 @@ class PromptResourceTest {
 
         Stream<Arguments> when__promptVersionIsInvalid__thenReturnError() {
             return Stream.of(
-                    arguments(new CreatePromptVersion(null, factory.manufacturePojo(PromptVersion.class)),
+                    arguments(new CreatePromptVersion(null, factory.manufacturePojo(PromptVersion.class), null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    arguments(new CreatePromptVersion("", factory.manufacturePojo(PromptVersion.class)),
+                    arguments(new CreatePromptVersion("", factory.manufacturePojo(PromptVersion.class), null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("").build()),
+                                            .toBuilder().commit("").build(),
+                                    null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
@@ -2042,7 +2043,8 @@ class PromptResourceTest {
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("1234567").build()),
+                                            .toBuilder().commit("1234567").build(),
+                                    null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
@@ -2050,7 +2052,8 @@ class PromptResourceTest {
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("1234-567").build()),
+                                            .toBuilder().commit("1234-567").build(),
+                                    null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
@@ -2058,21 +2061,24 @@ class PromptResourceTest {
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().id(UUID.randomUUID()).build()),
+                                            .toBuilder().id(UUID.randomUUID()).build(),
+                                    null),
                             HttpStatus.SC_BAD_REQUEST,
                             new ErrorMessage(List.of("prompt version id must be a version 7 UUID")),
                             ErrorMessage.class),
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().template("").build()),
+                                            .toBuilder().template("").build(),
+                                    null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class),
                     arguments(
                             new CreatePromptVersion(UUID.randomUUID().toString(),
                                     factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().template(null).build()),
+                                            .toBuilder().template(null).build(),
+                                    null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
@@ -2108,7 +2114,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2145,7 +2151,8 @@ class PromptResourceTest {
                     .toList();
 
             promptVersions
-                    .forEach(promptVersion -> createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion),
+                    .forEach(promptVersion -> createPromptVersion(
+                            new CreatePromptVersion(prompt.name(), promptVersion, null),
                             API_KEY, TEST_WORKSPACE));
 
             List<PromptVersion> expectedPromptVersionPage1 = promptVersions.reversed().subList(0, 10);
@@ -2176,7 +2183,8 @@ class PromptResourceTest {
                     .toList();
 
             promptVersions
-                    .forEach(promptVersion -> createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion),
+                    .forEach(promptVersion -> createPromptVersion(
+                            new CreatePromptVersion(prompt.name(), promptVersion, null),
                             API_KEY, TEST_WORKSPACE));
 
             List<PromptVersion> promptVersionPage1 = promptVersions.reversed().subList(0, 2);
@@ -2241,7 +2249,7 @@ class PromptResourceTest {
                     .type(type)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2295,14 +2303,14 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
                     .build();
 
-            var request2 = new CreatePromptVersion(prompt.name(), promptVersion2);
+            var request2 = new CreatePromptVersion(prompt.name(), promptVersion2, null);
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
             var createdPromptVersion2 = createPromptVersion(request2, API_KEY, TEST_WORKSPACE);
@@ -2357,7 +2365,7 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2430,8 +2438,8 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Success: should retrieve string prompt when template_structure is STRING")
-        void shouldRetrieveStringPrompt_whenTemplateStructureIsString() {
+        @DisplayName("Success: should retrieve string prompt")
+        void shouldRetrieveStringPrompt() {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -2446,10 +2454,9 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .template("Hello {{name}}")
-                    .templateStructure(TemplateStructure.STRING.getValue())
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.STRING);
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.STRING);
@@ -2458,8 +2465,8 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Success: should retrieve chat prompt when template_structure is CHAT")
-        void shouldRetrieveChatPrompt_whenTemplateStructureIsChat() {
+        @DisplayName("Success: should retrieve chat prompt")
+        void shouldRetrieveChatPrompt() {
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -2474,10 +2481,9 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .template(null)
-                    .templateStructure(TemplateStructure.CHAT.getValue())
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.CHAT);
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.CHAT);
@@ -2503,13 +2509,12 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .template("Hello {{name}}")
-                    .templateStructure(TemplateStructure.STRING.getValue())
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.STRING);
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            // Try to retrieve it as CHAT prompt
+            // Try to retrieve it as CHAT prompt - should fail with clear error
             var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.CHAT);
 
             try (var response = client
@@ -2527,6 +2532,7 @@ class PromptResourceTest {
                         .contains("is a string prompt, but chat prompt was requested");
             }
         }
+
     }
 
     @Nested
@@ -2558,7 +2564,7 @@ class PromptResourceTest {
                     .changeDescription("First version")
                     .build();
 
-            var createdV1 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion1), API_KEY,
+            var createdV1 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion1, null), API_KEY,
                     TEST_WORKSPACE);
 
             // Create second version
@@ -2570,7 +2576,7 @@ class PromptResourceTest {
                     .changeDescription("Second version")
                     .build();
 
-            var createdV2 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion2), API_KEY,
+            var createdV2 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion2, null), API_KEY,
                     TEST_WORKSPACE);
 
             // Now restore the first version
@@ -2638,7 +2644,7 @@ class PromptResourceTest {
                     .changeDescription("First version")
                     .build();
 
-            createPromptVersion(new CreatePromptVersion(prompt1.name(), promptVersion1), API_KEY,
+            createPromptVersion(new CreatePromptVersion(prompt1.name(), promptVersion1, null), API_KEY,
                     TEST_WORKSPACE);
 
             // Create second version
@@ -2653,10 +2659,10 @@ class PromptResourceTest {
                     .changeDescription("Second version")
                     .build();
 
-            var prompt2V1 = createPromptVersion(new CreatePromptVersion(prompt2.name(), promptVersion2), API_KEY,
+            var prompt2V1 = createPromptVersion(new CreatePromptVersion(prompt2.name(), promptVersion2, null), API_KEY,
                     TEST_WORKSPACE);
 
-            createPromptVersion(new CreatePromptVersion(prompt1.name(), newpPromptVersion1), API_KEY,
+            createPromptVersion(new CreatePromptVersion(prompt1.name(), newpPromptVersion1, null), API_KEY,
                     TEST_WORKSPACE);
 
             // Now restore the first version

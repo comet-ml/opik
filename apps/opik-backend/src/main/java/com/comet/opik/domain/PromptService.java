@@ -151,7 +151,6 @@ class PromptServiceImpl implements PromptService {
                     .metadata(promptRequest.metadata())
                     .changeDescription(promptRequest.changeDescription())
                     .type(promptRequest.type())
-                    .templateStructure(createdPrompt.templateStructure().getValue())
                     .createdBy(createdPrompt.createdBy())
                     .build();
 
@@ -159,7 +158,10 @@ class PromptServiceImpl implements PromptService {
 
             promptVersionDAO.save(workspaceId, promptVersion);
 
-            return promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
+            PromptVersion savedVersion = promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
+            return savedVersion.toBuilder()
+                    .templateStructure(createdPrompt.templateStructure())
+                    .build();
         });
 
         log.info("Created Prompt version for prompt id '{}'", createdPrompt.id());
@@ -273,9 +275,9 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(id, "prompt version");
 
-        // Get template_structure from version, defaulting to STRING if not provided
-        TemplateStructure templateStructure = createPromptVersion.version().templateStructure() != null
-                ? TemplateStructure.fromString(createPromptVersion.version().templateStructure())
+        // Get template_structure from request, defaulting to STRING if not provided
+        TemplateStructure templateStructure = createPromptVersion.templateStructure() != null
+                ? createPromptVersion.templateStructure()
                 : TemplateStructure.STRING;
 
         Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure);
@@ -409,36 +411,23 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(promptVersion.id(), "prompt version");
 
-        // Validate that template_structure matches the prompt's template_structure
+        // Get parent prompt to inherit template structure
         Prompt prompt = getById(promptVersion.promptId());
-        String expectedStructure = prompt.templateStructure().getValue();
-        String actualStructure = promptVersion.templateStructure();
-
-        if (actualStructure != null && !expectedStructure.equals(actualStructure)) {
-            var errorMessage = String.format(
-                    "Template structure mismatch: prompt '%s' has template_structure '%s' but new version has '%s'. " +
-                            "Template structure is immutable and cannot be changed after prompt creation.",
-                    prompt.name(), expectedStructure, actualStructure);
-            log.warn(errorMessage);
-            throw new BadRequestException(errorMessage);
-        }
-
-        // Ensure template_structure is set to match prompt if not provided
-        PromptVersion versionToSave = actualStructure == null
-                ? promptVersion.toBuilder().templateStructure(expectedStructure).build()
-                : promptVersion;
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            promptVersionDAO.save(workspaceId, versionToSave);
+            promptVersionDAO.save(workspaceId, promptVersion);
 
             return null;
         });
 
-        log.info("Created Prompt version for prompt id '{}'", versionToSave.promptId());
+        log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
-        return getById(workspaceId, versionToSave.id());
+        PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
+        return savedVersion.toBuilder()
+                .templateStructure(prompt.templateStructure())
+                .build();
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {
@@ -594,7 +583,7 @@ class PromptServiceImpl implements PromptService {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
-            // Validate template structure only if specified
+            // Validate template structure if specified (for early error detection)
             if (templateStructure != null && !prompt.templateStructure().equals(templateStructure)) {
                 String expectedType = templateStructure == TemplateStructure.CHAT ? "chat" : "string";
                 String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "string";
@@ -603,23 +592,25 @@ class PromptServiceImpl implements PromptService {
                                 name, actualType, expectedType));
             }
 
+            PromptVersion promptVersion;
             if (commit == null) {
                 // Fetch latest version directly from prompt_versions table
                 List<PromptVersion> versions = promptVersionDAO.findByPromptId(prompt.id(), workspaceId, 1, 0);
                 if (versions.isEmpty()) {
                     throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
                 }
-                return versions.getFirst();
-            }
+                promptVersion = versions.getFirst();
+            } else {
+                promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);
 
-            PromptVersion promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);
-
-            if (promptVersion == null) {
-                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+                if (promptVersion == null) {
+                    throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+                }
             }
 
             return promptVersion.toBuilder()
                     .variables(getVariables(promptVersion.template(), promptVersion.type()))
+                    .templateStructure(prompt.templateStructure())
                     .build();
         });
     }

@@ -1567,20 +1567,22 @@ class Opik:
         parsed_filters = oql.get_filter_expressions()
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        name_and_versions = prompt_client_.search_prompts(parsed_filters=parsed_filters)
+        search_results = prompt_client_.search_prompts(parsed_filters=parsed_filters)
 
         # Convert to Prompt or ChatPrompt objects based on template_structure
         prompts: List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]] = []
-        for prompt_name, version in name_and_versions:
-            if version.template_structure == "chat":
+        for result in search_results:
+            if result.template_structure == "chat":
                 prompts.append(
                     prompt_module.ChatPrompt.from_fern_prompt_version(
-                        prompt_name, version
+                        result.name, result.prompt_version_detail
                     )
                 )
             else:
                 prompts.append(
-                    prompt_module.Prompt.from_fern_prompt_version(prompt_name, version)
+                    prompt_module.Prompt.from_fern_prompt_version(
+                        result.name, result.prompt_version_detail
+                    )
                 )
 
         return prompts
