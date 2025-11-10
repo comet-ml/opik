@@ -94,6 +94,8 @@ export interface ExperimentItem {
   output: object;
   feedback_scores?: TraceFeedbackScore[];
   duration?: number;
+  total_estimated_cost?: number;
+  usage?: Record<string, number>;
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;

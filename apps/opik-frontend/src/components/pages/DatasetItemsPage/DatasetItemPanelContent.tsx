@@ -24,6 +24,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
   const { data, isPending } = useDatasetItemById(
     {
       datasetItemId,
+      truncate: false,
     },
     {
       placeholderData: keepPreviousData,
