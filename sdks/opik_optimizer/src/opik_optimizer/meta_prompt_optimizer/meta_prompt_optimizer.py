@@ -185,9 +185,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             "enable_context": self.enable_context,
         }
 
-    def _get_reasoning_system_prompt(
-        self, prompt: chat_prompt.ChatPrompt
-    ) -> str:
+    def _get_reasoning_system_prompt(self, prompt: chat_prompt.ChatPrompt) -> str:
         try:
             messages = prompt.get_messages()
         except Exception:

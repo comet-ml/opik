@@ -199,7 +199,7 @@ def _format_multimodal_part(part: MediaPart) -> Text:
             style="dim",
         )
 
-    payload = part.get(payload_key, {})
+    payload = part.get(payload_key) if payload_key else {}
     url = payload.get("url") if isinstance(payload, dict) else None
     lines = [f"{_attachment_label(part_type)}:"]
     lines.extend(_format_url_lines(url))
@@ -217,7 +217,7 @@ def _summarize_media_part(part: MediaPart) -> str:
     """Return single-line summary for diff output."""
     part_type = str(part.get("type", "attachment"))
     payload_key = MULTIMODAL_URL_FIELDS.get(part_type)
-    payload = part.get(payload_key, {})
+    payload = part.get(payload_key) if payload_key else {}
     url = payload.get("url", "") if isinstance(payload, dict) else ""
     label = _attachment_label(part_type)
 

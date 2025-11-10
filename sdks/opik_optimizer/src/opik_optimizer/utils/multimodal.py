@@ -11,7 +11,7 @@ import re
 import textwrap
 import warnings
 from io import BytesIO
-from typing import Any, Iterable
+from typing import Any
 
 _PillowImage: Any | None
 _PIL_IMPORT_ERROR: ModuleNotFoundError | None
@@ -185,7 +185,9 @@ def replace_label_in_multimodal_content(
         part_type = part.get("type")
         if part_type == "text":
             text_value = str(part.get("text", ""))
-            new_parts.append({"type": "text", "text": text_value.replace(label, replacement)})
+            new_parts.append(
+                {"type": "text", "text": text_value.replace(label, replacement)}
+            )
         elif part_type in SUPPORTED_MULTIMODAL_PART_TYPES:
             new_parts.append(replace_label_in_media_part(part, label, replacement))
         else:
