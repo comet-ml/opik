@@ -52,7 +52,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
     }
 
     const filtered = annotationQueue.feedback_scores.filter((score) =>
-      annotationQueue.feedback_definition_names.includes(score.name),
+      annotationQueue.feedback_definition_names!.includes(score.name),
     );
 
     return sortBy(filtered, "name");

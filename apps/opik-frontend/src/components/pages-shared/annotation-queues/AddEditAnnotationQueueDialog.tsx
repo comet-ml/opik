@@ -294,7 +294,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         </FormLabel>
                         <FormControl>
                           <FeedbackDefinitionsSelectBox
-                            value={field.value}
+                            value={field.value || []}
                             onChange={field.onChange}
                             valueField="name"
                             multiselect

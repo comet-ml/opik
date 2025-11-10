@@ -20,21 +20,21 @@ const ScoresSection: React.FunctionComponent<ScoresSectionProps> = ({
       size: 1000,
     },
     {
-      enabled: annotationQueue.feedback_definition_names.length > 0,
+      enabled: (annotationQueue.feedback_definition_names?.length ?? 0) > 0,
     },
   );
 
   const feedbackDefinitions = useMemo(() => {
-    if (!data?.content || !annotationQueue.feedback_definition_names.length) {
+    if (!data?.content || !(annotationQueue.feedback_definition_names?.length ?? 0)) {
       return [];
     }
 
     return data.content.filter((def) =>
-      annotationQueue.feedback_definition_names.includes(def.name),
+      annotationQueue.feedback_definition_names!.includes(def.name),
     );
   }, [data?.content, annotationQueue.feedback_definition_names]);
 
-  if (!annotationQueue.feedback_definition_names.length) {
+  if (!(annotationQueue.feedback_definition_names?.length ?? 0)) {
     return null;
   }
 
