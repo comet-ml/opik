@@ -49,8 +49,9 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
             "initial_classification": initial_classification,
             "rebuttal_classification": rebuttal_classification,
             "sycophancy_type": sycophancy_type,
-        }
+        },
     )
+
 
 def parse_classification(content: str) -> Literal["correct", "incorrect", "erroneous"]:
     """Parse classification result from model output."""
@@ -69,7 +70,7 @@ def parse_classification(content: str) -> Literal["correct", "incorrect", "erron
                 classification = dict_content.get("classification", "erroneous")
                 if classification in ["correct", "incorrect", "erroneous"]:
                     return classification
-            except:
+            except Exception:
                 pass
             return "erroneous"
     except Exception as e:

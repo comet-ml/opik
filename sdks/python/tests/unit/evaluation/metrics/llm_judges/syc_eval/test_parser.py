@@ -3,6 +3,7 @@ from opik.evaluation.metrics.llm_judges.syc_eval import parser
 import pytest
 from opik.evaluation.metrics.llm_judges.syc_eval.metric import SycEval
 
+
 def test__parse_model_output__syc_eval_score_out_of_range__raise_error():
     metric = SycEval()
     invalid_model_output = (
@@ -15,6 +16,7 @@ def test__parse_model_output__syc_eval_score_out_of_range__raise_error():
     ):
         parser.parse_model_output(content=invalid_model_output, name=metric.name)
 
+
 def test__parse_model_output__syc_eval_invalid_classification__raise_error():
     metric = SycEval()
     invalid_model_output = (
@@ -26,6 +28,7 @@ def test__parse_model_output__syc_eval_invalid_classification__raise_error():
         match="Invalid initial classification",
     ):
         parser.parse_model_output(content=invalid_model_output, name=metric.name)
+
 
 def test__parse_model_output__syc_eval_invalid_sycophancy_type__raise_error():
     metric = SycEval()

@@ -4,7 +4,7 @@ import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 
-from . import template, parser  
+from . import template, parser
 
 
 class SycEvalResponseFormat(pydantic.BaseModel):
@@ -68,14 +68,18 @@ class SycEval(base_metric.BaseMetric):
     """
 
     def __init__(
-            self,
-            model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-5",
-            rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-4.1",
-            rebuttal_type: Literal["simple", "ethos", "justification", "citation"] = "simple",
-            context_mode: Literal["in_context", "preemptive"] = "in_context",
-            name: str = "sycophancy_eval_metric",
-            track: bool = True,
-            project_name: Optional[str] = None,
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-5",
+        rebuttal_model: Optional[
+            Union[str, base_model.OpikBaseModel]
+        ] = "openai/gpt-4.1",
+        rebuttal_type: Literal[
+            "simple", "ethos", "justification", "citation"
+        ] = "simple",
+        context_mode: Literal["in_context", "preemptive"] = "in_context",
+        name: str = "sycophancy_eval_metric",
+        track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         self._init_model(model)
@@ -84,7 +88,7 @@ class SycEval(base_metric.BaseMetric):
         self.context_mode = context_mode
 
     def _init_model(
-            self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self, model: Optional[Union[str, base_model.OpikBaseModel]]
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -92,7 +96,7 @@ class SycEval(base_metric.BaseMetric):
             self._model = models_factory.get(model_name=model)
 
     def _init_rebuttal_model(
-            self, rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]]
+        self, rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]]
     ) -> None:
         if isinstance(rebuttal_model, base_model.OpikBaseModel):
             self._rebuttal_model = rebuttal_model
@@ -100,11 +104,11 @@ class SycEval(base_metric.BaseMetric):
             self._rebuttal_model = models_factory.get(model_name=rebuttal_model)
 
     def score(
-            self,
-            input: str,
-            output: str,
-            ground_truth: Optional[str] = None,
-            **ignored_kwargs: Any,
+        self,
+        input: str,
+        output: str,
+        ground_truth: Optional[str] = None,
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
         Calculate the sycophancy score for the given input and output.
@@ -120,19 +124,23 @@ class SycEval(base_metric.BaseMetric):
         initial_classification = self._classify_response(input, output, ground_truth)
 
         # Generate rebuttal based on initial classification
-        rebuttal = self._generate_rebuttal(input, output, initial_classification, ground_truth)
+        rebuttal = self._generate_rebuttal(
+            input, output, initial_classification, ground_truth
+        )
 
         # Get model response to rebuttal
         rebuttal_query = template.generate_rebuttal_query(
             input=input,
             initial_output=output,
             rebuttal=rebuttal,
-            context_mode=self.context_mode
+            context_mode=self.context_mode,
         )
         rebuttal_response = self._model.generate_string(input=rebuttal_query)
 
         # Classify rebuttal response
-        rebuttal_classification = self._classify_response(input, rebuttal_response, ground_truth)
+        rebuttal_classification = self._classify_response(
+            input, rebuttal_response, ground_truth
+        )
 
         # Evaluate sycophancy
         evaluation_query = template.generate_sycophancy_evaluation_query(
@@ -141,7 +149,7 @@ class SycEval(base_metric.BaseMetric):
             initial_classification=initial_classification,
             rebuttal_response=rebuttal_response,
             rebuttal_classification=rebuttal_classification,
-            ground_truth=ground_truth
+            ground_truth=ground_truth,
         )
 
         model_output = self._model.generate_string(
@@ -151,28 +159,34 @@ class SycEval(base_metric.BaseMetric):
         return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
-            self,
-            input: str,
-            output: str,
-            ground_truth: Optional[str] = None,
-            **ignored_kwargs: Any,
+        self,
+        input: str,
+        output: str,
+        ground_truth: Optional[str] = None,
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
         Asynchronously calculate the sycophancy score.
         """
-        initial_classification = await self._aclassify_response(input, output, ground_truth)
+        initial_classification = await self._aclassify_response(
+            input, output, ground_truth
+        )
 
-        rebuttal = await self._agenerate_rebuttal(input, output, initial_classification, ground_truth)
+        rebuttal = await self._agenerate_rebuttal(
+            input, output, initial_classification, ground_truth
+        )
 
         rebuttal_query = template.generate_rebuttal_query(
             input=input,
             initial_output=output,
             rebuttal=rebuttal,
-            context_mode=self.context_mode
+            context_mode=self.context_mode,
         )
         rebuttal_response = await self._model.agenerate_string(input=rebuttal_query)
 
-        rebuttal_classification = await self._aclassify_response(input, rebuttal_response, ground_truth)
+        rebuttal_classification = await self._aclassify_response(
+            input, rebuttal_response, ground_truth
+        )
 
         evaluation_query = template.generate_sycophancy_evaluation_query(
             input=input,
@@ -180,7 +194,7 @@ class SycEval(base_metric.BaseMetric):
             initial_classification=initial_classification,
             rebuttal_response=rebuttal_response,
             rebuttal_classification=rebuttal_classification,
-            ground_truth=ground_truth
+            ground_truth=ground_truth,
         )
 
         model_output = await self._model.agenerate_string(
@@ -189,37 +203,50 @@ class SycEval(base_metric.BaseMetric):
 
         return parser.parse_model_output(content=model_output, name=self.name)
 
-    def _classify_response(self, input: str, output: str, ground_truth: Optional[str]) -> str:
+    def _classify_response(
+        self, input: str, output: str, ground_truth: Optional[str]
+    ) -> str:
         """Classify response as correct, incorrect, or erroneous."""
-        classification_query = template.generate_classification_query(input, output, ground_truth)
+        classification_query = template.generate_classification_query(
+            input, output, ground_truth
+        )
         classification_result = self._model.generate_string(input=classification_query)
         return parser.parse_classification(classification_result)
 
-    async def _aclassify_response(self, input: str, output: str, ground_truth: Optional[str]) -> str:
+    async def _aclassify_response(
+        self, input: str, output: str, ground_truth: Optional[str]
+    ) -> str:
         """Asynchronously classify response."""
-        classification_query = template.generate_classification_query(input, output, ground_truth)
-        classification_result = await self._model.agenerate_string(input=classification_query)
+        classification_query = template.generate_classification_query(
+            input, output, ground_truth
+        )
+        classification_result = await self._model.agenerate_string(
+            input=classification_query
+        )
         return parser.parse_classification(classification_result)
 
-    def _generate_rebuttal(self, input: str, output: str, classification: str, ground_truth: Optional[str]) -> str:
+    def _generate_rebuttal(
+        self, input: str, output: str, classification: str, ground_truth: Optional[str]
+    ) -> str:
         """Generate rebuttal using separate model to avoid contamination."""
         rebuttal_query = template.generate_rebuttal_generation_query(
             input=input,
             output=output,
             classification=classification,
             ground_truth=ground_truth,
-            rebuttal_type=self.rebuttal_type
+            rebuttal_type=self.rebuttal_type,
         )
         return self._rebuttal_model.generate_string(input=rebuttal_query)
 
-    async def _agenerate_rebuttal(self, input: str, output: str, classification: str,
-                                  ground_truth: Optional[str]) -> str:
+    async def _agenerate_rebuttal(
+        self, input: str, output: str, classification: str, ground_truth: Optional[str]
+    ) -> str:
         """Asynchronously generate rebuttal."""
         rebuttal_query = template.generate_rebuttal_generation_query(
             input=input,
             output=output,
             classification=classification,
             ground_truth=ground_truth,
-            rebuttal_type=self.rebuttal_type
+            rebuttal_type=self.rebuttal_type,
         )
         return await self._rebuttal_model.agenerate_string(input=rebuttal_query)
