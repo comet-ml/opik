@@ -59,3 +59,9 @@ src/opik_optimizer/
 
 - Type annotate public methods and helper functions. Use `pydantic.BaseModel`, dataclasses, or TypedDicts for structured data exchanged between modules (for example, `OptimizationResult`, prompt variants).
 - Prefer immutable structures (tuples, frozen dataclasses) for candidate representations passed between operators to avoid accidental mutation.
+
+## LiteLLM Structured Responses
+
+- Avoid passing `response_model` to `BaseOptimizer._call_model`. OpenAI/LiteLLM now enforces stricter schemas (`additionalProperties=false`) that break multimodal prompts.
+- Instead, instruct the LLM with an explicit **RETURN FORMAT** in the prompt (see `_generate_candidate_prompts` / `_improve_prompt`) and parse the raw string or object using `pydantic` (e.g., `CandidatePromptsResponse.model_validate_json(response)` when the response is a string).
+- When supporting both strings and typed objects, normalize immediately after `_call_model` so downstream code always handles the same type.
