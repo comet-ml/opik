@@ -98,4 +98,9 @@ Do not remove any variables or placeholders from any prompt message. You can rep
 
 IMPORTANT: When returning the improved prompt, preserve the exact structure of multimodal content. If a message's content is a list (multimodal), return it as a JSON array, not as a string. If it's a string, return it as a string.
 
-Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""
+Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt.
+
+RETURN FORMAT:
+- Respond **only** with valid JSON that matches: ```{{"reasoning": "<short paragraph explaining the edits>","messages": [{{"role": "<role>", "content": "<string or list matching original structure>"}},...]}}```
+- Do not include markdown fences, explanations outside the JSON object, or additional keys.
+"""
