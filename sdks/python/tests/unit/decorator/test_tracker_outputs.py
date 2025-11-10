@@ -1707,7 +1707,7 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
     f("f-input")
     tracker.flush_tracker()
 
-    expected_prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
+    expected_prompts = [prompt.to_info_dict(p) for p in prompts]
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -1763,7 +1763,7 @@ def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
     f("f-input")
     tracker.flush_tracker()
 
-    expected_prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
+    expected_prompts = [prompt.to_info_dict(p) for p in prompts]
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
