@@ -173,6 +173,7 @@ def finalize_mcp_result(
     final_tools = (
         result.details.get("final_tools") if isinstance(result.details, dict) else None
     )
+    # Use optimizer's centralized method if available, otherwise inline
     if optimizer and hasattr(optimizer, "_extract_tool_prompts"):
         tool_prompts = optimizer._extract_tool_prompts(final_tools) or {}
     else:
