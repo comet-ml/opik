@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
@@ -11,7 +12,9 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +24,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,6 +55,8 @@ public interface DatasetVersionService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetVersionServiceImpl implements DatasetVersionService {
+
+    private static final String LATEST_TAG = "latest";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -100,7 +106,14 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
 
-            // Add tag if provided
+            // Remove 'latest' tag from previous version (if exists)
+            datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
+
+            // Always add 'latest' tag to the new version
+            datasetVersionDAO.insertTag(datasetId, LATEST_TAG, versionId, userName, workspaceId);
+            log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
+
+            // Add custom tag if provided
             if (StringUtils.isNotBlank(request.tag())) {
                 DatabaseUtils.handleStateDbDuplicateConstraint(
                         () -> datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId),
@@ -199,6 +212,16 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public void deleteTag(@NonNull UUID datasetId, @NonNull String tag) {
         log.info("Deleting tag '{}' from dataset: '{}'", tag, datasetId);
+
+        // Prevent deletion of 'latest' tag - it's managed automatically
+        if (LATEST_TAG.equals(tag)) {
+            throw new ClientErrorException(
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(
+                                    List.of("Cannot delete '%s' tag - it is automatically managed"
+                                            .formatted(LATEST_TAG))))
+                            .build());
+        }
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

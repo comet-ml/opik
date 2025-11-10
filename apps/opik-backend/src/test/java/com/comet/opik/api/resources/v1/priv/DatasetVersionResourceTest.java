@@ -200,7 +200,7 @@ class DatasetVersionResourceTest {
                 assertThat(version.id()).isNotNull();
                 assertThat(version.datasetId()).isEqualTo(datasetId);
                 assertThat(version.versionHash()).isNotEmpty();
-                assertThat(version.tags()).isNullOrEmpty();
+                assertThat(version.tags()).contains("latest"); // Automatically added
                 // TODO OPIK-3015: Assert on actual item counts once snapshot creation is implemented
                 assertThat(version.itemsCount()).isEqualTo(0);
                 assertThat(version.itemsAdded()).isEqualTo(0);
@@ -237,7 +237,7 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
 
                 var version = response.readEntity(DatasetVersion.class);
-                assertThat(version.tags()).contains("baseline");
+                assertThat(version.tags()).contains("baseline", "latest"); // Custom tag + automatic latest tag
                 assertThat(version.changeDescription()).isEqualTo("Baseline version");
             }
         }
@@ -305,7 +305,7 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
                 var version1 = response.readEntity(DatasetVersion.class);
                 version1Id = version1.id();
-                assertThat(version1.tags()).contains("v1");
+                assertThat(version1.tags()).contains("v1", "latest");
             }
 
             // Add more items to change the dataset
@@ -329,7 +329,7 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
                 var version2 = response.readEntity(DatasetVersion.class);
                 assertThat(version2.id()).isNotEqualTo(version1Id); // Different version created
-                assertThat(version2.tags()).contains("v2");
+                assertThat(version2.tags()).contains("v2", "latest"); // Latest tag moved to version 2
             }
         }
 
@@ -377,6 +377,86 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
                 var error = response.readEntity(ErrorMessage.class);
                 assertThat(error.errors()).contains("Tag 'v1.0' already exists for this dataset");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: Latest tag automatically moves to new version")
+        void createVersion__whenMultipleVersions__thenLatestTagMovesToNewestVersion() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            // When - Create first version
+            var versionCreate1 = DatasetVersionCreate.builder()
+                    .tag("v1")
+                    .changeDescription("First version")
+                    .build();
+
+            String version1Hash;
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(versionCreate1))) {
+
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+                var version1 = response.readEntity(DatasetVersion.class);
+                version1Hash = version1.versionHash();
+                assertThat(version1.tags()).contains("v1", "latest");
+            }
+
+            // When - Create second version
+            var versionCreate2 = DatasetVersionCreate.builder()
+                    .tag("v2")
+                    .changeDescription("Second version")
+                    .build();
+
+            String version2Hash;
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(versionCreate2))) {
+
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+                var version2 = response.readEntity(DatasetVersion.class);
+                version2Hash = version2.versionHash();
+                assertThat(version2.tags()).contains("v2", "latest");
+            }
+
+            // Then - List versions and verify tag assignments
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var page = response.readEntity(DatasetVersionPage.class);
+                assertThat(page.content()).hasSize(2);
+
+                // Find versions by hash
+                var version1 = page.content().stream()
+                        .filter(v -> v.versionHash().equals(version1Hash))
+                        .findFirst()
+                        .orElseThrow();
+                var version2 = page.content().stream()
+                        .filter(v -> v.versionHash().equals(version2Hash))
+                        .findFirst()
+                        .orElseThrow();
+
+                // Verify first version no longer has 'latest' tag
+                assertThat(version1.tags()).contains("v1").doesNotContain("latest");
+
+                // Verify second version has 'latest' tag
+                assertThat(version2.tags()).contains("v2", "latest");
             }
         }
     }
@@ -536,7 +616,7 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
 
-            // Verify tag was added
+            // Verify tag was added (along with automatic 'latest' tag)
             try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path("versions")
@@ -546,7 +626,7 @@ class DatasetVersionResourceTest {
                     .get()) {
 
                 var page = response.readEntity(DatasetVersionPage.class);
-                assertThat(page.content().get(0).tags()).contains("production");
+                assertThat(page.content().get(0).tags()).contains("production", "latest");
             }
         }
 
@@ -715,6 +795,70 @@ class DatasetVersionResourceTest {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Cannot delete 'latest' tag")
+        void deleteTag__whenLatestTag__thenReturnBadRequest() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            // Create a version (which automatically gets 'latest' tag)
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tag("v1")
+                    .build();
+
+            String versionHash;
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(versionCreate))) {
+
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+                var version = response.readEntity(DatasetVersion.class);
+                versionHash = version.versionHash();
+                assertThat(version.tags()).contains("v1", "latest");
+            }
+
+            // When - Try to delete 'latest' tag
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .path(versionHash)
+                    .path("tags")
+                    .path("latest")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .delete()) {
+
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var error = response.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).contains("Cannot delete 'latest' tag - it is automatically managed");
+            }
+
+            // Verify 'latest' tag still exists on the version by listing versions
+            try (var response = client.target(DATASET_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path("versions")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var page = response.readEntity(DatasetVersionPage.class);
+                assertThat(page.content()).hasSize(1);
+
+                var version = page.content().get(0);
+                assertThat(version.versionHash()).isEqualTo(versionHash);
+                assertThat(version.tags()).contains("v1", "latest");
             }
         }
     }
