@@ -1,13 +1,16 @@
 import pytest
 from langchain_core.language_models import fake
+from langchain_core.language_models.fake import FakeStreamingListLLM
 from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableConfig
 
 import opik
 from opik import context_storage
 from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from opik.integrations.langchain.opik_tracer import OpikTracer
+from opik.integrations.langchain.opik_tracer import OpikTracer, ERROR_SKIPPED_OUTPUTS
 from opik.types import DistributedTraceHeadersDict
+
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -653,3 +656,98 @@ def test_langchain_callback__disabled_tracking(fake_backend):
 
         assert len(fake_backend.trace_trees) == 0
         assert len(callback.created_traces()) == 0
+
+
+def test_langchain_callback__skip_error_callback__error_output_skipped(
+    fake_backend,
+):
+    def _should_skip_error(error: str) -> bool:
+        if error is not None and error.startswith("FakeListLLMError"):
+            # skip processing - we are sure that this is OK
+            return True
+        else:
+            return False
+
+    callback = OpikTracer(
+        skip_error_callback=_should_skip_error,
+    )
+
+    llm = FakeStreamingListLLM(
+        error_on_chunk_number=0,  # throw error on the first chunk
+        responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"],
+    )
+
+    template = "Given the title of play, write a synopsis for that. Title: {title}."
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    synopsis_chain = prompt_template | llm
+    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+
+    stream = synopsis_chain.stream(
+        input=test_prompts, config=RunnableConfig(callbacks=[callback])
+    )
+    try:
+        for p in stream:
+            print(p)
+    except Exception:
+        # ignoring exception
+        pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="RunnableSequence",
+        project_name="Default Project",
+        input={"title": "Documentary about Bigfoot in Paris"},
+        output=ERROR_SKIPPED_OUTPUTS,
+        metadata={"created_from": "langchain"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="RunnableSequence",
+                input={"input": ""},
+                output=ERROR_SKIPPED_OUTPUTS,
+                metadata={"created_from": "langchain"},
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="PromptTemplate",
+                        input={"title": "Documentary about Bigfoot in Paris"},
+                        output={"output": ANY_DICT},
+                        metadata={"created_from": "langchain"},
+                        type="tool",
+                        end_time=ANY_BUT_NONE,
+                        project_name="Default Project",
+                        last_updated_at=ANY_BUT_NONE,
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="FakeStreamingListLLM",
+                        input={"prompts": ANY_BUT_NONE},
+                        output=ANY_DICT,
+                        tags=None,
+                        metadata=ANY_DICT,
+                        type="llm",
+                        end_time=ANY_BUT_NONE,
+                        project_name="Default Project",
+                        last_updated_at=ANY_BUT_NONE,
+                    ),
+                ],
+                last_updated_at=ANY_BUT_NONE,
+            )
+        ],
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
