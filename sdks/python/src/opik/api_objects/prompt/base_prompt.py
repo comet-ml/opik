@@ -1,34 +1,15 @@
 """
-Base classes for prompts and prompt templates.
+Base class for prompts.
 
-Defines abstract interfaces that both string and chat variants must implement.
+Defines abstract interface that both string and chat prompt variants must implement.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
-
-class BasePromptTemplate(ABC):
-    """
-    Abstract base class for prompt templates (string and chat).
-    
-    All prompt template implementations must provide a format method
-    that takes variables and returns formatted output.
-    """
-
-    @abstractmethod
-    def format(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Format the template with the provided variables.
-        
-        Returns:
-            Formatted output. Type depends on the implementation:
-            - PromptTemplate returns str
-            - ChatPromptTemplate returns List[Dict[str, MessageContent]]
-        """
-        pass
+from . import types as prompt_types
 
 
 class BasePrompt(ABC):
@@ -59,15 +40,13 @@ class BasePrompt(ABC):
 
     @property
     @abstractmethod
-    def type(self) -> Any:
-        """The prompt type (e.g., MUSTACHE, JINJA2)."""
+    def type(self) -> prompt_types.PromptType:
+        """The prompt type (MUSTACHE or JINJA2)."""
         pass
 
-    @property
-    @abstractmethod
-    def template_structure(self) -> str:
-        """The template structure of the prompt ('string' or 'chat')."""
-        pass
+    # Internal API fields for backend synchronization
+    __internal_api__prompt_id__: Optional[str]
+    __internal_api__version_id__: Optional[str]
 
     @abstractmethod
     def format(self, **kwargs: Any) -> Any:
@@ -78,6 +57,16 @@ class BasePrompt(ABC):
             Formatted output. Type depends on the implementation:
             - Prompt returns str
             - ChatPrompt returns List[Dict[str, MessageContent]]
+        """
+        pass
+
+    @abstractmethod
+    def to_info_dict(self) -> Dict[str, Any]:
+        """
+        Convert the prompt to an info dictionary for serialization.
+        
+        Returns:
+            Dictionary containing prompt metadata and version information.
         """
         pass
 

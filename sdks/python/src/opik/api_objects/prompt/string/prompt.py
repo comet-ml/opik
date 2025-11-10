@@ -5,10 +5,10 @@ from opik.rest_api import types as rest_api_types
 from . import prompt_template
 from .. import types as prompt_types
 from .. import client as prompt_client
-from .. import base
+from .. import base_prompt
 
 
-class Prompt(base.BasePrompt):
+class Prompt(base_prompt.BasePrompt):
     """
     Prompt class represents a prompt with a name, prompt text/template and commit hash.
     """
@@ -97,6 +97,31 @@ class Prompt(base.BasePrompt):
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
         return self._template.format(**kwargs)
+
+    def to_info_dict(self) -> Dict[str, Any]:
+        """
+        Convert the prompt to an info dictionary for serialization.
+        
+        Returns:
+            Dictionary containing prompt metadata and version information.
+        """
+        info_dict: Dict[str, Any] = {
+            "name": self.name,
+            "version": {
+                "template": self.prompt,
+            },
+        }
+
+        if self.__internal_api__prompt_id__ is not None:
+            info_dict["id"] = self.__internal_api__prompt_id__
+
+        if self.commit is not None:
+            info_dict["version"]["commit"] = self.commit
+
+        if self.__internal_api__version_id__ is not None:
+            info_dict["version"]["id"] = self.__internal_api__version_id__
+
+        return info_dict
 
     @classmethod
     def from_fern_prompt_version(

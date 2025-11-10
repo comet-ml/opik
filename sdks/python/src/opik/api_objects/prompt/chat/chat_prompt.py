@@ -6,10 +6,10 @@ from opik.rest_api import types as rest_api_types
 from . import chat_prompt_template
 from .. import client as prompt_client
 from .. import types as prompt_types
-from .. import base
+from .. import base_prompt
 
 
-class ChatPrompt(base.BasePrompt):
+class ChatPrompt(base_prompt.BasePrompt):
     """
     ChatPrompt class represents a chat-style prompt with a name, message array template and commit hash.
     Similar to Prompt but uses a list of chat messages instead of a string template.
@@ -115,6 +115,31 @@ class ChatPrompt(base.BasePrompt):
         """
         return self._chat_template.format(variables=variables)
 
+    def to_info_dict(self) -> Dict[str, Any]:
+        """
+        Convert the prompt to an info dictionary for serialization.
+        
+        Returns:
+            Dictionary containing prompt metadata and version information.
+        """
+        info_dict: Dict[str, Any] = {
+            "name": self.name,
+            "version": {
+                "messages": self.messages,
+            },
+        }
+
+        if self.__internal_api__prompt_id__ is not None:
+            info_dict["id"] = self.__internal_api__prompt_id__
+
+        if self.commit is not None:
+            info_dict["version"]["commit"] = self.commit
+
+        if self.__internal_api__version_id__ is not None:
+            info_dict["version"]["id"] = self.__internal_api__version_id__
+
+        return info_dict
+
     @classmethod
     def from_fern_prompt_version(
         cls,
@@ -141,23 +166,3 @@ class ChatPrompt(base.BasePrompt):
         chat_prompt._metadata = prompt_version.metadata
         chat_prompt._type = prompt_version.type
         return chat_prompt
-
-
-def to_info_dict(chat_prompt: ChatPrompt) -> Dict[str, Any]:
-    info_dict: Dict[str, Any] = {
-        "name": chat_prompt.name,
-        "version": {
-            "messages": chat_prompt.messages,
-            "template_structure": "chat",
-        },
-    }
-    if chat_prompt.__internal_api__prompt_id__ is not None:
-        info_dict["id"] = chat_prompt.__internal_api__prompt_id__
-
-    if chat_prompt.commit is not None:
-        info_dict["version"]["commit"] = chat_prompt.commit
-
-    if chat_prompt.__internal_api__version_id__ is not None:
-        info_dict["version"]["id"] = chat_prompt.__internal_api__version_id__
-
-    return info_dict

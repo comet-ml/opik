@@ -15,11 +15,11 @@ import opik.exceptions as exceptions
 
 from ..string import prompt_template
 from .. import types as prompt_types
-from .. import base
+from .. import base_prompt_template
 from . import content_renderer_registry
 
 
-class ChatPromptTemplate(base.BasePromptTemplate):
+class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
     """
     Prompt template for chat-style prompts with multimodal content.
     """
