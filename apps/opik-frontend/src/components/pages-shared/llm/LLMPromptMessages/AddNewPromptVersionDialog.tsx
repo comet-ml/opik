@@ -125,6 +125,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           template,
           changeDescription,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
+          ...(templateStructure && { templateStructure }),
           onSuccess: (data) => onSave(data),
         });
 
