@@ -221,6 +221,50 @@ public class DatasetResourceClient {
         }
     }
 
+    public DatasetItemPage getDatasetItems(UUID datasetId, int page, int size, String version, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (version != null && !version.isBlank()) {
+            target = target.queryParam("version", version);
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetItemPage.class);
+        }
+    }
+
+    public Response callGetDatasetItems(UUID datasetId, int page, int size, String version, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (version != null && !version.isBlank()) {
+            target = target.queryParam("version", version);
+        }
+
+        return target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
         datasets.parallelStream()
                 .forEach(dataset -> deleteDataset(dataset.id(), apiKey, workspaceName));

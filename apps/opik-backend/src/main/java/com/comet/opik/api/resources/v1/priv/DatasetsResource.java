@@ -367,22 +367,32 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("version") @Schema(description = "Version hash or tag to fetch specific dataset version") String version,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
 
+        // Resolve version hash/tag to version ID if provided
+        UUID versionId = null;
+        if (version != null && !version.isBlank()) {
+            versionId = versionService.resolveVersionId(id, version);
+            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'", version, versionId, id);
+        }
+
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(id)
                 .experimentIds(Set.of()) // Empty set for regular dataset items
+                .versionId(versionId)
                 .filters(queryFilters)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'", id, page,
-                size, filters, workspaceId);
+        log.info(
+                "Finding dataset items by id '{}', version '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
+                id, version, page, size, filters, workspaceId);
 
         DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))

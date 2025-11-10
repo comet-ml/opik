@@ -1,12 +1,12 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -153,26 +153,62 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // Fetch current dataset items from ClickHouse to calculate hash and create snapshot
+        var fetchedItems = datasetItemDAO.getItems(datasetId, Integer.MAX_VALUE, null)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .collectList()
+                .block();
+
+        // Make effectively final for lambda
+        final List<DatasetItem> currentItems;
+        if (fetchedItems == null || fetchedItems.isEmpty()) {
+            log.warn("No items found for dataset: '{}'", datasetId);
+            currentItems = List.of();
+        } else {
+            currentItems = fetchedItems;
+        }
+
+        // Calculate content-based hash from current items
+        final String versionHash = calculateContentBasedHash(currentItems);
+        log.info("Calculated content-based hash '{}' for dataset '{}' with '{}' items",
+                versionHash, datasetId, currentItems.size());
+
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
 
-            // TODO OPIK-3015: Get actual item count and calculate diff stats from ClickHouse
-            // For now, use placeholder values for metadata-only testing
-            int itemsTotal = 0;
-            int itemsAdded = 0;
-            int itemsModified = 0;
-            int itemsDeleted = 0;
+            // Get previous version for diff calculation
+            var previousVersion = datasetVersionDAO.findByTag(datasetId, LATEST_TAG, workspaceId);
 
-            // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
-            // For now, use payload + counters + timestamp-based hash as placeholder
-            String versionHash = DatabaseUtils.calculatePlaceholderVersionHash(
-                    datasetId, request, itemsTotal, itemsAdded, itemsModified, itemsDeleted);
+            // Calculate diff statistics
+            DiffStatistics diffStats;
+            if (previousVersion.isPresent()) {
+                var previousItems = datasetItemDAO.getVersionedItemsByIds(
+                        currentItems.stream().map(DatasetItem::id).collect(java.util.stream.Collectors.toSet()),
+                        previousVersion.get().id())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, userName)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .collectList()
+                        .block();
+
+                diffStats = calculateDiffStatistics(
+                        previousItems != null ? previousItems : List.of(),
+                        currentItems);
+            } else {
+                // First version - all items are new
+                diffStats = new DiffStatistics(currentItems.size(), currentItems.size(), 0, 0);
+            }
+
+            log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}'",
+                    datasetId, diffStats.itemsAdded, diffStats.itemsModified, diffStats.itemsDeleted);
 
             // Create new version
             var versionId = idGenerator.generateId();
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
-                    itemsTotal, itemsAdded, itemsModified, itemsDeleted,
+                    diffStats.itemsCount, diffStats.itemsAdded, diffStats.itemsModified, diffStats.itemsDeleted,
                     request, userName);
 
             EntityConstraintHandler.handle(() -> {
@@ -199,7 +235,15 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(request.tag())))));
             }
 
-            // TODO OPIK-3015: Create immutable snapshots in ClickHouse dataset_item_versions table
+            // Create immutable snapshot in ClickHouse dataset_item_versions table
+            if (!currentItems.isEmpty()) {
+                datasetItemDAO.saveVersionSnapshot(versionId, datasetId, currentItems)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, userName)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block();
+                log.info("Saved version snapshot with '{}' items for version '{}'", currentItems.size(), versionId);
+            }
 
             return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
         });
@@ -330,5 +374,105 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId));
         });
+    }
+
+    /**
+     * Calculate content-based hash from dataset items for version identification.
+     * Uses SHA-256 hash of sorted item IDs and data to ensure deterministic hashing.
+     */
+    private String calculateContentBasedHash(List<DatasetItem> items) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+
+            // Sort items by ID for deterministic hashing
+            var sortedItems = items.stream()
+                    .sorted(java.util.Comparator.comparing(DatasetItem::id))
+                    .toList();
+
+            // Build content string from sorted items
+            for (var item : sortedItems) {
+                // Add item ID
+                digest.update(item.id().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+                // Add data map (sorted by keys for consistency)
+                if (item.data() != null) {
+                    var sortedKeys = item.data().keySet().stream().sorted().toList();
+                    for (String key : sortedKeys) {
+                        digest.update(key.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        var value = item.data().get(key);
+                        if (value != null) {
+                            digest.update(value.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        }
+                    }
+                }
+            }
+
+            byte[] hashBytes = digest.digest();
+
+            // Convert to hex string (first 16 chars for display)
+            StringBuilder hexString = new StringBuilder();
+            for (int i = 0; i < 8; i++) {
+                String hex = Integer.toHexString(0xff & hashBytes[i]);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+
+            return hexString.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
+    }
+
+    /**
+     * Calculate diff statistics between previous and current dataset versions.
+     */
+    private DiffStatistics calculateDiffStatistics(List<DatasetItem> previousItems, List<DatasetItem> currentItems) {
+        // Build maps for efficient lookup
+        var previousMap = previousItems.stream()
+                .collect(java.util.stream.Collectors.toMap(DatasetItem::id, item -> item));
+
+        var currentMap = currentItems.stream()
+                .collect(java.util.stream.Collectors.toMap(DatasetItem::id, item -> item));
+
+        // Calculate added items (in current but not in previous)
+        var addedIds = new java.util.HashSet<>(currentMap.keySet());
+        addedIds.removeAll(previousMap.keySet());
+
+        // Calculate deleted items (in previous but not in current)
+        var deletedIds = new java.util.HashSet<>(previousMap.keySet());
+        deletedIds.removeAll(currentMap.keySet());
+
+        // Calculate modified items (in both but with different data)
+        var commonIds = new java.util.HashSet<>(currentMap.keySet());
+        commonIds.retainAll(previousMap.keySet());
+
+        int modifiedCount = 0;
+        for (UUID id : commonIds) {
+            var prevItem = previousMap.get(id);
+            var currItem = currentMap.get(id);
+
+            // Compare data maps
+            if (!java.util.Objects.equals(prevItem.data(), currItem.data())) {
+                modifiedCount++;
+            }
+        }
+
+        return new DiffStatistics(
+                currentItems.size(),
+                addedIds.size(),
+                modifiedCount,
+                deletedIds.size());
+    }
+
+    /**
+     * Internal record to hold diff statistics.
+     */
+    private record DiffStatistics(
+            int itemsCount,
+            int itemsAdded,
+            int itemsModified,
+            int itemsDeleted) {
     }
 }
