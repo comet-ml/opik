@@ -1,9 +1,15 @@
-from .string.prompt import Prompt
-from .chat.chat_prompt import ChatPrompt
-from typing import Dict, Any
-from typing import Union
+from typing import Dict, Any, TYPE_CHECKING
+from .base import BasePrompt
 
-def to_info_dict(prompt: Union[Prompt, ChatPrompt]) -> Dict[str, Any]:
+if TYPE_CHECKING:
+    from .string.prompt import Prompt
+    from .chat.chat_prompt import ChatPrompt
+
+def to_info_dict(prompt: BasePrompt) -> Dict[str, Any]:
+    # Import here to avoid circular dependencies
+    from .string.prompt import Prompt
+    from .chat.chat_prompt import ChatPrompt
+    
     if isinstance(prompt, Prompt):
         info_dict: Dict[str, Any] = {
             "name": prompt.name,

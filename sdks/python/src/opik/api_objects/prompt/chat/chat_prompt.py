@@ -6,9 +6,10 @@ from opik.rest_api import types as rest_api_types
 from . import chat_prompt_template
 from .. import client as prompt_client
 from .. import types as prompt_types
+from .. import base
 
 
-class ChatPrompt:
+class ChatPrompt(base.BasePrompt):
     """
     ChatPrompt class represents a chat-style prompt with a name, message array template and commit hash.
     Similar to Prompt but uses a list of chat messages instead of a string template.

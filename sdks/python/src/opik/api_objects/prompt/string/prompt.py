@@ -5,9 +5,10 @@ from opik.rest_api import types as rest_api_types
 from . import prompt_template
 from .. import types as prompt_types
 from .. import client as prompt_client
+from .. import base
 
 
-class Prompt:
+class Prompt(base.BasePrompt):
     """
     Prompt class represents a prompt with a name, prompt text/template and commit hash.
     """

@@ -4,9 +4,10 @@ import jinja2
 
 import opik.exceptions as exceptions
 from .. import types as prompt_types
+from .. import base
 
 
-class PromptTemplate:
+class PromptTemplate(base.BasePromptTemplate):
     def __init__(
         self,
         template: str,
