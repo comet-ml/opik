@@ -640,10 +640,6 @@ navigation:
             icon: fa-regular fa-play
             path: docs/agent_optimization/getting_started/quickstart_notebook.mdx
             slug: quickstart_notebook
-          - page: Roadmap
-            icon: fa-regular fa-map
-            path: docs/agent_optimization/getting_started/roadmap.mdx
-            slug: roadmap
           - page: FAQ
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
@@ -746,10 +742,6 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
-          - page: Coming soon
-            icon: fa-regular fa-circle-plus
-            path: docs/agent_optimization/cookbook/future_cookbooks.mdx
-            slug: future_cookbooks
       - section: Advanced Topics
         slug: /advanced
         contents:
