@@ -124,7 +124,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 <if(instructions)> :instructions <else> instructions <endif> as instructions,
                 scope,
                 <if(comments_enabled)> :comments_enabled <else> comments_enabled <endif> as comments_enabled,
-                <if(feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
+                <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -680,8 +680,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> template.add("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> template.add("comments_enabled", true));
-        // Always add feedback_definitions if present (including empty arrays)
+        // Handle feedback_definitions explicitly, including empty arrays
         if (update.feedbackDefinitionNames() != null) {
+            template.add("has_feedback_definitions", true);
             template.add("feedback_definitions", update.feedbackDefinitionNames());
         }
 
