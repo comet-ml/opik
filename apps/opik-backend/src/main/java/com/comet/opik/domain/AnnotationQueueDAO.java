@@ -124,7 +124,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 <if(instructions)> :instructions <else> instructions <endif> as instructions,
                 scope,
                 <if(comments_enabled)> :comments_enabled <else> comments_enabled <endif> as comments_enabled,
-                <if(feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
+                <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -301,7 +301,15 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     GROUP BY qi.queue_id, fs.name
                 ) as fs_avg
                 GROUP BY queue_id
-            ), queue_items_with_reviewers AS (
+            ), comments_combined AS (
+                SELECT DISTINCT
+                    entity_id,
+                    created_by
+                FROM comments FINAL
+                WHERE workspace_id = :workspace_id
+                    AND project_id IN (SELECT project_id FROM queues_final)
+                    AND entity_id IN (SELECT item_id FROM queue_items_final)
+            ), queue_items_with_feedback_reviewers AS (
                 SELECT DISTINCT
                     qi.queue_id,
                     qi.item_id,
@@ -309,7 +317,23 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 FROM queue_items_final AS qi
                 INNER JOIN feedback_scores_combined AS fsc
                  ON fsc.entity_id = qi.item_id
-                WHERE has(qi.feedback_definitions, fsc.name)  -- only names defined for this queue
+                WHERE length(qi.feedback_definitions) > 0
+                  AND has(qi.feedback_definitions, fsc.name)  -- only names defined for this queue
+            ), queue_items_with_comment_reviewers AS (
+                SELECT DISTINCT
+                    qi.queue_id,
+                    qi.item_id,
+                    c.created_by AS username
+                FROM queue_items_final AS qi
+                INNER JOIN comments_combined AS c
+                 ON c.entity_id = qi.item_id
+                WHERE length(c.created_by) > 0
+            ), queue_items_with_reviewers AS (
+                SELECT queue_id, item_id, username
+                FROM queue_items_with_feedback_reviewers
+                UNION DISTINCT
+                SELECT queue_id, item_id, username
+                FROM queue_items_with_comment_reviewers
             ), feedback_scores_reviewers_agg AS (
                 SELECT
                     qir_sum.queue_id,
@@ -656,9 +680,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> template.add("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> template.add("comments_enabled", true));
-        Optional.ofNullable(update.feedbackDefinitionNames())
-                .ifPresent(feedbackDefinitionNames -> template.add("feedback_definitions",
-                        update.feedbackDefinitionNames()));
+        // Handle feedback_definitions explicitly, including empty arrays
+        if (update.feedbackDefinitionNames() != null) {
+            template.add("has_feedback_definitions", true);
+            template.add("feedback_definitions", update.feedbackDefinitionNames());
+        }
 
         return template;
     }
@@ -673,9 +699,13 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(instructions -> statement.bind("instructions", update.instructions()));
         Optional.ofNullable(update.commentsEnabled())
                 .ifPresent(commentsEnabled -> statement.bind("comments_enabled", update.commentsEnabled()));
-        Optional.ofNullable(update.feedbackDefinitionNames())
-                .ifPresent(feedbackDefinitionNames -> statement.bind("feedback_definitions",
-                        update.feedbackDefinitionNames().toArray(String[]::new)));
+        // Always bind feedback_definitions if present (including empty arrays)
+        if (update.feedbackDefinitionNames() != null) {
+            String[] array = update.feedbackDefinitionNames().isEmpty()
+                    ? new String[]{}
+                    : update.feedbackDefinitionNames().toArray(String[]::new);
+            statement.bind("feedback_definitions", array);
+        }
     }
 
     private void bindSearchCriteria(Statement statement, AnnotationQueueSearchCriteria searchCriteria) {

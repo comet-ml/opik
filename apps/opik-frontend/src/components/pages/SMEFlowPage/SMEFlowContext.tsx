@@ -52,13 +52,22 @@ const isItemProcessed = (
 ): boolean => {
   if (!userName) return false;
 
-  return (item.feedback_scores || []).some((score) => {
+  // Check if user has added feedback scores (if feedback definitions exist)
+  const hasFeedbackScores = (item.feedback_scores || []).some((score) => {
     if (!feedbackScoreNames.includes(score.name)) return false;
 
     return hasValuesByAuthor(score)
       ? Boolean(score.value_by_author?.[userName])
       : score.last_updated_by === userName;
   });
+
+  // Check if user has added a comment
+  const hasComment = (item.comments || []).some(
+    (comment) => comment.created_by === userName,
+  );
+
+  // Item is processed if user has added feedback scores OR comments
+  return hasFeedbackScores || hasComment;
 };
 
 export interface ValidationError {
