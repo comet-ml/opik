@@ -13,6 +13,8 @@ from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import 
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
+from ..types.experiment_score import ExperimentScore
+from ..types.experiment_score_write import ExperimentScoreWrite
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
@@ -120,6 +122,7 @@ class ExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -142,6 +145,8 @@ class ExperimentsClient:
         optimization_id : typing.Optional[str]
 
         status : typing.Optional[ExperimentWriteStatus]
+
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScoreWrite]]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -168,6 +173,7 @@ class ExperimentsClient:
             type=type,
             optimization_id=optimization_id,
             status=status,
+            experiment_scores=experiment_scores,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
             request_options=request_options,
@@ -476,6 +482,7 @@ class ExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -494,6 +501,8 @@ class ExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScore]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -508,7 +517,13 @@ class ExperimentsClient:
         client.experiments.update_experiment(id='id', )
         """
         _response = self._raw_client.update_experiment(
-            id, name=name, metadata=metadata, type=type, status=status, request_options=request_options
+            id,
+            name=name,
+            metadata=metadata,
+            type=type,
+            status=status,
+            experiment_scores=experiment_scores,
+            request_options=request_options,
         )
         return _response.data
 
@@ -709,6 +724,7 @@ class AsyncExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -731,6 +747,8 @@ class AsyncExperimentsClient:
         optimization_id : typing.Optional[str]
 
         status : typing.Optional[ExperimentWriteStatus]
+
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScoreWrite]]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -760,6 +778,7 @@ class AsyncExperimentsClient:
             type=type,
             optimization_id=optimization_id,
             status=status,
+            experiment_scores=experiment_scores,
             prompt_version=prompt_version,
             prompt_versions=prompt_versions,
             request_options=request_options,
@@ -1095,6 +1114,7 @@ class AsyncExperimentsClient:
         metadata: typing.Optional[JsonNode] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
+        experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1113,6 +1133,8 @@ class AsyncExperimentsClient:
         status : typing.Optional[ExperimentUpdateStatus]
             The status of the experiment
 
+        experiment_scores : typing.Optional[typing.Sequence[ExperimentScore]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1130,7 +1152,13 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_experiment(
-            id, name=name, metadata=metadata, type=type, status=status, request_options=request_options
+            id,
+            name=name,
+            metadata=metadata,
+            type=type,
+            status=status,
+            experiment_scores=experiment_scores,
+            request_options=request_options,
         )
         return _response.data
 

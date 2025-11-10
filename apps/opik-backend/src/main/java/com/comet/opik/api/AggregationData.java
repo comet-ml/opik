@@ -17,5 +17,6 @@ public record AggregationData(
         BigDecimal totalEstimatedCost,
         BigDecimal totalEstimatedCostAvg,
         PercentageValues duration,
-        List<FeedbackScoreAverage> feedbackScores) {
+        List<FeedbackScoreAverage> feedbackScores,
+        List<FeedbackScoreAverage> experimentScores) {
 }

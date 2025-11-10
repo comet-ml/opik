@@ -89,6 +89,7 @@ export type DynamicColumn = {
   id: string;
   label: string;
   columnType: COLUMN_TYPE;
+  type?: "feedback_scores" | "experiment_scores";
 };
 
 export enum ROW_HEIGHT {
@@ -105,6 +106,7 @@ export enum CELL_VERTICAL_ALIGNMENT {
 
 export interface FeedbackScoreName {
   name: string;
+  type?: "feedback_scores" | "experiment_scores";
 }
 
 export enum STATISTIC_AGGREGATION_TYPE {

@@ -18,6 +18,7 @@ export interface ExperimentWrite {
     type?: OpikApi.ExperimentWriteType;
     optimizationId?: string;
     status?: OpikApi.ExperimentWriteStatus;
+    experimentScores?: OpikApi.ExperimentScoreWrite[];
     promptVersion?: OpikApi.PromptVersionLinkWrite;
     promptVersions?: OpikApi.PromptVersionLinkWrite[];
 }
