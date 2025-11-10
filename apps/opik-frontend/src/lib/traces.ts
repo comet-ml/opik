@@ -377,51 +377,64 @@ const prettifyCustomMessagingLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
 ): string | undefined => {
-  if (
-    config.type === "input" &&
-    isObject(message) &&
-    "prompt" in message &&
-    isArray(message.prompt)
-  ) {
-    const userMessages = message.prompt.filter(
-      (m) =>
-        isObject(m) &&
-        "role" in m &&
-        m.role === "user" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+  if (!isObject(message)) return undefined;
 
-    if (userMessages.length > 0) {
-      return last(userMessages).content;
-    }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "candidates" in message &&
-    isArray(message.candidates)
-  ) {
-    const lastCandidate = last(message.candidates);
-    if (
-      lastCandidate &&
-      isObject(lastCandidate) &&
-      "content" in lastCandidate &&
-      isObject(lastCandidate.content) &&
-      "parts" in lastCandidate.content &&
-      isArray(lastCandidate.content.parts)
-    ) {
-      const lastTextPart = findLast(
-        lastCandidate.content.parts,
-        (part) =>
-          isObject(part) &&
-          "text" in part &&
-          isString(part.text) &&
-          part.text !== "",
+  if (config.type === "input") {
+    if ("prompt" in message && isArray(message.prompt)) {
+      const userMessages = message.prompt.filter(
+        (m) =>
+          isObject(m) &&
+          "role" in m &&
+          m.role === "user" &&
+          "content" in m &&
+          isString(m.content) &&
+          m.content !== "",
       );
 
-      if (lastTextPart && "text" in lastTextPart) {
-        return lastTextPart.text;
+      if (userMessages.length > 0) {
+        return last(userMessages).content;
+      }
+    }
+  } else if (config.type === "output") {
+    if ("candidates" in message && isArray(message.candidates)) {
+      const lastCandidate = last(message.candidates);
+      if (
+        lastCandidate &&
+        isObject(lastCandidate) &&
+        "content" in lastCandidate &&
+        isObject(lastCandidate.content) &&
+        "parts" in lastCandidate.content &&
+        isArray(lastCandidate.content.parts)
+      ) {
+        const lastTextPart = findLast(
+          lastCandidate.content.parts,
+          (part) =>
+            isObject(part) &&
+            "text" in part &&
+            isString(part.text) &&
+            part.text !== "",
+        );
+
+        if (lastTextPart && "text" in lastTextPart) {
+          return lastTextPart.text;
+        }
+      }
+    }
+
+    if ("output" in message && isArray(message.output)) {
+      const lastAiMessage = findLast(
+        message.output,
+        (m) =>
+          isObject(m) &&
+          "type" in m &&
+          m.type === "ai" &&
+          "content" in m &&
+          isString(m.content) &&
+          m.content !== "",
+      );
+
+      if (lastAiMessage && "content" in lastAiMessage) {
+        return lastAiMessage.content;
       }
     }
   }
@@ -447,8 +460,20 @@ const prettifyGenericLogic = (
       "contents",
       "user_payload",
       "user_query",
+      "input",
+      // some customer specific formats
+      "query.body.question",
+      "content",
     ],
-    output: ["answer", "output", "response", "reply"],
+    output: [
+      "answer",
+      "output",
+      "response",
+      "reply",
+      "final_output",
+      // some customer specific formats
+      "answer.answer",
+    ],
   };
 
   let unwrappedMessage = message;
@@ -472,12 +497,6 @@ const prettifyGenericLogic = (
       for (const key of PREDEFINED_KEYS_MAP[config.type]) {
         const value = get(unwrappedMessage, key);
         if (isString(value)) {
-          const json = safelyParseJSON(value);
-
-          if (!isEmpty(json)) {
-            return JSON.stringify(json, null, 2);
-          }
-
           return value;
         }
       }
@@ -494,7 +513,7 @@ export const prettifyMessage = (
   if (isString(message)) {
     return {
       message,
-      prettified: false,
+      prettified: true,
     } as PrettifyMessageResponse;
   }
   try {
@@ -526,6 +545,15 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyGenericLogic(message, config);
+    }
+
+    // attempt to improve JSON string if the message is serialised JSON string
+    if (isString(processedMessage)) {
+      const json = safelyParseJSON(processedMessage);
+
+      if (!isEmpty(json)) {
+        processedMessage = JSON.stringify(json, null, 2);
+      }
     }
 
     return {
