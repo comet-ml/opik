@@ -34,6 +34,16 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(DatasetVersionServiceImpl.class)
 public interface DatasetVersionService {
 
+    String LATEST_TAG = "latest";
+
+    // Error message templates
+    String ERROR_VERSION_HASH_EXISTS = "Version with hash '%s' already exists for dataset '%s'";
+    String ERROR_TAG_EXISTS = "Tag '%s' already exists for this dataset";
+    String ERROR_CANNOT_DELETE_LATEST_TAG = "Cannot delete '%s' tag - it is automatically managed";
+    String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash '%s' not found for dataset '%s'";
+    String ERROR_TAG_NOT_FOUND = "Tag '%s' not found for dataset '%s'";
+    String ERROR_VERSION_NOT_FOUND = "Version not found for dataset '%s' with hash or tag '%s'";
+
     DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate request);
 
     DatasetVersionPage getVersions(UUID datasetId, int page, int size);
@@ -55,8 +65,6 @@ public interface DatasetVersionService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetVersionServiceImpl implements DatasetVersionService {
-
-    private static final String LATEST_TAG = "latest";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -102,7 +110,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             DatabaseUtils.handleStateDbDuplicateConstraint(
                     () -> datasetVersionDAO.insert(version, workspaceId),
-                    "Version with hash '%s' already exists for dataset '%s'".formatted(versionHash, datasetId));
+                    ERROR_VERSION_HASH_EXISTS.formatted(versionHash, datasetId));
 
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
 
@@ -117,7 +125,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             if (StringUtils.isNotBlank(request.tag())) {
                 DatabaseUtils.handleStateDbDuplicateConstraint(
                         () -> datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId),
-                        "Tag '%s' already exists for this dataset".formatted(request.tag()));
+                        ERROR_TAG_EXISTS.formatted(request.tag()));
             }
 
             // TODO OPIK-3015: Create immutable snapshots in ClickHouse dataset_item_versions table
@@ -196,12 +204,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Find version by hash
             var version = dao.findByHash(datasetId, versionHash, workspaceId)
                     .orElseThrow(() -> new NotFoundException(
-                            "Version with hash '%s' not found for dataset '%s'".formatted(versionHash, datasetId)));
+                            ERROR_VERSION_HASH_NOT_FOUND.formatted(versionHash, datasetId)));
 
             // Insert tag
             DatabaseUtils.handleStateDbDuplicateConstraint(
                     () -> dao.insertTag(datasetId, tagRequest.tag(), version.id(), userName, workspaceId),
-                    "Tag '%s' already exists for this dataset".formatted(tagRequest.tag()));
+                    ERROR_TAG_EXISTS.formatted(tagRequest.tag()));
 
             return null;
         });
@@ -218,8 +226,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             throw new ClientErrorException(
                     Response.status(Response.Status.BAD_REQUEST)
                             .entity(new ErrorMessage(
-                                    List.of("Cannot delete '%s' tag - it is automatically managed"
-                                            .formatted(LATEST_TAG))))
+                                    List.of(ERROR_CANNOT_DELETE_LATEST_TAG.formatted(LATEST_TAG))))
                             .build());
         }
 
@@ -231,7 +238,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
 
         if (deleted == 0) {
-            throw new NotFoundException("Tag '%s' not found for dataset '%s'".formatted(tag, datasetId));
+            throw new NotFoundException(ERROR_TAG_NOT_FOUND.formatted(tag, datasetId));
         }
 
         log.info("Deleted tag '{}' from dataset: '{}'", tag, datasetId);
@@ -258,8 +265,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 return versionByTag.get().id();
             }
 
-            throw new NotFoundException(
-                    "Version not found for dataset '%s' with hash or tag '%s'".formatted(datasetId, hashOrTag));
+            throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(datasetId, hashOrTag));
         });
     }
 
