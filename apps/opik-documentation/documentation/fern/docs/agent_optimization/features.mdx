@@ -4,11 +4,18 @@ subtitle: "At-a-glance view of supported features"
 description: "See which Opik Agent Optimizer algorithms cover ChatPrompt inputs, agents, tool use, MCP workflows, and multimodal content."
 ---
 
-Choosing the right optimizer is easier when you can see which capabilities are covered. The table
-below highlights the primary features that customers ask about most often—prompt inputs, agent
-interfaces, tool optimization, and multimodal awareness.
+Choosing the right optimizer is easier when you can see which capabilities are covered. This page
+is an Explanation/Reference matrix that compares each optimizer’s supported features when run inside
+the Opik Optimizer SDK (some capabilities, like MCP integration and tool signature editing, are provided by the Opik
+framework itself). Start by finding the algorithm you’re evaluating, then scan across to confirm it meets your ChatPrompt,
+tool, MCP, and multimodal requirements before reading the detailed algorithm pages.
 
-| Optimizer | ChatPrompt Input | OptimizableAgent Support | Function or Tool Use¹ | MCP Tool Use | Prompt Optimization | Tool Signature Optimization² | MCP Optimization | Multimodal Input³ |
+<Callout>
+  <strong>Tip:</strong> Use the “Function or Tool Use” column for standard function-calling agents, the “MCP Tool Use” column when you need MCP-specific flows, and “MCP Optimization” when you
+  want the optimizer to change tool signatures.
+</Callout>
+
+| Optimizer | ChatPrompt Input | OptimizableAgent Support | Function or Tool Use¹ | MCP Tool Use | Prompt Optimization | Tool Signature Optimization² | MCP Optimization | Multimodal Input |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Evolutionary** | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
 | **Few-shot Bayesian** | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
@@ -23,22 +30,16 @@ interfaces, tool optimization, and multimodal awareness.
 - ⚠️ — Works, but requires manual configuration (e.g., set `max_tokens` yourself)
 - ❌ — Not supported today
 
-<Info>
-¹ Every optimizer built on `ChatPrompt` can optimize prompts that make function calls or invoke tool
-sandboxes. This is different from optimizing tool *schemas*.
-</Info>
-
-<Info>
-² Tool signature optimization (editing tool descriptions, arguments, or MCP manifests) is currently
-available only through the MetaPrompt optimizer as documented in
-[Tool Optimization (MCP & Functions)](/agent_optimization/algorithms/tool_optimization). Other
-optimizers can still optimize prompts that *use* tools.
-</Info>
-
-<Info>
-³ Every optimizer keeps multimodal structure intact. You may still need to set conservative `max_tokens` /
-`max_completion_tokens` manually when working with large attachments.
-</Info>
+<AccordionGroup>
+  <Accordion title="¹ Function vs. Tool Optimization">
+    Every optimizer built on `ChatPrompt` can work with prompts that make function calls or invoke tool sandboxes.
+    This is different from optimizing the tool schemas themselves.
+  </Accordion>
+  <Accordion title="² Tool Signature Optimization">
+    Editing tool descriptions, arguments, or MCP manifests is currently only available via the MetaPrompt optimizer (see
+    [Tool Optimization (MCP & Functions)](/agent_optimization/algorithms/tool_optimization)). Other optimizers can still optimize prompts that reference tools without changing the tool definition.
+  </Accordion>
+</AccordionGroup>
 
 Need more detail? Jump back to the [algorithm deep dive section](/agent_optimization/overview#optimization-algorithms)
 for per-optimizer configuration guides.
