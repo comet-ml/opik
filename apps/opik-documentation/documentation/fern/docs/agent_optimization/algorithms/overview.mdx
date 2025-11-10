@@ -7,7 +7,7 @@ The Opik Optimizer SDK wraps a mix of in-house algorithms (MetaPrompt, Hierarchi
 
 ## How optimizers run
 
-1. **Input** – you pass a `ChatPrompt` definition, dataset, and metric. Many optimizers also accept additional parameters to set which model to use, number of optimization rounds, and event tool use (MCP and function calling) defitions.
+1. **Input** – you pass a `ChatPrompt` definition, dataset, and metric. Many optimizers also accept additional parameters to set which model to use, number of optimization rounds, and event tool use (MCP and function calling) definitions.
 2. **Candidate generation** – each algorithm proposes new prompts (MetaPrompt via reasoning LLMs, Evolutionary via mutation/crossover, GEPA via its genetic-Pareto search).
 3. **Evaluation** – Opik runs the candidate against your dataset/metric and logs trials to the dashboard. The steps 2-to-3 continue to loop until such time a best prompt is found or the search has been exhausted.
 4. **Result delivery** – every optimizer returns an `OptimizationResult` with the best prompt, history, scores, and metadata which is passed back and also avaliable in the UI.
