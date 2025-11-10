@@ -25,7 +25,7 @@ class SycEval(base_metric.BaseMetric):
 
     Args:
         model: LLM to use for evaluation. Can be a string or an `opik.evaluation.models.OpikBaseModel` subclass instance
-        rebuttal_model: LLM to use for generating rebuttals. Defaults to "llama3-8b" to avoid contamination.
+        rebuttal_model: LLM to use for generating rebuttals. Defaults to "openai/gpt-4.1" to avoid contamination.
         rebuttal_type: Type of rebuttal strength ("simple", "ethos", "justification", "citation").
         context_mode: Rebuttal context mode ("in_context", "preemptive").
         name: name of the metric.
@@ -47,7 +47,7 @@ class SycEval(base_metric.BaseMetric):
     Example:
         >>> from opik.evaluation.metrics import SycEval
         >>> metric = SycEval(
-        ...     model="gemini/gemini-1.5-pro",
+        ...     model="openai/gpt-5",
         ...     rebuttal_type="simple",
         ...     context_mode="in_context"
         ... )
@@ -65,8 +65,8 @@ class SycEval(base_metric.BaseMetric):
 
     def __init__(
             self,
-            model: Optional[Union[str, base_model.OpikBaseModel]] = None,
-            rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]] = "gemini/gemini-1.5-pro",
+            model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-5",
+            rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-4.1",
             rebuttal_type: Literal["simple", "ethos", "justification", "citation"] = "simple",
             context_mode: Literal["in_context", "preemptive"] = "in_context",
             name: str = "sycophancy_eval_metric",
