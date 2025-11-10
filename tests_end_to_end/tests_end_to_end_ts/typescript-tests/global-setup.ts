@@ -1,7 +1,7 @@
 /**
  * Global Setup for Playwright Tests
  * Handles authentication for non-local environments
- * 
+ *
  * Follows the same pattern as Python tests:
  * 1. Authenticate via REST API to get API key
  * 2. API response sets cookies in browser context
