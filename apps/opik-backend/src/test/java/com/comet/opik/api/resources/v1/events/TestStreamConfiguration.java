@@ -32,7 +32,16 @@ public class TestStreamConfiguration implements StreamConfiguration {
     private Duration poolingInterval = Duration.milliseconds(100);
 
     @Builder.Default
-    private Duration longPollingDuration = Duration.milliseconds(300);
+    private Duration longPollingDuration = Duration.milliseconds(100);
+
+    @Builder.Default
+    private int claimIntervalRatio = 10;
+
+    @Builder.Default
+    private Duration pendingMessageDuration = Duration.minutes(2);
+
+    @Builder.Default
+    private int maxRetries = 3;
 
     @Builder.Default
     private Codec codec = OnlineScoringCodecs.JAVA.getCodec();

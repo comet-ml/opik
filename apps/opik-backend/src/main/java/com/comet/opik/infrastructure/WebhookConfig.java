@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.redisson.client.codec.Codec;
 import org.redisson.codec.CompositeCodec;
@@ -24,7 +25,7 @@ public class WebhookConfig implements StreamConfiguration {
     public static final String PAYLOAD_FIELD = "message";
 
     private static final CompositeCodec CODEC = new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(JsonUtils.MAPPER));
+            new JsonJacksonCodec(JsonUtils.getMapper()));
 
     @Valid @JsonProperty
     private boolean enabled = false;
@@ -39,17 +40,18 @@ public class WebhookConfig implements StreamConfiguration {
     @Min(1) @Max(100) private int consumerBatchSize = 10;
 
     @Valid @JsonProperty
-    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval = Duration.seconds(1);
 
     @Valid @JsonProperty
-    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
     private Duration longPollingDuration;
 
+    @JsonProperty
+    @Min(1) @Max(10) private int maxRetries;
+
     // Webhook-specific configuration
-    @Valid @JsonProperty
-    @Min(1) @Max(10) private int maxRetries = 3;
 
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
@@ -70,6 +72,13 @@ public class WebhookConfig implements StreamConfiguration {
     // Debouncing configuration
     @Valid @JsonProperty
     private DebouncingConfig debouncing = new DebouncingConfig();
+
+    @JsonProperty
+    @Min(2) private int claimIntervalRatio;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration pendingMessageDuration;
 
     @Override
     @JsonIgnore

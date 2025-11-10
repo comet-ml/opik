@@ -45,7 +45,7 @@ public class RedisConfig {
         singleServerConfig
                 .setDatabase(redisUrl.database());
 
-        config.setCodec(new JsonJacksonCodec(JsonUtils.MAPPER));
+        config.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
         return config;
     }
 

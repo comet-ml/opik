@@ -6,6 +6,7 @@ import os
 import time
 from queue import Queue
 from threading import Lock, Event
+from typing import Optional
 from uuid6 import uuid7
 
 import docker
@@ -238,7 +239,7 @@ class DockerExecutor(CodeExecutorBase):
 
                     logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
 
-    def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
+    def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
         

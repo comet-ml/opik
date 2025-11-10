@@ -148,7 +148,7 @@ function Start-DockerServices {
         
         if (Test-Path $opikScript) {
             # Invoke opik.ps1 script directly
-            & $opikScript $Mode --port-mapping
+            & $opikScript $Mode
             if ($?) {
                 Write-LogSuccess "Docker services started successfully"
             }
@@ -214,28 +214,27 @@ function Test-DockerServices {
     }
 }
 
-# Wrapper functions for backward compatibility
-function Start-Infrastructure {
-    Start-DockerServices -Mode "--infra"
+function Start-LocalBeFe {
+    Start-DockerServices -Mode "--local-be-fe"
 }
 
-function Stop-Infrastructure {
-    Stop-DockerServices -Mode "--infra"
+function Stop-LocalBeFe {
+    Stop-DockerServices -Mode "--local-be-fe"
 }
 
-function Test-Infrastructure {
-    return Test-DockerServices -Mode "--infra"
+function Test-LocalBeFe {
+    return Test-DockerServices -Mode "--local-be-fe"
 }
 
-function Start-LocalBeDockerServices {
+function Start-LocalBe {
     Start-DockerServices -Mode "--local-be"
 }
 
-function Stop-LocalBeDockerServices {
+function Stop-LocalBe {
     Stop-DockerServices -Mode "--local-be"
 }
 
-function Test-LocalBeDockerServices {
+function Test-LocalBe {
     return Test-DockerServices -Mode "--local-be"
 }
 
@@ -311,13 +310,24 @@ function Invoke-FrontendLint {
     Push-Location $script:FRONTEND_DIR
     
     try {
-        npm run lint
+        npm run lint:fix
         
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "Frontend linting completed successfully"
         }
         else {
             Write-LogError "Frontend linting failed"
+            exit 1
+        }
+        
+        Write-LogInfo "Typechecking frontend..."
+        npm run typecheck
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-LogSuccess "Frontend typechecking completed successfully"
+        }
+        else {
+            Write-LogError "Frontend typechecking failed"
             exit 1
         }
     }
@@ -353,7 +363,7 @@ function Invoke-BackendLint {
 function Write-MigrationsRecoveryMessage {
     Write-LogError "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
     Write-LogError "  1. Stop all services: $PSCommandPath --stop"
-    Write-LogError "  2. Remove Docker volumes (DANGER): docker volume prune -a -f"
+    Write-LogError "  2. Clean all data volumes (DANGER): cd $script:PROJECT_ROOT && .\opik.ps1 --clean"
     Write-LogError "  3. Run again your current flow: $script:ORIGINAL_COMMAND"
 }
 
@@ -418,6 +428,60 @@ function Invoke-DbMigrations {
     }
     finally {
         Pop-Location
+    }
+}
+
+function Wait-BackendReady {
+    Test-CommandExists "curl"
+    Write-LogInfo "Waiting for backend to be ready..."
+    $maxWait = 60
+    $count = 0
+    $backendReady = $false
+    
+    while ($count -lt $maxWait) {
+        try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8080/health-check" -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
+            if ($response.StatusCode -eq 200) {
+                $backendReady = $true
+                break
+            }
+        }
+        catch {
+            # Continue waiting
+        }
+        
+        Start-Sleep -Seconds 1
+        $count++
+        
+        # Check if backend process is still running
+        if (Test-Path $script:BACKEND_PID_FILE) {
+            $backendPid = Get-Content $script:BACKEND_PID_FILE
+            $process = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
+            
+            if (-not $process) {
+                Write-LogError "Backend process died while waiting for it to be ready"
+                Write-LogError "Check logs:"
+                Write-LogError "  Get-Content '$script:BACKEND_LOG_FILE'"
+                Write-LogError "  Get-Content '$script:BACKEND_LOG_FILE.err'"
+                Remove-Item $script:BACKEND_PID_FILE -Force -ErrorAction SilentlyContinue
+                return $false
+            }
+        }
+    }
+    
+    if ($backendReady) {
+        Write-LogSuccess "Backend is ready and accepting connections"
+        if ($script:DEBUG_MODE) {
+            Write-LogDebug "Debug mode enabled - check logs for detailed output"
+        }
+        return $true
+    }
+    else {
+        Write-LogError "Backend failed to become ready after ${maxWait}s"
+        Write-LogError "Check logs:"
+        Write-LogError "  Get-Content '$script:BACKEND_LOG_FILE'"
+        Write-LogError "  Get-Content '$script:BACKEND_LOG_FILE.err'"
+        return $false
     }
 }
 
@@ -501,13 +565,13 @@ function Start-Backend {
         $stillRunning = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
         
         if ($stillRunning) {
-            Write-LogSuccess "Backend started successfully (PID: $backendPid)"
+            Write-LogSuccess "Backend process started (PID: $backendPid)"
             Write-LogInfo "Backend logs:"
             Write-LogInfo "  stdout: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
             Write-LogInfo "  stderr: Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
             
-            if ($script:DEBUG_MODE) {
-                Write-LogDebug "Debug mode enabled - check logs for detailed output"
+            if (-not (Wait-BackendReady)) {
+                exit 1
             }
         }
         else {
@@ -820,32 +884,56 @@ function Show-AccessInformation {
     Write-Host "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
 }
 
+function New-DemoData {
+    param([string]$Mode)
+    
+    Write-LogInfo "Creating demo data..."
+    Push-Location $script:PROJECT_ROOT
+    
+    try {
+        $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
+        
+        if (Test-Path $opikScript) {
+            & $opikScript $Mode --demo-data
+            if ($?) {
+                Write-LogSuccess "Demo data created"
+                return $true
+            }
+            else {
+                Write-LogWarning "Demo data creation failed, but services are running"
+                return $false
+            }
+        }
+        return $false
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 # Function to verify services
 function Test-Services {
     Write-LogInfo "=== Opik Development Status ==="
     
-    # Infrastructure status
-    $infraRunning = Test-Infrastructure
-    if ($infraRunning) {
-        Write-Host "Infrastructure: " -NoNewline
-        Write-Host "RUNNING" -ForegroundColor Green -NoNewline
-        Write-Host " (Docker containers)"
+    $dockerServicesRunning = Test-LocalBeFe
+    if ($dockerServicesRunning) {
+        Write-Host "Docker Services: " -NoNewline
+        Write-Host "RUNNING" -ForegroundColor Green
     }
     else {
-        Write-Host "Infrastructure: " -NoNewline
-        Write-Host "STOPPED" -ForegroundColor Red -NoNewline
-        Write-Host " (Docker containers)"
+        Write-Host "Docker Services: " -NoNewline
+        Write-Host "STOPPED" -ForegroundColor Red
     }
     
-    # Backend status
+    # Backend process status
     $backendRunning = Get-BackendStatus
     
-    # Frontend status
+    # Frontend process status
     $frontendRunning = $false
     if (Test-Path $script:FRONTEND_PID_FILE) {
         $processId = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
         if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
-            Write-Host "Frontend: " -NoNewline
+            Write-Host "Frontend Process: " -NoNewline
             Write-Host "RUNNING" -ForegroundColor Green -NoNewline
             Write-Host " (PID: $processId)"
             $frontendRunning = $true
@@ -853,38 +941,33 @@ function Test-Services {
     }
     
     if (-not $frontendRunning) {
-        Write-Host "Frontend: " -NoNewline
+        Write-Host "Frontend Process: " -NoNewline
         Write-Host "STOPPED" -ForegroundColor Red
     }
     
     # Show access information if all services are running
-    if ($infraRunning -and $backendRunning -and $frontendRunning) {
+    if ($dockerServicesRunning -and $backendRunning -and $frontendRunning) {
         Show-AccessInformation -UiUrl "http://localhost:5174" -ShowManualEdit $true
     }
     
     Write-Host ""
     Write-Host "Logs:"
-    Write-Host "  Backend stdout:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
-    Write-Host "  Backend stderr:  Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
-    Write-Host "  Frontend stdout: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
-    Write-Host "  Frontend stderr: Get-Content -Wait '$script:FRONTEND_LOG_FILE.err'"
+    Write-Host "  Backend Process:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+    Write-Host "  Frontend Process: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
 }
 
 # Function to verify BE-only services
 function Test-BeOnlyServices {
     Write-LogInfo "=== Opik BE-Only Development Status ==="
     
-    # Infrastructure and Docker Frontend status
-    $dockerServicesRunning = Test-LocalBeDockerServices
+    $dockerServicesRunning = Test-LocalBe
     if ($dockerServicesRunning) {
-        Write-Host "Infrastructure + Docker Frontend: " -NoNewline
-        Write-Host "RUNNING" -ForegroundColor Green -NoNewline
-        Write-Host " (Docker containers)"
+        Write-Host "Docker Services: " -NoNewline
+        Write-Host "RUNNING" -ForegroundColor Green
     }
     else {
-        Write-Host "Infrastructure + Docker Frontend: " -NoNewline
-        Write-Host "STOPPED" -ForegroundColor Red -NoNewline
-        Write-Host " (Docker containers)"
+        Write-Host "Docker Services: " -NoNewline
+        Write-Host "STOPPED" -ForegroundColor Red
     }
     
     # Backend process status
@@ -897,23 +980,24 @@ function Test-BeOnlyServices {
     
     Write-Host ""
     Write-Host "Logs:"
-    Write-Host "  Backend stdout: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
-    Write-Host "  Backend stderr: Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
-    Write-Host "  Docker Services: docker logs -f opik-frontend-1"
+    Write-Host "  Backend Process:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+    Write-Host "  Frontend:         docker logs -f opik-frontend-1"
 }
 
 # Function to start services (without building)
 function Start-Services {
     Write-LogInfo "=== Starting Opik Development Environment ==="
     Write-LogWarning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    Write-LogInfo "Step 1/4: Starting infrastructure..."
-    Start-Infrastructure
-    Write-LogInfo "Step 2/4: Running DB migrations..."
+    Write-LogInfo "Step 1/5: Starting Docker services..."
+    Start-LocalBeFe
+    Write-LogInfo "Step 2/5: Running DB migrations..."
     Invoke-DbMigrations
-    Write-LogInfo "Step 3/4: Starting backend..."
+    Write-LogInfo "Step 3/5: Starting backend process..."
     Start-Backend
-    Write-LogInfo "Step 4/4: Starting frontend..."
+    Write-LogInfo "Step 4/5: Starting frontend process..."
     Start-Frontend
+    Write-LogInfo "Step 5/5: Creating demo data..."
+    New-DemoData -Mode "--local-be-fe"
     Write-LogSuccess "=== Start Complete ==="
     Test-Services
 }
@@ -925,16 +1009,16 @@ function Stop-Services {
     Stop-Frontend
     Write-LogInfo "Step 2/3: Stopping backend..."
     Stop-Backend
-    Write-LogInfo "Step 3/3: Stopping infrastructure..."
-    Stop-Infrastructure
+    Write-LogInfo "Step 3/3: Stopping Docker services..."
+    Stop-LocalBeFe
     Write-LogSuccess "=== Stop Complete ==="
 }
 
 # Function to run migrations
 function Invoke-Migrations {
     Write-LogInfo "=== Running Database Migrations ==="
-    Write-LogInfo "Step 1/3: Starting infrastructure..."
-    Start-Infrastructure
+    Write-LogInfo "Step 1/3: Starting Docker services..."
+    Start-LocalBeFe
     Write-LogInfo "Step 2/3: Building backend..."
     Build-Backend
     Write-LogInfo "Step 3/3: Running DB migrations..."
@@ -945,25 +1029,86 @@ function Invoke-Migrations {
 # Function to restart services (stop, build, start)
 function Restart-Services {
     Write-LogInfo "=== Restarting Opik Development Environment ==="
-    Write-LogInfo "Step 1/9: Stopping frontend..."
+    Write-LogInfo "Step 1/10: Stopping frontend process..."
     Stop-Frontend
-    Write-LogInfo "Step 2/9: Stopping backend..."
+    Write-LogInfo "Step 2/10: Stopping backend process..."
     Stop-Backend
-    Write-LogInfo "Step 3/9: Stopping infrastructure..."
-    Stop-Infrastructure
-    Write-LogInfo "Step 4/9: Starting infrastructure..."
-    Start-Infrastructure
-    Write-LogInfo "Step 5/9: Building backend..."
+    Write-LogInfo "Step 3/10: Stopping Docker services..."
+    Stop-LocalBeFe
+    Write-LogInfo "Step 4/10: Starting Docker services..."
+    Start-LocalBeFe
+    Write-LogInfo "Step 5/10: Building backend..."
     Build-Backend
-    Write-LogInfo "Step 6/9: Building frontend..."
+    Write-LogInfo "Step 6/10: Building frontend..."
     Build-Frontend
-    Write-LogInfo "Step 7/9: Running DB migrations..."
+    Write-LogInfo "Step 7/10: Running DB migrations..."
     Invoke-DbMigrations
-    Write-LogInfo "Step 8/9: Starting backend..."
+    Write-LogInfo "Step 8/10: Starting backend process..."
     Start-Backend
-    Write-LogInfo "Step 9/9: Starting frontend..."
+    Write-LogInfo "Step 9/10: Starting frontend process..."
     Start-Frontend
+    Write-LogInfo "Step 10/10: Creating demo data..."
+    New-DemoData -Mode "--local-be-fe"
     Write-LogSuccess "=== Restart Complete ==="
+    Test-Services
+}
+
+# Function for quick restart (only rebuild backend, keep infrastructure running)
+function Invoke-QuickRestart {
+    Write-LogInfo "=== Quick Restart & Build (Backend, Frontend only) ==="
+    
+    # Check if infrastructure is running, start it if not
+    Write-LogInfo "Step 1/7: Checking Docker infrastructure..."
+    if (Test-LocalBeFe) {
+        Write-LogSuccess "Docker infrastructure is already running"
+    }
+    else {
+        Write-LogWarning "Docker infrastructure is not running, starting it..."
+        Start-LocalBeFe
+        Write-LogInfo "Running DB migrations..."
+        Invoke-DbMigrations
+    }
+    
+    Write-LogInfo "Step 2/7: Stopping frontend..."
+    Stop-Frontend
+    Write-LogInfo "Step 3/7: Stopping backend..."
+    Stop-Backend
+    Write-LogInfo "Step 4/7: Building backend..."
+    Build-Backend
+    Write-LogInfo "Step 5/7: Starting backend..."
+    Start-Backend
+    
+    # Check if package.json has changed since last npm install
+    Write-LogInfo "Step 6/7: Checking frontend dependencies..."
+    $packageJson = Join-Path $script:FRONTEND_DIR "package.json"
+    $packageLock = Join-Path $script:FRONTEND_DIR "package-lock.json"
+    $nodeModules = Join-Path $script:FRONTEND_DIR "node_modules"
+    
+    $needsInstall = $false
+    
+    if (-not (Test-Path $nodeModules)) {
+        Write-LogInfo "node_modules not found, will install dependencies"
+        $needsInstall = $true
+    }
+    elseif (-not (Test-Path $packageLock)) {
+        Write-LogInfo "package-lock.json not found, will install dependencies"
+        $needsInstall = $true
+    }
+    elseif ((Get-Item $packageJson).LastWriteTime -gt (Get-Item $packageLock).LastWriteTime) {
+        Write-LogInfo "package.json is newer than package-lock.json, will install dependencies"
+        $needsInstall = $true
+    }
+    else {
+        Write-LogInfo "Frontend dependencies are up to date, skipping npm install"
+    }
+    
+    if ($needsInstall) {
+        Build-Frontend
+    }
+    
+    Write-LogInfo "Step 7/7: Starting frontend..."
+    Start-Frontend
+    Write-LogSuccess "=== Quick Restart Complete ==="
     Test-Services
 }
 
@@ -971,12 +1116,14 @@ function Restart-Services {
 function Start-BeOnlyServices {
     Write-LogInfo "=== Starting Opik BE-Only Development Environment ==="
     Write-LogWarning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    Write-LogInfo "Step 1/3: Starting infrastructure and Docker frontend..."
-    Start-LocalBeDockerServices
-    Write-LogInfo "Step 2/3: Running DB migrations..."
+    Write-LogInfo "Step 1/4: Starting Docker services..."
+    Start-LocalBe
+    Write-LogInfo "Step 2/4: Running DB migrations..."
     Invoke-DbMigrations
-    Write-LogInfo "Step 3/3: Starting backend process..."
+    Write-LogInfo "Step 3/4: Starting backend process..."
     Start-Backend
+    Write-LogInfo "Step 4/4: Creating demo data..."
+    New-DemoData -Mode "--local-be"
     Write-LogSuccess "=== BE-Only Start Complete ==="
     Test-BeOnlyServices
 }
@@ -986,26 +1133,28 @@ function Stop-BeOnlyServices {
     Write-LogInfo "=== Stopping Opik BE-Only Development Environment ==="
     Write-LogInfo "Step 1/2: Stopping backend process..."
     Stop-Backend
-    Write-LogInfo "Step 2/2: Stopping infrastructure and Docker frontend..."
-    Stop-LocalBeDockerServices
+    Write-LogInfo "Step 2/2: Stopping Docker services..."
+    Stop-LocalBe
     Write-LogSuccess "=== BE-Only Stop Complete ==="
 }
 
 # Function to restart BE-only services (stop, build, start)
 function Restart-BeOnlyServices {
     Write-LogInfo "=== Restarting Opik BE-Only Development Environment ==="
-    Write-LogInfo "Step 1/6: Stopping backend process..."
+    Write-LogInfo "Step 1/7: Stopping backend process..."
     Stop-Backend
-    Write-LogInfo "Step 2/6: Stopping infrastructure and Docker frontend..."
-    Stop-LocalBeDockerServices
-    Write-LogInfo "Step 3/6: Starting infrastructure and Docker frontend..."
-    Start-LocalBeDockerServices
-    Write-LogInfo "Step 4/6: Building backend..."
+    Write-LogInfo "Step 2/7: Stopping Docker services..."
+    Stop-LocalBe
+    Write-LogInfo "Step 3/7: Starting Docker services..."
+    Start-LocalBe
+    Write-LogInfo "Step 4/7: Building backend..."
     Build-Backend
-    Write-LogInfo "Step 5/6: Running DB migrations..."
+    Write-LogInfo "Step 5/7: Running DB migrations..."
     Invoke-DbMigrations
-    Write-LogInfo "Step 6/6: Starting backend process..."
+    Write-LogInfo "Step 6/7: Starting backend process..."
     Start-Backend
+    Write-LogInfo "Step 7/7: Creating demo data..."
+    New-DemoData -Mode "--local-be"
     Write-LogSuccess "=== BE-Only Restart Complete ==="
     Test-BeOnlyServices
 }
@@ -1046,15 +1195,16 @@ function Show-Usage {
     Write-Host "Usage: $PSCommandPath [OPTIONS]"
     Write-Host ""
     Write-Host "Standard Mode (BE and FE services as processes):"
-    Write-Host "  --start        - Start Docker infrastructure, and BE and FE processes (without building)"
-    Write-Host "  --stop         - Stop Docker infrastructure, and BE and FE processes"
-    Write-Host "  --restart      - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
-    Write-Host "  --verify       - Verify status of Docker infrastructure, and BE and FE processes"
+    Write-Host "  --start         - Start Docker infrastructure, and BE and FE processes (without building)"
+    Write-Host "  --stop          - Stop Docker infrastructure, and BE and FE processes"
+    Write-Host "  --restart       - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
+    Write-Host "  --quick-restart - Quick restart: stop BE/FE, rebuild BE only, start BE/FE (keeps infrastructure running)"
+    Write-Host "  --verify        - Verify status of Docker infrastructure, and BE and FE processes"
     Write-Host ""
     Write-Host "BE-Only Mode (BE as process, FE in Docker):"
     Write-Host "  --be-only-start    - Start Docker infrastructure and FE, and backend process (without building)"
     Write-Host "  --be-only-stop     - Stop Docker infrastructure and FE, and backend process"
-    Write-Host "  --be-only-restart  - Stop, build, and Docker infrastructure and FE, and backend process"
+    Write-Host "  --be-only-restart  - Stop, build, and start Docker infrastructure and FE, and backend process"
     Write-Host "  --be-only-verify   - Verify status of Docker infrastructure and FE, and backend process"
     Write-Host ""
     Write-Host "Other options:"
@@ -1095,6 +1245,9 @@ switch ($Action.ToLower()) {
     }
     "--restart" {
         Restart-Services
+    }
+    "--quick-restart" {
+        Invoke-QuickRestart
     }
     "--verify" {
         Test-Services

@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -26,8 +27,11 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
@@ -87,6 +91,9 @@ public class OnlineScoringSampler {
 
             List<? extends AutomationRuleEvaluator<?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, tracesBatch.workspaceId());
+
+            // Filter evaluators based on trace metadata if selected_rule_ids is present
+            evaluators = filterEvaluatorsByTraceMetadata(evaluators, traces);
 
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
             evaluators.parallelStream().forEach(evaluator -> {
@@ -201,5 +208,77 @@ public class OnlineScoringSampler {
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.RULE_ID, evaluator.getId().toString(),
                 UserLog.TRACE_ID, trace.id().toString()));
+    }
+
+    /**
+     * Filters evaluators based on trace metadata. If the first trace in the batch contains
+     * "selected_rule_ids" in its metadata, only evaluators with IDs in that list will be returned.
+     * Otherwise, all evaluators are returned (default behavior for backward compatibility).
+     *
+     * Note: All traces in a batch from the same source (e.g., Playground) will have the same metadata,
+     * so checking only the first trace is sufficient.
+     *
+     * @param evaluators the list of all evaluators for the project
+     * @param traces the traces batch to check for metadata
+     * @return filtered list of evaluators, or all evaluators if no selection metadata is present
+     */
+    private List<? extends AutomationRuleEvaluator<?>> filterEvaluatorsByTraceMetadata(
+            List<? extends AutomationRuleEvaluator<?>> evaluators, List<Trace> traces) {
+
+        // Check if batch is empty
+        if (traces.isEmpty()) {
+            return evaluators;
+        }
+
+        // Check the first trace for selected_rule_ids metadata
+        // All traces in the same batch will have identical metadata
+        Optional<List<UUID>> selectedRuleIds = extractSelectedRuleIds(traces.getFirst());
+
+        // If no selection found, return all evaluators (default behavior)
+        if (selectedRuleIds.isEmpty()) {
+            return evaluators;
+        }
+
+        List<UUID> ruleIdsToApply = selectedRuleIds.get();
+        log.info("Filtering evaluators based on trace metadata. Selected rule IDs: '{}'", ruleIdsToApply);
+
+        // Filter evaluators to only include those in the selected list
+        List<? extends AutomationRuleEvaluator<?>> filtered = evaluators.stream()
+                .filter(evaluator -> ruleIdsToApply.contains(evaluator.getId()))
+                .toList();
+
+        log.info("Filtered '{}' evaluators out of '{}' based on trace metadata", filtered.size(), evaluators.size());
+        return filtered;
+    }
+
+    /**
+     * Extracts selected_rule_ids from trace metadata if present.
+     *
+     * @param trace the trace to check
+     * @return Optional containing list of rule UUIDs if present, empty otherwise
+     */
+    private Optional<List<UUID>> extractSelectedRuleIds(Trace trace) {
+        return Optional.ofNullable(trace.metadata())
+                .map(metadata -> metadata.get("selected_rule_ids"))
+                .filter(JsonNode::isArray)
+                .map(ruleIdsNode -> {
+                    try {
+                        List<UUID> ruleIds = new ArrayList<>();
+                        ruleIdsNode.forEach(idNode -> {
+                            if (idNode.isTextual()) {
+                                try {
+                                    ruleIds.add(UUID.fromString(idNode.asText()));
+                                } catch (IllegalArgumentException e) {
+                                    log.warn("Invalid UUID format in selected_rule_ids metadata for trace: '{}'",
+                                            trace.id(), e);
+                                }
+                            }
+                        });
+                        return ruleIds.isEmpty() ? null : ruleIds;
+                    } catch (Exception e) {
+                        log.warn("Error parsing selected_rule_ids metadata for trace: '{}'", trace.id(), e);
+                        return null;
+                    }
+                });
     }
 }

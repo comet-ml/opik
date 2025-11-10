@@ -13,6 +13,11 @@ class ProviderApiKeyPublic(UniversalBaseModel):
     provider: ProviderApiKeyPublicProvider
     api_key: typing.Optional[str] = None
     name: typing.Optional[str] = None
+    provider_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). Should not be set for standard providers (OpenAI, Anthropic, etc.).
+    """
+
     headers: typing.Optional[typing.Dict[str, str]] = None
     configuration: typing.Optional[typing.Dict[str, str]] = None
     base_url: typing.Optional[str] = None

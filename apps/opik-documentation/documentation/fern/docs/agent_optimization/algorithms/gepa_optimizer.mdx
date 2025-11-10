@@ -73,6 +73,23 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
+### Determinism and tool usage
+
+- GEPA’s seed is forwarded directly to the underlying `gepa.optimize` call, but any non-determinism in your prompt (tool calls, non-zero temperature, external APIs) will still introduce variance. To test seeding in isolation, disable tools or substitute cached responses.
+- GEPA emits its own baseline evaluation inside the optimization loop. You’ll see one baseline score from Opik’s wrapper and another from GEPA before the first trial; this is expected and does not double-charge the metric budget.
+- Reflection only triggers after GEPA accepts at least `reflection_minibatch_size` unique prompts. If the minibatch is larger than the trial budget, the optimizer logs a warning and skips reflection.
+
+### GEPA scores vs. Opik scores
+
+- The **GEPA Score** column reflects the aggregate score GEPA computes on its train/validation split when deciding which candidates stay on the Pareto front. It is useful for understanding how GEPA’s evolutionary search ranks prompts.
+- The **Opik Score** column is a fresh evaluation performed through Opik’s metric pipeline on the same dataset (respecting `n_samples`). This is the score you should use when comparing against your baseline or other optimizers.
+- Because the GEPA score is based on GEPA’s internal aggregation, it can diverge from the Opik score for the same prompt. This is expected—treat the GEPA score as a hint about why GEPA kept or discarded a candidate, and rely on the Opik score for final comparisons.
+
+### `skip_perfect_score`
+
+- When `skip_perfect_score=True`, GEPA immediately ignores any candidate whose GEPA score meets or exceeds the `perfect_score` threshold (default `1.0`). This keeps the search moving toward imperfect prompts instead of spending budget refining already perfect ones.
+- Set `skip_perfect_score=False` if your metric tops out below `1.0`, or if you still want to see how GEPA mutates a perfect-scoring prompt—for example, when you care about ties being broken by Opik’s rescoring step rather than GEPA’s aggregate.
+
 ## Configuration Options
 
 ### Optimizer parameters
@@ -134,7 +151,6 @@ optimizer = GepaOptimizer(
 
 ## Next Steps
 
-- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
-- Learn about [Dataset Requirements](/agent_optimization/opik_optimizer/datasets)
-- Try the [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart) for runnable examples
-- Read about [creating effective metrics](/evaluation/metrics/overview) that provide good feedback for optimization
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

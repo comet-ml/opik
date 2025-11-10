@@ -111,6 +111,16 @@ SUPPORTED_OPERATORS = {
         ">",
         "<",
     ],
+    "default": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
+        ">",
+        "<",
+    ],
 }
 
 
@@ -252,15 +262,24 @@ class OpikQueryLanguage:
                         "key": "",
                         "type": COLUMNS[f"usage.{key}"],
                     }
-            else:
+            elif field in COLUMNS:
                 return {"field": field, "key": key, "type": COLUMNS[field]}
+            else:
+                # defaults to string
+                return {"field": field, "key": key, "type": "string"}
 
-        else:
+        elif field in COLUMNS:
             return {"field": field, "key": "", "type": COLUMNS[field]}
+        else:
+            # defaults to string
+            return {"field": field, "key": "", "type": "string"}
 
     def _parse_operator(self, parsed_field: str) -> Dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
+
+        if parsed_field not in SUPPORTED_OPERATORS:
+            parsed_field = "default"
 
         # Parse the operator
         if self.query_string[self._cursor] == "=":

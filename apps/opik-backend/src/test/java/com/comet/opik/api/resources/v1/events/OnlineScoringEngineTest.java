@@ -55,6 +55,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.text.StringEscapeUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -69,8 +70,8 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -158,12 +159,8 @@ class OnlineScoringEngineTest {
     private final String unquoted;
 
     {
-        try {
-            String jsonEncodedPrompt = JsonUtils.MAPPER.writeValueAsString(TRACE_THREAD_PROMPT);
-            unquoted = jsonEncodedPrompt.substring(1, jsonEncodedPrompt.length() - 1);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+        String jsonEncodedPrompt = JsonUtils.writeValueAsString(TRACE_THREAD_PROMPT);
+        unquoted = jsonEncodedPrompt.substring(1, jsonEncodedPrompt.length() - 1);
     }
 
     private final String TEST_TRACE_THREAD_EVALUATOR = """
@@ -226,7 +223,7 @@ class OnlineScoringEngineTest {
             .formatted(EDGE_CASE_TEMPLATE).trim();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
 
@@ -297,7 +294,7 @@ class OnlineScoringEngineTest {
     void testRedisProducerAndConsumerBaseFlow(OnlineScoringSampler onlineScoringSampler) throws Exception {
         var projectId = projectResourceClient.createProject(PROJECT_NAME, API_KEY, WORKSPACE_NAME);
 
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
         var evaluator = createRule(projectId, evaluatorCode); // Let's make sure all traces are expected to be scored
 
@@ -341,6 +338,76 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("test filtering evaluators by trace metadata")
+    void testFilteringEvaluatorsByTraceMetadata(OnlineScoringSampler onlineScoringSampler) throws Exception {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        // Create three evaluators
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+
+        var evaluator1 = createRule(projectId, evaluatorCode);
+        var evaluator2 = createRule(projectId, evaluatorCode);
+        var evaluator3 = createRule(projectId, evaluatorCode);
+
+        var evaluatorId1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+        var evaluatorId2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+        evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY); // Create evaluator3 but don't select it
+
+        // Create trace with metadata specifying only evaluator1 and evaluator2
+        var traceId = generator.generate();
+        var metadata = JsonUtils.createObjectNode();
+        metadata.putArray("selected_rule_ids")
+                .add(evaluatorId1.toString())
+                .add(evaluatorId2.toString());
+
+        var trace = createTrace(traceId, projectId).toBuilder()
+                .metadata(metadata)
+                .build();
+
+        var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+                + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+                + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
+
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        onlineScoringSampler.onTracesCreated(event);
+
+        // Wait longer for async processing to complete (both evaluators need to process)
+        Awaitility.await().untilAsserted(() -> {
+            // Verify that evaluators were processed
+            // We should have at least 1 call to scoreBatchOfTraces
+            Mockito.verify(feedbackScoreService, Mockito.atLeastOnce()).scoreBatchOfTraces(captor.capture());
+
+            // Collect all scores from all calls
+            var allScores = captor.getAllValues().stream()
+                    .flatMap(List::stream)
+                    .toList();
+
+            // Verify that only 2 evaluators were processed (evaluator1 and evaluator2)
+            // Each evaluator produces 3 feedback scores, so we expect 2 * 3 = 6 scores total
+            assertThat(allScores).hasSize(6);
+
+            // Verify all scores are from online scoring
+            var scoresBySource = allScores.stream()
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::source));
+
+            assertThat(scoresBySource).containsOnlyKeys(ScoreSource.ONLINE_SCORING);
+            assertThat(scoresBySource.get(ScoreSource.ONLINE_SCORING)).hasSize(6);
+        });
+    }
+
+    @Test
     @DisplayName("test User Facing log error when AI provider fails")
     void testUserFacingLogErrorWhenAIProviderFails(OnlineScoringSampler onlineScoringSampler) throws Exception {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
@@ -349,7 +416,7 @@ class OnlineScoringEngineTest {
 
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
         var evaluator = createRule(projectId, evaluatorCode);
 
@@ -392,8 +459,8 @@ class OnlineScoringEngineTest {
                 .projectName(PROJECT_NAME)
                 .projectId(projectId)
                 .createdBy(USER_NAME)
-                .input(JsonUtils.MAPPER.readTree(INPUT))
-                .output(JsonUtils.MAPPER.readTree(OUTPUT)).build();
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT)).build();
     }
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
@@ -410,7 +477,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("parse variable mapping into a usable one")
     void testVariableMapping() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var variableMappings = OnlineScoringEngine.toVariableMapping(evaluatorCode.variables());
 
         assertThat(variableMappings).hasSize(6);
@@ -454,7 +521,7 @@ class OnlineScoringEngineTest {
     @MethodSource
     @DisplayName("render message templates with a trace")
     void testRenderTemplate(String evaluator) throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(evaluator, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(evaluator, LlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId);
@@ -477,7 +544,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("render message templates with a trace thread")
     void testRenderTemplateWithTraceThread() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId).toBuilder()
@@ -501,7 +568,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("prepare trace thread LLM request with tool-calling strategy")
     void testPrepareTraceThreadLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate()).toBuilder()
                 .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                 .build();
@@ -517,7 +584,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("prepare LLM request with tool-calling strategy")
     void testPrepareLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy());
@@ -530,7 +597,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("prepare LLM request with instruction strategy")
     void testPrepareLlmRequestWithInstructionStrategy() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(
@@ -645,7 +712,7 @@ class OnlineScoringEngineTest {
                 .projectName(PROJECT_NAME)
                 .projectId(UUID.randomUUID())
                 .createdBy(USER_NAME)
-                .input(JsonUtils.MAPPER.readTree(jsonBody))
+                .input(JsonUtils.getJsonNodeFromString(jsonBody))
                 .build();
 
         // Render a message using the variable

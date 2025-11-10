@@ -42,6 +42,8 @@ public class WebhookEvent<T> {
 
     @NotBlank private String workspaceId;
 
+    @NotBlank private String workspaceName;
+
     @NotBlank private String userName;
 
     @NotNull private T payload;

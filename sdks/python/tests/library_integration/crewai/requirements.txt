@@ -1,2 +1,0 @@
-crewai<1.0.0 # Crewai changed LLM infrastructure handling since 1.0.0
-crewai-tools

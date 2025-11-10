@@ -44,8 +44,23 @@ spec:
       securityContext:
         {{- toYaml . | nindent 10 }}
       {{- end }}
-      {{- if or $value.initContainers $value.waitForClickhouse $value.run_migration }}
+      {{- if or $value.initContainers $value.waitForClickhouse (and $value.waitForMysql $value.waitForMysql.enabled) $value.run_migration }}
       initContainers:
+      {{- if and (eq $key "backend") $value.waitForMysql $value.waitForMysql.enabled }}
+        - name: wait-for-mysql-service
+          image: "{{ default $.Values.registry $value.waitForMysql.image.registry }}/{{ $value.waitForMysql.image.repository }}:{{ $value.waitForMysql.image.tag }}"
+          imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForMysql.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until nc -z -v -w5 {{ $value.waitForMysql.mysql.host }} {{ $value.waitForMysql.mysql.port }}; do
+                echo "MySQL is not available. Waiting for MySQL at {{ $value.waitForMysql.mysql.host }}:{{ $value.waitForMysql.mysql.port }}...";
+                sleep 5;
+              done;
+              echo "MySQL is available at {{ $value.waitForMysql.mysql.host }}:{{ $value.waitForMysql.mysql.port }}";
+      {{- end }}
       {{- if and (eq $key "backend") $value.waitForClickhouse }}
         - name: wait-for-clickhouse-service
           image: "{{ default $.Values.registry $value.waitForClickhouse.image.registry }}/{{ $value.waitForClickhouse.image.repository }}:{{ $value.waitForClickhouse.image.tag }}"

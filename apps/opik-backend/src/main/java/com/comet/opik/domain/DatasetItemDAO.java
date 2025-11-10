@@ -4,8 +4,10 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -378,8 +380,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LIMIT 1 BY id
             ) AS tfs ON ei.trace_id = tfs.id
             <endif>
+            <if(dataset_item_filters || search_filter)>
+            WHERE 1=1
             <if(dataset_item_filters)>
-            WHERE <dataset_item_filters>
+            AND <dataset_item_filters>
+            <endif>
+            <if(search_filter)>
+            AND <search_filter>
+            <endif>
             <endif>
             ;
             """;
@@ -619,6 +627,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.last_updated_at AS last_updated_at,
                 di.created_by AS created_by,
                 di.last_updated_by AS last_updated_by,
+                argMax(tfs.duration, ei.created_at) AS duration,
+                argMax(tfs.total_estimated_cost, ei.created_at) AS total_estimated_cost,
+                argMax(tfs.usage, ei.created_at) AS usage,
+                argMax(tfs.feedback_scores, ei.created_at) AS feedback_scores,
+                argMax(tfs.input, ei.created_at) AS input,
+                argMax(tfs.output, ei.created_at) AS output,
+                argMax(tfs.metadata, ei.created_at) AS metadata,
+                argMax(tfs.visibility_mode, ei.created_at) AS visibility_mode,
+                argMax(tfs.comments_array_agg, ei.created_at) AS comments,
                 groupArray(tuple(
                     ei.id,
                     ei.experiment_id,
@@ -635,7 +652,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     tfs.duration,
                     tfs.total_estimated_cost,
                     tfs.usage,
-                    tfs.visibility_mode as trace_visibility_mode
+                    tfs.visibility_mode,
+                    tfs.metadata
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
             LEFT JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id
@@ -644,6 +662,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.id,
                     t.input,
                     t.output,
+                    t.metadata,
                     t.duration,
                     t.visibility_mode,
                     s.total_estimated_cost,
@@ -661,6 +680,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         fs.last_updated_by,
                         fs.value_by_author
                     )) AS feedback_scores_array,
+                    mapFromArrays(
+                        groupArray(fs.name),
+                        groupArray(fs.value)
+                    ) AS feedback_scores,
                     groupUniqArray(tuple(c.*)) AS comments_array_agg
                 FROM (
                     SELECT
@@ -671,6 +694,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                          NULL) AS duration,
                         <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
                         <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        metadata,
                         visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
@@ -694,6 +718,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.id,
                     t.input,
                     t.output,
+                    t.metadata,
                     t.duration,
                     t.visibility_mode,
                     s.total_estimated_cost,
@@ -710,10 +735,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.last_updated_at,
                 di.created_by,
                 di.last_updated_by
+            <if(dataset_item_filters || search_filter)>
+            HAVING 1=1
             <if(dataset_item_filters)>
-            HAVING <dataset_item_filters>
+            AND <dataset_item_filters>
             <endif>
+            <if(search_filter)>
+            AND <search_filter>
+            <endif>
+            <endif>
+            <if(sort_fields)>
+            ORDER BY <sort_fields>
+            <else>
             ORDER BY id DESC, last_updated_at DESC
+            <endif>
             LIMIT :limit OFFSET :offset
             ;
             """;
@@ -953,6 +988,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull SortingFactoryDatasets sortingFactory;
 
     @Override
     @WithSpan
@@ -1168,6 +1205,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                     feedbackScoreIsEmptyFilters));
                 });
 
+        Optional.ofNullable(datasetItemSearchCriteria.search())
+                .filter(s -> !s.isBlank())
+                .ifPresent(searchText -> template.add("search_filter",
+                        filterQueryBuilder.buildDatasetItemSearchFilter(searchText)));
+
         return template;
     }
 
@@ -1179,6 +1221,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 });
+
+        Optional.ofNullable(datasetItemSearchCriteria.search())
+                .filter(s -> !s.isBlank())
+                .ifPresent(searchText -> filterQueryBuilder.bindSearchTerms(statement, searchText));
     }
 
     @Override
@@ -1214,7 +1260,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     selectTemplate = selectTemplate.add("truncationSize",
                             configuration.getResponseFormatting().getTruncationSize());
 
-                    var selectStatement = connection.createStatement(selectTemplate.render())
+                    // Add sorting if present
+                    var finalTemplate = selectTemplate;
+                    if (datasetItemSearchCriteria.sortingFields() != null) {
+                        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields(),
+                                filterQueryBuilder
+                                        .buildDatasetItemFieldMapping(datasetItemSearchCriteria.sortingFields())))
+                                .ifPresent(sortFields -> {
+                                    // feedback_scores is now exposed at outer query level via argMax(tfs.feedback_scores, ei.created_at)
+                                    // so we don't need to map it to tfs.feedback_scores anymore
+                                    finalTemplate.add("sort_fields", sortFields);
+                                });
+                    }
+
+                    var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
+                            && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
+
+                    var selectStatement = connection.createStatement(finalTemplate.render())
                             .bind("datasetId", datasetItemSearchCriteria.datasetId())
                             .bind("limit", size)
                             .bind("offset", (page - 1) * size);
@@ -1224,6 +1286,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         selectStatement = selectStatement.bind("experimentIds",
                                 datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
                                 .bind("entityType", datasetItemSearchCriteria.entityType().getType());
+                    }
+
+                    // Bind dynamic sorting keys if present
+                    if (hasDynamicKeys) {
+                        selectStatement = sortingQueryBuilder.bindDynamicKeys(selectStatement,
+                                datasetItemSearchCriteria.sortingFields());
                     }
 
                     bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
@@ -1237,7 +1305,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .collectList()
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
-                                    items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns)));
+                                    items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
+                                            sortingFactory.getSortableFields())));
                 }));
     }
 

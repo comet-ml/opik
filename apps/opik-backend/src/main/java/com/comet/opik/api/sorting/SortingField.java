@@ -16,8 +16,16 @@ public record SortingField(
         Direction direction,
         String bindKeyParam) {
 
+    // Canonical constructor with auto-generation of bindKeyParam for dynamic fields
+    public SortingField {
+        // Auto-generate bindKeyParam for dynamic fields if not provided
+        if (bindKeyParam == null && field != null && field.contains(".")) {
+            bindKeyParam = UUID.randomUUID().toString().replace("-", "");
+        }
+    }
+
     public SortingField(@NotBlank String field, Direction direction) {
-        this(field, direction, UUID.randomUUID().toString().replace("-", ""));
+        this(field, direction, null);
     }
 
     public String dbField() {

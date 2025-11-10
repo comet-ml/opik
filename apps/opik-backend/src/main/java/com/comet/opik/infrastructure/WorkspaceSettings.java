@@ -1,14 +1,9 @@
 package com.comet.opik.infrastructure;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import lombok.Data;
+import lombok.Builder;
 
-@Data
-public class WorkspaceSettings {
-
-    @Valid @NotNull @JsonProperty
-    private double maxSizeToAllowSorting;
-
+@Builder(toBuilder = true)
+public record WorkspaceSettings(
+        double maxSizeToAllowSorting,
+        double maxProjectSizeToAllowSorting) {
 }

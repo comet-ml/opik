@@ -3,15 +3,27 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
+import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.threads.TraceThreadService;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.ListUtils;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,12 +53,30 @@ public interface ManualEvaluationService {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
-    private final @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService;
-    private final @NonNull OnlineScorePublisher onlineScorePublisher;
+    private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    private final OnlineScorePublisher onlineScorePublisher;
+    private final TraceService traceService;
+    private final ProjectService projectService;
+    private final TraceThreadService traceThreadService;
+    private final ServiceTogglesConfig serviceTogglesConfig;
+
+    @Inject
+    public ManualEvaluationServiceImpl(@NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull OnlineScorePublisher onlineScorePublisher,
+            @NonNull TraceService traceService,
+            @NonNull ProjectService projectService,
+            @NonNull TraceThreadService traceThreadService,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
+        this.automationRuleEvaluatorService = automationRuleEvaluatorService;
+        this.onlineScorePublisher = onlineScorePublisher;
+        this.traceService = traceService;
+        this.projectService = projectService;
+        this.traceThreadService = traceThreadService;
+        this.serviceTogglesConfig = serviceTogglesConfig;
+    }
 
     @Override
     public Mono<ManualEvaluationResponse> evaluate(@NonNull ManualEvaluationRequest request, @NonNull UUID projectId,
@@ -97,53 +127,155 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
     /**
      * Evaluates traces by enqueueing evaluation messages for each rule.
-     * Does not validate trace existence - evaluation will fail later if traces don't exist.
+     * Handles both span-level evaluators (which need full trace objects) and trace-thread evaluators (which need only IDs).
      */
     private Mono<Integer> evaluateTraces(List<UUID> traceIds, List<AutomationRuleEvaluator<?>> rules, UUID projectId,
             String workspaceId, String userName) {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
-        return Mono.fromCallable(() -> {
-            // Convert trace IDs to strings for enqueueing
-            List<String> traceIdStrings = traceIds.stream()
-                    .map(UUID::toString)
-                    .toList();
+        // Separate rules by type using grouping
+        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = new ArrayList<>();
+        List<AutomationRuleEvaluator<?>> traceThreadRules = new ArrayList<>();
 
-            // Enqueue messages for each rule
-            rules.forEach(rule -> {
-                log.info("Enqueueing evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
-                        traceIdStrings.size());
-                onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId, workspaceId,
-                        userName);
-            });
+        for (AutomationRuleEvaluator<?> rule : rules) {
+            switch (rule) {
+                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> spanLevelLlmAsJudgeRules.add(llmAsJudge);
+                case AutomationRuleEvaluatorUserDefinedMetricPython python -> spanLevelPythonRules.add(python);
+                case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge ->
+                    traceThreadRules.add(traceThreadLlmAsJudge);
+                case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython traceThreadPython ->
+                    traceThreadRules.add(traceThreadPython);
+            }
+        }
+
+        // Handle span-level evaluators - need to fetch full traces
+        Mono<Void> spanLevelMono = Mono.empty();
+        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules, spanLevelPythonRules,
+                    projectId, workspaceId, userName);
+        }
+
+        // Handle trace-thread evaluators - can use IDs directly
+        return spanLevelMono.then(Mono.fromCallable(() -> {
+            if (!traceThreadRules.isEmpty()) {
+                List<String> traceIdStrings = traceIds.stream()
+                        .map(UUID::toString)
+                        .toList();
+
+                traceThreadRules.forEach(rule -> {
+                    log.info("Enqueueing trace-thread evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
+                            traceIdStrings.size());
+                    onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId, workspaceId,
+                            userName);
+                });
+            }
 
             return traceIds.size();
-        });
+        }));
+    }
+
+    /**
+     * Enqueues span-level evaluations by fetching full trace objects and creating messages.
+     */
+    private Mono<Void> enqueueSpanLevelEvaluations(List<UUID> traceIds,
+            List<AutomationRuleEvaluatorLlmAsJudge> llmAsJudgeRules,
+            List<AutomationRuleEvaluatorUserDefinedMetricPython> pythonRules,
+            UUID projectId, String workspaceId, String userName) {
+
+        log.info("Fetching '{}' traces for span-level evaluation", traceIds.size());
+
+        // Fetch project to get project name
+        var project = projectService.get(projectId, workspaceId);
+
+        // Fetch all traces
+        return traceService.getByIds(traceIds)
+                .collectList()
+                .flatMap(traces -> {
+                    if (ListUtils.emptyIfNull(traces).isEmpty()) {
+                        log.warn("No traces found to enqueue for span-level evaluation");
+                        return Mono.empty();
+                    }
+
+                    log.info("Successfully fetched '{}' traces for span-level evaluation", traces.size());
+
+                    // Enqueue LLM as Judge evaluations
+                    llmAsJudgeRules.forEach(rule -> {
+                        List<TraceToScoreLlmAsJudge> messages = traces.stream()
+                                .map(trace -> TraceToScoreLlmAsJudge.builder()
+                                        .trace(trace.toBuilder().projectName(project.name()).build())
+                                        .ruleId(rule.getId())
+                                        .ruleName(rule.getName())
+                                        .llmAsJudgeCode(rule.getCode())
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build())
+                                .toList();
+
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'", messages.size(),
+                                rule.getId());
+                    });
+
+                    // Enqueue Python evaluations (if enabled)
+                    pythonRules.forEach(rule -> {
+                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                            log.warn("Span-level Python evaluator is disabled, skipping rule '{}'", rule.getId());
+                            return;
+                        }
+
+                        List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
+                                .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
+                                        .trace(trace.toBuilder().projectName(project.name()).build())
+                                        .ruleId(rule.getId())
+                                        .ruleName(rule.getName())
+                                        .code(rule.getCode())
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build())
+                                .toList();
+
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
+                                rule.getId());
+                    });
+
+                    return Mono.empty();
+                });
     }
 
     /**
      * Evaluates threads by enqueueing evaluation messages for each rule.
-     * Does not validate thread existence - evaluation will fail later if threads don't exist.
+     * Resolves thread model IDs to thread ID strings before enqueueing.
      */
-    private Mono<Integer> evaluateThreads(List<UUID> threadIds, List<AutomationRuleEvaluator<?>> rules, UUID projectId,
+    private Mono<Integer> evaluateThreads(List<UUID> threadModelIds, List<AutomationRuleEvaluator<?>> rules,
+            UUID projectId,
             String workspaceId, String userName) {
-        log.info("Evaluating '{}' threads with '{}' rules", threadIds.size(), rules.size());
+        log.info("Evaluating '{}' threads with '{}' rules", threadModelIds.size(), rules.size());
 
-        return Mono.fromCallable(() -> {
-            // Convert thread model IDs to strings for enqueueing
-            List<String> threadIdStrings = threadIds.stream()
-                    .map(UUID::toString)
-                    .toList();
+        // Fetch thread IDs from thread model IDs
+        return traceThreadService.getThreadIdsByThreadModelIds(threadModelIds)
+                .flatMap(threadModelIdToThreadIdMap -> {
+                    if (threadModelIdToThreadIdMap == null || threadModelIdToThreadIdMap.isEmpty()) {
+                        log.warn("No thread IDs found to enqueue for thread evaluation");
+                        return Mono.just(0);
+                    }
 
-            // Enqueue messages for each rule
-            rules.forEach(rule -> {
-                log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
-                        threadIdStrings.size());
-                onlineScorePublisher.enqueueThreadMessage(threadIdStrings, rule.getId(), projectId, workspaceId,
-                        userName);
-            });
+                    log.info("Successfully resolved '{}' thread IDs for thread evaluation",
+                            threadModelIdToThreadIdMap.size());
 
-            return threadIds.size();
-        });
+                    // Extract thread ID strings
+                    List<String> threadIds = List.copyOf(threadModelIdToThreadIdMap.values());
+
+                    // Enqueue messages for each rule
+                    rules.forEach(rule -> {
+                        log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
+                                threadIds.size());
+                        onlineScorePublisher.enqueueThreadMessage(threadIds, rule.getId(), projectId, workspaceId,
+                                userName);
+                    });
+
+                    return Mono.just(threadModelIds.size());
+                });
     }
 }

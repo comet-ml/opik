@@ -38,8 +38,9 @@ public class AlertEventEvaluationService {
 
                         String eventId = idGenerator.generateId().toString();
                         alertBucketService
-                                .addEventToBucket(alert.id(), alertEvent.workspaceId(), alertEvent.eventType(),
-                                        eventId, JsonUtils.writeValueAsString(alertEvent.payload()),
+                                .addEventToBucket(alert.id(), alertEvent.workspaceId(), alertEvent.workspaceName(),
+                                        alertEvent.eventType(), eventId,
+                                        JsonUtils.writeValueAsString(alertEvent.payload()),
                                         alertEvent.userName())
                                 .block();
                     }
@@ -49,9 +50,10 @@ public class AlertEventEvaluationService {
 
     private boolean isValidForAlert(AlertEvent alertEvent, List<AlertTrigger> triggers) {
         return switch (alertEvent.eventType()) {
-            case PROMPT_CREATED, PROMPT_COMMITTED, PROMPT_DELETED -> true;
+            case PROMPT_CREATED, PROMPT_COMMITTED, PROMPT_DELETED, EXPERIMENT_FINISHED -> true;
             case TRACE_FEEDBACK_SCORE, TRACE_THREAD_FEEDBACK_SCORE, TRACE_ERRORS, TRACE_GUARDRAILS_TRIGGERED ->
                 isWithinProjectScope(alertEvent, triggers);
+            default -> false;
         };
     }
 

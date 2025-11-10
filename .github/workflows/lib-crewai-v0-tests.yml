@@ -1,0 +1,74 @@
+# Workflow to run CrewAI v0.x tests
+#
+# Please read inputs to provide correct values.
+#
+name: SDK Lib CrewAI v0 Tests
+run-name: "SDK Lib CrewAI v0 Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+  GOOGLE_CLOUD_LOCATION: us-east1
+  GOOGLE_CLOUD_PROJECT: opik-sdk-tests
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+
+on:
+  workflow_call:
+
+jobs:
+  tests:
+    name: CrewAI v0 Python ${{matrix.python_version}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sdks/python
+
+    strategy:
+      fail-fast: true
+      matrix:
+        python_version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{matrix.python_version}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python_version}}
+
+      - name: Install opik
+        run: pip install .
+
+      - name: Install test tools
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+      - name: Install lib
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r library_integration/crewai/requirements_v0.txt
+
+      - name: Configure AWS credentials for Bedrock
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.BEDROCK_ROLE }}
+          aws-region: us-east-1
+          role-chaining: true
+          role-skip-session-tagging: true
+
+      - name: Run tests
+        run: |
+          cd ./tests/library_integration/crewai/
+          python -m pytest  -vv .

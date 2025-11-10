@@ -1,3 +1,5 @@
+import json
+from numbers import Number
 from contextlib import contextmanager
 from typing import Any
 
@@ -19,10 +21,68 @@ from ..reporting_utils import (  # noqa: F401
     display_result,
     get_console,
     convert_tqdm_to_rich,
+    format_prompt_snippet,
     suppress_opik_logs,
 )
 
 console = get_console()
+
+
+def _format_pareto_note(note: str) -> str:
+    try:
+        data = json.loads(note)
+    except json.JSONDecodeError:
+        return note
+
+    if isinstance(data, dict):
+        parts: list[str] = []
+        new_scores = data.get("new_scores") or data.get("scores")
+        if isinstance(new_scores, list):
+            formatted_scores = ", ".join(
+                f"{float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}"
+                if isinstance(score, Number)
+                else str(score)
+                for score in new_scores
+            )
+            parts.append(f"scores=[{formatted_scores}]")
+
+        chosen = data.get("chosen")
+        if chosen is not None:
+            parts.append(f"chosen={chosen}")
+
+        train_val = data.get("pareto_front_train_val_score")
+        if isinstance(train_val, dict) and chosen is not None:
+            chosen_entry = train_val.get(str(chosen))
+            if isinstance(chosen_entry, dict):
+                score = chosen_entry.get("score")
+                if isinstance(score, Number):
+                    parts.append(
+                        f"train_val={float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}"
+                    )
+
+        pareto_front = data.get("pareto_front")
+        if isinstance(pareto_front, dict):
+            parts.append(f"front_size={len(pareto_front)}")
+
+        if parts:
+            return ", ".join(parts)
+
+        return note
+
+    elif isinstance(data, list):
+        return ", ".join(
+            f"{float(item) if isinstance(item, (int, float)) else float(str(item)):.3f}"
+            if isinstance(item, Number)
+            else str(item)
+            for item in data
+        )
+
+    elif isinstance(data, Number):
+        return (
+            f"{float(data) if isinstance(data, (int, float)) else float(str(data)):.3f}"
+        )
+
+    return str(data)
 
 
 class RichGEPAOptimizerLogger:
@@ -58,6 +118,8 @@ class RichGEPAOptimizerLogger:
         self.task_id = task_id
         self.max_trials = max_trials
         self.current_iteration = 0
+        self._last_best_message: tuple[str, str] | None = None
+        self._last_raw_message: str | None = None
 
     def log(self, message: str) -> None:
         if self.verbose < 1:
@@ -72,6 +134,13 @@ class RichGEPAOptimizerLogger:
             return
 
         first = lines[0]
+
+        if first == self._last_raw_message:
+            return
+
+        # Reset duplicate tracker when handling other messages
+        if not first.startswith("Best "):
+            self._last_best_message = None
 
         # Track iteration changes and add separation
         if first.startswith("Iteration "):
@@ -88,6 +157,7 @@ class RichGEPAOptimizerLogger:
 
                     self.optimizer._gepa_current_iteration = iteration  # type: ignore[attr-defined]
                     self.current_iteration = iteration
+                    self._last_raw_message = first
 
                     # Update progress bar
                     if self.progress and self.task_id is not None:
@@ -120,32 +190,34 @@ class RichGEPAOptimizerLogger:
                 except Exception:
                     pass
 
-        # Check if this message should be suppressed
-        for keyword in self.SUPPRESS_KEYWORDS:
-            if keyword in first:
-                return
+        # Check if this message should be suppressed (unless verbose >= 2)
+        if self.verbose <= 1:
+            for keyword in self.SUPPRESS_KEYWORDS:
+                if keyword in first:
+                    return
 
-        for prefix in self.SUPPRESS_PREFIXES:
-            if prefix in first:
-                return
+            for prefix in self.SUPPRESS_PREFIXES:
+                if prefix in first:
+                    return
 
         # Format proposed prompts
         if "Proposed new text" in first and "system_prompt:" in first:
             _, _, rest = first.partition("system_prompt:")
-            snippet = rest.strip()
-            if len(snippet) > 100:
-                snippet = snippet[:100] + "…"
+            snippet = format_prompt_snippet(rest, max_length=100)
             console.print(f"│ │  Proposed: {snippet}", style="dim")
+            self._last_raw_message = first
             return
 
         # Format subsample evaluation results
         if "New subsample score" in first and "is not better than" in first:
             console.print("│ └─ Rejected - no improvement", style="dim yellow")
             console.print("│")  # Add spacing after rejected trials
+            self._last_raw_message = first
             return
 
-        if "New subsample score" in first and "is better than" in first:
+        elif "New subsample score" in first and "is better than" in first:
             console.print("│ ├─ Promising! Running full validation...", style="green")
+            self._last_raw_message = first
             return
 
         # Format final validation score
@@ -157,9 +229,18 @@ class RichGEPAOptimizerLogger:
                 console.print(f"│ ├─ Validation complete: {score}", style="bold green")
             else:
                 console.print("│ ├─ Validation complete", style="green")
+            self._last_raw_message = first
             return
 
         # Format best score updates
+        if "Best score on train_val" in first:
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                console.print(f"│   Best train_val score: {score}", style="cyan")
+                self._last_raw_message = first
+            return
+
         if (
             "Best valset aggregate score so far" in first
             or "Best score on valset" in first
@@ -168,9 +249,31 @@ class RichGEPAOptimizerLogger:
             parts = first.split(":")
             if len(parts) >= 2:
                 score = parts[-1].strip()
-                console.print(f"│ └─ New best: {score} ✓", style="bold green")
-                console.print("│")  # Add spacing after successful trials
+                key = ("new_best", score)
+                if self._last_best_message != key:
+                    console.print(f"│ └─ New best: {score} ✓", style="bold green")
+                    console.print("│")  # Add spacing after successful trials
+                    self._last_best_message = key
+                    self._last_raw_message = first
             return
+
+        if self.verbose >= 2:
+            if "New valset pareto front scores" in first:
+                note = first.split(":", 1)[-1].strip()
+                console.print(
+                    f"│   Pareto front scores updated: {_format_pareto_note(note)}",
+                    style="cyan",
+                )
+                self._last_raw_message = first
+                return
+            if "Updated valset pareto front programs" in first:
+                console.print("│   Pareto front programs updated", style="cyan")
+                self._last_raw_message = first
+                return
+            if "New program is on the linear pareto front" in first:
+                console.print("│   Candidate added to Pareto front", style="cyan")
+                self._last_raw_message = first
+                return
 
         # Suppress redundant "Iteration X:" prefix from detailed messages
         if first.startswith(f"Iteration {self.current_iteration}:"):
@@ -184,6 +287,7 @@ class RichGEPAOptimizerLogger:
         # Default: print with standard prefix only if not already handled
         if first:
             console.print(f"│ {first}", style="dim")
+            self._last_raw_message = first
 
 
 @contextmanager
@@ -280,6 +384,7 @@ def display_selected_candidate(
     *,
     verbose: int = 1,
     title: str = "Selected Candidate",
+    trial_info: dict[str, Any] | None = None,
 ) -> None:
     """Display the final selected candidate with its Opik score."""
     if verbose < 1:
@@ -287,11 +392,33 @@ def display_selected_candidate(
 
     snippet = system_prompt.strip() or "<empty>"
     text = Text(snippet)
+    subtitle: Text | None = None
+    if trial_info:
+        trial_parts: list[str] = []
+        trial_name = trial_info.get("experiment_name")
+        trial_ids = trial_info.get("trial_ids") or []
+        if trial_name:
+            trial_parts.append(f"Trial {trial_name}")
+        elif trial_ids:
+            trial_parts.append(f"Trial {trial_ids[0]}")
+
+        compare_url = trial_info.get("compare_url")
+        experiment_url = trial_info.get("experiment_url")
+        if compare_url:
+            trial_parts.append(f"[link={compare_url}]Compare run[/link]")
+        elif experiment_url:
+            trial_parts.append(f"[link={experiment_url}]View experiment[/link]")
+
+        if trial_parts:
+            subtitle = Text.from_markup(" • ".join(trial_parts))
+
     panel = Panel(
         text,
         title=f"{title} — Opik score {score:.4f}",
         border_style="green",
         expand=True,
+        subtitle=subtitle,
+        subtitle_align="left",
     )
     console.print(panel)
 

@@ -13,6 +13,7 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
+from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -178,6 +179,45 @@ class DatasetsClient:
         """
         _response = self._raw_client.create_or_update_dataset_items(
             items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import TraceEnrichmentOptions
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.create_dataset_items_from_traces(dataset_id='dataset_id', trace_ids=['trace_ids'], enrichment_options=TraceEnrichmentOptions(), )
+        """
+        _response = self._raw_client.create_dataset_items_from_traces(
+            dataset_id, trace_ids=trace_ids, enrichment_options=enrichment_options, request_options=request_options
         )
         return _response.data
 
@@ -417,6 +457,8 @@ class DatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
@@ -434,6 +476,10 @@ class DatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -457,6 +503,8 @@ class DatasetsClient:
             page=page,
             size=size,
             filters=filters,
+            sorting=sorting,
+            search=search,
             truncate=truncate,
             request_options=request_options,
         )
@@ -840,6 +888,48 @@ class AsyncDatasetsClient:
         )
         return _response.data
 
+    async def create_dataset_items_from_traces(
+        self,
+        dataset_id: str,
+        *,
+        trace_ids: typing.Sequence[str],
+        enrichment_options: TraceEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from traces with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        trace_ids : typing.Sequence[str]
+            Set of trace IDs to add to the dataset
+
+        enrichment_options : TraceEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import TraceEnrichmentOptions
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.create_dataset_items_from_traces(dataset_id='dataset_id', trace_ids=['trace_ids'], enrichment_options=TraceEnrichmentOptions(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_dataset_items_from_traces(
+            dataset_id, trace_ids=trace_ids, enrichment_options=enrichment_options, request_options=request_options
+        )
+        return _response.data
+
     async def get_dataset_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetPublic:
@@ -1101,6 +1191,8 @@ class AsyncDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
@@ -1118,6 +1210,10 @@ class AsyncDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1144,6 +1240,8 @@ class AsyncDatasetsClient:
             page=page,
             size=size,
             filters=filters,
+            sorting=sorting,
+            search=search,
             truncate=truncate,
             request_options=request_options,
         )

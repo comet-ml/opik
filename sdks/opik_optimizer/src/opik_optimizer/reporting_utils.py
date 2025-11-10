@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from contextlib import contextmanager
 from typing import Any
 
@@ -92,6 +93,23 @@ def suppress_opik_logs() -> Any:
         # Restore original log levels
         opik_client_logger.setLevel(original_client_level)
         opik_logger.setLevel(original_opik_level)
+
+
+def format_prompt_snippet(text: str, max_length: int = 100) -> str:
+    """
+    Normalize whitespace in a prompt snippet and truncate it for compact display.
+
+    Args:
+        text: Raw text to summarize.
+        max_length: Maximum characters to keep before adding an ellipsis.
+
+    Returns:
+        str: Condensed snippet safe for inline logging.
+    """
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if len(normalized) > max_length:
+        return normalized[:max_length] + "…"
+    return normalized
 
 
 def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:

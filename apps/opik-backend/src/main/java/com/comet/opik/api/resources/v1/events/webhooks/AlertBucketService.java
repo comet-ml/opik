@@ -40,6 +40,7 @@ public class AlertBucketService {
     private static final String FIRST_SEEN_KEY = "firstSeen";
     private static final String WINDOW_SIZE_KEY = "windowSize";
     private static final String WORKSPACE_ID_KEY = "workspaceId";
+    private static final String WORKSPACE_NAME_KEY = "workspaceName";
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull WebhookConfig webhookConfig;
@@ -47,11 +48,12 @@ public class AlertBucketService {
     /**
      * Adds an event to an alert bucket.
      * If this is the first event for this alert+event type combination,
-     * the current timestamp, debouncing window size, and workspace ID are stored.
+     * the current timestamp, debouncing window size, workspace ID, and workspace name are stored.
      * This ensures that configuration changes do not affect existing buckets.
      *
      * @param alertId the alert ID
      * @param workspaceId the workspace ID for the alert
+     * @param workspaceName the workspace name for the alert
      * @param eventType the event type
      * @param eventId the event ID to add
      * @param payload the event payload to add
@@ -61,6 +63,7 @@ public class AlertBucketService {
     public Mono<Void> addEventToBucket(
             @NonNull UUID alertId,
             @NonNull String workspaceId,
+            @NonNull String workspaceName,
             @NonNull AlertEventType eventType,
             @NonNull String eventId,
             @NonNull String payload,
@@ -106,7 +109,7 @@ public class AlertBucketService {
                             .then(bucket.get(FIRST_SEEN_KEY).defaultIfEmpty(""))
                             .flatMap(firstSeen -> {
                                 if (firstSeen == null || firstSeen.isEmpty()) {
-                                    // First event in bucket - store timestamp, window size, workspace ID, and set TTL
+                                    // First event in bucket - store timestamp, window size, workspace ID, workspace name, and set TTL
                                     long firstSeenMillis = Instant.now().toEpochMilli();
                                     String timestamp = String.valueOf(firstSeenMillis);
                                     String windowSize = String.valueOf(currentWindowSizeMillis);
@@ -115,18 +118,20 @@ public class AlertBucketService {
                                     double readyTimestamp = firstSeenMillis + currentWindowSizeMillis;
 
                                     log.debug(
-                                            "First event in bucket '{}', storing timestamp: '{}', windowSize: '{}'ms, readyTimestamp: '{}', and workspaceId: '{}'",
-                                            bucketKey, timestamp, windowSize, readyTimestamp, workspaceId);
+                                            "First event in bucket '{}', storing timestamp: '{}', windowSize: '{}'ms, readyTimestamp: '{}', workspaceId: '{}', and workspaceName: '{}'",
+                                            bucketKey, timestamp, windowSize, readyTimestamp, workspaceId,
+                                            workspaceName);
 
                                     return bucket.put(FIRST_SEEN_KEY, timestamp)
                                             .then(bucket.put(WINDOW_SIZE_KEY, windowSize))
                                             .then(bucket.put(WORKSPACE_ID_KEY, workspaceId))
+                                            .then(bucket.put(WORKSPACE_NAME_KEY, workspaceName))
                                             .then(bucket.expire(java.time.Duration.ofMillis(
                                                     webhookConfig.getDebouncing().getBucketTtl().toMilliseconds())))
                                             .then(addBucketToIndex(bucketKey, readyTimestamp))
                                             .then();
                                 } else {
-                                    // Subsequent event - keep original timestamp, window size, workspace ID, and TTL
+                                    // Subsequent event - keep original timestamp, window size, workspace ID, workspace name, and TTL
                                     log.debug(
                                             "Adding to existing bucket '{}', keeping original timestamp, windowSize, and TTL",
                                             bucketKey);
@@ -231,7 +236,7 @@ public class AlertBucketService {
     }
 
     /**
-     * Retrieves complete bucket data including event IDs, payloads, user names, firstSeen timestamp, and window size.
+     * Retrieves complete bucket data including event IDs, payloads, user names, firstSeen timestamp, window size, workspace ID, and workspace name.
      *
      * @param bucketKey the bucket key
      * @return Mono containing BucketData with all bucket information
@@ -245,7 +250,8 @@ public class AlertBucketService {
                 bucket.get(USER_NAMES_KEY).defaultIfEmpty("[]"),
                 bucket.get(FIRST_SEEN_KEY),
                 bucket.get(WINDOW_SIZE_KEY),
-                bucket.get(WORKSPACE_ID_KEY))
+                bucket.get(WORKSPACE_ID_KEY),
+                bucket.get(WORKSPACE_NAME_KEY))
                 .flatMap(tuple -> Mono.fromCallable(() -> {
                     String eventIdsJson = tuple.getT1();
                     String payloadsJson = tuple.getT2();
@@ -253,6 +259,7 @@ public class AlertBucketService {
                     String firstSeenStr = tuple.getT4();
                     String windowSizeStr = tuple.getT5();
                     String workspaceId = tuple.getT6();
+                    String workspaceName = tuple.getT7();
 
                     List<String> eventIds = JsonUtils.readCollectionValue(eventIdsJson, List.class, String.class);
                     List<String> payloads = JsonUtils.readCollectionValue(payloadsJson, List.class, String.class);
@@ -267,13 +274,14 @@ public class AlertBucketService {
                             .firstSeen(firstSeen)
                             .windowSize(windowSize)
                             .workspaceId(workspaceId)
+                            .workspaceName(workspaceName)
                             .build();
                 }))
                 .doOnSuccess(
                         data -> log.debug(
-                                "Retrieved bucket data for '{}': {} events, {} payloads, {} userNames, firstSeen={}, windowSize={}ms",
+                                "Retrieved bucket data for '{}': {} events, {} payloads, {} userNames, firstSeen={}, windowSize={}ms, workspaceId='{}', workspaceName='{}'",
                                 bucketKey, data.eventIds().size(), data.payloads().size(), data.userNames().size(),
-                                data.firstSeen(), data.windowSize()))
+                                data.firstSeen(), data.windowSize(), data.workspaceId(), data.workspaceName()))
                 .doOnError(error -> log.error("Failed to retrieve bucket data for '{}': {}",
                         bucketKey, error.getMessage(), error));
     }
@@ -284,7 +292,7 @@ public class AlertBucketService {
     @Builder
     public record BucketData(@NonNull List<String> eventIds, @NonNull List<String> payloads,
             @NonNull List<String> userNames, long firstSeen, long windowSize,
-            @NonNull String workspaceId) {
+            @NonNull String workspaceId, @NonNull String workspaceName) {
     }
 
     /**

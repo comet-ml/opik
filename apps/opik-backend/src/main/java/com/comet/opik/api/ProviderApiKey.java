@@ -31,6 +31,10 @@ public record ProviderApiKey(
         @JsonView({View.Public.class,
                 View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). "
+                        +
+                        "Should not be set for standard providers (OpenAI, Anthropic, etc.).", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> headers,
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
         @JsonView({View.Public.class,
@@ -47,6 +51,7 @@ public record ProviderApiKey(
                 ", provider=" + provider +
                 ", apiKey='*******'" +
                 ", name='" + name + '\'' +
+                ", providerName='" + providerName + '\'' +
                 ", headers=" + headers +
                 ", baseUrl='" + baseUrl + '\'' +
                 ", createdAt=" + createdAt +

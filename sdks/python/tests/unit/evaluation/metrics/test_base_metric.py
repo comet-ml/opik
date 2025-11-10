@@ -5,7 +5,7 @@ from typing import Any, List, Union
 from opik.evaluation.metrics import base_metric, score_result
 
 
-class TestMetric(base_metric.BaseMetric):
+class DummyMetric(base_metric.BaseMetric):
     def score(
         self, *args: Any, **kwargs: Any
     ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
@@ -28,21 +28,21 @@ class MyCustomMetric(base_metric.BaseMetric):
 
 
 def test_base_metric_score_default_name():
-    metric = TestMetric()
+    metric = DummyMetric()
 
-    assert metric.name == "TestMetric"
+    assert metric.name == "DummyMetric"
     assert metric.track is True
 
     actual_result = metric.score()
 
     expected_result = score_result.ScoreResult(
-        name="TestMetric", value=0.5, reason="Test metric score"
+        name="DummyMetric", value=0.5, reason="Test metric score"
     )
     assert actual_result == expected_result
 
 
 def test_base_metric_custom_name():
-    metric = TestMetric(name="custom_name", project_name="test_project")
+    metric = DummyMetric(name="custom_name", project_name="test_project")
 
     assert metric.name == "custom_name"
     assert metric.track is True
@@ -73,14 +73,14 @@ def test_base_metric_project_name_with_track_false_raises_error():
     with pytest.raises(
         ValueError, match="project_name can be set only when `track` is set to True"
     ):
-        TestMetric(track=False, project_name="test_project")
+        DummyMetric(track=False, project_name="test_project")
 
 
 def test_base_metric_ascore_returns_expected_result():
-    metric = TestMetric()
+    metric = DummyMetric()
     actual_result = asyncio.run(metric.ascore())
 
     expected_result = score_result.ScoreResult(
-        name="TestMetric", value=0.5, reason="Test metric score"
+        name="DummyMetric", value=0.5, reason="Test metric score"
     )
     assert actual_result == expected_result

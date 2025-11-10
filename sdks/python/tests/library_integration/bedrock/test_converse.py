@@ -224,15 +224,40 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
     assert_equal(expected_trace, trace_tree)
 
 
-def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(fake_backend):
-    """Test converse_stream functionality."""
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        # Standard Claude model - baseline for converse_stream event structure
+        # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html
+        BEDROCK_MODEL_FOR_TESTS,
+        # DeepSeek R1 reasoning model - OPIK-2910: Different event structure for reasoning models
+        # Reasoning models may have unique streaming patterns, including reasoning traces
+        # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-deepseek.html
+        "us.deepseek.r1-v1:0",
+        # Amazon Nova - Tests Amazon's proprietary model streaming format
+        # Nova models use different internal event structures
+        # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-nova.html
+        "us.amazon.nova-pro-v1:0",
+        # Meta Llama - Tests open-source model integration
+        # Llama models may have different tokenization and streaming patterns
+        # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-meta.html
+        "us.meta.llama3-1-8b-instruct-v1:0",
+        # Mistral Pixtral - Tests multimodal model streaming (text focus in this test)
+        # Multimodal models may include additional event types
+        # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-mistral.html
+        "us.mistral.pixtral-large-2502-v1:0",
+    ],
+)
+def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
+    fake_backend, model_id
+):
     client = boto3.client("bedrock-runtime", region_name="us-east-1")
     tracked_client = track_bedrock(client)
 
     messages = [{"role": "user", "content": [{"text": "Hello, tell me a story"}]}]
 
     response = tracked_client.converse_stream(
-        modelId=BEDROCK_MODEL_FOR_TESTS,
+        modelId=model_id,
         messages=messages,
         inferenceConfig={"maxTokens": 50},
     )
@@ -264,7 +289,7 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(fake_b
                 tags=["bedrock"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=BEDROCK_MODEL_FOR_TESTS,
+                model=model_id,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -274,6 +299,104 @@ def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(fake_b
     assert len(fake_backend.trace_trees) == 1
 
     trace_tree = fake_backend.trace_trees[0]
+    assert_equal(expected_trace, trace_tree)
+
+
+def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_correctly(
+    fake_backend,
+):
+    """
+    Test converse_stream with tool use / structured output.
+
+    This test verifies the fix for Issue #3829: KeyError 'text' when using streaming
+    with structured output via toolConfig. When using tool use, the contentBlockDelta
+    events contain delta.toolUse instead of delta.text.
+
+    References:
+    - Issue #3829: https://github.com/comet-ml/opik/issues/3829
+    - ContentBlockDelta: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ContentBlockDelta.html
+    - Tool Use Guide: https://docs.aws.amazon.com/bedrock/latest/userguide/tool-use.html
+    """
+    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    tracked_client = track_bedrock(client)
+
+    messages = [{"role": "user", "content": [{"text": "What's the weather in Tokyo?"}]}]
+
+    # Define a simple weather tool
+    tool_config = {
+        "tools": [
+            {
+                "toolSpec": {
+                    "name": "get_weather",
+                    "description": "Get the current weather for a location",
+                    "inputSchema": {
+                        "json": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "City name, e.g., Tokyo",
+                                }
+                            },
+                            "required": ["location"],
+                        }
+                    },
+                }
+            }
+        ]
+    }
+
+    response = tracked_client.converse_stream(
+        modelId=BEDROCK_MODEL_FOR_TESTS,
+        messages=messages,
+        toolConfig=tool_config,
+        inferenceConfig={"maxTokens": 100},
+    )
+
+    # Consume the stream - should not raise KeyError
+    for _ in response["stream"]:
+        pass
+
+    opik.flush_tracker()
+
+    # Verify trace was created successfully with output
+    assert len(fake_backend.trace_trees) == 1
+
+    trace_tree = fake_backend.trace_trees[0]
+
+    # Verify basic structure
+    expected_trace = TraceModel(
+        id=ANY_BUT_NONE,
+        name="bedrock_converse_stream",
+        input={"messages": messages, "toolConfig": tool_config},
+        output={"output": ANY_DICT},  # May contain text or toolUse
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        tags=["bedrock"],
+        metadata=ANY_DICT,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="bedrock_converse_stream",
+                type="llm",
+                input={"messages": messages, "toolConfig": tool_config},
+                output={
+                    "output": ANY_DICT
+                },  # Simplified - just verify structure exists
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                tags=["bedrock"],
+                metadata=ANY_DICT.containing({"created_from": "bedrock"}),
+                last_updated_at=ANY_BUT_NONE,
+                model=BEDROCK_MODEL_FOR_TESTS,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
+                provider="bedrock",
+                spans=[],
+            )
+        ],
+    )
+
     assert_equal(expected_trace, trace_tree)
 
 

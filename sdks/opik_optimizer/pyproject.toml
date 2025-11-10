@@ -1,6 +1,6 @@
 [project]
 name = "opik_optimizer"
-version = "2.2.0"
+version = "2.2.1"
 description = "Agent optimization with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}
@@ -11,9 +11,7 @@ requires-python = ">=3.10,<3.14"
 dependencies = [
     "datasets",
     "deap>=1.4.3",
-    "diskcache",
     "gepa>=0.0.7",
-    "ujson",
     "hf_xet",
     "litellm<=1.75.6",
     "mcp>=1.0.0",

@@ -1,7 +1,6 @@
 package com.comet.opik.api;
 
 import com.comet.opik.domain.GuardrailResult;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -36,7 +35,7 @@ public record Guardrail(
                 Guardrail.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
 
         @JsonView({
-                Guardrail.View.Public.class, Guardrail.View.Write.class}) @JsonIgnore UUID projectId,
+                Guardrail.View.Public.class, Guardrail.View.Write.class}) UUID projectId,
 
         @JsonView({
                 Guardrail.View.Public.class, Guardrail.View.Write.class}) @NotNull GuardrailType name,
