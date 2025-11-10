@@ -10,6 +10,9 @@ Model Context Protocol (MCP) lets you describe tools in manifests so multiple ag
 - `mcp.json` manifest located in your repo and committed.
 - `llms.txt` describing the agent, tools, and entrypoints (helpful for agents and automation).
 - Tool implementations instrumented with `@track(type="tool")` so traces capture I/O.
+- Working examples to reference:
+  - `sdks/opik_optimizer/scripts/llm_frameworks/mcp` – current MetaPrompt tool-calling example that powers docs/tests.
+  - `sdks/opik_optimizer/scripts/archive/litellm_evolutionary_context7_mcp_example.py` – historical evolutionary workflow that shows raw LiteLLM integration.
 
 ## Run the optimizer
 
@@ -35,6 +38,7 @@ result = optimizer.optimize_mcp(
 - Store secrets via environment variables referenced in `mcp.json`; never hard-code them into prompts.
 - Use dataset metadata to indicate which tool combinations should run on each row.
 - Track tool performance separately so you can tell whether regressions stem from prompts or external systems.
+- Run the scripts under `sdks/opik_optimizer/scripts/llm_frameworks/mcp` whenever you upgrade the SDK—they double as regression tests to confirm MCP optimizations still work.
 
 ## Troubleshooting
 

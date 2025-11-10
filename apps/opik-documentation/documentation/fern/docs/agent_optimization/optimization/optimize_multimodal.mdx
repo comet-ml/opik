@@ -3,7 +3,7 @@ title: "Optimize multimodal prompts"
 description: "Run optimizations for prompts that combine text, images, and other modalities."
 ---
 
-Multimodal agents often juggle text instructions, image references, and structured outputs. Follow these practices to keep optimizations reliable.
+Multimodal agents often juggle text instructions, image references, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for images or videos (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure the optimizer’s `model` and your `ChatPrompt.model` both accept the modality you plan to optimize; otherwise the run will fail or silently ignore the media.
 
 ## Dataset design
 
@@ -36,9 +36,10 @@ prompt = ChatPrompt(
 
 ## Running optimizations
 
-- Start with MetaPrompt for wording improvements.
-- Use Hierarchical Reflective to catch recurring multimodal failures (e.g., missing chart descriptions).
-- Monitor token usage because multimodal prompts can exceed context limits faster.
+- Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
+- Use Hierarchical Reflective to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
+- Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
+- If an optimizer does not support the modality (e.g., text-only GEPA with image inputs), it will still mutate the prompt but cannot execute candidate evaluations—stick to optimizers whose evaluation models accept the modality.
 
 ## Validation
 

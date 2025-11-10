@@ -3,7 +3,7 @@ title: "Define metrics"
 description: "Create reliable metrics and composite objectives for Agent Optimizer runs."
 ---
 
-Metrics drive optimizer decisions. This guide shows how to implement single metrics, combine them, and return rich reasoning so algorithms like Hierarchical Reflective can diagnose failures.
+Metrics drive optimizer decisions. This guide highlights the fastest way to pick proven presets from Opik’s evaluation catalog, then shows how to extend them when your use case demands it. If you need the full theory, see [Evaluation concepts](/evaluation/concepts) and the [metrics overview](/evaluation/metrics/overview).
 
 ## Metric anatomy
 
@@ -45,12 +45,25 @@ objective = MultiMetricObjective(
   Weights do not need to sum to 1; choose numbers that highlight the most critical metric to your use case.
 </Tip>
 
+## Recommended presets
+
+| Scenario | Metric | Notes |
+| --- | --- | --- |
+| Factual QA | `LevenshteinRatio` or `ExactMatch` | Works with text-only datasets; deterministic and low cost. |
+| Retrieval / grounding | `AnswerRelevance` | Pass reference context via `context=[item["answer"]]` or retrieved docs. |
+| Safety | `Moderation` or custom LLM-as-a-judge | Combine with `MultiMetricObjective` to gate unsafe answers. |
+| Multi-turn trajectories | [Agent trajectory evaluator](/evaluation/evaluate_agent_trajectory) | Scores complete conversations, not just final outputs. |
+
+Reuse these heuristics before writing custom metrics—most are already imported in `opik.evaluation.metrics`.
+
 ## Checklist for great metrics
 
 - **Return explanations** – populate `reason` so reflective optimizers can group failure modes.
 - **Avoid randomness** – deterministic metrics keep optimizers from chasing noise.
 - **Bound runtime** – use cached references or lightweight models where possible; heavy metrics slow down trials.
 - **Log metadata** – include `details` in the `ScoreResult` if you want to visualize per-sample attributes later.
+
+When you outgrow presets, move to [Custom metrics](/agent_optimization/advanced/custom_metrics) for LLM-as-a-judge flows or domain-specific scoring.
 
 ## Testing metrics
 

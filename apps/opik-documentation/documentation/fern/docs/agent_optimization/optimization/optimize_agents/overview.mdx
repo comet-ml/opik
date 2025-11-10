@@ -3,7 +3,35 @@ title: "Optimize agents"
 description: "Connect the Agent Optimizer to LangGraph, Google ADK, and OpenAI Agents."
 ---
 
-Agent frameworks orchestrate complex chains of prompts and tools. This section explains how to pair those frameworks with Opik datasets, metrics, and optimizers.
+Agent frameworks orchestrate complex chains of prompts and tools. The Agent Optimizer treats any agent as an `OptimizableAgent`, a thin wrapper with a predictable interface so optimizers can call it repeatedly during a run. This means the optimizer SDK is able to work with most agentic workflows and multi-agent systems out of the box or with minimal changes.
+
+## Existing Examples
+Use the sub-guides for framework-specific guides:
+
+- [LangGraph](/agent_optimization/optimization/optimize_agents/langgraph)
+- [Google ADK](/agent_optimization/optimization/optimize_agents/google_adk)
+
+## Understanding OptimizableAgent
+
+Every optimizer ships with a default base LiteLLM agent under the hood, so even a basic prompt optimization is setup like an agent in the SDK. You are able to modify this default behaviour, you can plug in your own by subclassing `opik_optimizer.optimizable_agent.OptimizableAgent`:
+
+```python
+from opik_optimizer.optimizable_agent import OptimizableAgent
+
+class MyAgent(OptimizableAgent):
+    def __init__(self, prompt, **kwargs):
+        super().__init__(prompt=prompt, **kwargs)
+        self.app = build_my_agent(prompt)
+
+    def invoke(self, messages, seed=None):
+        return self.app.run(messages, seed=seed)
+```
+
+- `prompt` is a `ChatPrompt` the optimizer mutates.
+- `invoke` receives the message list produced by the optimizer and must return the agent output string.
+- Use `init_agent`/`init_llm` helpers from the base class if you need the built-in LiteLLM wiring.
+
+See `sdks/opik_optimizer/scripts/llm_frameworks/` for working agents (LangGraph, MCP tool runners, etc.). Each script doubles as both an example and a regression test during development.
 
 ## How agent optimization works
 
@@ -12,12 +40,6 @@ Agent frameworks orchestrate complex chains of prompts and tools. This section e
 3. **Run optimizers** (MetaPrompt, Hierarchical Reflective, etc.) using your agent’s datasets.
 4. **Deploy the improved instructions** back into the agent runtime.
 
-Use the sub-guides for framework-specific wiring:
-
-- [LangGraph](/agent_optimization/optimization/optimize_agents/langgraph)
-- [Google ADK](/agent_optimization/optimization/optimize_agents/google_adk)
-- [OpenAI Agents (coming soon)](/agent_optimization/optimization/optimize_agents/openai_agents)
-
 <Info>
-  Need another framework? Open a request in the roadmap or share a sample repo so we can add a dedicated guide.
+  Need another framework? Open a request in the roadmap or point us to a repo; we prioritize new guides when we have working scripts under `sdks/opik_optimizer/scripts/llm_frameworks`.
 </Info>
