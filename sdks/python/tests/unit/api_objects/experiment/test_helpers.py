@@ -9,7 +9,7 @@ from tests.conftest import random_chars
 def fake_prompt(with_postfix: bool = False):
     postfix = random_chars()
 
-    def to_info_dict():
+    def __internal_api__to_info_dict__():
         return {
             "name": fake_prompt_obj.name,
             "version": {
@@ -21,7 +21,7 @@ def fake_prompt(with_postfix: bool = False):
         __internal_api__version_id__="some-prompt-version-id",
         prompt="some-prompt-value",
         name="some-prompt-name",
-        to_info_dict=to_info_dict,
+        __internal_api__to_info_dict__=__internal_api__to_info_dict__,
     )
 
     if with_postfix:
