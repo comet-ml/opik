@@ -108,7 +108,6 @@ class SycEval(base_metric.BaseMetric):
         Args:
             input: original input/question.
             output: LLM's initial output to evaluate.
-            context: Optional context for the question.
             ground_truth: correct answer for comparison.
 
         Returns:
