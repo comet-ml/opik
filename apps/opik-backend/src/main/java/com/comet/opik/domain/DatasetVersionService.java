@@ -4,8 +4,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
-import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -16,6 +15,7 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
@@ -64,32 +64,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
+        // For now, use timestamp-based hash as placeholder
+        String versionHash = calculatePlaceholderVersionHash(datasetId);
+
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
-
-            // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
-            // For now, use timestamp-based hash as placeholder
-            String versionHash = calculatePlaceholderVersionHash(datasetId);
-
-            // Check if version with this hash already exists (deduplication)
-            var existingVersion = datasetVersionDAO.findByHash(datasetId, versionHash, workspaceId);
-            if (existingVersion.isPresent()) {
-                log.info("Version with hash '{}' already exists for dataset '{}'", versionHash, datasetId);
-
-                // If tag is provided, add it to existing version
-                if (request.tag() != null && !request.tag().isBlank()) {
-                    try {
-                        datasetVersionDAO.insertTag(datasetId, request.tag(), existingVersion.get().id(), userName,
-                                workspaceId);
-                    } catch (Exception e) {
-                        throw new EntityAlreadyExistsException(new ErrorMessage(
-                                java.util.List
-                                        .of("Tag '%s' already exists for this dataset".formatted(request.tag()))));
-                    }
-                }
-
-                return datasetVersionDAO.findById(existingVersion.get().id(), workspaceId).orElseThrow();
-            }
 
             // TODO OPIK-3015: Get actual item count and calculate diff stats from ClickHouse
             // For now, use placeholder values for metadata-only testing
@@ -114,18 +94,17 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     .lastUpdatedBy(userName)
                     .build();
 
-            datasetVersionDAO.insert(version, workspaceId);
+            DatabaseUtils.handleStateDbDuplicateConstraint(
+                    () -> datasetVersionDAO.insert(version, workspaceId),
+                    "Version with hash '%s' already exists for dataset '%s'".formatted(versionHash, datasetId));
 
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
 
             // Add tag if provided
-            if (request.tag() != null && !request.tag().isBlank()) {
-                try {
-                    datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId);
-                } catch (Exception e) {
-                    throw new EntityAlreadyExistsException(new ErrorMessage(
-                            java.util.List.of("Tag '%s' already exists for this dataset".formatted(request.tag()))));
-                }
+            if (StringUtils.isNotBlank(request.tag())) {
+                DatabaseUtils.handleStateDbDuplicateConstraint(
+                        () -> datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId),
+                        "Tag '%s' already exists for this dataset".formatted(request.tag()));
             }
 
             // TODO OPIK-3015: Create immutable snapshots in ClickHouse dataset_item_versions table
@@ -207,12 +186,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                             "Version with hash '%s' not found for dataset '%s'".formatted(versionHash, datasetId)));
 
             // Insert tag
-            try {
-                dao.insertTag(datasetId, tagRequest.tag(), version.id(), userName, workspaceId);
-            } catch (Exception e) {
-                throw new EntityAlreadyExistsException(new ErrorMessage(java.util.List
-                        .of("Tag '%s' already exists for this dataset".formatted(tagRequest.tag()))));
-            }
+            DatabaseUtils.handleStateDbDuplicateConstraint(
+                    () -> dao.insertTag(datasetId, tagRequest.tag(), version.id(), userName, workspaceId),
+                    "Tag '%s' already exists for this dataset".formatted(tagRequest.tag()));
 
             return null;
         });

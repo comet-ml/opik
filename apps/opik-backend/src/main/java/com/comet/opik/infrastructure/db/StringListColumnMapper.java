@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.db;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 
@@ -19,31 +20,19 @@ public class StringListColumnMapper implements ColumnMapper<List<String>> {
 
     @Override
     public List<String> map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
-        String json = r.getString(columnNumber);
-        if (json == null || json.isBlank()) {
-            return new ArrayList<>();
-        }
-
-        try {
-            return JsonUtils.readValue(json, LIST_TYPE_REFERENCE);
-        } catch (Exception exception) {
-            log.warn("Failed to parse JSON array: '{}'", json, exception);
-            return new ArrayList<>();
-        }
+        return performMapping(r.getString(columnNumber));
     }
 
     @Override
     public List<String> map(ResultSet r, String columnLabel, StatementContext ctx) throws SQLException {
-        String json = r.getString(columnLabel);
-        if (json == null || json.isBlank()) {
+        return performMapping(r.getString(columnLabel));
+    }
+
+    private List<String> performMapping(String json) {
+        if (StringUtils.isBlank(json)) {
             return new ArrayList<>();
         }
 
-        try {
-            return JsonUtils.readValue(json, LIST_TYPE_REFERENCE);
-        } catch (Exception exception) {
-            log.warn("Failed to parse JSON array: '{}'", json, exception);
-            return new ArrayList<>();
-        }
+        return JsonUtils.readValue(json, LIST_TYPE_REFERENCE);
     }
 }
