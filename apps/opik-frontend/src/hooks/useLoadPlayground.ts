@@ -83,6 +83,11 @@ const useLoadPlayground = () => {
 
       // For chat prompts, parse the JSON and create multiple messages
       if (templateStructure === "chat") {
+        // Set the loaded chat prompt ID for the dropdown to display
+        if (promptId) {
+          newPrompt.loadedChatPromptId = promptId;
+        }
+
         try {
           const parsed = JSON.parse(promptContent);
           if (Array.isArray(parsed) && parsed.length > 0) {
