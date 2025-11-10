@@ -606,8 +606,8 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Add comments to traces (without any feedback scores)
-            traceResourceClient.generateAndCreateComment(trace1, API_KEY, TEST_WORKSPACE, 201);
-            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, 201);
+            traceResourceClient.generateAndCreateComment(trace1, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             // When
             var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
@@ -659,11 +659,11 @@ class AnnotationQueuesResourceTest {
             createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
 
             // Add comment to trace2 (no feedback)
-            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, 201);
+            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             // Add both feedback and comment to trace3
             createFeedbackScoreForTrace(trace3, "quality", 0.9, project.name());
-            traceResourceClient.generateAndCreateComment(trace3, API_KEY, TEST_WORKSPACE, 201);
+            traceResourceClient.generateAndCreateComment(trace3, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             // When
             var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
