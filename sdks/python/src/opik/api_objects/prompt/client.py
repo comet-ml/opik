@@ -33,7 +33,7 @@ class PromptClient:
         Returns:
         - A Prompt object for the provided prompt name and template.
         """
-        prompt_version = self._get_latest_version(name)
+        prompt_version = self._get_latest_version(name, template_structure=template_structure)
 
         # For chat prompts, compare parsed JSON to avoid formatting differences
         templates_equal = False
@@ -94,17 +94,19 @@ class PromptClient:
         return new_prompt_version_detail
 
     def _get_latest_version(
-        self, name: str
+        self, name: str, template_structure: Optional[str] = None
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         try:
             prompt_latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                name=name
+                name=name,
+                template_structure=template_structure,
             )
             return prompt_latest_version
         except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-            return None
+            if e.status_code == 400 or e.status_code == 404:
+                # 400: template_structure mismatch, 404: prompt not found
+                return None
+            raise e
 
     def get_prompt(
         self,
@@ -262,10 +264,16 @@ class PromptClient:
             # Retrieve latest version for each container name
             results: List[Tuple[str, prompt_version_detail.PromptVersionDetail]] = []
             for prompt_name in all_prompt_names:
-                latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                    name=prompt_name
-                )
-                results.append((prompt_name, latest_version))
+                try:
+                    latest_version = self._rest_client.prompts.retrieve_prompt_version(
+                        name=prompt_name
+                    )
+                    results.append((prompt_name, latest_version))
+                except rest_api_core.ApiError as e:
+                    # Skip prompts that can't be retrieved (e.g., deleted between search and retrieval)
+                    if e.status_code == 404:
+                        continue
+                    raise e
 
             return results
 
