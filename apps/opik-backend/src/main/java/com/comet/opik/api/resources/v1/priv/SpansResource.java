@@ -28,6 +28,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.Metered;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -106,6 +107,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
     @JsonView(View.Public.class)
     @RateLimited(value = "getSpans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @Metered(operation = "span.list", entity = "span")
     public Response getSpansByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -174,6 +176,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
     @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @Metered(operation = "span.get", entity = "span")
     public Response getById(@PathParam("id") @NotNull UUID id,
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -200,6 +203,7 @@ public class SpansResource {
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     @UsageLimited
+    @Metered(operation = "span.create", entity = "span", recordAttachments = true)
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
@@ -221,6 +225,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     @UsageLimited
+    @Metered(operation = "span.batch.create", entity = "span", recordBatchSize = true, recordAttachments = true)
     public Response createSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(View.Write.class) @NotNull @Valid SpanBatch spans) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -239,6 +244,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "404", description = "Not found")})
     @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
             + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @Metered(operation = "span.update", entity = "span", recordAttachments = true)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanUpdate.class))) @NotNull @Valid SpanUpdate spanUpdate) {
 
@@ -326,6 +332,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "200", description = "Span stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    @Metered(operation = "span.stats", entity = "span")
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("trace_id") UUID traceId,
@@ -401,6 +408,7 @@ public class SpansResource {
     })
     @JsonView(View.Public.class)
     @RateLimited(value = "search_spans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @Metered(operation = "span.search", entity = "span")
     public ChunkedOutput<JsonNode> searchSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
