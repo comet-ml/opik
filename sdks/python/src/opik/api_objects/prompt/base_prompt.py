@@ -45,11 +45,11 @@ class BasePrompt(ABC):
         pass
 
     # Internal API fields for backend synchronization
-    __internal_api__prompt_id__: Optional[str]
-    __internal_api__version_id__: Optional[str]
+    __internal_api__prompt_id__: str
+    __internal_api__version_id__: str
 
     @abstractmethod
-    def format(self, **kwargs: Any) -> Any:
+    def format(self, *args: Any, **kwargs: Any) -> Any:
         """
         Format the prompt with the provided variables.
 

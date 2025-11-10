@@ -1,6 +1,7 @@
 import copy
 import json
-from typing import Any, Dict, List, Optional, override
+from typing import Any, Dict, List, Optional
+from typing_extensions import override
 
 from opik.rest_api import types as rest_api_types
 from . import chat_prompt_template
@@ -44,8 +45,8 @@ class ChatPrompt(base_prompt.BasePrompt):
             "chat"  # ChatPrompt class always uses "chat" structure
         )
         self._commit: Optional[str] = None
-        self.__internal_api__prompt_id__: Optional[str] = None
-        self.__internal_api__version_id__: Optional[str] = None
+        self.__internal_api__prompt_id__: str
+        self.__internal_api__version_id__: str
 
         self._sync_with_backend()
 

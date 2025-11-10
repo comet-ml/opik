@@ -1,6 +1,6 @@
 import copy
-from typing import Any, Dict, Optional, override
-
+from typing import Any, Dict, Optional
+from typing_extensions import override
 from opik.rest_api import types as rest_api_types
 from . import prompt_template
 from .. import types as prompt_types

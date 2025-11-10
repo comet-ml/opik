@@ -1,5 +1,6 @@
 import re
-from typing import Any, Set, override
+from typing import Any, Set
+from typing_extensions import override
 import jinja2
 
 import opik.exceptions as exceptions

@@ -11,11 +11,11 @@ def test_chat_prompt_template__format__simple_text_message__happyflow():
             "content": "Hi, my name is {{name}} and I live in {{city}}.",
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format({"name": "Harry", "city": "London"})
-    
+
     assert result == [
         {"role": "user", "content": "Hi, my name is Harry and I live in London."}
     ]
@@ -28,15 +28,17 @@ def test_chat_prompt_template__format__multiple_messages__happyflow():
         {"role": "user", "content": "What is the capital of {{country}}?"},
         {"role": "assistant", "content": "The capital is {{capital}}."},
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
-    result = tested.format({
-        "location": "London",
-        "country": "France",
-        "capital": "Paris",
-    })
-    
+
+    result = tested.format(
+        {
+            "location": "London",
+            "country": "France",
+            "capital": "Paris",
+        }
+    )
+
     assert result == [
         {"role": "system", "content": "You are a helpful assistant in London."},
         {"role": "user", "content": "What is the capital of France?"},
@@ -55,21 +57,24 @@ def test_chat_prompt_template__format__multimodal_content__happyflow():
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     # Format with vision supported to get structured content
     result = tested.format(
         {"object": "painting", "image_url": "https://example.com/image.jpg"},
-        supported_modalities={"vision": True}
+        supported_modalities={"vision": True},
     )
-    
+
     assert result == [
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Describe this painting:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.jpg"},
+                },
             ],
         }
     ]
@@ -83,11 +88,11 @@ def test_chat_prompt_template__format__jinja2_template__happyflow():
             "content": "Hi, my name is {{ name }} and I live in {{ city }}.",
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages, template_type=PromptType.JINJA2)
-    
+
     result = tested.format({"name": "Harry", "city": "London"})
-    
+
     assert result == [
         {"role": "user", "content": "Hi, my name is Harry and I live in London."}
     ]
@@ -107,14 +112,22 @@ def test_chat_prompt_template__format__jinja2_with_control_flow():
             """,
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages, template_type=PromptType.JINJA2)
-    
-    wizard_result = tested.format({"name": "Harry", "city": "London", "is_wizard": True})
-    assert "Harry is a wizard who lives in London." in wizard_result[0]["content"].strip()
-    
-    muggle_result = tested.format({"name": "Dudley", "city": "Surrey", "is_wizard": False})
-    assert "Dudley is a muggle who lives in Surrey." in muggle_result[0]["content"].strip()
+
+    wizard_result = tested.format(
+        {"name": "Harry", "city": "London", "is_wizard": True}
+    )
+    assert (
+        "Harry is a wizard who lives in London." in wizard_result[0]["content"].strip()
+    )
+
+    muggle_result = tested.format(
+        {"name": "Dudley", "city": "Surrey", "is_wizard": False}
+    )
+    assert (
+        "Dudley is a muggle who lives in Surrey." in muggle_result[0]["content"].strip()
+    )
 
 
 def test_chat_prompt_template__format__jinja2_with_loops():
@@ -130,11 +143,11 @@ def test_chat_prompt_template__format__jinja2_with_loops():
             """,
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages, template_type=PromptType.JINJA2)
-    
+
     result = tested.format({"name": "Harry", "friends": ["Ron", "Hermione", "Neville"]})
-    
+
     content = result[0]["content"]
     assert "Harry's friends are:" in content
     assert "- Ron" in content
@@ -147,11 +160,11 @@ def test_chat_prompt_template__format__empty_content():
     messages = [
         {"role": "user", "content": ""},
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format({})
-    
+
     assert result == [{"role": "user", "content": ""}]
 
 
@@ -162,11 +175,11 @@ def test_chat_prompt_template__format__message_without_role__skipped():
         {"content": "This message has no role"},
         {"role": "assistant", "content": "Hi there!"},
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format({"name": "Harry"})
-    
+
     # Only messages with roles should be included
     assert result == [
         {"role": "user", "content": "Hello Harry"},
@@ -179,11 +192,11 @@ def test_chat_prompt_template__required_modalities__text_only():
     messages = [
         {"role": "user", "content": "Simple text message"},
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.required_modalities()
-    
+
     assert result == set()
 
 
@@ -194,15 +207,18 @@ def test_chat_prompt_template__required_modalities__with_vision():
             "role": "user",
             "content": [
                 {"type": "text", "text": "Describe this image:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/img.jpg"},
+                },
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.required_modalities()
-    
+
     assert "vision" in result
 
 
@@ -214,15 +230,18 @@ def test_chat_prompt_template__required_modalities__multiple_messages():
             "role": "user",
             "content": [
                 {"type": "text", "text": "With image:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/img.jpg"},
+                },
             ],
         },
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.required_modalities()
-    
+
     assert "vision" in result
 
 
@@ -233,16 +252,19 @@ def test_chat_prompt_template__format__unsupported_modality_replaced_with_placeh
             "role": "user",
             "content": [
                 {"type": "text", "text": "Describe this image:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/img.jpg"},
+                },
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     # Format with vision not supported
     result = tested.format({}, supported_modalities={"vision": False})
-    
+
     assert len(result) == 1
     # When vision is not supported, image should be replaced with placeholder
     content = result[0]["content"]
@@ -259,22 +281,28 @@ def test_chat_prompt_template__format__supported_modality_preserved():
             "role": "user",
             "content": [
                 {"type": "text", "text": "Describe this image:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/img.jpg"},
+                },
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     # Format with vision supported
     result = tested.format({}, supported_modalities={"vision": True})
-    
+
     assert result == [
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Describe this image:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/img.jpg"},
+                },
             ],
         }
     ]
@@ -287,24 +315,30 @@ def test_chat_prompt_template__format__multimodal_with_template_variables():
             "role": "user",
             "content": [
                 {"type": "text", "text": "Analyze this {{object}}:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/{{filename}}"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/{{filename}}"},
+                },
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format(
         {"object": "diagram", "filename": "diagram.png"},
-        supported_modalities={"vision": True}
+        supported_modalities={"vision": True},
     )
-    
+
     assert result == [
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Analyze this diagram:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/diagram.png"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/diagram.png"},
+                },
             ],
         }
     ]
@@ -324,20 +358,25 @@ def test_chat_prompt_template__format__image_with_detail_parameter():
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format(
-        {"url": "https://example.com/img.jpg"},
-        supported_modalities={"vision": True}
+        {"url": "https://example.com/img.jpg"}, supported_modalities={"vision": True}
     )
-    
+
     assert result == [
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Analyze:"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg", "detail": "high"}},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://example.com/img.jpg",
+                        "detail": "high",
+                    },
+                },
             ],
         }
     ]
@@ -349,9 +388,9 @@ def test_chat_prompt_template__messages_property():
         {"role": "user", "content": "Hello {{name}}"},
         {"role": "assistant", "content": "Hi there!"},
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     assert tested.messages == messages
 
 
@@ -360,19 +399,17 @@ def test_chat_prompt_template__format__override_template_type():
     messages = [
         {"role": "user", "content": "Name: {{name}}, City: {{city}}"},
     ]
-    
+
     # Create with Mustache default
     tested = ChatPromptTemplate(messages, template_type=PromptType.MUSTACHE)
-    
+
     # Override with Jinja2 in format
     result = tested.format(
         {"name": "Harry", "city": "London"},
         template_type=PromptType.JINJA2,
     )
-    
-    assert result == [
-        {"role": "user", "content": "Name: Harry, City: London"}
-    ]
+
+    assert result == [{"role": "user", "content": "Name: Harry, City: London"}]
 
 
 def test_chat_prompt_template__format__one_placeholder_used_multiple_times():
@@ -383,11 +420,11 @@ def test_chat_prompt_template__format__one_placeholder_used_multiple_times():
             "content": "My name is {{name}}. I repeat, my name is {{name}}.",
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format({"name": "Harry"})
-    
+
     assert result == [
         {"role": "user", "content": "My name is Harry. I repeat, my name is Harry."}
     ]
@@ -396,11 +433,11 @@ def test_chat_prompt_template__format__one_placeholder_used_multiple_times():
 def test_chat_prompt_template__format__empty_messages_list():
     """Test formatting with empty messages list."""
     messages = []
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format({})
-    
+
     assert result == []
 
 
@@ -409,11 +446,11 @@ def test_chat_prompt_template__format__message_with_missing_content():
     messages = [
         {"role": "user"},  # No content field
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     result = tested.format({})
-    
+
     assert result == [{"role": "user", "content": ""}]
 
 
@@ -422,12 +459,14 @@ def test_chat_prompt_template__format__passed_arguments_not_in_template__error_r
     messages = [
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
-    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+
+    with pytest.raises(
+        exceptions.PromptPlaceholdersDontMatchFormatArguments
+    ) as exc_info:
         tested.format({"name": "Harry", "city": "London", "nemesis_name": "Voldemort"})
-    
+
     assert exc_info.value.format_arguments == set(["name", "city", "nemesis_name"])
     assert exc_info.value.prompt_placeholders == set(["name", "city"])
     assert exc_info.value.symmetric_difference == set(["nemesis_name"])
@@ -438,12 +477,14 @@ def test_chat_prompt_template__format__some_placeholders_missing__error_raised()
     messages = [
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
-    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+
+    with pytest.raises(
+        exceptions.PromptPlaceholdersDontMatchFormatArguments
+    ) as exc_info:
         tested.format({"name": "Harry"})
-    
+
     assert exc_info.value.format_arguments == set(["name"])
     assert exc_info.value.prompt_placeholders == set(["name", "city"])
     assert exc_info.value.symmetric_difference == set(["city"])
@@ -454,12 +495,14 @@ def test_chat_prompt_template__format__placeholders_mismatch_both_ways__error_ra
     messages = [
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
-    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+
+    with pytest.raises(
+        exceptions.PromptPlaceholdersDontMatchFormatArguments
+    ) as exc_info:
         tested.format({"name": "Harry", "nemesis_name": "Voldemort"})
-    
+
     assert exc_info.value.format_arguments == set(["name", "nemesis_name"])
     assert exc_info.value.prompt_placeholders == set(["name", "city"])
     assert exc_info.value.symmetric_difference == set(["city", "nemesis_name"])
@@ -476,13 +519,15 @@ def test_chat_prompt_template__format__multimodal_placeholders__validates_all():
             ],
         }
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     # Missing image_url placeholder
-    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+    with pytest.raises(
+        exceptions.PromptPlaceholdersDontMatchFormatArguments
+    ) as exc_info:
         tested.format({"object": "painting"})
-    
+
     assert exc_info.value.format_arguments == set(["object"])
     assert exc_info.value.prompt_placeholders == set(["object", "image_url"])
     assert exc_info.value.symmetric_difference == set(["image_url"])
@@ -494,13 +539,15 @@ def test_chat_prompt_template__format__multiple_messages_placeholders__validates
         {"role": "system", "content": "You are an assistant in {{location}}."},
         {"role": "user", "content": "What is the capital of {{country}}?"},
     ]
-    
+
     tested = ChatPromptTemplate(messages)
-    
+
     # Missing country placeholder
-    with pytest.raises(exceptions.PromptPlaceholdersDontMatchFormatArguments) as exc_info:
+    with pytest.raises(
+        exceptions.PromptPlaceholdersDontMatchFormatArguments
+    ) as exc_info:
         tested.format({"location": "London"})
-    
+
     assert exc_info.value.format_arguments == set(["location"])
     assert exc_info.value.prompt_placeholders == set(["location", "country"])
     assert exc_info.value.symmetric_difference == set(["country"])
@@ -511,12 +558,12 @@ def test_chat_prompt_template__format__validation_disabled__no_error():
     messages = [
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
-    
+
     tested = ChatPromptTemplate(messages, validate_placeholders=False)
-    
+
     # Should not raise an error even though city is missing
     result = tested.format({"name": "Harry"})
-    
+
     # The template will leave unformatted placeholders
     assert result == [
         {"role": "user", "content": "Hi, my name is Harry, I live in {{city}}."}
@@ -528,14 +575,13 @@ def test_chat_prompt_template__format__jinja2_no_validation():
     messages = [
         {"role": "user", "content": "Hi, my name is {{ name }}, I live in {{ city }}."}
     ]
-    
+
     tested = ChatPromptTemplate(messages, template_type=PromptType.JINJA2)
-    
+
     # Jinja2 templates don't validate, so this should not raise an error
     # Jinja2 will just render missing variables as empty
     result = tested.format({"name": "Harry"})
-    
+
     # Should render successfully (Jinja2 handles missing variables gracefully)
     assert len(result) == 1
     assert result[0]["role"] == "user"
-

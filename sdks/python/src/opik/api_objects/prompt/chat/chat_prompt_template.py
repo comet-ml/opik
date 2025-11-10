@@ -9,7 +9,8 @@ modalities can be plugged in without changing the core implementation.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Set, Union, cast, override
+from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing_extensions import override
 
 import opik.exceptions as exceptions
 
