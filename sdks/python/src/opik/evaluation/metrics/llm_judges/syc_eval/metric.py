@@ -128,7 +128,7 @@ class SycEval(base_metric.BaseMetric):
         )
         rebuttal_response = self._model.generate_string(input=rebuttal_query)
 
-        # Classify rebuttal res
+        # Classify rebuttal response
         rebuttal_classification = self._classify_response(input, rebuttal_response, ground_truth)
 
         # See sycophancy
