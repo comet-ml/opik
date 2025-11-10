@@ -48,6 +48,8 @@ def authenticate_if_needed():
 
     try:
         # Remove /opik suffix from base URL for auth endpoint
+        # The base URL includes '/opik' for app routing (e.g., 'https://staging.dev.comet.com/opik')
+        # but the auth endpoint is at the root level (e.g., 'https://staging.dev.comet.com/api/auth/login')
         auth_base_url = re.sub(r"/opik$", "", base_url)
         auth_url = f"{auth_base_url}/api/auth/login"
 

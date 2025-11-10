@@ -64,6 +64,13 @@ export class EnvConfigManager {
           `Missing required environment variables for non-local environment: ${missingVars.join(', ')}`
         );
       }
+
+      // Validate workspace is set for cloud environments
+      if (!this.config.workspace) {
+        throw new Error(
+          'Workspace must be set for cloud environments. Provide OPIK_TEST_USER_NAME or OPIK_TEST_WORKSPACE.'
+        );
+      }
     }
   }
 

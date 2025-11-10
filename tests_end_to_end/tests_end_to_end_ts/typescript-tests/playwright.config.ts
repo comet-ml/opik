@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
+import { AUTH_STATE_FILE } from './global-setup';
 
 dotenv.config();
 
@@ -39,7 +40,7 @@ export default defineConfig({
     actionTimeout: 10000,
     permissions: ['clipboard-read', 'clipboard-write'],
     storageState: process.env.OPIK_BASE_URL && !process.env.OPIK_BASE_URL.startsWith('http://localhost')
-      ? '.auth/user.json'
+      ? AUTH_STATE_FILE
       : undefined,
   },
 

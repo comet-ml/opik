@@ -13,7 +13,9 @@ import { getEnvironmentConfig } from './config/env.config';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const authFile = path.join(__dirname, '.auth/user.json');
+// Shared constant for authentication state storage
+export const AUTH_STATE_FILE = '.auth/user.json';
+const authFile = path.join(__dirname, AUTH_STATE_FILE);
 
 async function globalSetup(config: FullConfig) {
   console.log('🔧 Running global setup...');
