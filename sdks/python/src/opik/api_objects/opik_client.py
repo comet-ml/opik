@@ -1461,22 +1461,17 @@ class Opik:
 
         Returns:
             List[Prompt]: A list of string Prompt instances for the given name.
-        
-        Raises:
-            ValueError: If the prompt is a chat prompt (use get_chat_prompt_history instead).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
         
-        if not fern_prompt_versions:
+        # First, validate that this is a string prompt by trying to get the latest version
+        # This will return None if it's a chat prompt (backend validates template_structure)
+        latest_version = prompt_client_.get_prompt(name=name, template_structure="string")
+        if latest_version is None:
             return []
         
-        # Check the first version to determine prompt type
-        template_structure = getattr(fern_prompt_versions[0], "template_structure", "string") or "string"
-        if template_structure == "chat":
-            raise ValueError(
-                f"Prompt '{name}' is a chat prompt. Use get_chat_prompt_history() instead of get_prompt_history()."
-            )
+        # Now get all versions (we know it's a string prompt)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
         
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
@@ -1493,22 +1488,17 @@ class Opik:
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name.
-        
-        Raises:
-            ValueError: If the prompt is a string prompt (use get_prompt_history instead).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
         
-        if not fern_prompt_versions:
+        # First, validate that this is a chat prompt by trying to get the latest version
+        # This will return None if it's a string prompt (backend validates template_structure)
+        latest_version = prompt_client_.get_prompt(name=name, template_structure="chat")
+        if latest_version is None:
             return []
         
-        # Check the first version to determine prompt type
-        template_structure = getattr(fern_prompt_versions[0], "template_structure", "string") or "string"
-        if template_structure != "chat":
-            raise ValueError(
-                f"Prompt '{name}' is a string prompt. Use get_prompt_history() instead of get_chat_prompt_history()."
-            )
+        # Now get all versions (we know it's a chat prompt)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
         
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
