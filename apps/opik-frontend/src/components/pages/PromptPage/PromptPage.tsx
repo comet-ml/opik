@@ -14,6 +14,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import PromptTagsList from "@/components/pages/PromptPage/PromptTagsList";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
@@ -59,7 +60,10 @@ const PromptPage: React.FunctionComponent = () => {
       >
         {prompt?.created_at && (
           <div className="mb-2 flex gap-4 overflow-x-auto">
-            <DateTag date={prompt?.created_at} />
+            <DateTag
+              date={prompt?.created_at}
+              resource={RESOURCE_TYPE.prompt}
+            />
           </div>
         )}
         <PromptTagsList

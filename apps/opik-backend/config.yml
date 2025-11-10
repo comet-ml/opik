@@ -172,7 +172,7 @@ authentication:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
-  # Description: Whether to enable virtual threads for Jetty’s thread pool.
+  # Description: Whether to enable virtual threads for Jetty's thread pool.
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
@@ -185,7 +185,15 @@ server:
   # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
   applicationConnectors:
     - type: http
+      # Default: 8080
+      # Description: The port on which the application HTTP connector listens
+      port: ${SERVER_APPLICATION_PORT:-8080}
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
+  adminConnectors:
+    - type: http
+      # Default: 8081
+      # Description: The port on which the admin HTTP connector listens
+      port: ${SERVER_ADMIN_PORT:-8081}
 
 # Jackson JSON processing configuration
 # Controls limits for JSON deserialization to prevent memory exhaustion
