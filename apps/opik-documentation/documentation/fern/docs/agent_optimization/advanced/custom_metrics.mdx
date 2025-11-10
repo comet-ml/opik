@@ -42,7 +42,7 @@ def safety_and_completeness(item, output):
 
 - **Single metrics** – implement one callable per concern (accuracy, tone, cost). Keep them reusable across prompts.
 - **Multi-metric objectives** – combine single metrics with weights when you need to balance, e.g., accuracy (0.7) + style (0.3). See [Multi-metric optimization](/agent_optimization/best_practices/multi_metric_optimization) for templates.
-- **LLM-as-a-judge** – call out to an evaluation model (OpenAI, Anthropic, etc.) inside the metric. Always  include detailed prompts so results stay stable.
+- **LLM-as-a-judge** – call out to an evaluation model (OpenAI, Anthropic, etc.) inside the metric. Always include detailed prompts so results stay stable, and understand that reflective optimizers will inherit any noise from these judge calls.
 - **Heuristics** – leverage built-ins from `/evaluation/metrics` instead of reinventing classic scores. You can compose heuristics with custom logic as shown above.
 
 ## Testing
