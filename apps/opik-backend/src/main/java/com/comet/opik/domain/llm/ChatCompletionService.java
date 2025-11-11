@@ -94,6 +94,24 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
+        // Check if we have multimodal content (images/videos) in the request
+        boolean hasMultimodalContent = chatRequest.messages().stream()
+                .anyMatch(msg -> msg instanceof dev.langchain4j.data.message.UserMessage userMsg
+                        && userMsg.contents().stream()
+                                .anyMatch(content -> content instanceof dev.langchain4j.data.message.ImageContent
+                                        || content instanceof dev.langchain4j.data.message.VideoContent));
+
+        // For custom LLMs with multimodal content, use direct ChatCompletionRequest API
+        // This is needed because OpenAiChatModel doesn't support VideoContent serialization
+        var llmProvider = llmProviderFactory.getLlmProvider(modelParameters.name());
+        if (hasMultimodalContent && llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM) {
+            log.info(
+                    "Using direct ChatCompletionRequest API for custom LLM '{}' with multimodal content, workspaceId '{}'",
+                    modelParameters.name(), workspaceId);
+            return scoreTraceViaDirectAPI(chatRequest, modelParameters, workspaceId);
+        }
+
+        // Standard path for non-multimodal or non-custom-LLM providers
         var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
 
         ChatResponse chatResponse;
@@ -105,6 +123,98 @@ public class ChatCompletionService {
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
+        } catch (RuntimeException runtimeException) {
+            LlmProviderService provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
+
+            Optional<ErrorMessage> providerError = provider.getLlmProviderError(runtimeException);
+
+            providerError
+                    .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+
+            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+        }
+    }
+
+    /**
+     * Score trace using direct ChatCompletionRequest API (bypassing LangChain4j ChatModel).
+     * This is needed for custom LLM providers with multimodal content (images/videos).
+     *
+     * Strategy:
+     * 1. Flatten ChatRequest messages to strings (with <<<video>>> tags)
+     * 2. Build ChatCompletionRequest with those strings
+     * 3. Apply MessageContentNormalizer.normalizeRequest() to expand tags to structured content (same as Playground)
+     * 4. Generate response via direct provider.generate() API
+     * 5. Convert ChatCompletionResponse back to ChatResponse
+     *
+     * This preserves structured output instructions (from InstructionStrategy) in the text content.
+     */
+    private ChatResponse scoreTraceViaDirectAPI(@NonNull ChatRequest chatRequest,
+            @NonNull LlmAsJudgeModelParameters modelParameters,
+            @NonNull String workspaceId) {
+        try {
+            // Step 1: Flatten ChatRequest messages to strings with <<<video>>> tags
+            var stringMessages = new java.util.ArrayList<dev.langchain4j.model.openai.internal.chat.Message>();
+            for (var message : chatRequest.messages()) {
+                if (message instanceof dev.langchain4j.data.message.UserMessage userMessage) {
+                    // Flatten content back to string with video tags
+                    String flattenedContent = MessageContentNormalizer.flattenContent(userMessage.contents());
+                    stringMessages.add(dev.langchain4j.model.openai.internal.chat.UserMessage.builder()
+                            .content(flattenedContent)
+                            .build());
+                } else if (message instanceof dev.langchain4j.data.message.AiMessage aiMessage) {
+                    stringMessages.add(dev.langchain4j.model.openai.internal.chat.AssistantMessage.builder()
+                            .content(aiMessage.text())
+                            .build());
+                } else if (message instanceof dev.langchain4j.data.message.SystemMessage systemMessage) {
+                    stringMessages.add(dev.langchain4j.model.openai.internal.chat.SystemMessage.builder()
+                            .content(systemMessage.text())
+                            .build());
+                }
+            }
+
+            // Step 2: Build ChatCompletionRequest
+            var rawChatCompletionRequest = dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest.builder()
+                    .model(modelParameters.name())
+                    .messages(stringMessages)
+                    .build();
+
+            // Step 3: Normalize the request - this expands <<<video>>> tags to structured content (same as Playground)
+            var chatCompletionRequest = MessageContentNormalizer.normalizeRequest(rawChatCompletionRequest);
+
+            // Step 4: Generate response via provider
+            var provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
+            var chatCompletionResponse = retryPolicy
+                    .withRetry(() -> provider.generate(chatCompletionRequest, workspaceId));
+
+            // Step 5: Convert response back to ChatResponse
+            var aiMessageText = chatCompletionResponse.choices().isEmpty()
+                    ? ""
+                    : Optional.ofNullable(chatCompletionResponse.choices().get(0).message())
+                            .map(dev.langchain4j.model.openai.internal.chat.AssistantMessage::content)
+                            .orElse("");
+
+            var aiMessage = dev.langchain4j.data.message.AiMessage.from(aiMessageText);
+
+            var inputTokens = Optional.ofNullable(chatCompletionResponse.usage())
+                    .map(dev.langchain4j.model.openai.internal.shared.Usage::promptTokens)
+                    .orElse(0);
+            var outputTokens = Optional.ofNullable(chatCompletionResponse.usage())
+                    .map(dev.langchain4j.model.openai.internal.shared.Usage::completionTokens)
+                    .orElse(0);
+            var tokenUsage = new dev.langchain4j.model.output.TokenUsage(inputTokens, outputTokens);
+
+            var finishReason = chatCompletionResponse.choices().isEmpty()
+                    ? null
+                    : dev.langchain4j.model.output.FinishReason.valueOf(
+                            chatCompletionResponse.choices().get(0).finishReason().toUpperCase());
+
+            return dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(aiMessage)
+                    .tokenUsage(tokenUsage)
+                    .finishReason(finishReason)
+                    .build();
+
         } catch (RuntimeException runtimeException) {
             LlmProviderService provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
 

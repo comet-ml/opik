@@ -200,6 +200,30 @@ public class MessageContentNormalizer {
         }
     }
 
+    /**
+     * Flatten LangChain4j Content list back to string with video/image tags.
+     * Used when converting ChatRequest to ChatCompletionRequest.
+     */
+    public static String flattenContent(@NonNull List<dev.langchain4j.data.message.Content> contents) {
+        var builder = new StringBuilder();
+        for (var content : contents) {
+            if (content instanceof dev.langchain4j.data.message.TextContent textContent) {
+                builder.append(textContent.text());
+            } else if (content instanceof dev.langchain4j.data.message.VideoContent videoContent) {
+                var video = videoContent.video();
+                if (video != null && video.url() != null) {
+                    builder.append(renderVideoPlaceholder(video.url().toString()));
+                }
+            } else if (content instanceof dev.langchain4j.data.message.ImageContent imageContent) {
+                var image = imageContent.image();
+                if (image != null && image.url() != null) {
+                    builder.append(renderImagePlaceholder(image.url().toString()));
+                }
+            }
+        }
+        return builder.toString().trim();
+    }
+
     public static String flattenContent(@NonNull Object rawContent) {
         if (rawContent instanceof String str) {
             return str;

@@ -28,6 +28,10 @@ const isOpenAIModel = (modelName: string): boolean => {
   return openAIModels.some((model) => model.value === modelName);
 };
 
+const isVllmQwenModel = (modelName: string): boolean => {
+  return /qwen.*(vl|vi)/i.test(modelName);
+};
+
 const RuleNameSchema = z
   .string({
     required_error: "Rule name is required",
@@ -199,7 +203,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   );
 
   if (hasImages || hasVideos) {
-    if (!isOpenAIModel(data.model)) {
+    if (!isOpenAIModel(data.model) && !isVllmQwenModel(data.model)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
