@@ -1,6 +1,7 @@
 from typing import Any, TYPE_CHECKING
 from collections.abc import Callable
 
+import copy
 import json
 import logging
 import random
@@ -10,6 +11,12 @@ from .mcp import EvolutionaryMCPContext, tool_description_mutation
 from ..optimization_config import chat_prompt
 from .. import utils
 from . import reporting
+from ..utils.message_content import (
+    MessageContent,
+    extract_text_from_content,
+    is_multimodal_prompt,
+    rebuild_content_with_text,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -26,15 +33,33 @@ class MutationOps:
         _mcp_context: EvolutionaryMCPContext | None
         _update_individual_with_prompt: Callable[[Any, chat_prompt.ChatPrompt], Any]
 
+    def _prompt_from_individual(
+        self, individual: Any, fallback_prompt: chat_prompt.ChatPrompt
+    ) -> chat_prompt.ChatPrompt:
+        tools = getattr(individual, "tools", fallback_prompt.tools)
+        function_map = getattr(individual, "function_map", fallback_prompt.function_map)
+        return chat_prompt.ChatPrompt(
+            messages=copy.deepcopy(list(individual)),
+            tools=copy.deepcopy(tools) if tools else None,
+            function_map=function_map,
+        )
+
+    def _clone_prompt_with_messages(
+        self,
+        base_prompt: chat_prompt.ChatPrompt,
+        messages: list[dict[str, MessageContent]],
+    ) -> chat_prompt.ChatPrompt:
+        return chat_prompt.ChatPrompt(
+            messages=messages,
+            tools=copy.deepcopy(base_prompt.tools) if base_prompt.tools else None,
+            function_map=base_prompt.function_map,
+        )
+
     def _deap_mutation(
         self, individual: Any, initial_prompt: chat_prompt.ChatPrompt
     ) -> Any:
         """Enhanced mutation operation with multiple strategies."""
-        prompt = chat_prompt.ChatPrompt(
-            messages=individual,
-            tools=initial_prompt.tools,
-            function_map=initial_prompt.function_map,
-        )
+        prompt = self._prompt_from_individual(individual, initial_prompt)
 
         mcp_context = getattr(self, "_mcp_context", None)
         if mcp_context is not None:
@@ -88,6 +113,8 @@ class MutationOps:
     ) -> chat_prompt.ChatPrompt:
         """Enhanced semantic mutation with multiple strategies."""
         current_output_style_guidance = self.output_style_guidance
+        # Detect if we're working with multimodal prompts
+        is_multimodal = is_multimodal_prompt(prompt.get_messages())
         if random.random() < 0.1:
             return self._radical_innovation_mutation(prompt, initial_prompt)
 
@@ -119,7 +146,7 @@ class MutationOps:
                     {
                         "role": "system",
                         "content": evo_prompts.semantic_mutation_system_prompt(
-                            current_output_style_guidance
+                            current_output_style_guidance, is_multimodal=is_multimodal
                         ),
                     },
                     {"role": "user", "content": user_prompt_for_semantic_mutation},
@@ -134,11 +161,7 @@ class MutationOps:
                     f"Error parsing semantic mutation response as JSON. "
                     f"Response: {response!r}\nOriginal error: {parse_exc}"
                 ) from parse_exc
-            return chat_prompt.ChatPrompt(
-                messages=messages,
-                tools=prompt.tools,
-                function_map=prompt.function_map,
-            )
+            return self._clone_prompt_with_messages(prompt, messages)
         except Exception as e:
             reporting.display_error(
                 f"      Error in semantic mutation, this is usually a parsing error: {e}",
@@ -150,13 +173,16 @@ class MutationOps:
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
         """Perform structural mutation (reordering, combining, splitting)."""
-        mutated_messages: list[dict[str, str]] = []
+        mutated_messages: list[dict[str, MessageContent]] = []
 
         for message in prompt.get_messages():
             content = message["content"]
             role = message["role"]
 
-            sentences = [s.strip() for s in content.split(".") if s.strip()]
+            # Extract text for mutation (handles both string and structured content)
+            text_content = extract_text_from_content(content)
+
+            sentences = [s.strip() for s in text_content.split(".") if s.strip()]
             if len(sentences) <= 1:
                 mutated_messages.append(
                     {"role": role, "content": self._word_level_mutation(content)}
@@ -164,21 +190,17 @@ class MutationOps:
                 continue
 
             mutation_type = random.random()
+            mutated_text = None
+
             if mutation_type < 0.3:
                 random.shuffle(sentences)
-                mutated_messages.append(
-                    {"role": role, "content": ". ".join(sentences) + "."}
-                )
-                continue
+                mutated_text = ". ".join(sentences) + "."
             elif mutation_type < 0.6:
                 if len(sentences) >= 2:
                     idx = random.randint(0, len(sentences) - 2)
                     combined = sentences[idx] + " and " + sentences[idx + 1]
                     sentences[idx : idx + 2] = [combined]
-                    mutated_messages.append(
-                        {"role": role, "content": ". ".join(sentences) + "."}
-                    )
-                    continue
+                    mutated_text = ". ".join(sentences) + "."
             else:
                 idx = random.randint(0, len(sentences) - 1)
                 words = sentences[idx].split()
@@ -188,23 +210,21 @@ class MutationOps:
                         " ".join(words[:split_point]),
                         " ".join(words[split_point:]),
                     ]
-                    mutated_messages.append(
-                        {"role": role, "content": ". ".join(sentences) + "."}
-                    )
-                    continue
-                else:
-                    mutated_messages.append({"role": role, "content": content})
+                    mutated_text = ". ".join(sentences) + "."
 
-        return chat_prompt.ChatPrompt(
-            messages=mutated_messages,
-            tools=prompt.tools,
-            function_map=prompt.function_map,
-        )
+            # Rebuild content with mutated text, preserving any images
+            if mutated_text:
+                new_content = rebuild_content_with_text(content, mutated_text)
+                mutated_messages.append({"role": role, "content": new_content})
+            else:
+                mutated_messages.append({"role": role, "content": content})
+
+        return self._clone_prompt_with_messages(prompt, mutated_messages)
 
     def _word_level_mutation_prompt(
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
-        mutated_messages: list[dict[str, str]] = []
+        mutated_messages: list[dict[str, MessageContent]] = []
         for message in prompt.get_messages():
             mutated_messages.append(
                 {
@@ -212,16 +232,15 @@ class MutationOps:
                     "content": self._word_level_mutation(message["content"]),
                 }
             )
-        return chat_prompt.ChatPrompt(
-            messages=mutated_messages,
-            tools=prompt.tools,
-            function_map=prompt.function_map,
-        )
+        return self._clone_prompt_with_messages(prompt, mutated_messages)
 
-    def _word_level_mutation(self, msg_content: str) -> str:
-        """Perform word-level mutation."""
-        words = msg_content.split()
-        if len(words) <= 1:
+    def _word_level_mutation(self, msg_content: MessageContent) -> MessageContent:
+        """Perform word-level mutation on message content."""
+        # Extract text for mutation
+        text_content = extract_text_from_content(msg_content)
+
+        words = text_content.split()
+        if len(words) == 0:
             return msg_content
 
         mutation_type = random.random()
@@ -236,7 +255,9 @@ class MutationOps:
             idx = random.randint(0, len(words) - 1)
             words[idx] = self._modify_phrase(words[idx])
 
-        return " ".join(words)
+        # Rebuild content with mutated text, preserving any images
+        mutated_text = " ".join(words)
+        return rebuild_content_with_text(msg_content, mutated_text)
 
     def _get_synonym(self, word: str) -> str:
         """Get a synonym for a word using LLM."""
@@ -287,6 +308,8 @@ class MutationOps:
         )
         task_desc_for_llm = self._get_task_description_for_llm(initial_prompt)
         current_output_style_guidance = self.output_style_guidance
+        # Detect if we're working with multimodal prompts
+        is_multimodal = is_multimodal_prompt(prompt.get_messages())
 
         user_prompt_for_radical_innovation = evo_prompts.radical_innovation_user_prompt(
             task_desc_for_llm, current_output_style_guidance, prompt.get_messages()
@@ -297,7 +320,7 @@ class MutationOps:
                     {
                         "role": "system",
                         "content": evo_prompts.radical_innovation_system_prompt(
-                            current_output_style_guidance
+                            current_output_style_guidance, is_multimodal=is_multimodal
                         ),
                     },
                     {"role": "user", "content": user_prompt_for_radical_innovation},
@@ -314,11 +337,7 @@ class MutationOps:
                     f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {new_prompt_str[:200]}. Error: {parse_exc}. Returning original."
                 )
                 return prompt
-            return chat_prompt.ChatPrompt(
-                messages=new_messages,
-                tools=prompt.tools,
-                function_map=prompt.function_map,
-            )
+            return self._clone_prompt_with_messages(prompt, new_messages)
         except Exception as e:
             logger.warning(
                 f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."

@@ -10,6 +10,9 @@ from opik.api_objects.dataset import Dataset
 
 # Expected size mappings - add expected sizes based on dataset function names
 dataset_sizes = {
+    "driving_hazard_50": 50,
+    "driving_hazard_100": 100,
+    "driving_hazard_test_split": 100,
     "hotpot_300": 300,
     "hotpot_500": 500,
     "halu_eval_300": 300,

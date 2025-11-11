@@ -14,9 +14,14 @@ from opik_optimizer import task_evaluator
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
+from ..optimization_config.chat_prompt import MessageDict
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
 from . import reporting
+from .types import (
+    CandidatePromptsResponse,
+    ToolDescriptionsResponse,
+)
 import re
 
 from ..mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
@@ -25,7 +30,15 @@ from ..mcp_utils.mcp_workflow import (
     MCPSecondPassCoordinator,
     extract_tool_arguments,
 )
+from ..utils.message_content import is_multimodal_prompt
+from ..utils.multimodal import (
+    get_multimodal_reasoning_guidance,
+    get_multimodal_structure_guidance,
+)
 from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
+
+_MULTIMODAL_STRUCTURE_GUIDANCE = get_multimodal_structure_guidance()
+_MULTIMODAL_REASONING_GUIDANCE = get_multimodal_reasoning_guidance()
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -112,7 +125,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     DEFAULT_PROMPTS_PER_ROUND = 4
 
     # --- Reasoning System Prompt ---
-    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+    _BASE_REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
         Focus on making the prompt more effective by:
         1. Being clear and specific about what is expected
@@ -142,7 +155,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "reasoning": "why this improvement should help"
                 }
             ]
-        }"""
+        }}
+
+        """
 
     def __init__(
         self,
@@ -169,6 +184,21 @@ class MetaPromptOptimizer(BaseOptimizer):
             "prompts_per_round": self.prompts_per_round,
             "enable_context": self.enable_context,
         }
+
+    def _get_reasoning_system_prompt(self, prompt: chat_prompt.ChatPrompt) -> str:
+        try:
+            messages = prompt.get_messages()
+        except Exception:
+            messages = prompt.messages or []
+        if is_multimodal_prompt(messages):
+            return (
+                self._BASE_REASONING_SYSTEM_PROMPT
+                + "\n\n"
+                + _MULTIMODAL_STRUCTURE_GUIDANCE
+                + "\n\n"
+                + _MULTIMODAL_REASONING_GUIDANCE
+            )
+        return self._BASE_REASONING_SYSTEM_PROMPT
 
     def _evaluate_prompt(
         self,
@@ -810,8 +840,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_result(
         self,
         metric: Callable,
-        initial_prompt: list[dict[str, str]],
-        best_prompt: list[dict[str, str]],
+        initial_prompt: list[MessageDict],
+        best_prompt: list[MessageDict],
         best_score: float,
         initial_score: float,
         rounds: list[OptimizationRound],
@@ -946,92 +976,57 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call["optimizer_name"] = self.__class__.__name__
                 metadata_for_call["opik_call_type"] = "optimization_algorithm"
 
-                # Use _call_model for optimization algorithm
-                content = self._call_model(
+                system_prompt = self._get_reasoning_system_prompt(current_prompt)
+                response = self._call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
                     optimization_id=optimization_id,
                     metadata=metadata_for_call,
                 )
-                logger.debug(f"Raw response from reasoning model: {content}")
 
-                # --- Robust JSON Parsing and Validation ---
-                json_result = None
-                try:
-                    # Try direct JSON parsing
-                    json_result = json.loads(content)
-                except json.JSONDecodeError:
-                    import re
-
-                    json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                    if json_match:
-                        try:
-                            json_result = json.loads(json_match.group())
-                        except json.JSONDecodeError as e:
-                            raise ValueError(
-                                f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
-                            )
-                    else:
-                        raise ValueError(
-                            f"No JSON object found in response via regex. - received: {content}"
-                        )
-
-                # Validate the parsed JSON structure
-                if isinstance(json_result, list) and len(json_result) == 1:
-                    json_result = json_result[0]
-
-                if not isinstance(json_result, dict) or "prompts" not in json_result:
-                    logger.debug(f"Parsed JSON content: {json_result}")
-                    raise ValueError(
-                        f"Parsed JSON is not a dictionary or missing 'prompts' key. - received: {json_result}"
+                parsed_candidates: CandidatePromptsResponse
+                if isinstance(response, str):
+                    parsed_candidates = CandidatePromptsResponse.model_validate_json(
+                        response
                     )
+                else:
+                    parsed_candidates = CandidatePromptsResponse.model_validate(
+                        response
+                    )  # type: ignore[arg-type]
 
-                if not isinstance(json_result["prompts"], list):
-                    logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                    raise ValueError(
-                        f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}"
-                    )
-
-                # Extract and log valid prompts
                 valid_prompts: list[chat_prompt.ChatPrompt] = []
-                for item in json_result["prompts"]:
-                    if (
-                        isinstance(item, dict)
-                        and "prompt" in item
-                        and isinstance(item["prompt"], list)
-                    ):
-                        # NOTE: might be brittle
-                        if current_prompt.user:
-                            user_text = current_prompt.user
-                        else:
-                            if current_prompt.messages is not None:
-                                user_text = current_prompt.messages[-1]["content"]
-                            else:
-                                raise Exception(
-                                    "User content not found in chat-prompt!"
-                                )
-
-                        valid_prompts.append(
-                            chat_prompt.ChatPrompt(
-                                system=item["prompt"][0]["content"],
-                                user=user_text,
-                                tools=current_prompt.tools,
-                                function_map=current_prompt.function_map,
-                            )
-                        )
-
-                        # Log details
-                        focus = item.get("improvement_focus", "N/A")
-                        reasoning = item.get("reasoning", "N/A")
-                        logger.debug(f"Generated prompt: {item['prompt']}")
-                        logger.debug(f"  Improvement focus: {focus}")
-                        logger.debug(f"  Reasoning: {reasoning}")
-                    else:
+                for candidate in parsed_candidates.prompts:
+                    if not candidate.prompt:
                         logger.warning(
-                            f"Skipping invalid prompt item structure in JSON response: {item}"
+                            "Skipping prompt candidate with empty prompt list"
                         )
+                        continue
+
+                    if current_prompt.user:
+                        user_text = current_prompt.user
+                    else:
+                        if current_prompt.messages is not None:
+                            content = current_prompt.messages[-1]["content"]
+                            user_text = (
+                                content if isinstance(content, str) else str(content)
+                            )
+                        else:
+                            raise Exception("User content not found in chat-prompt!")
+
+                    valid_prompts.append(
+                        chat_prompt.ChatPrompt(
+                            system=candidate.prompt[0]["content"],
+                            user=user_text,
+                            tools=current_prompt.tools,
+                            function_map=current_prompt.function_map,
+                        )
+                    )
+
+                    logger.debug(f"Generated prompt: {candidate.prompt}")
+                    logger.debug(f"  Improvement focus: {candidate.improvement_focus}")
+                    logger.debug(f"  Reasoning: {candidate.reasoning}")
 
                 if not valid_prompts:
                     raise ValueError(
@@ -1041,7 +1036,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 candidate_generation_report.set_generated_prompts()
 
                 return valid_prompts
-                # --- End Robust Parsing ---
 
             except Exception as e:
                 raise ValueError(
@@ -1093,16 +1087,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             for how the tool output must be used in the final response.
             Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
 
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
+            Return JSON format (no markdown fences, no additional keys):
+            ```{{"prompts":[{{"tool_description": "<string>","improvement_focus": "<string>","reasoning": "<string>"}}]}}```
             """
         ).strip()
 
@@ -1120,42 +1106,35 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call_tools["optimizer_name"] = self.__class__.__name__
                 metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
 
-                content = self._call_model(
+                system_prompt = self._get_reasoning_system_prompt(current_prompt)
+                response = self._call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": instruction},
                     ],
                     optimization_id=optimization_id,
                     metadata=metadata_for_call_tools,
                 )
 
-                try:
-                    json_result = json.loads(content)
-                except json.JSONDecodeError:
-                    import re
-
-                    json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                    if not json_match:
-                        raise ValueError("No JSON object found in reasoning output")
-                    json_result = json.loads(json_match.group())
-
-                prompts_payload = json_result.get("prompts")
-                if not isinstance(prompts_payload, list):
-                    raise ValueError("Reasoning output missing 'prompts' list")
-
                 candidate_generation_report.set_generated_prompts()
 
+                parsed_response: ToolDescriptionsResponse
+                if isinstance(response, str):
+                    parsed_response = ToolDescriptionsResponse.model_validate_json(
+                        response
+                    )
+                else:
+                    parsed_response = ToolDescriptionsResponse.model_validate(response)  # type: ignore[arg-type]
+
                 candidates: list[chat_prompt.ChatPrompt] = []
-                for item in prompts_payload:
-                    if not isinstance(item, dict):
-                        continue
-                    description = item.get("tool_description")
-                    if not isinstance(description, str) or not description.strip():
+                for candidate in parsed_response.prompts:
+                    description = candidate.tool_description.strip()
+                    if not description:
                         continue
 
                     updated_prompt = apply_segment_updates(
                         current_prompt,
-                        {tool_segment_id: description.strip()},
+                        {tool_segment_id: description},
                     )
                     _sync_tool_description_in_system(updated_prompt)
                     if (

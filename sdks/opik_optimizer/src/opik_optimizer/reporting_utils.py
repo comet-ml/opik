@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 from rich import box
 from rich.console import Console, Group
@@ -10,7 +10,12 @@ from rich.panel import Panel
 from rich.progress import track
 from rich.text import Text
 
+from .optimization_config.chat_prompt import MediaPart, MessageDict, TextPart
 from .utils import get_optimization_run_url_by_id
+from .utils.multimodal import (
+    MULTIMODAL_URL_FIELDS,
+    SUPPORTED_MULTIMODAL_PART_TYPES,
+)
 
 PANEL_WIDTH = 70
 
@@ -112,11 +117,169 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     return normalized
 
 
-def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:
+def _format_message_content(content: str | list[TextPart | MediaPart]) -> Text:
+    """
+    Format message content for display, handling both string and multimodal content.
+
+    Args:
+        content: Message content, either a string or a list of text/image parts.
+
+    Returns:
+        Text object ready for Rich display.
+    """
+    if isinstance(content, str):
+        return Text(content, overflow="fold")
+
+    # Handle multimodal content (list of parts)
+    formatted_parts: list[Text] = []
+
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            text_part = cast(TextPart, part)
+            text_content = text_part.get("text", "")
+            if text_content:
+                # Split text into lines and format with pipe prefix
+                lines = text_content.split("\n")
+                formatted_lines: list[str] = ["text:"]
+                for line in lines:
+                    formatted_lines.append(f"  | {line}")
+                formatted_parts.append(
+                    Text("\n".join(formatted_lines), overflow="fold")
+                )
+        elif part_type in SUPPORTED_MULTIMODAL_PART_TYPES:
+            formatted_parts.append(_format_multimodal_part(cast(MediaPart, part)))
+
+    # Combine all parts with spacing
+    if not formatted_parts:
+        return Text("(empty content)", style="dim")
+
+    result = Text()
+    for i, part in enumerate(formatted_parts):
+        if i > 0:
+            result.append("\n\n")
+        result.append(part)
+
+    return result
+
+
+def _attachment_label(part_type: str) -> str:
+    """Convert part type to a human-readable label."""
+    label = part_type.removesuffix("_url")
+    return label.replace("_", " ") or "attachment"
+
+
+def _format_url_lines(url: str | None) -> list[str]:
+    """Produce formatted lines for either data URIs or standard URLs."""
+    if not isinstance(url, str) or not url:
+        return ["  | <no URL>"]
+
+    if url.startswith("data:"):
+        header = url.split(",", 1)[0][5:] if "," in url else url[5:]
+        lines = [f"  | data:{header}"]
+        if "," in url:
+            payload = url.split(",", 1)[1]
+            preview = payload[:10] + "..." if len(payload) > 10 else payload
+            lines.append(f"  | preview={preview}")
+        return lines
+
+    display_url = url[:80] + "..." if len(url) > 80 else url
+    return [f"  | {display_url}"]
+
+
+def _format_multimodal_part(part: MediaPart) -> Text:
+    """Render a video/image/file part into Rich text."""
+    part_type = str(part.get("type", "attachment"))
+    payload_key = MULTIMODAL_URL_FIELDS.get(part_type)
+
+    if payload_key is None:
+        return Text(
+            f"{_attachment_label(part_type)}:\n  | <unsupported payload>",
+            overflow="fold",
+            style="dim",
+        )
+
+    payload = part.get(payload_key) if payload_key else {}
+    url = payload.get("url") if isinstance(payload, dict) else None
+    lines = [f"{_attachment_label(part_type)}:"]
+    lines.extend(_format_url_lines(url))
+
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key == "url":
+                continue
+            lines.append(f"  | {key}={value}")
+
+    return Text("\n".join(lines), overflow="fold", style="dim")
+
+
+def _summarize_media_part(part: MediaPart) -> str:
+    """Return single-line summary for diff output."""
+    part_type = str(part.get("type", "attachment"))
+    payload_key = MULTIMODAL_URL_FIELDS.get(part_type)
+    payload = part.get(payload_key) if payload_key else {}
+    url = payload.get("url", "") if isinstance(payload, dict) else ""
+    label = _attachment_label(part_type)
+
+    if not url:
+        return f"[{label}] <no URL>"
+
+    if url.startswith("data:"):
+        return f"[{label}] <base64 data>"
+
+    display_url = url[:50] + "..." if len(url) > 50 else url
+    return f"[{label}] {display_url}"
+
+
+def content_to_diff_string(
+    content: str | list[TextPart | MediaPart] | None,
+) -> str:
+    """
+    Convert message content (text or multimodal) into a compact string for diff views.
+
+    Args:
+        content: Message content to stringify.
+
+    Returns:
+        Human-readable string describing the content.
+    """
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content
+
+    parts: list[str] = []
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            text_part = cast(TextPart, part)
+            text_content = text_part.get("text", "")
+            if text_content:
+                parts.append(f"[text] {text_content}")
+        elif part_type in SUPPORTED_MULTIMODAL_PART_TYPES:
+            parts.append(_summarize_media_part(cast(MediaPart, part)))
+
+    return "\n".join(parts)
+
+
+def display_messages(messages: list[MessageDict], prefix: str = "") -> None:
+    """
+    Display messages using Rich panels, supporting both string and multimodal content.
+
+    Args:
+        messages: List of MessageDict instances to display.
+        prefix: Optional prefix to add to each line of output.
+    """
     for i, msg in enumerate(messages):
+        # MessageDict requires content, but we use .get() for defensive programming
+        content: str | list[TextPart | MediaPart] = msg.get("content", "")
+        formatted_content = _format_message_content(content)
+        role = msg.get("role", "message")
+
         panel = Panel(
-            Text(msg.get("content", ""), overflow="fold"),
-            title=f"{msg.get('role', 'message')}",
+            formatted_content,
+            title=role,
             title_align="left",
             border_style="dim",
             width=PANEL_WIDTH,
@@ -228,7 +391,7 @@ def display_header(
 def display_result(
     initial_score: float,
     best_score: float,
-    best_prompt: list[dict[str, str]],
+    best_prompt: list[MessageDict],
     verbose: int = 1,
     tools: list[dict[str, Any]] | None = None,
 ) -> None:
@@ -266,10 +429,15 @@ def display_result(
 
     content.append(Text("\nOptimized prompt:"))
     for i, msg in enumerate(best_prompt):
+        # MessageDict requires content, but we use .get() for defensive programming
+        content_value: str | list[TextPart | MediaPart] = msg.get("content", "")
+        formatted_content = _format_message_content(content_value)
+        role = msg.get("role", "message")
+
         content.append(
             Panel(
-                Text(msg.get("content", ""), overflow="fold"),
-                title=f"{msg.get('role', 'message')}",
+                formatted_content,
+                title=role,
                 title_align="left",
                 border_style="dim",
                 width=PANEL_WIDTH,
@@ -293,7 +461,7 @@ def display_result(
 
 
 def display_configuration(
-    messages: list[dict[str, str]],
+    messages: list[MessageDict],
     optimizer_config: dict[str, Any],
     verbose: int = 1,
     tools: list[dict[str, Any]] | None = None,

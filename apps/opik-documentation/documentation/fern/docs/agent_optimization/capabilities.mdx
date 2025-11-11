@@ -1,0 +1,43 @@
+---
+title: "Optimizer Capabilities"
+subtitle: "At-a-glance view of supported features"
+description: "See which Opik Agent Optimizer algorithms cover ChatPrompt inputs, agents, tool use, MCP workflows, and multimodal content."
+---
+
+Choosing the right optimizer is easier when you can see which capabilities are supported. This page
+is an Explanation/Reference matrix for the Opik Optimizer SDK; some capabilities (like MCP integration or tool signature editing)
+are provided by the SDK and surfaced only through certain algorithms.
+
+Use this table by scanning down the feature list and reading across to confirm which algorithm satisfies your Chat Prompt, agent,
+tool, MCP, and multimodal requirements before diving into the detailed algorithm docs.
+
+| Feature | Evolutionary | Few Shot | GEPA | Hierarchical | MetaPrompt | Parameter |
+| --- | --- | --- | --- | --- | --- | --- |
+| Chat Prompt | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Use Agent Frameworks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Function & Tool Use¹ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| MCP Tool Use | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Prompt Editing | ✅ | ✅ | ✅ | ✅ | ✅ | n/a |
+| Tool Editing² | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| MCP Editing | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Multimodal Input | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+
+**Legend**
+
+- ✅ — Supported out of the box
+- ⚠️ — Works, but requires manual configuration
+- ❌ — Not supported today
+
+<AccordionGroup>
+  <Accordion title="¹ Function vs. Tool Optimization">
+    Every optimizer built on `ChatPrompt` can work with prompts that make function calls or invoke tool sandboxes.
+    This is different from optimizing the tool schemas themselves.
+  </Accordion>
+  <Accordion title="² Tool Signature Optimization">
+    Editing tool descriptions, arguments, or MCP manifests is currently only available via the MetaPrompt optimizer (see
+    [Tool Optimization (MCP & Functions)](/agent_optimization/algorithms/tool_optimization)). Other optimizers can still optimize prompts that reference tools without changing the tool definition.
+  </Accordion>
+</AccordionGroup>
+
+Need more detail? Jump back to the [algorithm deep dive section](/agent_optimization/overview#optimization-algorithms)
+for per-optimizer configuration guides.

@@ -19,12 +19,15 @@ from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
 from . import reporting
+from ..utils.multimodal import get_multimodal_structure_guidance
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 logger = logging.getLogger(__name__)
 
 FEW_SHOT_EXAMPLE_PLACEHOLDER = "FEW_SHOT_EXAMPLE_PLACEHOLDER"
+_MULTIMODAL_STRUCTURE_GUIDANCE = get_multimodal_structure_guidance()
+
 SYSTEM_PROMPT_TEMPLATE = f"""
 You are a prompt editor that modifies a message list to support few-shot learning. Your job is to insert a placeholder where few-shot examples can be inserted and generate a reusable string template for formatting those examples.
 
@@ -51,6 +54,8 @@ Return your output as a JSON object with:
 - example_template: a string template using the fields provided in the examples (you don't need to use all of them)
 
 Respond only with the JSON object. Do not include any explanation or extra text.
+
+{_MULTIMODAL_STRUCTURE_GUIDANCE}
 """
 
 

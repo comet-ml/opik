@@ -4,3 +4,4 @@ pytest-cov
 pytest-env
 orderly_set==5.3.2  # 5.4.0 is broken for python 3.8, this restriction can be removed after it is fixed
 gepa>=0.0.7
+Pillow

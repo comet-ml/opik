@@ -1,3 +1,4 @@
+import json
 import logging
 
 import opik
@@ -5,12 +6,13 @@ from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
 
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from collections.abc import Callable
 from pydantic import BaseModel
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config import chat_prompt, mappers
+from ..optimization_config.chat_prompt import MessageDict
 from ..optimizable_agent import OptimizableAgent
 
 from opik_optimizer.task_evaluator import _create_metric_class
@@ -277,8 +279,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             ImprovedPrompt with reasoning and improved messages
         """
 
+        # Format messages for the template, preserving multimodal structure
+        messages_for_template = prompt.get_messages()
+        # Convert messages to JSON string to preserve multimodal content structure
+        messages_json = json.dumps(messages_for_template, indent=2)
+
         improve_prompt_prompt = IMPROVE_PROMPT_TEMPLATE.format(
-            current_prompt=prompt.get_messages(),
+            current_prompt=messages_json,
             failure_mode_name=root_cause.name,
             failure_mode_description=root_cause.description,
             failure_mode_root_cause=root_cause.root_cause,
@@ -293,14 +300,24 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Retry attempt {attempt}: Using seed {attempt_seed} (base seed: {self.seed})"
             )
 
-        improve_prompt_response = self._call_model(
+        raw_response = self._call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.model,
             seed=attempt_seed,
-            response_model=ImprovedPrompt,
         )
 
-        return improve_prompt_response
+        if isinstance(raw_response, str):
+            try:
+                return ImprovedPrompt.model_validate_json(raw_response)
+            except Exception as exc:  # pragma: no cover - defensive parsing
+                raise ValueError(
+                    f"Failed to parse improved prompt response as JSON: {raw_response}"
+                ) from exc
+        if isinstance(raw_response, ImprovedPrompt):
+            return raw_response
+        raise ValueError(
+            f"Unexpected response type {type(raw_response)} while improving prompt"
+        )
 
     def _generate_and_evaluate_improvement(
         self,
@@ -342,9 +359,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
             improvement_reporter.set_reasoning(improved_prompt_response.reasoning)
 
-        # Convert to chat prompt
-        messages_as_dicts = [
-            {"role": msg.role, "content": msg.content}
+        messages_as_dicts: list[MessageDict] = [
+            cast(MessageDict, {"role": msg.role, "content": msg.content})
             for msg in improved_prompt_response.messages
         ]
 

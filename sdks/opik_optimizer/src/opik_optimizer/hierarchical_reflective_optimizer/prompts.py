@@ -87,6 +87,8 @@ INSTRUCTIONS FOR IMPROVING THE PROMPT:
 3. **Be Surgical**: Make targeted changes that directly address the root cause. Don't add unnecessary instructions or rewrite the entire prompt.
 
 4. **Maintain Structure**: Keep the same message structure (role and content format). Only modify the content where necessary.
+   - If a message has multimodal content (content is a list with text and/or image parts), preserve that structure
+   - Maintain the same content type (string or list) as the original message
 
 5. **Do NOT Add Messages**: Do not add new messages to the prompt. Only modify existing messages. The number of messages in the prompt must remain exactly the same.
 
@@ -94,4 +96,11 @@ INSTRUCTIONS FOR IMPROVING THE PROMPT:
 
 Do not remove any variables or placeholders from any prompt message. You can reposition them within the same message content if needed but never remove them.
 
-Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""
+IMPORTANT: When returning the improved prompt, preserve the exact structure of multimodal content. If a message's content is a list (multimodal), return it as a JSON array, not as a string. If it's a string, return it as a string.
+
+Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt.
+
+RETURN FORMAT:
+- Respond **only** with valid JSON that matches: ```{{"reasoning": "<short paragraph explaining the edits>","messages": [{{"role": "<role>", "content": "<string or list matching original structure>"}},...]}}```
+- Do not include markdown fences, explanations outside the JSON object, or additional keys.
+"""

@@ -11,6 +11,7 @@ from . import reporting
 from .mcp import EvolutionaryMCPContext, initialize_population_mcp
 from ..optimization_config import chat_prompt
 from .. import utils
+from ..utils.message_content import is_multimodal_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,16 @@ class PopulationOps:
             task_desc_for_llm = self._get_task_description_for_llm(prompt)
             current_output_style_guidance = self.output_style_guidance
 
+            # Detect if we're working with multimodal prompts
+            is_multimodal = is_multimodal_prompt(prompt.get_messages())
+
+            def _clone_prompt(messages: list[dict[str, Any]]) -> chat_prompt.ChatPrompt:
+                return chat_prompt.ChatPrompt(
+                    messages=messages,
+                    tools=prompt.tools,
+                    function_map=prompt.function_map,
+                )
+
             # Fresh starts
             if num_fresh_starts > 0:
                 init_pop_report.start_fresh_prompts(num_fresh_starts)
@@ -70,7 +81,8 @@ class PopulationOps:
                             {
                                 "role": "system",
                                 "content": evo_prompts.fresh_start_system_prompt(
-                                    current_output_style_guidance
+                                    current_output_style_guidance,
+                                    is_multimodal=is_multimodal,
                                 ),
                             },
                             {"role": "user", "content": fresh_start_user_prompt},
@@ -87,22 +99,12 @@ class PopulationOps:
                         if all(isinstance(p, dict) for p in fresh_prompts) and all(
                             p.get("role") is not None for p in fresh_prompts
                         ):
-                            population.append(
-                                chat_prompt.ChatPrompt(
-                                    messages=fresh_prompts,
-                                    tools=prompt.tools,
-                                    function_map=prompt.function_map,
-                                )
-                            )
+                            population.append(_clone_prompt(fresh_prompts))
                             init_pop_report.success_fresh_prompts(1)
                         elif all(isinstance(p, list) for p in fresh_prompts):
                             population.extend(
                                 [
-                                    chat_prompt.ChatPrompt(
-                                        messages=p,
-                                        tools=prompt.tools,
-                                        function_map=prompt.function_map,
-                                    )
+                                    _clone_prompt(p)
                                     for p in fresh_prompts[:num_fresh_starts]
                                 ]
                             )
@@ -140,7 +142,8 @@ class PopulationOps:
                             {
                                 "role": "system",
                                 "content": evo_prompts.variation_system_prompt(
-                                    current_output_style_guidance
+                                    current_output_style_guidance,
+                                    is_multimodal=is_multimodal,
                                 ),
                             },
                             {"role": "user", "content": user_prompt_for_variation},
@@ -150,7 +153,9 @@ class PopulationOps:
                     logger.debug(
                         f"Raw response for population variations: {response_content_variations}"
                     )
-                    json_response_variations = json.loads(response_content_variations)
+                    json_response_variations = utils.json_to_dict(
+                        response_content_variations
+                    )
                     generated_prompts_variations = [
                         p["prompt"]
                         for p in json_response_variations.get("prompts", [])
@@ -165,11 +170,7 @@ class PopulationOps:
                         )
                         population.extend(
                             [
-                                chat_prompt.ChatPrompt(
-                                    messages=p,
-                                    tools=prompt.tools,
-                                    function_map=prompt.function_map,
-                                )
+                                _clone_prompt(p)
                                 for p in generated_prompts_variations[
                                     :num_variations_on_initial
                                 ]
