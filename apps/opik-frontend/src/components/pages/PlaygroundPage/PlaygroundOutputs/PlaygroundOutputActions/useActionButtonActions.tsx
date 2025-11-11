@@ -12,6 +12,8 @@ import {
   useCreatedExperiments,
   useSetCreatedExperiments,
   useClearCreatedExperiments,
+  useIsRunning,
+  useSetIsRunning,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -46,7 +48,8 @@ const useActionButtonActions = ({
 
   const { toast } = useToast();
 
-  const [isRunning, setIsRunning] = useState(false);
+  const isRunning = useIsRunning();
+  const setIsRunning = useSetIsRunning();
   const [isToStop, setIsToStop] = useState(false);
   const createdExperiments = useCreatedExperiments();
   const setCreatedExperiments = useSetCreatedExperiments();
@@ -61,8 +64,8 @@ const useActionButtonActions = ({
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
-    clearCreatedExperiments(); // Clear experiments when resetting
-  }, [resetOutputMap, clearCreatedExperiments]);
+    clearCreatedExperiments();
+  }, [resetOutputMap, clearCreatedExperiments, setIsRunning]);
 
   const stopAll = useCallback(() => {
     // nothing to stop
@@ -135,7 +138,7 @@ const useActionButtonActions = ({
   const runAll = useCallback(async () => {
     resetState();
     setIsRunning(true);
-    clearCreatedExperiments(); // Clear previous experiments when starting a new run
+    clearCreatedExperiments();
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
@@ -154,6 +157,7 @@ const useActionButtonActions = ({
     );
   }, [
     resetState,
+    setIsRunning,
     clearCreatedExperiments,
     createCombinations,
     processCombination,
