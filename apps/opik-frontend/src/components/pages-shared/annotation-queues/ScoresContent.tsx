@@ -8,9 +8,9 @@ import { COLUMN_TYPE, ColumnData, ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import FeedbackDefinitionsValueCell from "@/components/shared/DataTableCells/FeedbackDefinitionsValueCell";
-import FeedbackOptionCell from "@/components/shared/DataTableCells/FeedbackOptionCell";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
+import FeedbackOptionCell from "./FeedbackOptionCell";
 
 interface ScoresContentProps {
   annotationQueue: AnnotationQueue;

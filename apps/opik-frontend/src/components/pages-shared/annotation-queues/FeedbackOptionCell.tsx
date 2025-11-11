@@ -1,6 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
-import FeedbackOptionCommentCell from "@/components/shared/DataTableCells/FeedbackOptionCommentCell";
+import FeedbackOptionCommentCell from "./FeedbackOptionCommentCell";
 
 const FeedbackOptionCell = (context: CellContext<unknown, string>) => {
   const value = context.getValue();
