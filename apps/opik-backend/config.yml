@@ -327,7 +327,7 @@ onlineScoring:
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
-  # Default: 5
+  # Default: 10
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-10}
