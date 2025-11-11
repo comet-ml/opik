@@ -62,9 +62,7 @@ const formSchema = z.object({
   instructions: z.string().optional(),
   scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
   comments_enabled: z.boolean(),
-  feedback_definition_names: z
-    .array(z.string())
-    .min(1, "At least one feedback definition is required"),
+  feedback_definition_names: z.array(z.string()).default([]),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -288,7 +286,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                     return (
                       <FormItem>
                         <FormLabel>
-                          Available feedback scores{" "}
+                          Available feedback scores (optional){" "}
                           <ExplainerIcon
                             className="inline"
                             {...EXPLAINERS_MAP[EXPLAINER_ID.visible_scores]}
