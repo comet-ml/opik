@@ -419,9 +419,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
   const clearRowSelection = useCallback(() => {
     setRowSelection({});
+  }, []);
+
+  // Enable table data loading after initial render to allow users to change the date filter
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsTableDataEnabled(true);
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const { data, isPending, refetch } = useTracesOrSpansList(
@@ -438,8 +447,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       toTime: intervalEnd,
     },
     {
+      enabled: isTableDataEnabled,
       refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: "always",
+      refetchOnMount: false,
     },
   );
 

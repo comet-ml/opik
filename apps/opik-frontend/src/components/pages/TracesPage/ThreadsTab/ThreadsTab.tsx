@@ -321,6 +321,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
+
+  // Enable table data loading after initial render to allow users to change the date filter
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsTableDataEnabled(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const { data, isPending, refetch } = useThreadList(
     {
@@ -335,9 +344,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       toTime: intervalEnd,
     },
     {
+      enabled: isTableDataEnabled,
       placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: "always",
+      refetchOnMount: false,
     },
   );
 
