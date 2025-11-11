@@ -6,4 +6,5 @@ export interface PromptVersionLink {
     id: string;
     commit?: string;
     promptId?: string;
+    promptName?: string;
 }

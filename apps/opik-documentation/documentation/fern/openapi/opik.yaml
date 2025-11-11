@@ -8288,6 +8288,9 @@ components:
           type: string
           format: uuid
           readOnly: true
+        prompt_name:
+          type: string
+          readOnly: true
     Experiment_Write:
       required:
       - dataset_name
@@ -9053,6 +9056,9 @@ components:
           type: string
           format: uuid
           readOnly: true
+        prompt_name:
+          type: string
+          readOnly: true
     ExperimentGroupResponse:
       type: object
       properties:
@@ -9776,9 +9782,10 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - to uniquely identify custom providers (e.g.,\
-            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
-            \ Anthropic, etc.)."
+          description: "Provider name - required for custom LLM providers to uniquely\
+            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
+            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
+            \ etc.). This requirement is conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -9833,9 +9840,10 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - to uniquely identify custom providers (e.g.,\
-            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
-            \ Anthropic, etc.)."
+          description: "Provider name - required for custom LLM providers to uniquely\
+            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
+            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
+            \ etc.). This requirement is conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object
@@ -9886,9 +9894,10 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-          description: "Provider name - to uniquely identify custom providers (e.g.,\
-            \ 'ollama', 'vllm'). Should not be set for standard providers (OpenAI,\
-            \ Anthropic, etc.)."
+          description: "Provider name - required for custom LLM providers to uniquely\
+            \ identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom\
+            \ providers. Should not be set for standard providers (OpenAI, Anthropic,\
+            \ etc.). This requirement is conditional and validation is enforced programmatically."
           example: ollama
         headers:
           type: object

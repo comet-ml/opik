@@ -10,6 +10,7 @@ class PromptVersionLinkPublic(UniversalBaseModel):
     id: str
     commit: typing.Optional[str] = None
     prompt_id: typing.Optional[str] = None
+    prompt_name: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

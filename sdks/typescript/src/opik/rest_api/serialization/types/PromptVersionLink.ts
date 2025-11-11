@@ -13,6 +13,7 @@ export const PromptVersionLink: core.serialization.ObjectSchema<
     id: core.serialization.string(),
     commit: core.serialization.string().optional(),
     promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
+    promptName: core.serialization.property("prompt_name", core.serialization.string().optional()),
 });
 
 export declare namespace PromptVersionLink {
@@ -20,5 +21,6 @@ export declare namespace PromptVersionLink {
         id: string;
         commit?: string | null;
         prompt_id?: string | null;
+        prompt_name?: string | null;
     }
 }
