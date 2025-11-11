@@ -15,17 +15,12 @@ import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
-import { ENTITY_TYPE, ENTITY_COLORS } from "@/constants/colors";
+import {
+  RESOURCE_TYPE,
+  RESOURCE_COLORS,
+} from "@/constants/colors";
 
-export enum RESOURCE_TYPE {
-  project,
-  dataset,
-  prompt,
-  experiment,
-  optimization,
-  trial,
-  annotationQueue,
-}
+export { RESOURCE_TYPE } from "@/constants/colors";
 
 export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
@@ -34,7 +29,7 @@ export const RESOURCE_MAP = {
     param: "projectId",
     deleted: "Deleted project",
     label: "project",
-    color: ENTITY_COLORS[ENTITY_TYPE.project],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.project],
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
@@ -42,7 +37,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted dataset",
     label: "dataset",
-    color: ENTITY_COLORS[ENTITY_TYPE.dataset],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.dataset],
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
@@ -50,7 +45,7 @@ export const RESOURCE_MAP = {
     param: "promptId",
     deleted: "Deleted prompt",
     label: "prompt",
-    color: ENTITY_COLORS[ENTITY_TYPE.prompt],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.prompt],
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
@@ -58,7 +53,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted experiment",
     label: "experiment",
-    color: ENTITY_COLORS[ENTITY_TYPE.experiment],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.experiment],
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
@@ -66,7 +61,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "optimization run",
-    color: ENTITY_COLORS[ENTITY_TYPE.optimization],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.optimization],
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
@@ -74,7 +69,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "trial",
-    color: ENTITY_COLORS[ENTITY_TYPE.trial],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.trial],
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
@@ -82,7 +77,7 @@ export const RESOURCE_MAP = {
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
     label: "annotation queue",
-    color: ENTITY_COLORS[ENTITY_TYPE.annotationQueue],
+    color: RESOURCE_COLORS[RESOURCE_TYPE.annotationQueue],
   },
 };
 

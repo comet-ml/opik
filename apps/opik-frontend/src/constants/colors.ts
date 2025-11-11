@@ -1,10 +1,9 @@
 /**
- * Single Source of Truth for entity colors across the application.
- * Use these colors for sidebar icons, navigation tags, and any other entity representations.
+ * Single Source of Truth for resource colors in navigation tags and date tags.
+ * Use these colors for NavigationTag and DateTag components.
  */
 
-export enum ENTITY_TYPE {
-  // Main resources (have navigation tags)
+export enum RESOURCE_TYPE {
   project = "project",
   dataset = "dataset",
   prompt = "prompt",
@@ -12,44 +11,19 @@ export enum ENTITY_TYPE {
   optimization = "optimization",
   trial = "trial",
   annotationQueue = "annotationQueue",
-
-  // Application sections (sidebar only)
-  home = "home",
-  playground = "playground",
-  onlineEvaluation = "onlineEvaluation",
-  automations = "automations",
-  configuration = "configuration",
-  
-  // Bottom menu items
-  documentation = "documentation",
-  quickstartGuide = "quickstartGuide",
-  provideFeedback = "provideFeedback",
 }
 
 /**
- * Color mapping for all entities in the system.
+ * Color mapping for resources.
  * Colors use CSS custom properties defined in the theme.
  */
-export const ENTITY_COLORS: Record<ENTITY_TYPE, string> = {
-  // Main resources
-  [ENTITY_TYPE.project]: "var(--color-blue)",
-  [ENTITY_TYPE.dataset]: "var(--color-yellow)",
-  [ENTITY_TYPE.prompt]: "var(--color-purple)",
-  [ENTITY_TYPE.experiment]: "var(--color-green)",
-  [ENTITY_TYPE.optimization]: "var(--color-yellow)", // Star icon = yellow
-  [ENTITY_TYPE.trial]: "var(--color-yellow)",
-  [ENTITY_TYPE.annotationQueue]: "var(--color-pink)",
-
-  // Application sections
-  [ENTITY_TYPE.home]: "var(--color-orange)", // Brown/orange
-  [ENTITY_TYPE.playground]: "var(--color-burgundy)",
-  [ENTITY_TYPE.onlineEvaluation]: "var(--color-pink)",
-  [ENTITY_TYPE.automations]: "var(--color-blue)",
-  [ENTITY_TYPE.configuration]: "var(--color-gray)",
-  
-  // Bottom menu items
-  [ENTITY_TYPE.documentation]: "var(--color-green)",
-  [ENTITY_TYPE.quickstartGuide]: "var(--color-blue)",
-  [ENTITY_TYPE.provideFeedback]: "var(--color-gray)", // Black/dark gray
+export const RESOURCE_COLORS: Record<RESOURCE_TYPE, string> = {
+  [RESOURCE_TYPE.project]: "var(--color-blue)",
+  [RESOURCE_TYPE.dataset]: "var(--color-yellow)",
+  [RESOURCE_TYPE.prompt]: "var(--color-purple)",
+  [RESOURCE_TYPE.experiment]: "var(--color-green)",
+  [RESOURCE_TYPE.optimization]: "var(--color-yellow)",
+  [RESOURCE_TYPE.trial]: "var(--color-yellow)",
+  [RESOURCE_TYPE.annotationQueue]: "var(--color-pink)",
 };
 

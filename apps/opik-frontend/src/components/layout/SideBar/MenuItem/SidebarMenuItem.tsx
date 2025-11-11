@@ -8,7 +8,6 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { ENTITY_TYPE, ENTITY_COLORS } from "@/constants/colors";
 
 export enum MENU_ITEM_TYPE {
   link = "link",
@@ -25,7 +24,6 @@ export type MenuItem = {
   count?: string;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
-  entityType?: ENTITY_TYPE;
 };
 
 export type MenuItemGroup = {
@@ -104,17 +102,9 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     return null;
   }
 
-  const iconColor =
-    item.entityType !== undefined ? ENTITY_COLORS[item.entityType] : undefined;
-
   const content = (
     <>
-      <item.icon
-        className="size-4 shrink-0"
-        style={
-          iconColor ? ({ color: iconColor } as React.CSSProperties) : undefined
-        }
-      />
+      <item.icon className="size-4 shrink-0" />
       {expanded && (
         <>
           <div className="ml-1 grow truncate">{item.label}</div>
