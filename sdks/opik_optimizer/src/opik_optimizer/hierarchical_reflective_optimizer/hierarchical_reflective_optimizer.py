@@ -401,6 +401,20 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
+        """
+        Optimize a prompt using hierarchical reflective refinement.
+
+        Optional Arguments:
+            experiment_config: Additional configuration for experiment logging.
+            n_samples: Number of dataset samples to evaluate per prompt (None for all).
+            auto_continue: Whether to continue optimization automatically after each round.
+            agent_class: Optional agent implementation to execute prompt evaluations.
+            project_name: Opik project name for trace logging (default: "Optimization").
+            max_trials: Maximum number of optimization iterations to run.
+            max_retries: Maximum retries allowed for addressing a failure mode.
+            optimization_id: Optional ID for the Opik optimization run; when provided it must
+                be a valid UUIDv7 string.
+        """
         # Reset counters at the start of optimization
         self._reset_counters()
         self._should_stop_optimization = False  # Reset stop flag

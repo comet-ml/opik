@@ -393,6 +393,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             candidate_generator: Optional custom function to generate candidate prompts.
                 Overrides default meta-reasoning generator. Should return list[ChatPrompt].
             candidate_generator_kwargs: Optional kwargs to pass to candidate_generator.
+            optimization_id: Optional ID to use when creating the Opik optimization run; when
+                provided it must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Contains the best prompt found, final score, optimization

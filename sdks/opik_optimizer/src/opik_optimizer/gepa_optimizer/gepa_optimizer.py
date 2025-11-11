@@ -193,6 +193,8 @@ class GepaOptimizer(BaseOptimizer):
             display_progress_bar: Display progress bar (default: False)
             seed: Random seed for reproducibility (default: 42)
             raise_on_exception: Raise exceptions instead of continuing (default: True)
+            optimization_id: Optional ID for the Opik optimization run; when provided it
+                must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Result of the optimization

@@ -522,15 +522,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """
         Args:
-            prompt: The prompt to optimize
-            dataset: The dataset to use for evaluation
-            metric: Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`
-            experiment_config: Optional experiment configuration
-            n_samples: Optional number of samples to use
-            auto_continue: Whether to automatically continue optimization
-            agent_class: Optional agent class to use
-            project_name: Opik project name for logging traces (default: "Optimization")
-            mcp_config: MCP tool calling configuration (default: None)
+            prompt: The prompt to optimize.
+            dataset: Dataset used to evaluate each candidate prompt.
+            metric: Objective function receiving `(dataset_item, llm_output)`.
+            experiment_config: Optional experiment configuration metadata.
+            n_samples: Optional number of dataset items to evaluate per prompt.
+            auto_continue: Whether to continue automatically after each generation.
+            agent_class: Optional agent implementation for executing prompts.
+            project_name: Opik project name for logging traces (default: "Optimization").
+            max_trials: Maximum number of prompt evaluations allowed.
+            mcp_config: MCP tool-calling configuration (default: None).
+            optimization_id: Optional ID for the Opik optimization run; when provided it
+                must be a valid UUIDv7 string.
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)

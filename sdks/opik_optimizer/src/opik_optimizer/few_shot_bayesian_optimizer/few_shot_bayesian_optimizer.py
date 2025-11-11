@@ -462,11 +462,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
-            max_trials: Number of trials for Bayesian Optimization (default: 10)
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
             project_name: Opik project name for logging traces (default: "Optimization")
+            max_trials: Number of trials for Bayesian Optimization (default: 10)
+            optimization_id: Optional ID for the Opik optimization run; when provided it
+                must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Result of the optimization

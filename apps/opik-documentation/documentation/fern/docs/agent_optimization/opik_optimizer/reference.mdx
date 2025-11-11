@@ -315,7 +315,7 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true} />
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -465,7 +465,7 @@ optimize_prompt(
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
 <ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
 <ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs to pass to candidate_generator.</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true} />
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -619,17 +619,17 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
-<ParamField path="dataset" type="Dataset">The dataset to use for evaluation</ParamField>
-<ParamField path="metric" type="Callable">Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`</ParamField>
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment configuration</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Optional number of samples to use</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to automatically continue optimization</ParamField>
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10" />
-<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool calling configuration (default: None)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true} />
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize.</ParamField>
+<ParamField path="dataset" type="Dataset">Dataset used to evaluate each candidate prompt.</ParamField>
+<ParamField path="metric" type="Callable">Objective function receiving `(dataset_item, llm_output)`.</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment configuration metadata.</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Optional number of dataset items to evaluate per prompt.</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue automatically after each generation.</ParamField>
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent implementation for executing prompts.</ParamField>
+<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization").</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of prompt evaluations allowed.</ParamField>
+<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool-calling configuration (default: None).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -753,7 +753,7 @@ optimize_prompt(
 <ParamField path="display_progress_bar" type="bool" optional={true} default="False">Display progress bar (default: False)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility (default: 42)</ParamField>
 <ParamField path="raise_on_exception" type="bool" optional={true} default="True">Raise exceptions instead of continuing (default: True)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true} />
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 
 ## HierarchicalReflectiveOptimizer
 
@@ -853,17 +853,17 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="ChatPrompt">the prompt to optimize</ParamField>
-<ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
-<ParamField path="metric" type="Callable">A metric function, this function should have two arguments: dataset_item and llm_output</ParamField>
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="experiment_config" type="dict | None" optional={true} />
 <ParamField path="n_samples" type="int | None" optional={true} />
 <ParamField path="auto_continue" type="bool" optional={true} default="False" />
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
+<ParamField path="project_name" type="str" optional={true} default="Optimization" />
 <ParamField path="max_trials" type="int" optional={true} default="5" />
 <ParamField path="max_retries" type="int" optional={true} default="2" />
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true} />
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
