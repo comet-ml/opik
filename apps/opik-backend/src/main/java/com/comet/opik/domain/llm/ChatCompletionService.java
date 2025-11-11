@@ -101,13 +101,15 @@ public class ChatCompletionService {
                                 .anyMatch(content -> content instanceof dev.langchain4j.data.message.ImageContent
                                         || content instanceof dev.langchain4j.data.message.VideoContent));
 
-        // For custom LLMs with multimodal content, use direct ChatCompletionRequest API
-        // This is needed because OpenAiChatModel doesn't support VideoContent serialization
+        // For custom LLMs, always use direct ChatCompletionRequest API
+        // This is needed because:
+        // 1. OpenAiChatModel doesn't support VideoContent serialization
+        // 2. vLLM has a bug where it returns SSE format even when stream:false is requested
         var llmProvider = llmProviderFactory.getLlmProvider(modelParameters.name());
-        if (hasMultimodalContent && llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM) {
+        if (llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM) {
             log.info(
-                    "Using direct ChatCompletionRequest API for custom LLM '{}' with multimodal content, workspaceId '{}'",
-                    modelParameters.name(), workspaceId);
+                    "Using direct ChatCompletionRequest API for custom LLM '{}' (hasMultimodal={}), workspaceId '{}'",
+                    modelParameters.name(), hasMultimodalContent, workspaceId);
             return scoreTraceViaDirectAPI(chatRequest, modelParameters, workspaceId);
         }
 

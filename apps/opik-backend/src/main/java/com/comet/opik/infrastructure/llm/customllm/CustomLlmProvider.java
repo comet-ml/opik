@@ -30,10 +30,11 @@ public class CustomLlmProvider implements LlmProviderService {
         log.info("CustomLlmProvider.generate() called with stream='{}', streamOptions='{}', model='{}'",
                 request.stream(), request.streamOptions(), request.model());
         ChatCompletionRequest cleanedRequest = cleanModelName(request);
-        log.info("CustomLlmProvider after cleanModelName: stream='{}', streamOptions='{}', model='{}', messageCount='{}'",
+        log.info(
+                "CustomLlmProvider after cleanModelName: stream='{}', streamOptions='{}', model='{}', messageCount='{}'",
                 cleanedRequest.stream(), cleanedRequest.streamOptions(), cleanedRequest.model(),
                 cleanedRequest.messages() != null ? cleanedRequest.messages().size() : 0);
-        
+
         // Extra validation to ensure streaming is disabled
         if (Boolean.TRUE.equals(cleanedRequest.stream())) {
             log.warn("Request has stream=true, but generate() should never use streaming! Forcing stream=false");
@@ -43,8 +44,8 @@ public class CustomLlmProvider implements LlmProviderService {
                     .temperature(cleanedRequest.temperature())
                     .topP(cleanedRequest.topP())
                     .n(cleanedRequest.n())
-                    .stream(false)  // Force non-streaming
-                    .streamOptions(null)  // Explicitly null
+                    .stream(false) // Force non-streaming
+                    .streamOptions(null) // Explicitly null
                     .stop(cleanedRequest.stop())
                     .maxTokens(cleanedRequest.maxTokens())
                     .maxCompletionTokens(cleanedRequest.maxCompletionTokens())
@@ -65,21 +66,34 @@ public class CustomLlmProvider implements LlmProviderService {
                     .functionCall(cleanedRequest.functionCall())
                     .build();
         }
-        
+
         try {
             return openAiClient.chatCompletion(cleanedRequest).execute();
         } catch (Exception e) {
             // Check if this is the SSE format error (vLLM bug where it ignores stream:false)
-            if (e.getCause() instanceof JsonProcessingException jsonException 
+            // Walk the entire exception chain to find JsonProcessingException
+            Throwable current = e;
+            JsonProcessingException jsonException = null;
+
+            while (current != null) {
+                if (current instanceof JsonProcessingException) {
+                    jsonException = (JsonProcessingException) current;
+                    break;
+                }
+                current = current.getCause();
+            }
+
+            if (jsonException != null && jsonException.getMessage() != null
                     && jsonException.getMessage().contains("Unrecognized token 'data'")) {
-                log.warn("vLLM returned SSE format despite stream:false. Falling back to SSE parsing for model '{}'",
+                log.warn("SSE format detected despite stream:false. Falling back to SSE parsing for model '{}'",
                         cleanedRequest.model());
                 return generateViaStreaming(cleanedRequest, workspaceId);
             }
+
             throw e;
         }
     }
-    
+
     /**
      * Fallback for vLLM bug where it returns SSE format even when stream:false.
      * Collects all streaming chunks and returns the final complete response.
@@ -89,7 +103,7 @@ public class CustomLlmProvider implements LlmProviderService {
         AtomicReference<ChatCompletionResponse> lastResponse = new AtomicReference<>();
         AtomicReference<Throwable> error = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
-        
+
         // Force stream: true since we're using streaming API to parse SSE
         ChatCompletionRequest streamRequest = ChatCompletionRequest.builder()
                 .model(request.model())
@@ -97,7 +111,7 @@ public class CustomLlmProvider implements LlmProviderService {
                 .temperature(request.temperature())
                 .topP(request.topP())
                 .n(request.n())
-                .stream(true)  // Enable streaming to properly parse SSE
+                .stream(true) // Enable streaming to properly parse SSE
                 .streamOptions(request.streamOptions())
                 .stop(request.stop())
                 .maxTokens(request.maxTokens())
@@ -118,24 +132,25 @@ public class CustomLlmProvider implements LlmProviderService {
                 .functions(request.functions())
                 .functionCall(request.functionCall())
                 .build();
-        
+
         // Use streaming API to handle SSE format
         openAiClient.chatCompletion(streamRequest)
                 .onPartialResponse(response -> {
                     // Accumulate content from delta
                     if (response.choices() != null && !response.choices().isEmpty()) {
                         var delta = response.choices().get(0).delta();
-                        if (delta != null && delta.content() != null) {
-                            accumulatedContent.append(delta.content());
-                            log.debug("Accumulated {} chars for model '{}'", 
-                                    accumulatedContent.length(), request.model());
+                        if (delta != null && delta.content() != null && !delta.content().isEmpty()) {
+                            String chunk = delta.content();
+                            accumulatedContent.append(chunk);
+                            log.info("Accumulated chunk of {} chars, total now: {} chars for model '{}'",
+                                    chunk.length(), accumulatedContent.length(), request.model());
                         }
                     }
                     // Keep the last response for metadata
                     lastResponse.set(response);
                 })
                 .onComplete(() -> {
-                    log.debug("SSE stream completed for model '{}', total content length: {}", 
+                    log.debug("SSE stream completed for model '{}', total content length: {}",
                             request.model(), accumulatedContent.length());
                     latch.countDown();
                 })
@@ -145,7 +160,7 @@ public class CustomLlmProvider implements LlmProviderService {
                     latch.countDown();
                 })
                 .execute();
-        
+
         // Wait for stream to complete (with 5 minute timeout matching our config)
         try {
             boolean completed = latch.await(5, TimeUnit.MINUTES);
@@ -156,22 +171,22 @@ public class CustomLlmProvider implements LlmProviderService {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for vLLM SSE stream", e);
         }
-        
+
         if (error.get() != null) {
             log.error("Error during SSE streaming fallback for model '{}'", request.model(), error.get());
             throw new RuntimeException("Failed to parse vLLM SSE response", error.get());
         }
-        
+
         if (lastResponse.get() == null) {
             throw new RuntimeException("No response received from vLLM SSE stream");
         }
-        
+
         // Build final response with accumulated content
         var completeContent = accumulatedContent.toString();
         if (completeContent.isEmpty()) {
             log.warn("SSE stream completed but accumulated content is empty for model '{}'", request.model());
         }
-        
+
         var originalResponse = lastResponse.get();
         var completeChoice = dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice.builder()
                 .index(0)
@@ -182,7 +197,7 @@ public class CustomLlmProvider implements LlmProviderService {
                         ? originalResponse.choices().get(0).finishReason()
                         : "stop")
                 .build();
-        
+
         var completeResponse = ChatCompletionResponse.builder()
                 .id(originalResponse.id())
                 .created(originalResponse.created())
@@ -190,8 +205,8 @@ public class CustomLlmProvider implements LlmProviderService {
                 .choices(java.util.List.of(completeChoice))
                 .usage(originalResponse.usage())
                 .build();
-        
-        log.info("Successfully parsed vLLM SSE response for model '{}', content length: {}", 
+
+        log.info("Successfully parsed vLLM SSE response for model '{}', content length: {}",
                 request.model(), completeContent.length());
         return completeResponse;
     }
