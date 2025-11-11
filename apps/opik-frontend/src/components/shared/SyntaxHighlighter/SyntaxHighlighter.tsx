@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
@@ -12,7 +12,7 @@ import {
 import { useScrollRestoration } from "@/components/shared/SyntaxHighlighter/hooks/useScrollRestoration";
 import CodeMirrorHighlighter from "@/components/shared/SyntaxHighlighter/CodeMirrorHighlighter";
 import MarkdownHighlighter from "@/components/shared/SyntaxHighlighter/MarkdownHighlighter";
-import { ExpandedState, OnChangeFn } from "@tanstack/react-table";
+import { OnChangeFn } from "@/types/shared";
 
 export type SyntaxHighlighterProps = {
   data: object;
@@ -20,10 +20,6 @@ export type SyntaxHighlighterProps = {
   preserveKey?: string;
   search?: string;
   withSearch?: boolean;
-  controlledExpanded?: ExpandedState;
-  onExpandedChange?: (
-    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-  ) => void;
   scrollPosition?: number;
   onScrollPositionChange?: OnChangeFn<number>;
   maxHeight?: string;
@@ -35,8 +31,6 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   preserveKey,
   search: searchValue,
   withSearch,
-  controlledExpanded,
-  onExpandedChange,
   scrollPosition,
   onScrollPositionChange,
   maxHeight,
@@ -73,22 +67,10 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     />
   );
 
-  const copyText = useMemo(() => {
-    if (typeof code.message === "object" && code.message !== null) {
-      try {
-        return JSON.stringify(code.message, null, 2);
-      } catch (error) {
-        // Fallback for objects that can't be JSON stringified
-        return String(code.message);
-      }
-    }
-    return String(code.message);
-  }, [code.message]);
-
   const copyButton = (
     <CopyButton
       message="Successfully copied code"
-      text={copyText}
+      text={code.message}
       tooltipText="Copy code"
     />
   );
@@ -103,8 +85,6 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
         modeSelector={modeSelector}
         copyButton={copyButton}
         withSearch={withSearch}
-        controlledExpanded={controlledExpanded}
-        onExpandedChange={onExpandedChange}
         scrollRef={scrollRef}
         onScroll={handleScroll}
         maxHeight={maxHeight}

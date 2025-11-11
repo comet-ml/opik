@@ -586,6 +586,20 @@
   }
 }
 
+.comet-compare-optimizations-table {
+  thead[data-sticky-vertical] {
+    top: 0 !important;
+  }
+
+  thead:before {
+    height: 0 !important;
+  }
+
+  table {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+  }
+}
+
 .comet-table {
   /* resets padding for all nested cells wrappers */
   td [data-cell-wrapper="true"] [data-cell-wrapper="true"],
@@ -624,16 +638,6 @@
     white-space: preserve-breaks;
     overflow-wrap: break-word;
     word-break: break-word;
-  }
-}
-
-/* Specific styling for MarkdownHighlighter component only */
-.comet-markdown-highlighter {
-  /* Make H2 about the same size as strong elements */
-  h2 {
-    @apply text-base font-medium; /* Same size as base text but medium weight like strong */
-    margin-top: 1rem;
-    margin-bottom: 0.5rem;
   }
 }
 

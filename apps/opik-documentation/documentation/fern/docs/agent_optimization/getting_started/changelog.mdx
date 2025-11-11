@@ -1,0 +1,23 @@
+---
+title: "Changelog"
+description: "Release notes focused on Agent Optimizer features."
+---
+
+Stay current on Agent Optimizer updates. Each entry below reflects a version bump in `sdks/opik_optimizer/pyproject.toml` on `main`. The compare links jump straight to the commits that landed in that release. As Opik is a monorepo, you will see other non-optimizer related changes in the commit links below.
+
+| Date | Version | Highlights |
+| --- | --- | --- |
+| **2025-10-31** | `2.2.1` | Hardened the GEPA optimizer with new candidate utilities, reporting fixes, and clearer trial warnings. [Commits →](https://github.com/comet-ml/opik/compare/54eeef28c7eb0ddfd25bd471c3e33d8c95d3a57f...e8903c98843c14f87069ef80da02c53bf18e0cb9) |
+| **2025-10-23** | `2.2.0` | Standardized optimizer public methods, reorganized algorithm examples under `scripts/optimizer_algorithms/`, and removed legacy MIPRO/test cruft. [Commits →](https://github.com/comet-ml/opik/compare/3274ccf22f6c9fd0ec1d509d2a504832dae2fb61...54eeef28c7eb0ddfd25bd471c3e33d8c95d3a57f) |
+| **2025-10-19** | `2.1.3` | Added multi-metric optimization objectives (secondary feedback charts, example, tests) and improved Hierarchical Reflective Optimizer logging/docs. [Commits →](https://github.com/comet-ml/opik/compare/a0d049f8a45a010f8ae1f6eecc73ff4c2c1ba29f...3274ccf22f6c9fd0ec1d509d2a504832dae2fb61) |
+| **2025-10-11** | `2.1.2` | Polish release that fixes missing optimizer names across GEPA/HRO metadata so dashboards and docs stay consistent. [Commits →](https://github.com/comet-ml/opik/compare/04e0937e26bead34a70421057025bc182bf957e3...a0d049f8a45a010f8ae1f6eecc73ff4c2c1ba29f) |
+| **2025-10-10** | `2.1.1` | Introduced the Hierarchical Reflective Optimizer with reference docs, reporting, and sample scripts while pinning LiteLLM for stability. [Commits →](https://github.com/comet-ml/opik/compare/94da6803fd0fd4afd6cb5737bca39c630956f38d...04e0937e26bead34a70421057025bc182bf957e3) |
+| **2025-10-08** | `2.1.0` | Launched the Parameter Optimizer (search spaces, sensitivity analysis, API compliance tests) plus parameter-only tuning docs/examples and MCP test updates. [Commits →](https://github.com/comet-ml/opik/compare/516ba494ffeeaf7ba9d49337f336ac7cd360a4f2...94da6803fd0fd4afd6cb5737bca39c630956f38d) |
+| **2025-10-02** | `2.0.1` | Added the explicit GEPA dependency and `__init__.py` files for optimizer test packages so installs run reliably. [Commits →](https://github.com/comet-ml/opik/compare/c2230e13a2d956635f588bc0a52df16421507b6f...516ba494ffeeaf7ba9d49337f336ac7cd360a4f2) |
+| **2025-10-01** | `2.0.0` | Unified optimizer method signatures and delivered MCP caching/tooling updates for the Evolutionary Optimizer. [Commits →](https://github.com/comet-ml/opik/compare/8207231ec66a718e3247d14ec7e48d5964452bfb...c2230e13a2d956635f588bc0a52df16421507b6f) |
+| **2025-09-24** | `1.1.0` | GEPA shipped with docs/tests, plus search_wikipedia tool improvements, MCP invocation tuning, logging updates, and dependency/test cleanup across the SDK. [Commits →](https://github.com/comet-ml/opik/compare/7e250028959dd26d3f2ed5df5309ad49301cf283...8207231ec66a718e3247d14ec7e48d5964452bfb) |
+| **2025-09-05** | `1.0.6` | License alignment and packaging cleanup that moved versioning into `pyproject.toml` ahead of the public preview. [Commit →](https://github.com/comet-ml/opik/commit/7e250028959dd26d3f2ed5df5309ad49301cf283) |
+
+<Info>
+  Looking for older updates? Browse the [full Opik changelog](/changelog) and filter by the **Agent Optimization** tag.
+</Info>

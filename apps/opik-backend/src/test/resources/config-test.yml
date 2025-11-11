@@ -134,7 +134,7 @@ authentication:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
-  # Description: Whether to enable virtual threads for Jetty’s thread pool.
+  # Description: Whether to enable virtual threads for Jetty's thread pool.
   enableVirtualThreads: false
   # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
@@ -147,7 +147,15 @@ server:
   # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
   applicationConnectors:
     - type: http
+      # Default: 8080
+      # Description: The port on which the application HTTP connector listens
+      port: 8080
       maxRequestHeaderSize: 16KB
+  adminConnectors:
+    - type: http
+      # Default: 8081
+      # Description: The port on which the admin HTTP connector listens
+      port: 8081
 
 # Jackson JSON processing configuration
 # Controls limits for JSON deserialization to prevent memory exhaustion
@@ -219,10 +227,10 @@ onlineScoring:
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: 'online_scoring'
-  # Default: 5
+  # Default: 10
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
-  consumerBatchSize: 5
+  consumerBatchSize: 10
   # Default: 10
   # Description: Claim pending messages every N polling intervals (global default)
   claimIntervalRatio: 10

@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 export type TagListRendererProps = {
   tags: string[];
@@ -51,7 +52,9 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
 
   return (
     <div className="flex min-h-7 w-full flex-wrap items-center gap-1.5 overflow-x-hidden">
-      <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
+      <TooltipWrapper content="Tags list">
+        <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
+      </TooltipWrapper>
       {[...tags].sort().map((tag) => {
         return (
           <RemovableTag
