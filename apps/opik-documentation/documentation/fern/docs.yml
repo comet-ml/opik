@@ -1231,13 +1231,13 @@ redirects:
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/best_practices/multi-metric-optimization"
-    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/optimization/define_metrics#compose-metrics"
     permanent: true
   - source: "/docs/opik/agent_optimization/best_practices/multi_metric_optimization"
-    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/optimization/define_metrics#compose-metrics"
     permanent: true
   - source: "/docs/opik/agent_optimization/multi_metric_optimization"
-    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/optimization/define_metrics#compose-metrics"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/overview"
     destination: "/docs/opik/agent_optimization/overview"
@@ -1246,7 +1246,10 @@ redirects:
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/multi_metric_optimization"
-    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/optimization/define_metrics#compose-metrics"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/optimization/define_metrics#compose-metrics"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/faq"
     destination: "/docs/opik/agent_optimization/faq"
