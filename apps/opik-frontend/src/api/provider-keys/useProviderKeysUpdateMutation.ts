@@ -7,10 +7,10 @@ import api, {
   PROVIDERS_KEYS_KEY,
 } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
-import { ProviderKeyWithAPIKey } from "@/types/providers";
+import { PartialProviderKeyUpdate } from "@/types/providers";
 
 type UseProviderKeyUpdateMutationParams = {
-  providerKey: Partial<ProviderKeyWithAPIKey>;
+  providerKey: PartialProviderKeyUpdate;
 };
 
 const useProviderKeysUpdateMutation = () => {

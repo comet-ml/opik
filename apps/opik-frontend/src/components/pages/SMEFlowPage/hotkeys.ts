@@ -1,3 +1,5 @@
+import { modifierKey, isMac } from "@/lib/utils";
+
 export enum SME_ACTION {
   PREVIOUS = "previous",
   NEXT = "next",
@@ -6,11 +8,6 @@ export enum SME_ACTION {
   BLUR_COMMENT = "blur_comment",
   FOCUS_FEEDBACK_SCORES = "focus_feedback_scores",
 }
-
-const isMac =
-  typeof navigator !== "undefined" &&
-  navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-const modifierKey = isMac ? "meta" : "ctrl";
 
 export const SME_HOTKEYS = {
   [SME_ACTION.PREVIOUS]: {
