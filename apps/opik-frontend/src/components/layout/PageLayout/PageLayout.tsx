@@ -30,8 +30,22 @@ const PageLayout = () => {
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
 
   // Force sidebar collapsed on mobile, use stored preference on desktop
-  const isMobile =
-    typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
+  // Use state to prevent recalculation on every render
+  const [isMobile, setIsMobile] = useState(() => {
+    return typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
+  });
+
+  // Add resize listener to update mobile state only when window is actually resized
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
+      setIsMobile(mobile);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const expanded = isMobile ? false : storedExpanded;
 
   // Show welcome wizard if enabled and not completed
