@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useHotkeys } from "react-hotkeys-hook";
 import {
+  ArrowRightLeft,
   Brain,
   ChevronRight,
   Clock,
@@ -38,6 +39,7 @@ const EXPAND_HOTKEYS = ["⏎"];
 const DETAILS_SECTION_COMPONENTS = [
   TREE_DATABLOCK_TYPE.DURATION,
   TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS,
+  TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN,
   TREE_DATABLOCK_TYPE.ESTIMATED_COST,
   TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES,
   TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
@@ -206,6 +208,32 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
       total_estimated_cost: estimatedCost,
     } = node.data;
 
+    const promptTokens = node.data.usage?.prompt_tokens;
+    const completionTokens = node.data.usage?.completion_tokens;
+
+    const tokensBreakdownTooltip = node.data.usage ? (
+      <div className="space-y-2">
+        <div className="space-y-0.5">
+          <div className="text-sm font-medium">Token Usage</div>
+          <div className="text-xs">
+            <span className="font-medium">Input:</span> {promptTokens} |{" "}
+            <span className="font-medium">Output:</span> {completionTokens} |{" "}
+            <span className="font-medium">Total:</span> {tokens}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <div className="text-xs font-medium opacity-75">Breakdown:</div>
+          <pre className="whitespace-pre font-mono text-xs opacity-75">
+            {Object.entries(node.data.usage)
+              .map(([key, value]) => `"${key}": ${value}`)
+              .join(",\n")}
+          </pre>
+        </div>
+      </div>
+    ) : (
+      ""
+    );
+
     return (
       <div className="flex h-5 items-center gap-3 overflow-x-hidden">
         {Boolean(guardrailStatus !== null) && (
@@ -238,6 +266,16 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
             </div>
           </TooltipWrapper>
         )}
+        {config[TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN] &&
+          isNumber(promptTokens) &&
+          isNumber(completionTokens) && (
+            <TooltipWrapper content={tokensBreakdownTooltip}>
+              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+                <ArrowRightLeft className="size-3 shrink-0" /> {promptTokens}/
+                {completionTokens}
+              </div>
+            </TooltipWrapper>
+          )}
         {config[TREE_DATABLOCK_TYPE.ESTIMATED_COST] &&
           !isUndefined(estimatedCost) && (
             <TooltipWrapper

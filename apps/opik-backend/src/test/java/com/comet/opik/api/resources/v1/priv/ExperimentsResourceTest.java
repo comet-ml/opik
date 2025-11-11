@@ -109,8 +109,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -203,7 +203,7 @@ class ExperimentsResourceTest {
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
@@ -1065,7 +1065,7 @@ class ExperimentsResourceTest {
 
             var prompt = podamFactory.manufacturePojo(Prompt.class);
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
-            PromptVersionLink versionLink = buildVersionLink(promptVersion);
+            PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
             var experiments = experimentResourceClient.generateExperimentList()
                     .stream()
@@ -1789,7 +1789,7 @@ class ExperimentsResourceTest {
             List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
                     .parallel()
                     .mapToObj(i -> {
-                        PromptVersionLink versionLink = buildVersionLink(promptVersion);
+                        PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
                         var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .promptVersion(versionLink)
@@ -1832,8 +1832,8 @@ class ExperimentsResourceTest {
             List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
                     .parallel()
                     .mapToObj(i -> {
-                        PromptVersionLink versionLink = buildVersionLink(promptVersion);
-                        PromptVersionLink versionLink2 = buildVersionLink(promptVersion2);
+                        PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
+                        PromptVersionLink versionLink2 = buildVersionLink(promptVersion2, prompt2.name());
 
                         var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
@@ -2134,7 +2134,7 @@ class ExperimentsResourceTest {
 
                 var prompt = podamFactory.manufacturePojo(Prompt.class);
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
-                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
@@ -2419,7 +2419,7 @@ class ExperimentsResourceTest {
 
                 var prompt = podamFactory.manufacturePojo(Prompt.class);
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
-                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
@@ -2680,11 +2680,12 @@ class ExperimentsResourceTest {
                 .build();
     }
 
-    private static PromptVersionLink buildVersionLink(PromptVersion promptVersion) {
+    private static PromptVersionLink buildVersionLink(PromptVersion promptVersion, String promptName) {
         return PromptVersionLink.builder()
                 .id(promptVersion.id())
                 .commit(promptVersion.commit())
                 .promptId(promptVersion.promptId())
+                .promptName(promptName)
                 .build();
     }
 
@@ -2991,7 +2992,7 @@ class ExperimentsResourceTest {
                                     var prompt = podamFactory.manufacturePojo(Prompt.class);
                                     var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY,
                                             TEST_WORKSPACE);
-                                    return buildVersionLink(promptVersion);
+                                    return buildVersionLink(promptVersion, prompt.name());
                                 })
                                 .toList();
                         var experiment = experimentResourceClient.createPartialExperiment()
@@ -3293,7 +3294,7 @@ class ExperimentsResourceTest {
             var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
-                    promptVersion.promptId());
+                    promptVersion.promptId(), promptName);
 
             var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
@@ -3361,7 +3362,7 @@ class ExperimentsResourceTest {
         @Test
         void createWithInvalidPromptVersionId() {
             var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
-                    .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate()))
+                    .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
                     .build();
 
             var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, "Prompt version not found");

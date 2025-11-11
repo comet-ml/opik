@@ -33,6 +33,7 @@ import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
+import { Card } from "@/components/ui/card";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
@@ -44,12 +45,12 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTable from "@/components/shared/DataTable/DataTable";
+import { DataTableWrapperProps } from "@/components/shared/DataTable/DataTableWrapper";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import BestPrompt from "@/components/pages/CompareOptimizationsPage/BestPrompt";
@@ -73,12 +74,25 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "optimizer",
   "prompt",
-  "examples",
   "objective_name",
   COLUMN_CREATED_AT_ID,
 ];
+
+const StickyTableWrapperWithBorder: React.FC<DataTableWrapperProps> = ({
+  children,
+}) => {
+  return (
+    <div
+      className="comet-sticky-table comet-compare-optimizations-table overflow-x-auto overflow-y-hidden rounded-md"
+      {...{
+        [TABLE_WRAPPER_ATTRIBUTE]: "",
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
 const CompareOptimizationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -194,11 +208,12 @@ const CompareOptimizationsPage: React.FC = () => {
     [experiments, search],
   );
 
-  const { scoreMap, bestExperiment } = useMemo(() => {
+  const { scoreMap, bestExperiment, baselineExperiment } = useMemo(() => {
     const retVal: {
       scoreMap: Record<string, { score: number; percentage?: number }>;
       baseScore: number;
       bestExperiment?: Experiment;
+      baselineExperiment?: Experiment;
     } = {
       scoreMap: {},
       baseScore: 0,
@@ -208,6 +223,8 @@ const CompareOptimizationsPage: React.FC = () => {
     const sortedRows = experiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
+
+    retVal.baselineExperiment = sortedRows[0];
 
     if (
       !optimization?.objective_name ||
@@ -275,9 +292,9 @@ const CompareOptimizationsPage: React.FC = () => {
         size: 400,
         accessorFn: (row) => {
           const val = get(row.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
-          return val;
+
+          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
         },
-        cell: PrettyCell as never,
       },
       {
         id: "examples",
@@ -382,104 +399,119 @@ const CompareOptimizationsPage: React.FC = () => {
   }
 
   return (
-    <PageBodyScrollContainer>
-      <PageBodyStickyContainer
-        className="pb-4 pt-6"
-        direction="horizontal"
-        limitWidth
-      >
-        <div className="mb-4 flex min-h-8 flex-nowrap items-center gap-2">
-          <h1 className="comet-title-l truncate break-words">{title}</h1>
-          {optimization?.status && (
-            <Tag
-              variant={STATUS_TO_VARIANT_MAP[optimization.status]}
-              size="md"
-              className="capitalize"
-            >
-              {optimization.status}
-            </Tag>
-          )}
-        </div>
-      </PageBodyStickyContainer>
-      <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
-        direction="bidirectional"
-        limitWidth
-      >
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-        </div>
-        <div className="flex items-center gap-2">
-          <TooltipWrapper content={`Refresh trials list`}>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => {
-                refetchOptimization();
-                refetchExperiments();
-              }}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
-          <DataTableRowHeightSelector
-            type={height as ROW_HEIGHT}
-            setType={setHeight}
+    <>
+      <PageBodyScrollContainer>
+        <PageBodyStickyContainer
+          className="pb-4 pt-6"
+          direction="horizontal"
+          limitWidth
+        >
+          <div className="mb-4 flex min-h-8 flex-nowrap items-center gap-2">
+            <h1 className="comet-title-l truncate break-words">{title}</h1>
+            {optimization?.status && (
+              <Tag
+                variant={STATUS_TO_VARIANT_MAP[optimization.status]}
+                size="md"
+                className="capitalize"
+              >
+                {optimization.status}
+              </Tag>
+            )}
+          </div>
+        </PageBodyStickyContainer>
+        <PageBodyStickyContainer
+          className="pb-6"
+          direction="horizontal"
+          limitWidth
+        >
+          <OptimizationProgressChartContainer
+            experiments={experiments}
+            bestEntityId={bestExperiment?.id}
+            objectiveName={optimization?.objective_name}
           />
-          <ColumnsButton
-            columns={columnsDef}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-        </div>
-      </PageBodyStickyContainer>
-      <PageBodyStickyContainer
-        className="z-[9] flex flex-row gap-x-4 overflow-x-auto pb-6"
-        direction="horizontal"
-        limitWidth
-      >
-        <OptimizationProgressChartContainer
-          experiments={experiments}
-          bestEntityId={bestExperiment?.id}
-          objectiveName={optimization?.objective_name}
-        />
-        {bestExperiment && optimization ? (
-          <BestPrompt
-            experiment={bestExperiment}
-            optimization={optimization}
-            scoreMap={scoreMap}
-          ></BestPrompt>
-        ) : null}
-      </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        onRowClick={handleRowClick}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        getRowId={getRowId}
-        rowHeight={height}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        TableBody={DataTableVirtualBody}
-        stickyHeader
-      />
-      <PageBodyStickyContainer
-        className="h-4"
-        direction="horizontal"
-        limitWidth
-      ></PageBodyStickyContainer>
-    </PageBodyScrollContainer>
+        </PageBodyStickyContainer>
+        <PageBodyStickyContainer
+          className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+          direction="bidirectional"
+          limitWidth
+        >
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search!}
+              setSearchText={setSearch}
+              placeholder="Search by name"
+              className="w-[320px]"
+              dimension="sm"
+            ></SearchInput>
+          </div>
+          <div className="flex items-center gap-2">
+            <TooltipWrapper content={`Refresh trials list`}>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="shrink-0"
+                onClick={() => {
+                  refetchOptimization();
+                  refetchExperiments();
+                }}
+              >
+                <RotateCw />
+              </Button>
+            </TooltipWrapper>
+            <DataTableRowHeightSelector
+              type={height as ROW_HEIGHT}
+              setType={setHeight}
+            />
+            <ColumnsButton
+              columns={columnsDef}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+            ></ColumnsButton>
+          </div>
+        </PageBodyStickyContainer>
+        <PageBodyStickyContainer
+          className="flex flex-row gap-x-4 pb-6"
+          direction="horizontal"
+          limitWidth
+        >
+          <div className="flex min-w-0 flex-1">
+            <Card className="h-full flex-1 overflow-hidden">
+              <DataTable
+                columns={columns}
+                data={rows}
+                onRowClick={handleRowClick}
+                sortConfig={sortConfig}
+                resizeConfig={resizeConfig}
+                getRowId={getRowId}
+                rowHeight={height}
+                columnPinning={DEFAULT_COLUMN_PINNING}
+                noData={<DataTableNoData title={noDataText} />}
+                TableWrapper={StickyTableWrapperWithBorder}
+                TableBody={DataTableVirtualBody}
+                stickyHeader
+              />
+            </Card>
+          </div>
+          <div className="w-2/5 shrink-0">
+            {bestExperiment && optimization ? (
+              <BestPrompt
+                experiment={bestExperiment}
+                optimization={optimization}
+                scoreMap={scoreMap}
+                baselineExperiment={baselineExperiment}
+              ></BestPrompt>
+            ) : null}
+          </div>
+        </PageBodyStickyContainer>
+        <PageBodyStickyContainer
+          className="h-4"
+          direction="horizontal"
+          limitWidth
+        ></PageBodyStickyContainer>
+      </PageBodyScrollContainer>
+    </>
   );
 };
 

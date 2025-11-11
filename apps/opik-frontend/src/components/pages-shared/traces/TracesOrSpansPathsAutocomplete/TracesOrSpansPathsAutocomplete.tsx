@@ -11,7 +11,7 @@ import useTracesOrSpansList, {
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import { PROJECTS_SELECT_QUERY_KEY } from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { Project } from "@/types/projects";
-import { PLAYGROUND_PROJECT_NAME } from "@/api/playground/createLogPlaygroundProcessor";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 type CachedProjectsData = { content: Project[]; total: number };
 
@@ -66,6 +66,20 @@ const TracesOrSpansPathsAutocomplete: React.FC<
     },
   );
 
+  const { data: dataNonTruncated, isPending: isPendingNonTruncated } =
+    useTracesOrSpansList(
+      {
+        projectId,
+        type,
+        page: 1,
+        size: 10,
+        truncate: false,
+      },
+      {
+        enabled: isProjectId,
+      },
+    );
+
   // Get project name from prop if provided, otherwise look up from cached projects data
   const projectName = useMemo(() => {
     // If projectName is provided as prop, use it directly
@@ -91,7 +105,13 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   }, [projectId, queryClient, projectNameProp]);
 
   const items = useMemo(() => {
-    const hasTraces = data?.content && data.content.length > 0;
+    // Combine both truncated (100) and non-truncated (10) traces
+    // Truncated traces maximize chance of catching changes in structure
+    // Non-truncated traces provide fallback for complete JSON paths
+    const truncatedTraces = data?.content || [];
+    const nonTruncatedTraces = dataNonTruncated?.content || [];
+    const allTraces = [...truncatedTraces, ...nonTruncatedTraces];
+    const hasTraces = allTraces.length > 0;
     const isPlaygroundProject = projectName === PLAYGROUND_PROJECT_NAME;
 
     let baseSuggestions: string[] = [];
@@ -100,8 +120,8 @@ const TracesOrSpansPathsAutocomplete: React.FC<
     if (isPlaygroundProject && !hasTraces) {
       baseSuggestions = PLAYGROUND_DEFAULT_SUGGESTIONS;
     } else {
-      // Otherwise, use the existing logic to extract paths from traces
-      baseSuggestions = (data?.content || []).reduce<string[]>((acc, d) => {
+      // Extract paths from all traces (truncated + non-truncated)
+      baseSuggestions = allTraces.reduce<string[]>((acc, d) => {
         return acc.concat(
           rootKeys.reduce<string[]>(
             (internalAcc, key) =>
@@ -135,7 +155,15 @@ const TracesOrSpansPathsAutocomplete: React.FC<
         value ? p.toLowerCase().includes(value.toLowerCase()) : true,
       )
       .sort();
-  }, [data, rootKeys, value, excludeRoot, projectName, datasetColumnNames]);
+  }, [
+    data,
+    dataNonTruncated,
+    rootKeys,
+    value,
+    excludeRoot,
+    projectName,
+    datasetColumnNames,
+  ]);
 
   return (
     <Autocomplete
@@ -143,7 +171,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       onValueChange={onValueChange}
       items={items}
       hasError={hasError}
-      isLoading={isProjectId ? isPending : false}
+      isLoading={isProjectId ? isPending || isPendingNonTruncated : false}
       placeholder={placeholder}
     />
   );

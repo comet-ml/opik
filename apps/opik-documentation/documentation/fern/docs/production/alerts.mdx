@@ -284,7 +284,7 @@ async def get_dashboard():
 
 ## Supported event types
 
-Opik supports seven types of alert events:
+Opik supports eight types of alert events:
 
 ### Observability events
 
@@ -338,6 +338,15 @@ Opik supports seven types of alert events:
 - **Project scope**: Workspace-wide
 - **Payload**: Array of deleted prompt objects
 - **Use case**: Audit prompt deletions, maintain prompt governance
+
+### Evaluation events
+
+**Experiment finished**
+- **Event type**: `experiment:finished`
+- **Triggered when**: An experiment completes in the workspace
+- **Project scope**: Workspace-wide
+- **Payload**: Array of experiment objects with completion details
+- **Use case**: Automate experiment notifications, track evaluation completions
 
 ### Want us to support more event types?
 
@@ -558,6 +567,34 @@ All webhook events follow a consistent payload structure:
 }
 ```
 
+### Experiment finished payload
+
+```json
+{
+  "metadata": [
+    {
+      "id": "experiment-uuid",
+      "name": "Experiment Name",
+      "dataset_id": "dataset-uuid",
+      "created_at": "2025-01-15T10:00:00Z",
+      "created_by": "user@example.com",
+      "last_updated_at": "2025-01-15T10:05:00Z",
+      "last_updated_by": "user@example.com",
+      "feedback_scores": [
+        {
+          "name": "accuracy",
+          "value": 0.92
+        },
+        {
+          "name": "latency",
+          "value": 1.5
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Securing your webhooks
 
 ### Using secret tokens
@@ -598,6 +635,8 @@ def handle_webhook():
         handle_trace_errors(data)
     elif event_type == 'trace:feedback_score':
         handle_feedback_score(data)
+    elif event_type == 'experiment:finished':
+        handle_experiment_finished(data)
     
     return {'status': 'success'}, 200
 ```

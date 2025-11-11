@@ -12,11 +12,11 @@ import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
-import { ProviderKey } from "@/types/providers";
+import { ProviderObject } from "@/types/providers";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
 
 const AIProvidersRowActionsCell: React.FunctionComponent<
-  CellContext<ProviderKey, unknown>
+  CellContext<ProviderObject, unknown>
 > = (context) => {
   const resetKeyRef = useRef(0);
   const providerKey = context.row.original;

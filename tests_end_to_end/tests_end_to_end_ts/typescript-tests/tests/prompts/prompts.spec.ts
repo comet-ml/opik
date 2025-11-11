@@ -9,6 +9,19 @@ test.describe('Prompts CRUD Tests', () => {
       helperClient,
       createPrompt,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that prompts created via the SDK are properly visible and accessible in both the UI and SDK interfaces with correct content.
+
+Steps:
+1. Create a prompt via SDK (handled by fixture)
+2. Verify the prompt is retrievable via SDK with correct name and content
+3. Navigate to the prompts page in the UI
+4. Verify the prompt appears in the UI library
+
+This test ensures proper synchronization between UI and backend after SDK-based prompt creation.`
+      });
+
       await test.step('Verify prompt is retrievable via SDK with correct content', async () => {
         const promptSdk = await helperClient.getPrompt(createPrompt.name);
         expect(promptSdk.name).toBe(createPrompt.name);
@@ -29,6 +42,20 @@ test.describe('Prompts CRUD Tests', () => {
       helperClient,
       createPrompt,
     }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that prompts can be deleted through the UI, and the deletion is properly reflected in the SDK.
+
+Steps:
+1. Create a prompt via SDK (handled by fixture)
+2. Navigate to the prompts page
+3. Delete the prompt using the UI delete action
+4. Reload the page and verify the prompt no longer appears in the UI
+5. Verify the prompt returns 404 when fetched via SDK
+
+This test ensures UI deletions propagate correctly to the backend and SDK.`
+      });
+
       await test.step('Delete prompt via UI', async () => {
         const promptsPage = new PromptsPage(page);
         await promptsPage.goto();
@@ -108,10 +135,42 @@ test.describe('Prompts CRUD Tests', () => {
     };
 
     test('Prompts can be updated via SDK and version history is maintained @happypaths @fullregression @prompts', async ({ page, helperClient, createPrompt }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that prompts can be updated via SDK and version history is properly maintained in both UI and SDK.
+
+Steps:
+1. Create a prompt via SDK (handled by fixture)
+2. Navigate to the prompt details page
+3. Update the prompt content via SDK
+4. Verify both original and updated versions appear in the Commits tab
+5. Verify the most recent commit shows the updated text
+6. Verify SDK returns the updated content by default
+7. Verify the original version is still accessible via commit ID
+
+This test ensures prompt versioning works correctly when updates are made via SDK.`
+      });
+
       await testPromptUpdate(page, helperClient, createPrompt, 'sdk');
     });
 
     test('Prompts can be updated via UI and version history is maintained @happypaths @fullregression @prompts', async ({ page, helperClient, createPrompt }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that prompts can be updated via UI and version history is properly maintained in both UI and SDK.
+
+Steps:
+1. Create a prompt via SDK (handled by fixture)
+2. Navigate to the prompt details page
+3. Update the prompt content via UI
+4. Verify both original and updated versions appear in the Commits tab
+5. Verify the most recent commit shows the updated text
+6. Verify SDK returns the updated content by default
+7. Verify the original version is still accessible via commit ID
+
+This test ensures prompt versioning works correctly when updates are made via UI.`
+      });
+
       await testPromptUpdate(page, helperClient, createPrompt, 'ui');
     });
   });

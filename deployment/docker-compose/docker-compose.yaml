@@ -29,6 +29,8 @@ services:
       timeout: 4s
       retries: 20
       start_period: 30s
+    volumes:
+      - redis-data:/data
 
   clickhouse-init:
     image: alpine:latest
@@ -97,6 +99,8 @@ services:
       timeout: 10s
       retries: 30
       start_period: 5s
+    volumes:
+      - minio-data:/data
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
@@ -179,6 +183,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    tmpfs:
+      - /tmp
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
@@ -186,6 +192,8 @@ services:
     profiles:
       - backend
       - opik
+      - local-be-fe
+      - local-be
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -205,6 +213,8 @@ services:
       timeout: 60s
       retries: 30
       start_period: 2s
+    tmpfs:
+      - /var/lib/docker
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
@@ -229,6 +239,8 @@ services:
     pull_policy: always
     profiles:
       - opik
+      - local-be-fe
+      - local-be
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -242,12 +254,15 @@ services:
         condition: service_healthy
       python-backend:
         condition: service_healthy
+    tmpfs:
+      - /var/lib/docker
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
     pull_policy: always
     profiles:
       - opik
+      - local-be
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
@@ -283,3 +298,5 @@ volumes:
   clickhouse-config:
   mysql:
   zookeeper:
+  redis-data:
+  minio-data:

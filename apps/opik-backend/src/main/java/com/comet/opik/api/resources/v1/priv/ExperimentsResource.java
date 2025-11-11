@@ -18,6 +18,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.grouping.ExperimentGroupingFactory;
@@ -311,6 +312,25 @@ public class ExperimentsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Deleted experiments, count '{}'", request.ids());
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/finish")
+    @Operation(operationId = "finishExperiments", summary = "Finish experiments", description = "Finish experiments and trigger alert events", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response finishExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid IdsHolder request) {
+
+        log.info("Finishing experiments, count '{}'", request.ids().size());
+        experimentService.finishExperiments(request.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Finished experiments, count '{}'", request.ids().size());
+
         return Response.noContent().build();
     }
 

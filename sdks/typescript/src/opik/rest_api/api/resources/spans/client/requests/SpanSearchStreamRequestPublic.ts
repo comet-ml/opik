@@ -15,4 +15,8 @@ export interface SpanSearchStreamRequestPublic {
     lastRetrievedId?: string;
     /** Truncate image included in either input, output or metadata */
     truncate?: boolean;
+    /** Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'. */
+    fromTime?: Date;
+    /** Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'. */
+    toTime?: Date;
 }

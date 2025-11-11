@@ -2,46 +2,80 @@
 description: Describes metrics related to scoring the conversational threads
 ---
 
-The conversational metrics can be used to score the quality of conversational threads collected by Opik through multiple traces.
-Also, they can be used to score the quality of the conversations collected by other means.
+The conversational metrics can be used to score the quality of conversational threads collected by Opik through multiple traces. They also apply to conversations sourced outside of Opik when you want to analyse the performance of an assistant across turns.
 
-You can use the following metrics:
+Opik provides two families of conversation metrics:
 
-| Metric                        | Description                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------ |
-| ConversationalCoherenceMetric | Calculates the conversational coherence score for a given conversation thread. |
-| SessionCompletenessQuality    | Evaluates the completeness of a session within a conversational thread.        |
-| UserFrustrationMetric         | Calculates the user frustration score for a given conversational thread.       |
+1. **Conversation-level heuristic metrics** – lightweight analytics that inspect the transcript itself (for example, knowledge retention or degeneration). Use these when you only have the production conversation and no gold reference.
+2. **LLM-as-a-judge conversation metrics** – call an LLM to reason about conversation quality, user goal completion, or risk in the latest assistant responses.
 
-These metrics are based on the idea of using an LLM to evaluate the turns of the conversation between user and LLM.
-For this we have a prompt template used to generate the prompt for the LLM. By default, the `gpt-4o` model is used
-to evaluate responses, but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers)
-by setting the `model` parameter. You can learn more about customizing models in
-the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section.
+## Conversation-level heuristic metrics
 
-Each score produced by these metrics comes with a detailed explanation (`result.reason`) that helps understand
-why that particular score was assigned.
+| Metric | Description |
+| --- | --- |
+| KnowledgeRetentionMetric | Checks whether the final assistant replies retain earlier user-provided facts. |
+| ConversationDegenerationMetric | Detects repetition and degeneration patterns across the conversation. |
 
-## ConversationalCoherenceMetric
+### Knowledge Retention Metric
 
-This metric assesses the coherence and relevance across a series of conversation
-turns by evaluating the consistency in responses, logical flow, and overall
-context maintenance. It evaluates whether the conversation session felt like a
-natural, adaptive, helpful interaction.
-
-The `ConversationalCoherenceMetric` builds a sliding window of dialogue turns for
-each turn in the conversation. It then uses a language model to evaluate whether
-the final `assistant` message within each window is relevant and coherent in
-relation to the preceding conversational context.
-
-It supports both synchronous and asynchronous operations to accommodate the model's
-operation type. It returns a score between `0.0` and `1.0`, where `0.0` indicates a
-low coherence score and `1.0` indicates a high coherence score.
-
-It can be used in the following way:
+`KnowledgeRetentionMetric` operates on a conversation and compares how well the last assistant message preserves facts the user injected earlier. This is useful for guardrailing agents that should respect instructions or keep important constraints.
 
 ```python
+from opik.evaluation.metrics import KnowledgeRetentionMetric
+
+metric = KnowledgeRetentionMetric(turns_to_consider=5)
+score = metric.score(conversation=my_thread)
+print(score.value, score.reason)
+```
+
+### Conversation Degeneration Metric
+
+`ConversationDegenerationMetric` detects repetitive phrases, lack of variance, or low-entropy responses across a conversation. It is a lightweight guard against models that fall into loops or short-circuit the dialogue.
+
+```python
+from opik.evaluation.metrics import ConversationDegenerationMetric
+
+metric = ConversationDegenerationMetric()
+score = metric.score(conversation=my_thread)
+```
+
+## LLM-as-a-judge conversation metrics
+
+| Metric | Description |
+| --- | --- |
+| ConversationalCoherenceMetric | Evaluates coherence and relevance across sliding windows of the dialogue. |
+| SessionCompletenessQuality | Checks whether the user’s high-level goals were satisfied. |
+| UserFrustrationMetric | Estimates how frustrated the user was across the interaction. |
+| ConversationComplianceRiskMetric | Applies the Compliance Risk judge to the last assistant response. |
+| ConversationDialogueHelpfulnessMetric | Rates how helpful the final assistant reply is. |
+| ConversationQARelevanceMetric | Checks whether the final answer addresses the user’s request. |
+| ConversationSummarizationConsistencyMetric | Scores how faithful a conversation summary is to the transcript. |
+| ConversationSummarizationCoherenceMetric | Scores the structure and flow of a conversation summary. |
+| ConversationPromptPerplexityMetric | Estimates prompt difficulty at the conversation level. |
+| ConversationPromptUncertaintyMetric | Flags ambiguous prompts in threaded evaluations. |
+
+These metrics are based on the idea of using an LLM to evaluate the turns of the conversation between user and assistant. Opik ships a prompt template that wraps the transcript, criteria, and evaluation steps for you. By default, the `gpt-5-nano` model is used to evaluate responses, but you can switch to any LiteLLM-supported backend by setting the `model` parameter. You can learn more in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) guide.
+
+<Tip>
+  The GEval-based conversation adapters listed above live in the
+  `opik.evaluation.metrics.conversation.llm_judges.g_eval_wrappers` module. They accept the same
+  keyword arguments as their underlying judges (e.g. `model`, `temperature`). See
+  [Conversation-level GEval metrics](/evaluation/metrics/g_eval_conversation_metrics) for a deeper walkthrough.
+</Tip>
+
+<Tip>
+  Need reference-based scores such as BLEU, ROUGE, or METEOR across conversations?
+  Compose your own `ConversationThreadMetric` and reuse the single-turn heuristics
+  (`SentenceBLEU`, `ROUGE`, `METEOR`) directly.
+</Tip>
+
+### ConversationalCoherenceMetric
+
+`ConversationalCoherenceMetric` evaluates the logical flow of a dialogue. It builds a sliding window of turns and asks an LLM to rate whether the final assistant message is coherent and relevant. It returns a score between 0.0 and 1.0 and can optionally return detailed reasons.
+
+```python title="Conversational coherence example"
 from opik.evaluation.metrics import ConversationalCoherenceMetric
+
 conversation = [
     {
         "role": "user",
@@ -53,45 +87,35 @@ conversation = [
     },
     {
         "role": "user",
-        "content": "Next weekend, from Friday to Sunday."},
+        "content": "Next weekend, from Friday to Sunday.",
+    },
     {
         "role": "assistant",
         "content": "Great! I recommend checking airlines like Delta, United, or JetBlue for flights to New York next weekend. For hotels, what's your budget range and preferred location in New York?",
     },
     {
         "role": "user",
-        "content": "Around $200 per night, preferably in Manhattan."},
+        "content": "Around $200 per night, preferably in Manhattan.",
+    },
     {
         "role": "assistant",
         "content": "For Manhattan hotels around $200/night, you might want to look at options like Hotel Beacon, Pod 51, or CitizenM Times Square. These are well-rated options in that price range. Would you like more specific recommendations for any of these?",
     },
 ]
-metric = ConversationalCoherenceMetric()
+
+metric = ConversationalCoherenceMetric(model="gpt-5-nano", window_size=8, include_reason=True)
 result = metric.score(conversation)
-if result.scoring_failed:
-    print(f"Scoring failed: {result.reason}")
-else:
-    print(result.value)
+print(result.value)
+print(result.reason)
 ```
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+### SessionCompletenessQuality
 
-## SessionCompletenessQuality
+`SessionCompletenessQuality` captures whether a conversation fulfilled the user’s top-level goals. The metric asks an LLM to extract intentions from the thread, judge completion, and aggregate the results.
 
-This metric evaluates the completeness of a session within a conversational thread.
-It assesses whether the session addresses the intended context or purpose of the
-conversation.
-
-The evaluation process begins by using an LLM to extract a list of high-level user
-intentions from the conversation turns. The same LLM is then used to assess
-whether each intention was addressed and/or fulfilled over the course of
-the conversation. It returns a score between `0.0` and `1.0`, where higher values
-indicate better session completeness.
-
-You can use it in the following way:
-
-```python
+```python title="Session completeness example"
 from opik.evaluation.metrics import SessionCompletenessQuality
+
 conversation = [
     {
         "role": "user",
@@ -103,54 +127,39 @@ conversation = [
     },
     {
         "role": "user",
-        "content": "Next weekend, from Friday to Sunday."},
+        "content": "Next weekend, from Friday to Sunday.",
+    },
     {
         "role": "assistant",
         "content": "Great! I recommend checking airlines like Delta, United, or JetBlue for flights to New York next weekend. For hotels, what's your budget range and preferred location in New York?",
     },
     {
         "role": "user",
-        "content": "Around $200 per night, preferably in Manhattan."},
+        "content": "Around $200 per night, preferably in Manhattan.",
+    },
     {
         "role": "assistant",
         "content": "For Manhattan hotels around $200/night, you might want to look at options like Hotel Beacon, Pod 51, or CitizenM Times Square. These are well-rated options in that price range. Would you like more specific recommendations for any of these?",
     },
 ]
-metric = SessionCompletenessQuality()
+
+metric = SessionCompletenessQuality(model="gpt-5-nano")
 result = metric.score(conversation)
-if result.scoring_failed:
-    print(f"Scoring failed: {result.reason}")
-else:
-    print(result.value)
+print(result.value)
+print(result.reason)
 ```
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+### UserFrustrationMetric
 
-## UserFrustrationMetric
+`UserFrustrationMetric` estimates how likely it is that the user became frustrated (e.g. because of repetition or ignored requests). It scans windows of the conversation with an LLM and reports a value between 0.0 (not frustrated) and 1.0 (very frustrated).
 
-This metric evaluates the user frustration level within a conversation thread.
-It estimates a heuristic score estimating the likelihood that the user experienced confusion,
-annoyance, or disengagement during the session — due to repetition, lack of adaptation, ignored
-intent signals, or failure to smoothly conclude.
-
-The `UserFrustrationMetric` class integrates with LLM models to analyze
-conversation data in sliding windows and produce a numerical score along with an optional
-reason for the calculated score. It provides both synchronous and asynchronous methods for
-calculation and supports customization through attributes like window size and reason inclusion.
-
-This metric can be used to monitor and track user frustration levels during conversations, enabling
-insights into user experience. The metric makes use of LLM models to score conversational
-windows and summarize results. It returns a score between `0.0` and `1.0`. The higher the score,
-the more frustrated the user is likely to be.
-
-It can be used to evaluate the user experience during a conversation, like this:
-
-```python
+```python title="User frustration example"
 from opik.evaluation.metrics import UserFrustrationMetric
+
 conversation = [
     {
         "role": "user",
-        "content": "How do I center a div using CSS?"
+        "content": "How do I center a div using CSS?",
     },
     {
         "role": "assistant",
@@ -158,14 +167,15 @@ conversation = [
     },
     {
         "role": "user",
-        "content": "Okay... can you show me one?"},
+        "content": "Okay... can you show me one?",
+    },
     {
         "role": "assistant",
         "content": "Sure. It depends on the context — are you centering horizontally, vertically, or both?",
     },
     {
         "role": "user",
-        "content": "Both. Just give me a basic example."
+        "content": "Both. Just give me a basic example.",
     },
     {
         "role": "assistant",
@@ -173,11 +183,11 @@ conversation = [
     },
     {
         "role": "user",
-        "content": "Could you please just write the code?"
+        "content": "Could you please just write the code?",
     },
     {
         "role": "assistant",
-        "content": "Here’s one way:\n\n```css\ndiv {\n  display: flex;\n}\n```\nThat sets it up for centering.",
+        "content": "Here’s one way: set the container to display:flex and then add justify-content and align-items so the child centers both ways.",
     },
     {
         "role": "user",
@@ -187,20 +197,13 @@ conversation = [
         "role": "assistant",
         "content": "You're right. You also need `justify-content` and `align-items`.",
     },
-    {
-        "role": "user",
-        "content": "Why didn’t you include those in the first place? This is wasting my time.",
-    },
 ]
-metric = UserFrustrationMetric()
-result = metric.score(conversation)
-if result.scoring_failed:
-    print(f"Scoring failed: {result.reason}")
-else:
-    print(result.value)
-```
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+metric = UserFrustrationMetric(include_reason=True, model="gpt-5-nano")
+result = metric.score(conversation)
+print(result.value)
+print(result.reason)
+```
 
 ## Next steps
 

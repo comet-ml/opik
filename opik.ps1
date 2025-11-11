@@ -38,6 +38,10 @@ $LOCAL_BE_CONTAINERS = @(
     "opik-frontend-1"
 )
 
+$LOCAL_BE_FE_CONTAINERS = @(
+    "opik-python-backend-1"
+)
+
 function Get-Containers {
     $containers = @()
     
@@ -47,6 +51,8 @@ function Get-Containers {
         $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS
     } elseif ($LOCAL_BE) {
         $containers = $INFRA_CONTAINERS + $LOCAL_BE_CONTAINERS
+    } elseif ($LOCAL_BE_FE) {
+        $containers = $INFRA_CONTAINERS + $LOCAL_BE_FE_CONTAINERS
     } else {
         # Full Opik (default)
         $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS + $OPIK_CONTAINERS
@@ -66,6 +72,54 @@ function Write-DebugLog {
     if ($DebugMode) { 
         Write-Host $Message 
     }
+}
+
+function Initialize-BuildxBake {
+    if ($BUILD_MODE -eq "true") {
+        docker buildx bake --help *>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            # TODO: Enable bake once the issue with Windows paths is resolved:
+            # - https://github.com/docker/for-win/issues/14761
+            # - https://github.com/docker/buildx/issues/1028
+            # - https://github.com/docker/compose/issues/12669
+            Write-Host '[INFO] Bake is not available for docker compose on Windows yet. Not using it for builds'
+            $env:COMPOSE_BAKE = "false"
+        } else {
+            Write-Host '[INFO] Bake is not available on Docker Buildx. Not using it for builds'
+            $env:COMPOSE_BAKE = "false"
+        }
+    }
+}
+
+function Get-DockerComposeCommand {
+    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
+
+    if ($PORT_MAPPING) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
+    }
+
+    # Add profiles based on the selected mode (accumulative)
+    if ($INFRA) {
+        # No profile needed - infrastructure services start by default
+    } elseif ($BACKEND) {
+        $dockerArgs += "--profile", "backend"
+    } elseif ($LOCAL_BE) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
+        $dockerArgs += "--profile", "local-be"
+    } elseif ($LOCAL_BE_FE) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
+        $dockerArgs += "--profile", "local-be-fe"
+    } else {
+        # Full Opik (default) - includes all dependencies
+        $dockerArgs += "--profile", "opik"
+    }
+    
+    # Always add guardrails profile if enabled
+    if ($GUARDRAILS_ENABLED) {
+        $dockerArgs += "--profile", "guardrails"
+    }
+    
+    return $dockerArgs
 }
 
 function Get-SystemInfo {
@@ -140,12 +194,15 @@ function Show-Usage {
     Write-Host '  --verify          Check if all containers are healthy'
     Write-Host '  --info            Display welcome system status, only if all containers are running'
     Write-Host '  --stop            Stop all containers and clean up'
+    Write-Host '  --clean           Stop all containers and remove all Opik data volumes (WARNING: ALL OPIK DATA WILL BE LOST)'
+    Write-Host '  --demo-data       Triggers creation of demo data, assumes all required services (backend, python-backend, frontend etc.) are already running'
     Write-Host '  --build           Build containers before starting (can be combined with other flags)'
     Write-Host '  --debug           Enable debug mode (verbose output) (can be combined with other flags)'
     Write-Host '  --port-mapping    Enable port mapping for all containers by using the override file (can be combined with other flags)'
     Write-Host '  --infra           Start only infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)'
     Write-Host '  --backend         Start only infrastructure + backend services (Backend, Python Backend etc.)'
     Write-Host '  --local-be        Start all services EXCEPT backend (for local backend development)'
+    Write-Host '  --local-be-fe     Start only infrastructure + Python backend (for local backend + frontend development)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
@@ -193,6 +250,41 @@ function Test-ContainersStatus {
     }
 
     return $allOk
+}
+
+# Wait for a container to complete and return its exit code
+# Args: $1 = container name, $2 = timeout in seconds (default: 60)
+# Returns: 0 if container exits with code 0, 1 otherwise
+function Wait-ContainerCompletion {
+    param(
+        [string]$ContainerName,
+        [int]$MaxWait = 60
+    )
+
+    Write-DebugLog "[DEBUG] Waiting for $ContainerName to complete (timeout: ${MaxWait}s)..."
+    $count = 0
+
+    while ($count -lt $MaxWait) {
+        $status = docker inspect -f '{{.State.Status}}' $ContainerName 2>$null
+        if ([string]::IsNullOrEmpty($status)) { $status = 'not_found' }
+
+        if ($status -eq 'exited') {
+            $exitCode = docker inspect -f '{{.State.ExitCode}}' $ContainerName 2>$null
+            if ([string]::IsNullOrEmpty($exitCode)) { $exitCode = 1 }
+            Write-DebugLog "[DEBUG] $ContainerName exited with code: $exitCode"
+            return $exitCode
+        } elseif ($status -eq 'not_found') {
+            Write-Host "[ERROR] $ContainerName container not found"
+            return 1
+        }
+
+        Start-Sleep -Seconds 1
+        $count++
+    }
+
+    Write-Host "[ERROR] Timeout waiting for $ContainerName to complete"
+    docker logs $ContainerName 2>$null
+    return 1
 }
 
 function Send-InstallReport {
@@ -322,30 +414,9 @@ function Start-MissingContainers {
 
     Write-Host '[INFO] Starting missing containers...'
 
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
+    Initialize-BuildxBake
 
-    if ($PORT_MAPPING) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
-    }
-
-    # Add profiles based on the selected mode (accumulative)
-    if ($INFRA) {
-        # No profile needed - infrastructure services start by default
-    } elseif ($BACKEND) {
-        $dockerArgs += "--profile", "backend"
-    } elseif ($LOCAL_BE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
-        $dockerArgs += "--profile", "local-be"
-    } else {
-        # Full Opik (default) - includes all dependencies
-        $dockerArgs += "--profile", "opik"
-    }
-
-    # Always add guardrails profile if enabled
-    if ($GUARDRAILS_ENABLED) {
-        $dockerArgs += "--profile", "guardrails"
-    }
-    
+    $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "up", "-d"
 
     if ($BUILD_MODE -eq "true") {
@@ -409,33 +480,64 @@ function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
 
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
-
-    if ($PORT_MAPPING) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
-    }
-    
-    # Add profiles based on the selected mode (accumulative)
-    if ($INFRA) {
-        # No profile needed - infrastructure services start by default
-    } elseif ($BACKEND) {
-        $dockerArgs += "--profile", "backend"
-    } elseif ($LOCAL_BE) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
-        $dockerArgs += "--profile", "local-be"
-    } else {
-        # Full Opik (default) - includes all dependencies
-        $dockerArgs += "--profile", "opik"
-    }
-    
-    # Always add guardrails profile if enabled
-    if ($GUARDRAILS_ENABLED) {
-        $dockerArgs += "--profile", "guardrails"
-    }
-    
+    $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "down"
     docker @dockerArgs
     Write-Host '[OK] All containers stopped and cleaned up!'
+}
+
+function Remove-OpikData {
+    Test-DockerStatus
+    Write-Host '[WARN] WARNING: This will remove ALL Opik data including:'
+    Write-Host '   - MySQL (projects, datasets etc.)'
+    Write-Host '   - ClickHouse (traces, spans, etc.)'
+    Write-Host '   - Etc.'
+    Write-Host ''
+    Write-Host '[INFO] Stopping all containers and removing volumes...'
+
+    $dockerArgs = Get-DockerComposeCommand
+    $dockerArgs += "down", "-v"
+    
+    Write-DebugLog "[DEBUG] Running: docker $($dockerArgs -join ' ')"
+    docker @dockerArgs
+    Write-Host '[OK] All containers stopped and data volumes removed!'
+}
+
+function New-DemoData {
+    Test-DockerStatus
+    Write-Host '[INFO] Creating demo data...'
+
+    Initialize-BuildxBake
+
+    # Build the complete command
+    # --no-deps: Don't start dependent services
+    # Add --build flag if BUILD_MODE is set
+    $dockerArgs = Get-DockerComposeCommand
+    $dockerArgs += "up", "--no-deps", "-d"
+    
+    if ($BUILD_MODE -eq "true") {
+        $dockerArgs += "--build"
+    }
+    
+    $dockerArgs += "demo-data-generator"
+
+    Write-DebugLog "[DEBUG] Running: docker $($dockerArgs -join ' ')"
+    docker @dockerArgs
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '[ERROR] Failed to start demo-data-generator'
+        return 1
+    }
+
+    # Wait for the container to finish and check its exit code
+    $exitCode = Wait-ContainerCompletion -ContainerName "opik-demo-data-generator-1"
+    if ($exitCode -eq 0) {
+        Write-Host '[OK] Demo data created successfully!'
+        return 0
+    } else {
+        Write-Host '[ERROR] Failed to create demo data'
+        return 1
+    }
 }
 
 function Get-UIUrl {
@@ -495,6 +597,17 @@ function Show-Banner {
     } elseif ($BACKEND) {
         Write-Host '║  ✅ Backend services started successfully!                      ║'
         Write-Host '║                                                                 ║'
+    } elseif ($LOCAL_BE_FE) {
+        Write-Host '║  ✅ Local backend + frontend mode services started!             ║'
+        Write-Host '║                                                                 ║'
+        Write-Host '║  ⚙️  Configuration:                                              ║'
+        Write-Host '║     Backend is NOT running in Docker                            ║'
+        Write-Host '║     Frontend is NOT running in Docker                           ║'
+        Write-Host '║     Port mapping: ENABLED (required for local processes)        ║'
+        Write-Host '║                                                                 ║'
+        Write-Host '║  📊 Access the UI (start backend + frontend first):             ║'
+        Write-Host '║     http://localhost:5174                                       ║'
+        Write-Host '║                                                                 ║'
     } elseif ($LOCAL_BE) {
         Write-Host '║  ✅ Local backend mode services started successfully!           ║'
         Write-Host '║                                                                 ║'
@@ -502,6 +615,7 @@ function Show-Banner {
         Write-Host '║     Backend is NOT running in Docker                            ║'
         Write-Host '║     Start your local backend on port 8080                       ║'
         Write-Host '║     Frontend will proxy to: http://localhost:8080               ║'
+        Write-Host '║     Port mapping: ENABLED (required for local processes)        ║'
         Write-Host '║                                                                 ║'
         Write-Host '║  📊 Access the UI (start backend first):                        ║'
         Write-Host "║     $uiUrl                                       ║"
@@ -542,6 +656,8 @@ function Get-StartCommand {
         $cmd += " --backend"
     } elseif ($LOCAL_BE) {
         $cmd += " --local-be"
+    } elseif ($LOCAL_BE_FE) {
+        $cmd += " --local-be-fe"
     }
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
@@ -559,6 +675,8 @@ function Get-VerifyCommand {
         $cmd += " --backend"
     } elseif ($LOCAL_BE) {
         $cmd += " --local-be"
+    } elseif ($LOCAL_BE_FE) {
+        $cmd += " --local-be-fe"
     }
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
@@ -571,27 +689,18 @@ $BUILD_MODE = $false
 $DEBUG_MODE = $false
 $PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
+# PowerShell persists environment variables across script runs, so we need to reset them
+$env:OPIK_REVERSE_PROXY_URL = ""
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
 # Default: full opik (all profiles)
 $INFRA = $false
 $BACKEND = $false
 $LOCAL_BE = $false
+$LOCAL_BE_FE = $false
 
 if ($options -contains '--build') {
     $BUILD_MODE = $true
-    docker buildx bake --help *>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        # TODO: Enable bake once the issue with Windows paths is resolved:
-        # - https://github.com/docker/for-win/issues/14761
-        # - https://github.com/docker/buildx/issues/1028
-        # - https://github.com/docker/compose/issues/12669
-        Write-Host '[INFO] Bake is not available for docker compose on Windows yet. Not using it for builds'
-        $env:COMPOSE_BAKE = "false"
-    } else {
-        Write-Host '[INFO] Bake is not available on Docker Buildx. Not using it for builds'
-        $env:COMPOSE_BAKE = "false"
-    }
     $options = $options | Where-Object { $_ -ne '--build' }
 }
 
@@ -619,8 +728,17 @@ if ($options -contains '--backend') {
     $options = $options | Where-Object { $_ -ne '--backend' }
 }
 
+# Check --local-be-fe BEFORE --local-be (more specific first or regex will cause a script failure)
+if ($options -contains '--local-be-fe') {
+    $LOCAL_BE_FE = $true
+    $PORT_MAPPING = $true  # Required for local processes to connect to infrastructure
+    $env:OPIK_REVERSE_PROXY_URL = "http://host.docker.internal:8080"
+    $options = $options | Where-Object { $_ -ne '--local-be-fe' }
+}
+
 if ($options -contains '--local-be') {
     $LOCAL_BE = $true
+    $PORT_MAPPING = $true  # Required for local processes to connect to infrastructure
     $env:OPIK_FRONTEND_FLAVOR = "local_be"
     $options = $options | Where-Object { $_ -ne '--local-be' }
 }
@@ -640,15 +758,17 @@ $PROFILE_COUNT = 0
 if ($INFRA) { $PROFILE_COUNT++ }
 if ($BACKEND) { $PROFILE_COUNT++ }
 if ($LOCAL_BE) { $PROFILE_COUNT++ }
+if ($LOCAL_BE_FE) { $PROFILE_COUNT++ }
 
 # Validate mutually exclusive profile flags
 if ($PROFILE_COUNT -gt 1) {
-    Write-Host "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
+    Write-Host "❌ Error: --infra, --backend, --local-be, and --local-be-fe flags are mutually exclusive."
     Write-Host "   Choose one of the following:"
-    Write-Host "   • .\opik.ps1 --infra      (infrastructure services only)"
-    Write-Host "   • .\opik.ps1 --backend    (infrastructure + backend services)"
-    Write-Host "   • .\opik.ps1 --local-be   (all services except backend - for local backend development)"
-    Write-Host "   • .\opik.ps1              (full Opik suite - default)"
+    Write-Host "   • .\opik.ps1 --infra        (infrastructure services only)"
+    Write-Host "   • .\opik.ps1 --backend      (infrastructure + backend services)"
+    Write-Host "   • .\opik.ps1 --local-be     (all services except backend - for local backend development)"
+    Write-Host "   • .\opik.ps1 --local-be-fe  (infrastructure + Python backend - for local BE+FE development)"
+    Write-Host "   • .\opik.ps1                (full Opik suite - default)"
     exit 1
 }
 
@@ -673,7 +793,15 @@ switch ($option) {
     }
     '--stop' {
         Stop-Containers
-        exit 0
+        exit $LASTEXITCODE
+    }
+    '--clean' {
+        Remove-OpikData
+        exit $LASTEXITCODE
+    }
+    '--demo-data' {
+        $exitCode = New-DemoData
+        exit $exitCode
     }
     '--help' {
         Show-Usage

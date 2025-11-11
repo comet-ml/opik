@@ -21,7 +21,7 @@
         <lombok.version>1.18.38</lombok.version>
         <mysql.version>9.5.0</mysql.version>
         <dropwizard-guicey.version>8.0.0</dropwizard-guicey.version>
-        <stringtemplate.version>3.49.4</stringtemplate.version>
+        <stringtemplate.version>3.50.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
@@ -32,7 +32,7 @@
         <wiremock.version>3.13.1</wiremock.version>
         <redisson.version>3.52.0</redisson.version>
         <opentelmetry.version>2.21.0</opentelmetry.version>
-        <aws.java.sdk.version>2.37.3</aws.java.sdk.version>
+        <aws.java.sdk.version>2.38.2</aws.java.sdk.version>
         <json-path.version>2.10.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -306,7 +306,7 @@
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
-            <version>3.7.6</version>
+            <version>3.8.0</version>
             <scope>test</scope>
         </dependency>
 

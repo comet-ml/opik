@@ -15,8 +15,8 @@ export class PlaygroundPage {
     this.modelSelector = page.getByRole('combobox').first();
     this.promptInput = page.getByRole('textbox').first();
     this.runButton = page.getByRole('button', { name: 'Run' });
-    this.outputArea = page.locator('p:text("Output A") ~ div').first();
-    this.outputResponse = page.locator('p:text("Output A")').locator('xpath=following-sibling::div[1]');
+    this.outputArea = page.locator('p:text("Output") ~ div').first();
+    this.outputResponse = page.locator('p:text("Output")').locator('xpath=following-sibling::div[1]');
     this.errorMessage = page.locator('text=Please select an LLM model for your prompt');
     this.apiErrorMessages = [
       'messages: at least one message is required',

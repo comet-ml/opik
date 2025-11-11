@@ -11,6 +11,8 @@ type IntegrationCardProps = {
   iconClassName?: string;
   onClick?: () => void;
   size?: "sm" | "lg";
+  id?: string;
+  "data-fs-element"?: string;
 };
 
 const IntegrationCard: React.FC<IntegrationCardProps> = ({
@@ -22,6 +24,8 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
   iconClassName,
   onClick,
   size = "sm",
+  id,
+  "data-fs-element": dataFsElement,
 }) => {
   return (
     <div
@@ -31,6 +35,8 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
         className,
       )}
       onClick={onClick}
+      id={id}
+      data-fs-element={dataFsElement}
     >
       <div
         className={cn(

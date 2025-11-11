@@ -7,6 +7,7 @@ from json.decoder import JSONDecodeError
 
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
+from ..core.datetime_utils import serialize_datetime
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
@@ -202,6 +203,8 @@ class RawSpansClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SpanPagePublic]:
         """
@@ -231,6 +234,10 @@ class RawSpansClient:
 
         exclude : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -254,6 +261,8 @@ class RawSpansClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -857,6 +866,8 @@ class RawSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpanStatsRequestType] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsPublic]:
         """
@@ -873,6 +884,10 @@ class RawSpansClient:
         type : typing.Optional[GetSpanStatsRequestType]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -891,6 +906,8 @@ class RawSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -963,6 +980,8 @@ class RawSpansClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -988,6 +1007,12 @@ class RawSpansClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        from_time : typing.Optional[dt.datetime]
+            Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1010,6 +1035,8 @@ class RawSpansClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",
@@ -1283,6 +1310,8 @@ class AsyncRawSpansClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SpanPagePublic]:
         """
@@ -1312,6 +1341,10 @@ class AsyncRawSpansClient:
 
         exclude : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1335,6 +1368,8 @@ class AsyncRawSpansClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -1938,6 +1973,8 @@ class AsyncRawSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpanStatsRequestType] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsPublic]:
         """
@@ -1954,6 +1991,10 @@ class AsyncRawSpansClient:
         type : typing.Optional[GetSpanStatsRequestType]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1972,6 +2013,8 @@ class AsyncRawSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
             request_options=request_options,
         )
@@ -2044,6 +2087,8 @@ class AsyncRawSpansClient:
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -2069,6 +2114,12 @@ class AsyncRawSpansClient:
         truncate : typing.Optional[bool]
             Truncate image included in either input, output or metadata
 
+        from_time : typing.Optional[dt.datetime]
+            Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2091,6 +2142,8 @@ class AsyncRawSpansClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+                "from_time": from_time,
+                "to_time": to_time,
             },
             headers={
                 "content-type": "application/json",

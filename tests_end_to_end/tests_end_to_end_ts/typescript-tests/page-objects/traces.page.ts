@@ -21,10 +21,8 @@ export class TracesPage {
       .locator('button:nth-of-type(3)');
 
     this.deleteButton = page
-      .locator('div')
-      .filter({ hasText: /^Add toAdd tags$/ })
       .getByRole('button')
-      .nth(3);
+      .filter({ has: page.locator('svg path[d*="M3 6h18"]') });
 
     this.attachmentsSubmenuButton = page.getByRole('button', { name: 'Attachments' });
     this.attachmentContainer = page.getByLabel('Attachments');

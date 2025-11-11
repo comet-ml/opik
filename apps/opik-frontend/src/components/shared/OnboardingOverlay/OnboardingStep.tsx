@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronsRight } from "lucide-react";
 import { useOnboarding } from "./OnboardingOverlayContext";
+import kebabCase from "lodash/kebabCase";
 
 type OnboardingStepProps = {
   className?: string;
@@ -56,13 +57,18 @@ const Title: React.FC<TitleProps> = ({ children }) => {
 const AnswerCard: React.FC<AnswerCardProps> = ({ option }) => {
   const [title, description] = option.split(" – ");
 
-  const { handleAnswer } = useOnboarding();
+  const { handleAnswer, currentStep } = useOnboarding();
+
+  const kebabCaseTitle = title ? kebabCase(title) : "";
+  const stepIdentifier = currentStep || "unknown";
 
   return (
     <Button
       variant="outline"
       onClick={() => handleAnswer(option)}
       className="flex min-h-[100px] w-full min-w-0 flex-col items-start whitespace-normal p-6 text-left"
+      id={`onboarding-step-${stepIdentifier}-answer-card-${kebabCaseTitle}`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-answer-card-${kebabCaseTitle}`}
     >
       <span className="comet-body-s-accented">{title}</span>
       <span className="comet-body-xs text-muted-foreground">{description}</span>
@@ -77,13 +83,19 @@ const AnswerList: React.FC<AnswerListProps> = ({ children, className }) => (
 );
 
 const AnswerButton: React.FC<AnswerButtonProps> = ({ option }) => {
-  const { handleAnswer } = useOnboarding();
+  const { handleAnswer, currentStep } = useOnboarding();
+
+  const kebabCaseOption = kebabCase(option);
+  const stepIdentifier = currentStep || "unknown";
+
   return (
     <Button
       variant="outline"
       size="default"
       onClick={() => handleAnswer(option)}
       className="h-auto justify-center whitespace-normal bg-white px-4 py-2.5 text-left dark:bg-soft-background hover:dark:bg-primary-foreground"
+      id={`onboarding-step-${stepIdentifier}-answer-${kebabCaseOption}`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-answer-${kebabCaseOption}`}
     >
       {option}
     </Button>
@@ -91,12 +103,16 @@ const AnswerButton: React.FC<AnswerButtonProps> = ({ option }) => {
 };
 
 const Skip: React.FC = () => {
-  const { handleSkip } = useOnboarding();
+  const { handleSkip, currentStep } = useOnboarding();
+  const stepIdentifier = currentStep || "unknown";
+
   return (
     <Button
       variant="link"
       className="pl-0 text-foreground"
       onClick={handleSkip}
+      id={`onboarding-step-${stepIdentifier}-skip`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-skip`}
     >
       Skip
       <ChevronsRight className="ml-1 size-4" />
@@ -105,13 +121,17 @@ const Skip: React.FC = () => {
 };
 
 const BackButton: React.FC = () => {
-  const { handleBack } = useOnboarding();
+  const { handleBack, currentStep } = useOnboarding();
+  const stepIdentifier = currentStep || "unknown";
+
   return (
     <div className="flex justify-start">
       <Button
         variant="link"
         className="pl-0 text-foreground"
         onClick={handleBack}
+        id={`onboarding-step-${stepIdentifier}-back`}
+        data-fs-element={`onboarding-step-${stepIdentifier}-back`}
       >
         <ChevronLeft className="mr-1 size-4" />
         Back

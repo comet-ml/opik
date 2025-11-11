@@ -18,5 +18,7 @@ public record TraceSearchCriteria(
         UUID lastReceivedId,
         boolean truncate,
         boolean stripAttachments,
-        Set<Trace.TraceField> exclude) {
+        Set<Trace.TraceField> exclude,
+        UUID uuidFromTime,
+        UUID uuidToTime) {
 }

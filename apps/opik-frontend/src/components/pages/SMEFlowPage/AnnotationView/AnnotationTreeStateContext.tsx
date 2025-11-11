@@ -5,15 +5,12 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
-import { ExpandedState } from "@tanstack/react-table";
 
 /**
  * State for a single section (input/output) in the annotation viewer
- * Note: expanded state uses index-based paths but JsonKeyValueTable will map these
  * to key-based paths internally for robustness across different tree structures
  */
 interface SectionState {
-  expanded: ExpandedState;
   scrollTop: number;
 }
 
@@ -29,10 +26,6 @@ interface AnnotationTreeState {
 
 interface AnnotationTreeStateContextValue {
   state: AnnotationTreeState;
-  updateExpanded: (
-    section: keyof AnnotationTreeState,
-    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-  ) => void;
   updateScrollTop: (
     section: keyof AnnotationTreeState,
     scrollTop: number,
@@ -45,7 +38,6 @@ const AnnotationTreeStateContext = createContext<
 >(undefined);
 
 const createDefaultSectionState = (): SectionState => ({
-  expanded: {},
   scrollTop: 0,
 });
 
@@ -70,29 +62,6 @@ export const AnnotationTreeStateProvider: React.FC<
 > = ({ children }) => {
   const [state, setState] = useState<AnnotationTreeState>(createDefaultState);
 
-  const updateExpanded = useCallback(
-    (
-      section: keyof AnnotationTreeState,
-      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-    ) => {
-      setState((prev) => {
-        const newExpanded =
-          typeof updaterOrValue === "function"
-            ? updaterOrValue(prev[section].expanded)
-            : updaterOrValue;
-
-        return {
-          ...prev,
-          [section]: {
-            ...prev[section],
-            expanded: newExpanded,
-          },
-        };
-      });
-    },
-    [],
-  );
-
   const updateScrollTop = useCallback(
     (section: keyof AnnotationTreeState, scrollTop: number) => {
       setState((prev) => ({
@@ -115,7 +84,6 @@ export const AnnotationTreeStateProvider: React.FC<
 
   const value: AnnotationTreeStateContextValue = {
     state,
-    updateExpanded,
     updateScrollTop,
     getScrollTop,
   };

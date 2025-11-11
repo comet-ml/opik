@@ -9,6 +9,8 @@ export interface ProviderApiKey {
     provider: OpikApi.ProviderApiKeyProvider;
     apiKey?: string;
     name?: string;
+    /** Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically. */
+    providerName?: string;
     headers?: Record<string, string>;
     configuration?: Record<string, string>;
     baseUrl?: string;

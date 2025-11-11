@@ -202,7 +202,12 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
                     AI assistant prompt
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button size="xs" asChild>
+                    <Button
+                      size="xs"
+                      asChild
+                      id="quick-install-try-in-cursor"
+                      data-fs-element="QuickInstallTryInCursor"
+                    >
                       <a
                         href={CURSOR_PROMPT_URL}
                         target="_blank"
@@ -217,6 +222,8 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
                       text={AI_ASSISTANT_PROMPT}
                       tooltipText="Copy code"
                       className="text-muted-slate"
+                      id="quick-install-copy-prompt"
+                      data-fs-element="QuickInstallCopyPrompt"
                     />
                   </div>
                 </div>
