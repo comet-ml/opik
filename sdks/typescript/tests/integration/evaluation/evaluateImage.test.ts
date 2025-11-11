@@ -29,8 +29,8 @@ const MULTIMODAL_MESSAGES: OpikMessage[] = [
         type: "text",
         text: "Classify the animal(s) shown. Follow the instruction about how many words to use.",
       },
-      { type: "image_url", image_url: { url: "{{image_url}}" } },
-      { type: "image_url", image_url: { url: "{{secondary_image_url}}" } },
+      { type: "image", image: "{{image_url}}" },
+      { type: "image", image: "{{secondary_image_url}}" },
     ],
   },
 ];
@@ -63,66 +63,89 @@ describe.skipIf(!shouldRunApiTests)(
       await cleanupPrompts(client, createdPromptIds);
     });
 
-    it(
-      "should evaluate prompts with image inputs",
-      async () => {
-        const datasetName = `test-multimodal-dataset-${Date.now()}`;
-        const dataset = await client.createDataset(datasetName);
-        createdDatasetNames.push(dataset.name);
+    it("should evaluate prompts with image inputs", async () => {
+      const datasetName = `test-multimodal-dataset-${Date.now()}`;
+      const dataset = await client.createDataset(datasetName);
+      createdDatasetNames.push(dataset.name);
 
-        await client.datasetBatchQueue.flush();
+      await client.datasetBatchQueue.flush();
 
-        await dataset.insert([
-          {
-            prompt: "Identify the animal in the first image.",
-            image_url: CAT_IMAGE_URL,
-            secondary_image_url: "",
-            reference: "cat",
-          },
-          {
-            prompt: "Identify the animal in the first image.",
-            image_url: DOG_IMAGE_DATA_URL,
-            secondary_image_url: "",
-            reference: "dog",
-          },
-          {
-            prompt: "Identify the animal in the first image.",
-            image_url: FOX_IMAGE_DATA_URL,
-            secondary_image_url: "",
-            reference: "fox",
-          },
-          {
-            prompt: "Identify the animals in both images.",
-            image_url: DOG_IMAGE_DATA_URL,
-            secondary_image_url: FOX_IMAGE_DATA_URL,
-            reference: "dog fox",
-          },
-          {
-            prompt: "Identify the animals in both images.",
-            image_url: CAT_IMAGE_URL,
-            secondary_image_url: CAT_IMAGE_URL,
-            reference: "cat cat",
-          },
-        ]);
+      await dataset.insert([
+        {
+          prompt: "Identify the animal in the first image.",
+          image_url: CAT_IMAGE_URL,
+          secondary_image_url: "",
+          reference: "cat",
+        },
+        {
+          prompt: "Identify the animal in the first image.",
+          image_url: DOG_IMAGE_DATA_URL,
+          secondary_image_url: "",
+          reference: "dog",
+        },
+        {
+          prompt: "Identify the animal in the first image.",
+          image_url: FOX_IMAGE_DATA_URL,
+          secondary_image_url: "",
+          reference: "fox",
+        },
+        {
+          prompt: "Identify the animals in both images.",
+          image_url: DOG_IMAGE_DATA_URL,
+          secondary_image_url: FOX_IMAGE_DATA_URL,
+          reference: "dog fox",
+        },
+        {
+          prompt: "Identify the animals in both images.",
+          image_url: CAT_IMAGE_URL,
+          secondary_image_url: CAT_IMAGE_URL,
+          reference: "cat cat",
+        },
+      ]);
 
-        const result = await evaluatePrompt({
+      const result = await evaluatePrompt({
+        dataset,
+        messages: MULTIMODAL_MESSAGES,
+        scoringMetrics: [new Contains("contains", true)],
+        scoringKeyMapping: {
+          substring: "reference",
+        },
+        experimentName: `test-multimodal-${Date.now()}`,
+        model: "gpt-5-mini",
+      });
+
+      expect(result.testResults.length).toBe(5);
+      result.testResults.forEach((testResult) => {
+        expect(testResult.scoreResults).toHaveLength(1);
+        expect(testResult.scoreResults[0]?.value).toBe(1);
+      });
+    }, 180_000);
+
+    it("should throw error when non-multimodal model receives images", async () => {
+      const datasetName = `test-non-multimodal-error-${Date.now()}`;
+      const dataset = await client.createDataset(datasetName);
+      createdDatasetNames.push(dataset.name);
+
+      await client.datasetBatchQueue.flush();
+
+      await dataset.insert([
+        {
+          prompt: "Identify the animal in the image.",
+          image_url: CAT_IMAGE_URL,
+          secondary_image_url: "",
+          reference: "cat",
+        },
+      ]);
+
+      // Use gpt-3.5-turbo which doesn't support vision/images
+      await expect(
+        evaluatePrompt({
           dataset,
           messages: MULTIMODAL_MESSAGES,
-          scoringMetrics: [new Contains("contains", true)],
-          scoringKeyMapping: {
-            substring: "reference",
-          },
-          experimentName: `test-multimodal-${Date.now()}`,
-          model: "gpt-5-mini",
-        });
-
-        expect(result.testResults.length).toBe(5);
-        result.testResults.forEach((testResult) => {
-          expect(testResult.scoreResults).toHaveLength(1);
-          expect(testResult.scoreResults[0]?.value).toBe(1);
-        });
-      },
-      180_000
-    );
+          experimentName: `test-non-multimodal-error-${Date.now()}`,
+          model: "gpt-3.5-turbo", // This model doesn't support images
+        })
+      ).rejects.toThrow();
+    }, 60_000);
   }
 );

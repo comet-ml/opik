@@ -1,15 +1,6 @@
-import {
-  generateText,
-  generateObject,
-  type LanguageModel,
-  type ModelMessage,
-} from "ai";
+import { generateText, generateObject, type LanguageModel } from "ai";
 import type { z } from "zod";
-import {
-  OpikBaseModel,
-  type OpikMessage,
-  type MessageContentPart,
-} from "./OpikBaseModel";
+import { OpikBaseModel, type OpikMessage } from "./OpikBaseModel";
 import { ModelConfigurationError, ModelGenerationError } from "./errors";
 import { logger } from "@/utils/logger";
 import { detectProvider, type SupportedModelId } from "./providerDetection";
@@ -250,11 +241,9 @@ export class VercelAIChatModel extends OpikBaseModel {
         `Generating provider response with model ${this.modelName}, messages count: ${messages.length}`
       );
 
-      const modelMessages = convertToModelMessages(messages);
-
       const result = await this._generateText({
         model: this.model,
-        messages: modelMessages,
+        messages,
         ...options,
       });
 
@@ -271,88 +260,4 @@ export class VercelAIChatModel extends OpikBaseModel {
       );
     }
   }
-}
-
-function convertToModelMessages(messages: OpikMessage[]): ModelMessage[] {
-  return messages.map((message) => {
-    const content = convertMessageContent(message.content);
-    const commonBase =
-      message.providerOptions !== undefined
-        ? { providerOptions: message.providerOptions }
-        : {};
-
-    if (message.role === "system") {
-      const systemContent = Array.isArray(content)
-        ? content
-            .map((part) =>
-              part.type === "text" ? part.text ?? "" : JSON.stringify(part)
-            )
-            .join("")
-        : typeof content === "string"
-          ? content
-          : String(content ?? "");
-
-      return {
-        role: "system",
-        content: systemContent,
-        ...commonBase,
-      } as unknown as ModelMessage;
-    }
-
-    if (message.role === "assistant") {
-      return {
-        role: "assistant",
-        content,
-        ...commonBase,
-      } as unknown as ModelMessage;
-    }
-
-    return {
-      role: "user",
-      content,
-      ...commonBase,
-    } as unknown as ModelMessage;
-  });
-}
-
-function convertMessageContent(
-  content: OpikMessage["content"]
-): Array<{ type: string; text?: string; image?: unknown }> {
-  if (typeof content === "string") {
-    return [{ type: "text", text: content }];
-  }
-
-  if (!Array.isArray(content)) {
-    return [{ type: "text", text: String(content ?? "") }];
-  }
-
-  return content.map((part) => convertMessagePart(part));
-}
-
-function convertMessagePart(part: MessageContentPart) {
-  if (part.type === "text") {
-    return { type: "text", text: part.text ?? "" };
-  }
-
-  const url = part.image_url?.url ?? "";
-  if (!url) {
-    return { type: "text", text: "" };
-  }
-
-  if (url.startsWith("data:")) {
-    const commaIndex = url.indexOf(",");
-    const header = url.substring(5, commaIndex > -1 ? commaIndex : url.length);
-    const mimeType = header.split(";")[0] || undefined;
-
-    return {
-      type: "image",
-      image: url,
-      ...(mimeType ? { mediaType: mimeType } : {}),
-    };
-  }
-
-  return {
-    type: "image",
-    image: url,
-  };
 }
