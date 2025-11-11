@@ -124,7 +124,7 @@ public class SpanService {
 
     @WithSpan
     public Mono<UUID> create(@NonNull Span span) {
-        var id = span.id() == null ? idGenerator.generateId(span.startTime()) : span.id();
+        var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return IdGenerator
                 .validateVersionAsync(id, SPAN_KEY)
@@ -388,7 +388,7 @@ public class SpanService {
                         throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
-                    UUID id = span.id() == null ? idGenerator.generateId(span.startTime()) : span.id();
+                    UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     IdGenerator.validateVersion(id, SPAN_KEY);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();

@@ -32,14 +32,13 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
@@ -142,7 +141,6 @@ class FindTraceThreadsResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
     private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
     private String baseURI;
@@ -151,9 +149,10 @@ class FindTraceThreadsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, com.comet.opik.domain.IdGenerator idGenerator) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
@@ -166,6 +165,7 @@ class FindTraceThreadsResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.idGenerator = idGenerator;
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1464,15 +1464,11 @@ class FindTraceThreadsResourceTest {
             return createTrace().toBuilder()
                     .projectName(projectName)
                     .threadId(threadId)
-                    .id(generateUUIDForTimestamp(timestamp))
+                    .id(idGenerator.generateId(timestamp))
                     .spanCount(0)
                     .llmSpanCount(0)
                     .guardrailsValidations(null)
                     .build();
-        }
-
-        private UUID generateUUIDForTimestamp(Instant timestamp) {
-            return generator.construct(timestamp.toEpochMilli());
         }
     }
 

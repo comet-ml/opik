@@ -45,6 +45,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -53,8 +54,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
@@ -166,7 +165,6 @@ class GetTracesByProjectResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
     private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
     private String baseURI;
@@ -177,9 +175,10 @@ class GetTracesByProjectResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
@@ -194,6 +193,7 @@ class GetTracesByProjectResourceTest {
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
+        this.idGenerator = idGenerator;
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1141,7 +1141,7 @@ class GetTracesByProjectResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var traceName = generator.generate().toString();
+            var traceName = UUID.randomUUID().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1159,7 +1159,7 @@ class GetTracesByProjectResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
 
             traces.set(0, traces.getFirst().toBuilder()
-                    .name(generator.generate().toString())
+                    .name(UUID.randomUUID().toString())
                     .build());
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
@@ -3369,7 +3369,7 @@ class GetTracesByProjectResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = generator.generate().toString();
+            var projectName = UUID.randomUUID().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> {
@@ -4856,7 +4856,7 @@ class GetTracesByProjectResourceTest {
         private Trace createTraceAtTimestamp(String projectName, Instant timestamp, String comment) {
             return createTrace().toBuilder()
                     .projectName(projectName)
-                    .id(generateUUIDForTimestamp(timestamp))
+                    .id(idGenerator.generateId(timestamp))
                     .spanCount(0)
                     .llmSpanCount(0)
                     .guardrailsValidations(null)
@@ -4871,10 +4871,6 @@ class GetTracesByProjectResourceTest {
             return traces.stream()
                     .sorted(Comparator.comparing(Trace::id).reversed())
                     .toList();
-        }
-
-        private UUID generateUUIDForTimestamp(Instant timestamp) {
-            return generator.construct(timestamp.toEpochMilli());
         }
 
     }

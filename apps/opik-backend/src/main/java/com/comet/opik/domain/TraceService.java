@@ -142,7 +142,7 @@ class TraceServiceImpl implements TraceService {
     public Mono<UUID> create(@NonNull Trace trace) {
 
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
-        UUID id = trace.id() == null ? idGenerator.generateId(trace.startTime()) : trace.id();
+        UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
 
         return Mono.deferContextual(ctx -> IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
@@ -295,7 +295,7 @@ class TraceServiceImpl implements TraceService {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
                     Project project = projectPerName.get(projectName);
 
-                    UUID id = trace.id() == null ? idGenerator.generateId(trace.startTime()) : trace.id();
+                    UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
                     IdGenerator.validateVersion(id, TRACE_KEY);
 
                     return trace.toBuilder().id(id).projectId(project.id()).projectName(project.name()).build();

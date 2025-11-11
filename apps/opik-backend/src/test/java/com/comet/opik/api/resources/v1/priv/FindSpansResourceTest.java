@@ -22,7 +22,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.TestWorkspace;
-import com.comet.opik.api.resources.utils.UUIDTestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
@@ -33,6 +32,7 @@ import com.comet.opik.api.resources.utils.spans.StatsTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -166,9 +166,10 @@ class FindSpansResourceTest {
     private String baseURI;
     private ClientSupport client;
     private SpanResourceClient spanResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) throws SQLException {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator) throws SQLException {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
@@ -177,6 +178,7 @@ class FindSpansResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
+        this.idGenerator = idGenerator;
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -4164,7 +4166,7 @@ class FindSpansResourceTest {
 
         private Span createSpanWithTimestamp(String projectName, Instant timestamp) {
             return podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .id(UUIDTestUtils.generateUUIDForTimestamp(timestamp))
+                    .id(idGenerator.generateId(timestamp))
                     .projectName(projectName)
                     .projectId(null)
                     .parentSpanId(null)
