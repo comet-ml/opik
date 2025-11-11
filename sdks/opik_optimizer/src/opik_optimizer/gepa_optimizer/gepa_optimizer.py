@@ -266,7 +266,7 @@ class GepaOptimizer(BaseOptimizer):
                     opt_id = (
                         optimization.id
                         if optimization is not None
-                        else optimization_id
+                        else None
                     )
                     self.current_optimization_id = opt_id
                 except Exception:
