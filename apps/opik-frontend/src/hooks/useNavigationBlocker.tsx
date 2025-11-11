@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 
 export interface UseNavigationBlockerOptions {
   condition: boolean;
@@ -10,16 +11,7 @@ export interface UseNavigationBlockerOptions {
 }
 
 export interface UseNavigationBlockerResult {
-  showDialog: boolean;
-  setShowDialog: (show: boolean) => void;
-  handleConfirmNavigation: () => void;
-  handleCancelNavigation: () => void;
-  handleDialogOpenChange: (open: boolean) => void;
-  status: "idle" | "blocked" | "proceeding";
-  title: string;
-  description: string;
-  confirmText: string;
-  cancelText: string;
+  DialogComponent: JSX.Element;
 }
 
 const useNavigationBlocker = ({
@@ -80,19 +72,35 @@ const useNavigationBlocker = ({
     [handleCancelNavigation],
   );
 
+  const DialogComponent = useMemo(
+    () => (
+      <ConfirmDialog
+        open={showDialog}
+        setOpen={handleDialogOpenChange}
+        onConfirm={handleConfirmNavigation}
+        onCancel={handleCancelNavigation}
+        title={title}
+        description={description}
+        confirmText={confirmText}
+        cancelText={cancelText}
+        confirmButtonVariant="destructive"
+      />
+    ),
+    [
+      showDialog,
+      handleDialogOpenChange,
+      handleConfirmNavigation,
+      handleCancelNavigation,
+      title,
+      description,
+      confirmText,
+      cancelText,
+    ],
+  );
+
   return {
-    showDialog,
-    setShowDialog,
-    handleConfirmNavigation,
-    handleCancelNavigation,
-    handleDialogOpenChange,
-    status,
-    title,
-    description,
-    confirmText,
-    cancelText,
+    DialogComponent,
   };
 };
 
 export default useNavigationBlocker;
-

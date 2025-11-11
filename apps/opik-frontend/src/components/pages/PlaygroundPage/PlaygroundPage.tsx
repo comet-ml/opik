@@ -14,7 +14,6 @@ import {
 } from "@/store/PlaygroundStore";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -24,7 +23,7 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
 
-  const navigationBlocker = useNavigationBlocker({
+  const { DialogComponent } = useNavigationBlocker({
     condition: isRunning,
     title: "Prompt execution in progress",
     description:
@@ -101,17 +100,7 @@ const PlaygroundPage = () => {
         onProviderAdded={handleProviderAdded}
       />
 
-      <ConfirmDialog
-        open={navigationBlocker.showDialog}
-        setOpen={navigationBlocker.handleDialogOpenChange}
-        onConfirm={navigationBlocker.handleConfirmNavigation}
-        onCancel={navigationBlocker.handleCancelNavigation}
-        title={navigationBlocker.title}
-        description={navigationBlocker.description}
-        confirmText={navigationBlocker.confirmText}
-        cancelText={navigationBlocker.cancelText}
-        confirmButtonVariant="destructive"
-      />
+      {DialogComponent}
     </>
   );
 };

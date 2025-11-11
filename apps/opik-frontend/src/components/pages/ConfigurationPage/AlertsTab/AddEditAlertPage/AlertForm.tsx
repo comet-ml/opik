@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback } from "react";
 import get from "lodash/get";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import Loader from "@/components/shared/Loader/Loader";
 
 import { Alert, ALERT_TYPE } from "@/types/alerts";
@@ -119,7 +118,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
   const canLeavePage = form.formState.isSubmitted || !form.formState.isDirty;
 
-  const navigationBlocker = useNavigationBlocker({
+  const { DialogComponent } = useNavigationBlocker({
     condition: !canLeavePage,
     title: "You have unsaved changes",
     description:
@@ -289,17 +288,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
         </div>
       </div>
 
-      <ConfirmDialog
-        open={navigationBlocker.showDialog}
-        setOpen={navigationBlocker.handleDialogOpenChange}
-        onConfirm={navigationBlocker.handleConfirmNavigation}
-        onCancel={navigationBlocker.handleCancelNavigation}
-        title={navigationBlocker.title}
-        description={navigationBlocker.description}
-        confirmText={navigationBlocker.confirmText}
-        cancelText={navigationBlocker.cancelText}
-        confirmButtonVariant="destructive"
-      />
+      {DialogComponent}
     </div>
   );
 };
