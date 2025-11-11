@@ -23,11 +23,21 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
 
+  const [datasetId, setDatasetId] = useLocalStorageState<string | null>(
+    PLAYGROUND_SELECTED_DATASET_KEY,
+    {
+      defaultValue: null,
+    },
+  );
+
   const { DialogComponent } = useNavigationBlocker({
     condition: isRunning,
-    title: "Prompt execution in progress",
-    description:
-      "Your prompts are currently running. Leaving now will interrupt the execution and may result in incomplete traces or experiment items. Are you sure you want to leave?",
+    title: datasetId
+      ? "Experiment execution in progress"
+      : "Prompt execution in progress",
+    description: datasetId
+      ? "Your experiment is currently running. Leaving now will interrupt the execution and may result in incomplete experiment items. Are you sure you want to leave?"
+      : "Your prompt is currently running. Leaving now will interrupt the execution and may result in incomplete traces. Are you sure you want to leave?",
     confirmText: "Leave anyway",
     cancelText: "Stay and wait",
   });
@@ -40,13 +50,6 @@ const PlaygroundPage = () => {
   const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
-
-  const [datasetId, setDatasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_KEY,
-    {
-      defaultValue: null,
-    },
-  );
 
   // Auto-open setup dialog when no providers configured (only on initial load)
   useEffect(() => {
