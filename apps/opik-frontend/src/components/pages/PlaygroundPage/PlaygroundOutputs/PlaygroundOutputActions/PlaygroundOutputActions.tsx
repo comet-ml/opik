@@ -26,10 +26,12 @@ import { cn } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
-import { hasImagesInContent } from "@/lib/llm";
+import { countImagesInMessages, hasImagesInContent } from "@/lib/llm";
 import { supportsImageInput } from "@/lib/modelCapabilities";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetEmptyState from "./DatasetEmptyState";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -44,6 +46,7 @@ interface PlaygroundOutputActionsProps {
 
 const DEFAULT_LOADED_DATASETS = 1000;
 const MAX_LOADED_DATASETS = 10000;
+const IMAGE_COUNT_WARNING_THRESHOLD = 20; // Warn when more than 20 images are used
 
 const RUN_HOT_KEYS = ["⌘", "⏎"];
 
@@ -175,6 +178,17 @@ const PlaygroundOutputActions = ({
       return hasImages && !modelSupportsImages;
     });
   }, [promptMap]);
+
+  const maxImageCount = useMemo(() => {
+    return Math.max(
+      ...Object.values(promptMap).map((prompt) =>
+        countImagesInMessages(prompt.messages),
+      ),
+      0,
+    );
+  }, [promptMap]);
+
+  const showImageCountWarning = maxImageCount > IMAGE_COUNT_WARNING_THRESHOLD;
 
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {
@@ -399,6 +413,17 @@ const PlaygroundOutputActions = ({
 
   return (
     <>
+      {showImageCountWarning && (
+        <Alert variant="default" size="sm" className="mb-4">
+          <AlertTriangle />
+          <AlertTitle>High image count detected</AlertTitle>
+          <AlertDescription>
+            Your prompt contains {maxImageCount} images. Using many images may
+            impact performance and model response times. Consider reducing the
+            number of images if you experience issues.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="sticky right-0 ml-auto flex h-0 gap-2">
         {createdExperiments.length > 0 && (
           <TooltipWrapper

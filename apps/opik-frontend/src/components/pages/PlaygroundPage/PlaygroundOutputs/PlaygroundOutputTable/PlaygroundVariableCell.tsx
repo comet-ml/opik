@@ -27,7 +27,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
     const image = parseImageValue(value);
     if (image) {
       return (
-        <div className="max-h-80 max-w-[320px] overflow-y-auto">
+        <div className="max-h-80 max-w-[320px]">
           <ImagesListWrapper images={[image]} />
         </div>
       );

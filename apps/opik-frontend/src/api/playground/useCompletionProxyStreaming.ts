@@ -130,7 +130,37 @@ const useCompletionProxyStreaming = ({
           workspaceName,
         });
 
-        const reader = response?.body?.getReader();
+        // Check if the response is OK before trying to read the stream
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "Unknown error");
+          opikError = `Request failed with status ${response.status}: ${errorText}`;
+          return {
+            startTime,
+            endTime: getNowUtcTimeISOString(),
+            result: accumulatedValue,
+            providerError,
+            opikError,
+            pythonProxyError,
+            usage: null,
+            choices,
+          };
+        }
+
+        if (!response.body) {
+          opikError = "No response body received from server";
+          return {
+            startTime,
+            endTime: getNowUtcTimeISOString(),
+            result: accumulatedValue,
+            providerError,
+            opikError,
+            pythonProxyError,
+            usage: null,
+            choices,
+          };
+        }
+
+        const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
 
         const handleSuccessMessage = (
@@ -161,7 +191,14 @@ const useCompletionProxyStreaming = ({
           parsedMessage: ChatCompletionOpikErrorMessageType,
         ) => {
           if ("code" in parsedMessage && "message" in parsedMessage) {
-            opikError = parsedMessage.message;
+            // Make "Unexpected error calling LLM provider" more user-friendly
+            const message = parsedMessage.message;
+            if (message === "Unexpected error calling LLM provider") {
+              opikError =
+                "The AI provider encountered an error. This may be due to network issues, rate limits, or service unavailability. Please try again.";
+            } else {
+              opikError = message;
+            }
             return;
           }
 
@@ -228,15 +265,26 @@ const useCompletionProxyStreaming = ({
         const typedError = error as Error;
         const isStopped = typedError.name === "AbortError";
 
-        // no error if a run has been stopped
-        const defaultErrorMessage = isStopped ? null : "Unexpected error";
+        // Handle different types of errors
+        let errorMessage: string | null = null;
+        if (!isStopped) {
+          if (typedError.name === "TypeError" && typedError.message.includes("fetch")) {
+            errorMessage =
+              "Network error: Unable to connect to the AI provider. Please check your connection and try again.";
+          } else if (typedError.message.includes("timeout") || typedError.message.includes("Timeout")) {
+            errorMessage =
+              "Request timed out. The AI provider took too long to respond. This may happen with large requests. Please try again.";
+          } else {
+            errorMessage = typedError.message || "An unexpected error occurred while calling the AI provider.";
+          }
+        }
 
         return {
           startTime,
           endTime: getNowUtcTimeISOString(),
           result: accumulatedValue,
           providerError,
-          opikError: opikError || defaultErrorMessage,
+          opikError: opikError || errorMessage,
           pythonProxyError,
           usage: null,
           choices,

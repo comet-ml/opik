@@ -40,7 +40,7 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
 const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
-): ProviderMessageType => {
+): ProviderMessageType | { error: string; undefinedVariables: string[] } => {
   const messageTags = getPromptMustacheTags(message.content);
   const serializedDatasetItem = serializeTags(datasetItem, messageTags);
 
@@ -49,7 +49,11 @@ const transformMessageIntoProviderMessage = (
   );
 
   if (notDefinedVariables.length > 0) {
-    throw new Error(`${notDefinedVariables.join(", ")} not defined`);
+    // Return error object instead of throwing - allows soft error handling
+    return {
+      error: `${notDefinedVariables.join(", ")} not defined`,
+      undefinedVariables: notDefinedVariables,
+    };
   }
 
   // Wrap any raw image URLs or base64 data in the content with <<<image>>>...<<</image>>> tags
@@ -189,9 +193,26 @@ const usePromptDatasetItemCombination = ({
           isLoading: true,
         });
 
-        const providerMessages = prompt.messages.map((m) =>
+        const transformedMessages = prompt.messages.map((m) =>
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
+
+        // Check for undefined variable errors
+        const errorMessage = transformedMessages.find(
+          (msg): msg is { error: string; undefinedVariables: string[] } =>
+            "error" in msg,
+        );
+
+        if (errorMessage) {
+          // Set soft error - will be displayed with error icon in the output cell
+          updateOutput(prompt.id, datasetItemId, {
+            value: `Error: ${errorMessage.error}`,
+            isLoading: false,
+          });
+          return;
+        }
+
+        const providerMessages = transformedMessages as ProviderMessageType[];
 
         const promptLibraryVersions = (
           prompt.messages

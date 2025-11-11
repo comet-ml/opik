@@ -50,32 +50,40 @@ const PlaygroundOutputTable = ({
   const [hydratedDatasetItems, setHydratedDatasetItems] = useState<
     DatasetItem[]
   >([]);
+  const [isHydrating, setIsHydrating] = useState(false);
 
   // Hydrate dataset items when they change
   useEffect(() => {
     const hydrateItems = async () => {
-      const hydratedItems = await Promise.all(
-        datasetItems.map(async (item) => {
-          const hydratedData = await hydrateDatasetItemData(item);
-          return {
-            ...item,
-            data: hydratedData,
-          };
-        }),
-      );
-      setHydratedDatasetItems(hydratedItems);
+      setIsHydrating(true);
+      try {
+        const hydratedItems = await Promise.all(
+          datasetItems.map(async (item) => {
+            const hydratedData = await hydrateDatasetItemData(item);
+            return {
+              ...item,
+              data: hydratedData,
+            };
+          }),
+        );
+        setHydratedDatasetItems(hydratedItems);
+      } finally {
+        setIsHydrating(false);
+      }
     };
 
     if (datasetItems.length > 0) {
       hydrateItems();
     } else {
       setHydratedDatasetItems([]);
+      setIsHydrating(false);
     }
   }, [datasetItems, hydrateDatasetItemData]);
 
-  const noDataMessage = isLoadingDatasetItems
-    ? "Loading..."
-    : "No dataset items";
+  const noDataMessage =
+    isLoadingDatasetItems || isHydrating
+      ? "Loading..."
+      : "No dataset items";
 
   const rows = useMemo(() => {
     return hydratedDatasetItems.map((di) => {
