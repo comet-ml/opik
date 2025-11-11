@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -172,6 +172,14 @@ const useActionButtonActions = ({
       });
     }
   }, [createdExperiments, datasetId, navigate]);
+
+  useEffect(() => {
+    return () => {
+      if (isRunning) {
+        setIsRunning(false);
+      }
+    };
+  }, [isRunning, setIsRunning]);
 
   return {
     isRunning,
