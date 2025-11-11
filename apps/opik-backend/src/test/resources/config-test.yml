@@ -230,7 +230,7 @@ onlineScoring:
   # Default: 5
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
-  consumerBatchSize: 5
+  consumerBatchSize: 10
   # Default: 10
   # Description: Claim pending messages every N polling intervals (global default)
   claimIntervalRatio: 10
