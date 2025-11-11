@@ -91,6 +91,7 @@ export type PlaygroundStore = {
   providerValidationTrigger: number;
   selectedRuleIds: string[] | null;
   createdExperiments: LogExperiment[];
+  isRunning: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -113,6 +114,7 @@ export type PlaygroundStore = {
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
   clearCreatedExperiments: () => void;
+  setIsRunning: (isRunning: boolean) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -125,6 +127,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       providerValidationTrigger: 0,
       selectedRuleIds: null,
       createdExperiments: [],
+      isRunning: false,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -259,6 +262,14 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setIsRunning: (isRunning) => {
+        set((state) => {
+          return {
+            ...state,
+            isRunning,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -369,5 +380,11 @@ export const useSetCreatedExperiments = () =>
 
 export const useClearCreatedExperiments = () =>
   usePlaygroundStore((state) => state.clearCreatedExperiments);
+
+export const useIsRunning = () =>
+  usePlaygroundStore((state) => state.isRunning);
+
+export const useSetIsRunning = () =>
+  usePlaygroundStore((state) => state.setIsRunning);
 
 export default usePlaygroundStore;
