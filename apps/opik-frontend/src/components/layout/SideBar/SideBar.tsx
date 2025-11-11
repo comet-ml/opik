@@ -19,6 +19,7 @@ import {
   UserPen,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { ENTITY_TYPE } from "@/constants/colors";
 
 import useAppStore from "@/store/AppStore";
 import useProjectsList from "@/api/projects/useProjectsList";
@@ -55,6 +56,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: LucideHome,
         label: "Home",
+        entityType: ENTITY_TYPE.home,
       },
     ],
   },
@@ -69,6 +71,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LayoutGrid,
         label: "Projects",
         count: "projects",
+        entityType: ENTITY_TYPE.project,
       },
     ],
   },
@@ -83,6 +86,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: FlaskConical,
         label: "Experiments",
         count: "experiments",
+        entityType: ENTITY_TYPE.experiment,
       },
       {
         id: "optimizations",
@@ -91,6 +95,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: SparklesIcon,
         label: "Optimization runs",
         count: "optimizations",
+        entityType: ENTITY_TYPE.optimization,
       },
       {
         id: "datasets",
@@ -99,6 +104,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Database,
         label: "Datasets",
         count: "datasets",
+        entityType: ENTITY_TYPE.dataset,
       },
       {
         id: "annotation_queues",
@@ -107,6 +113,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: UserPen,
         label: "Annotation queues",
         count: "annotation_queues",
+        entityType: ENTITY_TYPE.annotationQueue,
       },
     ],
   },
@@ -121,6 +128,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: FileTerminal,
         label: "Prompt library",
         count: "prompts",
+        entityType: ENTITY_TYPE.prompt,
       },
       {
         id: "playground",
@@ -128,6 +136,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Blocks,
         label: "Playground",
+        entityType: ENTITY_TYPE.playground,
       },
     ],
   },
@@ -142,6 +151,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Brain,
         label: "Online evaluation",
         count: "rules",
+        entityType: ENTITY_TYPE.onlineEvaluation,
       },
     ],
   },
@@ -155,6 +165,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Bolt,
         label: "Configuration",
+        entityType: ENTITY_TYPE.configuration,
       },
     ],
   },
