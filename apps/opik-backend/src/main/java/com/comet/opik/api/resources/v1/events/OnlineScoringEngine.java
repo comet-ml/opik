@@ -237,12 +237,18 @@ public class OnlineScoringEngine {
 
     private UserMessage buildUserMessage(String content, @NotNull com.comet.opik.api.LlmProvider llmProvider,
             @NotNull String modelName) {
-        // Custom LLM providers (vLLM, etc.) don't support multi-content messages with VideoContent/ImageContent
-        // EXCEPT for vLLM Qwen-VL/VI models which DO support multimodal content```
-        // Match patterns like: qwen-vl, qwen2-vl, qwen2.5vi, etc.
-        boolean isVllmQwenModel = modelName.toLowerCase().matches(".*qwen.*(vl|vi).*");
+        // Custom LLM providers (vLLM, Ollama, etc.) don't support multi-content messages with VideoContent/ImageContent
+        // EXCEPT for specific multimodal models:
+        // - vLLM/Ollama Qwen-VL/VI models: Match patterns like qwen-vl, qwen2-vl, qwen2.5vi, etc.
+        // - vLLM/Ollama LLaVA models: Match patterns like llava, llava-v1.6, etc.
+        // - Any model with "vision" or "multimodal" in the name
+        String lowerModelName = modelName.toLowerCase();
+        boolean supportsMultimodal = lowerModelName.matches(".*qwen.*(vl|vi).*")
+                || lowerModelName.contains("llava")
+                || lowerModelName.contains("vision")
+                || lowerModelName.contains("multimodal");
 
-        if (llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM && !isVllmQwenModel) {
+        if (llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM && !supportsMultimodal) {
             return UserMessage.from(content);
         }
 

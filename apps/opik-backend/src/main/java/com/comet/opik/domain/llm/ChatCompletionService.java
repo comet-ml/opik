@@ -177,10 +177,20 @@ public class ChatCompletionService {
             var rawChatCompletionRequest = dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest.builder()
                     .model(modelParameters.name())
                     .messages(stringMessages)
+                    .stream(false) // Explicitly disable streaming to get plain JSON response
+                    .streamOptions(null) // Explicitly set streamOptions to null to prevent any streaming
                     .build();
+
+            log.info("Built ChatCompletionRequest with stream='{}', streamOptions='{}' for model '{}'",
+                    rawChatCompletionRequest.stream(), rawChatCompletionRequest.streamOptions(),
+                    rawChatCompletionRequest.model());
 
             // Step 3: Normalize the request - this expands <<<video>>> tags to structured content (same as Playground)
             var chatCompletionRequest = MessageContentNormalizer.normalizeRequest(rawChatCompletionRequest);
+
+            log.info("After normalization, ChatCompletionRequest stream='{}', streamOptions='{}' for model '{}'",
+                    chatCompletionRequest.stream(), chatCompletionRequest.streamOptions(),
+                    chatCompletionRequest.model());
 
             // Step 4: Generate response via provider
             var provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
