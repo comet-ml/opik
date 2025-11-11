@@ -404,6 +404,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         Optimize a prompt using hierarchical reflective refinement.
 
+        Args:
+            prompt: The chat prompt to optimize.
+            dataset: Dataset containing evaluation examples.
+            metric: Callable that scores `(dataset_item, llm_output)`.
+
         Optional Arguments:
             experiment_config: Additional configuration for experiment logging.
             n_samples: Number of dataset samples to evaluate per prompt (None for all).
