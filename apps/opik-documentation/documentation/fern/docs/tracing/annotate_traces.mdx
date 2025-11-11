@@ -111,6 +111,35 @@ will automatically score all, or a subset, of your production traces.
 
 ![Online evaluation](/img/production/online_evaluation.gif)
 
+## Manual evaluation
+
+While online evaluation automatically scores traces based on sampling rates and enabled rules, manual evaluation gives you complete control over which traces or threads get evaluated and when. This is particularly useful when you want to:
+
+- Evaluate specific traces or threads that failed or require closer inspection
+- Apply evaluation rules to historical data that wasn't captured by sampling
+- Test new evaluation rules on selected examples before enabling them for automatic scoring
+- Re-evaluate traces with updated or modified rules
+
+### How manual evaluation works
+
+Manual evaluation allows you to apply any existing evaluation rule to selected traces or threads directly from the UI, bypassing sampling rates and rule enablement status. You can trigger manual evaluation from:
+
+1. **Traces page**: Select one or more traces and click "Evaluate" to apply trace-level rules
+2. **Threads page**: Select one or more threads and click "Evaluate" to apply thread-level rules
+
+<Note>
+  **Important**: Trace-level rules can only be applied to traces, and thread-level rules can only be applied to threads. Make sure you're using the appropriate rule type for your selected entities.
+</Note>
+
+When you trigger manual evaluation:
+- All selected traces/threads will be queued for evaluation, regardless of sampling rate
+- You can apply multiple rules at once
+- Rules will execute even if they are currently disabled
+- Evaluation results will appear as feedback scores on the evaluated traces/threads
+- The evaluation is processed asynchronously, so you may need to wait a few seconds or refresh the page to see the results
+
+This gives you the flexibility to evaluate exactly what you need, when you need it, without waiting for the next sampled trace or modifying your online evaluation configuration.
+
 ## Next steps
 
 You can go one step further and:

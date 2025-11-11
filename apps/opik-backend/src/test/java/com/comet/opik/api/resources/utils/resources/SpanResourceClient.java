@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -11,6 +12,7 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -126,6 +128,47 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
+    }
+
+    public Response callFeedbackScoresWithContainer(FeedbackScoreBatchContainer request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(request));
+    }
+
+    public Response callGetSpansWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetSpansWithQueryParamsAndCookie(String sessionToken, String workspaceName,
+            Map<String, String> queryParams) {
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
+
+        return target
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callFeedbackScoresWithContainerAndCookie(FeedbackScoreBatchContainer request, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(request));
     }
 
     public void feedbackScore(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
@@ -282,6 +325,13 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
             UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
             List<SortingField> sortingFields, List<Span.SpanField> exclude) {
+        return findSpans(workspaceName, apiKey, projectName, projectId, page, size, traceId, type, filters,
+                sortingFields, exclude, null, null);
+    }
+
+    public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
+            UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
+            List<SortingField> sortingFields, List<Span.SpanField> exclude, String fromTime, String toTime) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
 
         if (page != null) {
@@ -318,6 +368,14 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
         if (!CollectionUtils.isEmpty(exclude)) {
             webTarget = webTarget.queryParam("exclude", toURLEncodedQueryParam(exclude));
+        }
+
+        if (fromTime != null) {
+            webTarget = webTarget.queryParam("from_time", fromTime);
+        }
+
+        if (toTime != null) {
+            webTarget = webTarget.queryParam("to_time", toTime);
         }
 
         try (var actualResponse = webTarget

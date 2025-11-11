@@ -58,6 +58,15 @@ component:
         registry: docker.io
         repository: curlimages/curl
         tag: 8.12.1
+    waitForMysql:
+      enabled: true
+      mysql:
+        host: opik-mysql
+        port: 3306
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: 1.36
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
@@ -404,7 +413,75 @@ clickhouse:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 30
-  # deprecated: use templates instead
+  configuration:
+    files:
+      conf.d/memory.xml: |
+        <yandex>
+          <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
+        </yandex>
+      conf.d/profiles.xml: |
+        <clickhouse>
+          <profiles>
+            <default>
+                <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>
+                <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
+            </default>
+          </profiles>
+        </clickhouse>
+      # Remove or add TTL to system tables that are not needed
+      conf.d/system_tables.xml: |
+        <clickhouse>
+          <opentelemetry_span_log remove="1"/>
+          <asynchronous_metric_log remove="1"/>
+          <processors_profile_log remove="1"/>
+          <text_log remove="1"/>
+          <trace_log remove="1"/>
+          <blob_storage_log remove="1"/>
+          <error_log>
+              <engine>
+                  ENGINE MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>error_log</table>
+          </error_log>
+          <latency_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>latency_log</table>
+          </latency_log>
+          <metric_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>metric_log</table>
+          </metric_log>
+          <query_metric_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>query_metric_log</table>
+          </query_metric_log>
+        </clickhouse>
   service:
     serviceTemplate: clickhouse-cluster-svc-template
   templates:

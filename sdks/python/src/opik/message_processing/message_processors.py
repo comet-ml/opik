@@ -4,6 +4,8 @@ from typing import List, Optional, TypeVar, Type
 
 from . import messages
 
+import opik.exceptions
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,9 +40,13 @@ class ChainedMessageProcessor(BaseMessageProcessor):
         return True
 
     def process(self, message: messages.BaseMessage) -> None:
+        rate_limit_error: Optional[opik.exceptions.OpikCloudRequestsRateLimited] = None
+
         for processor in self._processors:
             try:
                 processor.process(message)
+            except opik.exceptions.OpikCloudRequestsRateLimited as ex:
+                rate_limit_error = ex
             except Exception as ex:
                 LOGGER.error(
                     "Unexpected error while processing message: %s with message processor: %s",
@@ -48,7 +54,10 @@ class ChainedMessageProcessor(BaseMessageProcessor):
                     type(processor),
                     exc_info=True,
                 )
-                continue
+
+        # Rate limit error is a special case that is handled by the caller.
+        if rate_limit_error is not None:
+            raise rate_limit_error
 
     def get_processor_by_type(self, processor_type: Type[T]) -> Optional[T]:
         """

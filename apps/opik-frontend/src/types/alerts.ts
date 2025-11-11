@@ -6,6 +6,7 @@ export enum ALERT_EVENT_TYPE {
   prompt_committed = "prompt:committed",
   trace_guardrails_triggered = "trace:guardrails_triggered",
   prompt_deleted = "prompt:deleted",
+  experiment_finished = "experiment:finished",
 }
 
 export enum ALERT_TRIGGER_CONFIG_TYPE {
@@ -16,6 +17,7 @@ export enum ALERT_TRIGGER_CONFIG_TYPE {
 export enum ALERT_TYPE {
   general = "general",
   slack = "slack",
+  pagerduty = "pagerduty",
 }
 
 export interface AlertTriggerConfig {
@@ -52,6 +54,7 @@ export interface Webhook {
 
 export interface AlertMetadata {
   base_url?: string;
+  routing_key?: string;
 }
 
 export interface Alert {

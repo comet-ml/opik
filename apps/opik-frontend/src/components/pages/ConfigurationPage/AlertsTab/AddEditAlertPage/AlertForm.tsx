@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import get from "lodash/get";
-import capitalize from "lodash/capitalize";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
@@ -17,7 +16,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -64,6 +62,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       name: alert?.name || "",
       enabled: alert?.enabled ?? true,
       alertType: alert?.alert_type || ALERT_TYPE.general,
+      routingKey: alert?.metadata?.routing_key || "",
       url: alert?.webhook?.url || "",
       secretToken: alert?.webhook?.secret_token || "",
       headers: alert?.webhook?.headers
@@ -77,7 +76,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
   });
 
   const getAlert = useCallback(() => {
-    const formData = form.getValues();
+    const formData = form.watch();
 
     return {
       name: formData.name.trim(),
@@ -86,6 +85,11 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       metadata: {
         ...alert?.metadata,
         base_url: buildFullBaseUrl(),
+        ...(formData.alertType === ALERT_TYPE.pagerduty && {
+          routing_key: formData.routingKey
+            ? formData.routingKey.trim()
+            : undefined,
+        }),
       },
       webhook: {
         url: formData.url.trim(),
@@ -275,38 +279,6 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
                       </FormControl>
                     </FormItem>
                   )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="alertType"
-                  render={({ field, formState }) => {
-                    const validationErrors = get(formState.errors, [
-                      "alertType",
-                    ]);
-                    return (
-                      <FormItem>
-                        <Label>Type</Label>
-                        <FormControl>
-                          <SelectBox
-                            value={field.value}
-                            onChange={field.onChange}
-                            options={Object.values(ALERT_TYPE).map((type) => ({
-                              value: type,
-                              label: capitalize(type),
-                            }))}
-                            placeholder="Select type"
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
                 />
               </div>
 

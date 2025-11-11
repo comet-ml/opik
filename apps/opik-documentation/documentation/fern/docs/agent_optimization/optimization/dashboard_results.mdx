@@ -1,0 +1,49 @@
+---
+title: "Dashboard results"
+description: "Analyze optimization trials, failure modes, and improvements inside Opik."
+---
+
+After each optimization run, visit the Opik dashboard to understand what changed and decide whether to ship the new prompt.
+
+## Navigate to your run
+
+1. Open [https://www.comet.com/opik](https://www.comet.com/opik).
+2. In the left nav, click **Optimization runs** under **Evaluation**.
+3. Select the run you care about (grouped by dataset + optimizer). The detail view shows charts, trials, prompts, and per-sample traces.
+
+## Key panels
+
+<AccordionGroup>
+  <Accordion title="Optimization progress chart">
+    Plots every trial score in chronological order and highlights the current best prompt. Hover to read exact values and see percentage improvements.
+  </Accordion>
+  <Accordion title="Trial table">
+    Lists each trial, the optimizer used, the prompt JSON, and per-trial scores. Click a trial row to expand dataset items and attached traces.
+  </Accordion>
+  <Accordion title="Examples & traces">
+    When you expand a trial, you can inspect every dataset item that ran during that trial plus the corresponding trace tree (tool calls, attachments, etc.).
+  </Accordion>
+  <Accordion title="Failure modes (reflective runs only)">
+    Hierarchical Reflective runs add a panel that clusters similar failures. Expand a cluster to read metric reasons and sample traces.
+  </Accordion>
+  <Accordion title="Dataset coverage">
+    Confirms how many dataset rows were sampled per trial so you can judge statistical significance.
+  </Accordion>
+</AccordionGroup>
+
+## Reuse results
+
+While the UI currently focuses on analysis, you can always pull prompts and history directly from the SDK after the run finishes:
+
+```python
+# result is the OptimizationResult returned by your optimizer call
+optimized_prompt = result.prompt
+history = result.history
+```
+
+Use `optimized_prompt` to update your application and `history` to build custom reports or attach evidence to pull requests.
+
+## Next steps
+
+- Feed the exported prompt back into your application.
+- Attach dashboards or screenshots to your PR so reviewers understand the improvement.

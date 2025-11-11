@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo } from "react";
-import { Tag, Trash } from "lucide-react";
+import { Tag, Trash, Brain } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -16,6 +16,7 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import { ResponsiveToolbarProvider } from "@/contexts/ResponsiveToolbarContext";
 import { ResponsiveButton } from "@/components/ui/ResponsiveButton";
+import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -48,6 +49,8 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       { name: "GAP", size: 8, visible: true },
       { name: "ADD_TAGS", size: 118, visible: true },
       { name: "GAP", size: 8, visible: true },
+      { name: "EVALUATE", size: 118, visible: type === TRACE_DATA_TYPE.traces },
+      { name: "GAP", size: 8, visible: type === TRACE_DATA_TYPE.traces },
       { name: "EXPORT", size: 40, visible: true },
       { name: "GAP", size: 8, visible: true },
       { name: "DELETE", size: 40, visible: type === TRACE_DATA_TYPE.traces },
@@ -120,6 +123,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           type={type}
           onSuccess={onClearSelection}
         />
+        {type === TRACE_DATA_TYPE.traces && (
+          <RunEvaluationDialog
+            key={`evaluation-${resetKeyRef.current}`}
+            open={open === 4}
+            setOpen={setOpen}
+            projectId={projectId}
+            entityIds={selectedRows.map((row) => row.id)}
+            entityType="trace"
+          />
+        )}
         <AddToDropdown
           getDataForExport={getDataForExport}
           selectedRows={selectedRows}
@@ -136,6 +149,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           }}
           disabled={disabled}
         />
+        {type === TRACE_DATA_TYPE.traces && (
+          <TooltipWrapper content="Evaluate">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setOpen(4);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+              disabled={disabled}
+            >
+              <Brain className="mr-2 size-4" />
+              Evaluate
+            </Button>
+          </TooltipWrapper>
+        )}
         <ExportToButton
           disabled={disabled || columnsToExport.length === 0}
           getData={mapRowData}

@@ -17,6 +17,7 @@ import {
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 import { Experiment } from "@/experiment/Experiment";
+import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
 import { parseNdjsonStreamToArray } from "@/utils/stream";
@@ -31,6 +32,12 @@ import {
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
 import { OpikQueryLanguage } from "@/query";
+import {
+  searchTracesWithFilters,
+  searchAndWaitForDone,
+  parseFilterString,
+} from "@/utils/searchHelpers";
+import { SearchTimeoutError } from "@/errors";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -279,6 +286,7 @@ export class OpikClient {
    * @param datasetName The name of the dataset to associate with the experiment
    * @param name Optional name for the experiment (if not provided, a generated name will be used)
    * @param experimentConfig Optional experiment configuration parameters
+   * @param prompts Optional array of Prompt objects to link with the experiment
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
    * @returns The created Experiment object
@@ -287,12 +295,14 @@ export class OpikClient {
     datasetName,
     name,
     experimentConfig,
+    prompts,
     type = ExperimentType.Regular,
     optimizationId,
   }: {
     datasetName: string;
     name?: string;
     experimentConfig?: Record<string, unknown>;
+    prompts?: Prompt[];
     type?: ExperimentType;
     optimizationId?: string;
   }): Promise<Experiment> => {
@@ -302,15 +312,22 @@ export class OpikClient {
       throw new Error("Dataset name is required to create an experiment");
     }
 
+    // Process prompts and build metadata
+    const [metadata, promptVersions] = buildMetadataAndPromptVersions(
+      experimentConfig,
+      prompts
+    );
+
     const id = generateId();
-    const experiment = new Experiment({ id, name, datasetName }, this);
+    const experiment = new Experiment({ id, name, datasetName, prompts }, this);
 
     try {
       this.api.experiments.createExperiment({
         id,
         datasetName,
         name,
-        metadata: experimentConfig,
+        metadata,
+        promptVersions,
         type,
         optimizationId,
       });
@@ -741,6 +758,105 @@ export class OpikClient {
       logger.error("Failed to delete prompts", { count: ids.length, error });
       throw error;
     }
+  };
+
+  /**
+   * Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
+   * to be found before returning within the specified timeout.
+   *
+   * @param projectName - The name of the project to search in. Defaults to the project configured on the Client.
+   * @param filterString - Filter using Opik Query Language (OQL). Format: `<COLUMN> <OPERATOR> <VALUE> [AND ...]`
+   *   Common columns: `id`, `name`, `start_time`, `end_time`, `input`, `output`, `status`, `tags`, `metadata.*`, `feedback_scores.*`, `usage.*`
+   *   Common operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `not_contains`, `starts_with`, `ends_with`
+   *   Use ISO 8601 format for dates (e.g., "2024-01-01T00:00:00Z")
+   * @param maxResults - Maximum number of traces to return (default: 1000)
+   * @param truncate - Whether to truncate image data in input, output, or metadata (default: true)
+   * @param waitForAtLeast - Minimum number of traces to wait for before returning
+   * @param waitForTimeout - Timeout for waiting in seconds (default: 60)
+   *
+   * @returns Promise resolving to array of traces matching the search criteria
+   * @throws {SearchTimeoutError} If waitForAtLeast traces are not found within the specified timeout
+   *
+   * @example
+   * ```typescript
+   * // Get all traces in a project
+   * const traces = await client.searchTraces({ projectName: "My Project" });
+   *
+   * // Filter by date and metadata
+   * const filtered = await client.searchTraces({
+   *   projectName: "My Project",
+   *   filterString: 'start_time >= "2024-01-01T00:00:00Z" AND metadata.model = "gpt-4"'
+   * });
+   *
+   * // Wait for at least 10 traces
+   * const traces = await client.searchTraces({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 10,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchTraces = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TracePublic[]> => {
+    const {
+      projectName,
+      filterString,
+      maxResults = 1000,
+      truncate = true,
+      waitForAtLeast,
+      waitForTimeout = 60,
+    } = options ?? {};
+
+    logger.debug("Searching traces", {
+      projectName,
+      filterString,
+      maxResults,
+      truncate,
+      waitForAtLeast,
+      waitForTimeout,
+    });
+
+    // Parse filters
+    const filters = parseFilterString(filterString);
+
+    // Determine project name
+    const targetProject = projectName ?? this.config.projectName;
+
+    // Create search function
+    const searchFn = () =>
+      searchTracesWithFilters(
+        this.api,
+        targetProject,
+        filters,
+        maxResults,
+        truncate
+      );
+
+    // Execute with or without polling
+    if (waitForAtLeast === undefined) {
+      return await searchFn();
+    }
+
+    const result = await searchAndWaitForDone(
+      searchFn,
+      waitForAtLeast,
+      waitForTimeout * 1000, // Convert to ms
+      5000 // 5 second poll interval
+    );
+
+    if (result.length < waitForAtLeast) {
+      throw new SearchTimeoutError(
+        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} traces, but only ${result.length} were found.`
+      );
+    }
+
+    return result;
   };
 
   public flush = async () => {

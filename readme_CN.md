@@ -1,6 +1,6 @@
 > 注意：此文件为机器翻译版本。欢迎对翻译进行改进！
 
-<div align="center"><b><a href="README.md">英文版</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
 
 <h1 align="center" style="border-bottom: none">
     <div>
@@ -58,27 +58,24 @@ Opik（由 [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=git
 
 <br>
 
-### 关键能力
+主要功能包括：
 
-#### 开发与跟踪
+- **开发与跟踪:**
+  - 在开发和生产环境中跟踪所有 LLM 调用和详细跟踪信息 ([快速开始](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
+  - 丰富的第三方集成：原生支持 Google ADK、Autogen、Flowise AI 等主流框架 ([集成列表](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
+  - 通过 [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 或 [UI](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik) 为跟踪和跨度添加反馈分数注释
+  - 在 [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground) 中试验提示和模型
 
-- 在开发和生产环境中跟踪所有 LLM 调用和详细跟踪信息 ([快速开始](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
-- 丰富的第三方集成：原生支持 Google ADK、Autogen、Flowise AI 等主流框架 ([集成列表](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
-- 通过 [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 或 UI 为跟踪和跨度添加反馈分数注释
-- 在 [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground) 中试验提示和模型
+- **评估与测试**:
+  - 使用 [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) 和 [Experiments](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik) 自动化 LLM 应用评估
+  - 利用 LLM-as-a-judge 指标进行复杂任务评估，如 [幻觉检测](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik)、[内容审核](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik) 和 RAG 评估（[回答相关性](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik)、[上下文精确度](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)）
+  - 使用 [PyTest 集成](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik) 将评估纳入 CI/CD 流水线
 
-#### 评估与测试
-
-- 使用 [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) 和 [Experiments](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik) 自动化 LLM 应用评估
-- 利用 LLM-as-a-judge 指标进行复杂任务评估，如 [幻觉检测](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik)、[内容审核](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik) 和 RAG 评估（[回答相关性](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik)、[上下文精确度](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)）
-- 使用 [PyTest 集成](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik) 将评估纳入 CI/CD 流水线
-
-#### 生产监控与优化
-
-- 高吞吐量生产跟踪：支持每日 4,000 万+ 跟踪记录
-- 在 Opik 仪表板中监控反馈分数、跟踪计数和令牌使用量 ([仪表板](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik))
-- 使用在线评估规则检测生产问题 ([规则](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik))
-- 借助 **Opik Agent Optimizer** 和 **Opik Guardrails** 持续改进和保护您的 LLM 应用
+- **生产监控与优化**:
+  - 高吞吐量生产跟踪：支持每日 4,000 万+ 跟踪记录
+  - 在 [Opik 仪表板](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik) 中监控反馈分数、跟踪计数和令牌使用量
+  - 使用 [在线评估规则](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik) 和 LLM-as-a-Judge 指标检测生产问题
+  - 利用 **Opik Agent Optimizer** 和 **Opik Guardrails** 持续改进和保护您的 LLM 应用
 
 > [!TIP]  
 > 如果您需要 Opik 当前尚不支持的功能，请提交新的 [功能请求](https://github.com/comet-ml/opik/issues/new/choose) 🚀
@@ -155,6 +152,9 @@ Opik 安装脚本现在支持针对不同开发场景的服务配置文件：
 适用于生产或大规模自托管场景，通过 Helm Chart 在 Kubernetes 集群中安装 Opik：
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
+
+> [!IMPORTANT]
+> **版本 1.7.0 变更**：请查看 [更新日志](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) 以了解重要更新和破坏性变更。
 
 ## 💻 Opik 客户端 SDK
 

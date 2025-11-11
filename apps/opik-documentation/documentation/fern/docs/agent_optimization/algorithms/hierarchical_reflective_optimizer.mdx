@@ -4,153 +4,40 @@ subtitle: "Hierarchical root cause analysis for targeted prompt improvement"
 description: "Learn how to use the Hierarchical Reflective Optimizer to improve prompts through systematic root cause analysis of failure modes and targeted refinement."
 ---
 
-The `HierarchicalReflectiveOptimizer` uses hierarchical root cause analysis to identify and address specific failure modes in your prompts. It analyzes evaluation results, identifies patterns in failures, and generates targeted improvements to address each failure mode systematically.
+The `HierarchicalReflectiveOptimizer` uses hierarchical root cause analysis to identify and address
+specific failure modes in your prompts. It analyzes evaluation results, identifies patterns in
+failures, and generates targeted improvements to address each failure mode systematically.
 
 <Note>
-  **When to Use This Optimizer:**
-  `HierarchicalReflectiveOptimizer` is ideal when you have a complex prompt that you want to refine based on understanding *why* it's failing. Unlike optimizers that generate many random variations, this optimizer systematically analyzes failures, identifies root causes, and makes surgical improvements to address each specific issue.
-
-**Key Trade-offs:**
-
-- Requires metrics that return **reasons** for their scores (using `ScoreResult` with `reason` field). Simple numeric metrics won't provide enough feedback for root cause analysis.
-- Best suited for refinement of existing prompts rather than discovering entirely new prompt structures.
-- Uses hierarchical analysis which involves multiple LLM calls for analyzing batches of failures and synthesizing findings.
-- Supports multi-iteration optimization, allowing the optimizer to run multiple rounds of analysis and improvement until convergence or a maximum number of iterations is reached.
-
+  `HierarchicalReflectiveOptimizer` is ideal when you have a complex prompt that you want to refine
+  based on understanding *why* it's failing. Unlike optimizers that generate many random variations,
+  this optimizer systematically analyzes failures, identifies root causes, and makes surgical
+  improvements to address each specific issue.
 </Note>
-
-<Info>
-  Have questions about `HierarchicalReflectiveOptimizer`? The [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq) addresses common questions about choosing optimizers, understanding the role of the `reasoning_model`, and how parameters like `max_parallel_batches` affect performance and cost.
-</Info>
 
 ## How It Works
 
-The `HierarchicalReflectiveOptimizer` takes a systematic approach to prompt improvement through the following process:
+The Hierarchical Reflective Optimizer has been developed by the Opik team to improve prompts that
+might have already gone through a few rounds of manual prompt engineering. It focuses on identifying
+why a prompt is failing and then updating the prompts to address the issues.
 
-1.  **Baseline Evaluation**:
+As datasets can be large, we split the analysis into batches and analyze them in parallel. We then
+synthesize the findings across all batches to identify the core issues with the prompt.
 
-    - Your initial prompt is evaluated against the dataset using your specified `metric`.
-    - A baseline score is established to measure improvements against.
-
-2.  **Hierarchical Root Cause Analysis**:
-
-    - Evaluation results (especially failures or low-scoring cases) are split into batches.
-    - Each batch is analyzed in parallel using the `reasoning_model` to identify patterns and failure modes.
-    - The batch-level analyses are then synthesized into a unified set of failure modes that represent the core issues with the current prompt.
-    - This hierarchical approach (batch → synthesis) is more scalable and robust than analyzing all failures at once.
-
-3.  **Failure Mode Identification**:
-
-    - Each identified failure mode includes:
-      - A descriptive **name** (e.g., "Vague Instructions", "Missing Context")
-      - A **description** of the failure pattern
-      - A **root cause** analysis explaining why the prompt fails in these cases
-
-4.  **Targeted Improvement Generation**:
-
-    - For each failure mode, the optimizer generates an improved version of the prompt.
-    - The improvement is guided by a meta-prompt that instructs the `reasoning_model` to:
-      - Make surgical, targeted changes that address the specific root cause
-      - Update existing instructions if they're unclear or incomplete
-      - Add new instructions only when necessary
-      - Maintain the original prompt structure and intent
-
-5.  **Iterative Evaluation with Retries**:
-
-    - Each improved prompt is evaluated against the dataset.
-    - If an improvement doesn't increase the score, the optimizer can retry with a different seed (controlled by `max_retries`).
-    - Only improvements that increase the score are kept; otherwise, the previous best prompt is retained.
-
-6.  **Multi-Iteration Optimization**:
-
-    - After addressing all identified failure modes in an iteration, the optimizer re-analyzes the improved prompt to identify any remaining failure modes.
-    - The number of iterations is controlled by `max_iterations` (default: 5).
-    - The optimizer automatically stops early if the improvement between iterations falls below the `convergence_threshold` (default: 1%).
-    - Each iteration performs a complete cycle of root cause analysis, targeted improvements, and evaluation.
-
-7.  **Result**:
-    - The highest-scoring prompt found across all iterations and improvements is returned as the optimized prompt.
-    - Detailed metadata about the optimization process, including failure modes addressed, number of iterations completed, and improvement attempts, is included in the result.
-
-<Warning>
-  **Metric Requirements:** The `HierarchicalReflectiveOptimizer` requires metrics that provide **reasoning** about their scores. When using Opik metrics, ensure they return `ScoreResult` objects with the `reason` field populated. This feedback is critical for identifying failure modes.
-
-Example of a good metric for HierarchicalReflectiveOptimizer:
-
-```python
-from opik.evaluation.metrics import ScoreResult
-
-def my_metric(dataset_item, llm_output):
-    # Your scoring logic
-    score = calculate_score(dataset_item, llm_output)
-
-    # IMPORTANT: Include reason for the score
-    reason = f"Output {'matches' if score > 0.5 else 'does not match'} expected format. {additional_context}"
-
-    return ScoreResult(
-        name="my_metric",
-        value=score,
-        reason=reason  # This is required!
-    )
-```
-
-</Warning>
+<Frame>
+  <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="Hierarchical Reflective Optimizer" />
+</Frame>
 
 <Tip>
-  The hierarchical root cause analysis (Step 2) is what makes this optimizer unique. It processes evaluation results in batches, analyzes patterns in each batch, and then synthesizes findings across all batches. This approach scales better to large datasets and produces more coherent, actionable failure modes than analyzing all results at once. Understanding how Opik's evaluation works will help you design better metrics: - [Evaluation Overview](/evaluation/overview) - [Metrics Overview](/evaluation/metrics/overview)
+The optimizer is open-source, you can check out the root cause analysis code and prompts in the
+[Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/hierarchical_reflective_optimizer).
 </Tip>
 
-## Configuration Options
+## Quickstart
 
-### Basic Configuration
+You can use the `HierarchicalReflectiveOptimizer` to optimize a prompt:
 
-```python
-from opik_optimizer import HierarchicalReflectiveOptimizer
-
-optimizer = HierarchicalReflectiveOptimizer(
-    reasoning_model="openai/gpt-4.1",     # Model for analysis and improvement generation
-    # Optimization Parameters
-    max_iterations=5,                     # Maximum optimization iterations (default: 5)
-    convergence_threshold=0.01,           # Stop if improvement < 1% (default: 0.01)
-    # Technical Parameters
-    num_threads=12,                       # Parallel threads for evaluation
-    max_parallel_batches=5,               # Max batches analyzed concurrently
-    batch_size=25,                        # Test cases per batch (default: 25)
-    verbose=1,                            # 0=quiet, 1=show progress
-    seed=42,                              # Random seed for reproducibility
-    # LLM parameters (passed via **model_kwargs)
-    temperature=0.7,
-    max_tokens=4096
-)
-```
-
-### Advanced Configuration
-
-Key parameters include:
-
-**Optimization Control:**
-- `max_iterations`: Maximum number of optimization iterations to perform (default: 5). Each iteration performs root cause analysis, generates improvements, and evaluates them. The optimizer stops early if convergence is achieved.
-- `convergence_threshold`: Relative improvement threshold for early stopping (default: 0.01 or 1%). If the improvement between iterations is less than this threshold, the optimization stops early to avoid unnecessary LLM calls.
-
-**Model and Analysis:**
-- `reasoning_model`: The LLM used for root cause analysis, failure mode synthesis, and generating prompt improvements. This is typically a powerful model like GPT-4.
-- `batch_size`: Number of test cases per batch for root cause analysis (default: 25). Larger batches provide more context but use more tokens per analysis call.
-- `num_threads`: Number of parallel threads used for evaluating prompts against the dataset. Higher values speed up evaluation but increase concurrent API calls.
-- `max_parallel_batches`: Maximum number of batches to analyze concurrently during hierarchical root cause analysis. Controls parallelism vs. memory/API usage.
-
-**Other:**
-- `seed`: Random seed for reproducibility. Each retry attempt uses a varied seed to avoid cache hits and ensure different improvement suggestions.
-- `verbose`: Controls display of progress bars and detailed logging (0=off, 1=on).
-- `**model_kwargs`: Additional keyword arguments (e.g., `temperature`, `max_tokens`) passed to the underlying LLM calls.
-
-The `optimize_prompt` method also accepts:
-
-- `max_retries`: Number of retry attempts if an improvement doesn't increase the score (default: 2). Each retry uses a different seed.
-- `n_samples`: Optional limit on the number of dataset items used for evaluation. Useful for faster iterations during development.
-
-## Example Usage
-
-```python
+```python maxLines=1000
 from opik_optimizer import HierarchicalReflectiveOptimizer, ChatPrompt, datasets
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -181,18 +68,24 @@ def answer_quality_metric(dataset_item, llm_output):
 initial_prompt = ChatPrompt(
     project_name="reflective_optimization",
     messages=[
-        {"role": "system", "content": "You are a helpful assistant that answers questions accurately."},
-        {"role": "user", "content": "Question: {question}\n\nProvide a concise answer."}
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that answers questions accurately."
+        },
+        {
+            "role": "user",
+            "content": "Question: {question}\n\nProvide a concise answer."
+        }
     ]
 )
 
 # 4. Initialize the HierarchicalReflectiveOptimizer
 optimizer = HierarchicalReflectiveOptimizer(
-    reasoning_model="openai/gpt-4.1",  # Strong model for analysis
-    num_threads=8,
+    model="gpt-4o",
+    n_threads=8,
     max_parallel_batches=5,
     seed=42,
-    temperature=0.7
+    model_parameters={"temperature": 0.7}
 )
 
 # 5. Run the optimization
@@ -200,119 +93,70 @@ optimization_result = optimizer.optimize_prompt(
     prompt=initial_prompt,
     dataset=dataset,
     metric=answer_quality_metric,
-    n_samples=100,          # Evaluate on 100 samples
-    max_retries=2           # Retry up to 2 times if improvement fails
+    n_samples=100,
+    max_trials=5,
+    max_retries=2
 )
 
 # 6. View the results
 optimization_result.display()
-
-# Access the optimized prompt
-print("\nOptimized Prompt:")
-for msg in optimization_result.prompt:
-    print(f"{msg['role']}: {msg['content']}")
-
-# Check optimization details
-print(f"\nInitial Score: {optimization_result.initial_score:.4f}")
-print(f"Final Score: {optimization_result.score:.4f}")
-print(f"Improvement: {(optimization_result.score - optimization_result.initial_score):.4f}")
-print(f"LLM Calls Made: {optimization_result.llm_calls}")
 ```
 
-## Model Support
 
-The `HierarchicalReflectiveOptimizer` uses LiteLLM for model interactions, providing broad compatibility with various LLM providers including OpenAI, Azure OpenAI, Anthropic, Google (Vertex AI / AI Studio), Mistral AI, Cohere, and locally hosted models (e.g., via Ollama).
+## Configuration Options
 
-The `reasoning_model` parameter accepts any LiteLLM-supported model string (e.g., `"openai/gpt-4.1"`, `"azure/gpt-4"`, `"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`).
+### Optimizer parameters
 
-For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
+The optimizer has the following parameters:
 
-### Configuration Example using LiteLLM model string
+
+<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
+<ParamField path="n_threads" type="int" optional={true} defaultValue="12" />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
+<ParamField path="max_parallel_batches" type="int" optional={true} defaultValue="5" />
+<ParamField path="batch_size" type="int" optional={true} defaultValue="25" />
+<ParamField path="convergence_threshold" type="float" optional={true} defaultValue="0.01" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
+
+### `optimize_prompt` parameters
+
+The `optimize_prompt` method has the following parameters:
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
+<ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="project_name" type="str" optional={true} defaultValue="Optimization" />
+<ParamField path="max_trials" type="int" optional={true} defaultValue="5" />
+<ParamField path="max_retries" type="int" optional={true} defaultValue="2" />
+<ParamField path="kwargs" type="Any" />
+
+### Model Support
+
+There are two models to consider when using the `HierarchicalReflectiveOptimizer`:
+- `HierarchicalReflectiveOptimizer.model`: The model used for the root cause analysis and failure mode synthesis.
+- `ChatPrompt.model`: The model used to evaluate the prompt.
+
+The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
+`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
+using the `model_parameters` parameter:
 
 ```python
 optimizer = HierarchicalReflectiveOptimizer(
-    reasoning_model="anthropic/claude-3-opus-20240229",
-    temperature=0.7,
-    max_tokens=4096
+    model="anthropic/claude-3-opus-20240229",
+    model_parameters={
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
 )
 ```
 
-## Best Practices
-
-1. **Metric Design**
-
-   - **Always include detailed reasons** in your metric's `ScoreResult`. The quality of root cause analysis depends on this feedback.
-   - Provide specific, actionable feedback about why a response succeeds or fails.
-   - Consider multiple aspects: correctness, completeness, format, tone, etc.
-
-2. **Starting Prompt**
-
-   - Begin with a reasonably structured prompt. The optimizer refines existing prompts rather than creating from scratch.
-   - Include clear intent and structure; the optimizer will make it more precise.
-
-3. **Batch Configuration**
-
-   - `max_parallel_batches=5` is a good default for balancing speed and API rate limits.
-   - Increase if you have high rate limits and want faster analysis.
-   - Decrease if you encounter rate limiting issues.
-
-4. **Retry Strategy**
-
-   - Use `max_retries=2` or `max_retries=3` to give the optimizer multiple chances to improve for each failure mode.
-   - Each retry uses a different seed, producing different improvement suggestions.
-   - Higher retries increase cost but may find better solutions.
-
-5. **Sample Size**
-   - Start with `n_samples=50-100` for faster iteration during development.
-   - Use larger samples or full dataset for final optimization runs.
-   - Ensure your sample is representative of the full dataset's diversity.
-
-6. **Iteration Configuration**
-   - `max_iterations=5` is a good default that balances thoroughness with cost.
-   - Increase to 10+ for complex prompts that may need multiple rounds of refinement.
-   - The optimizer will stop early if convergence is achieved, so higher values are safe.
-   - `convergence_threshold=0.01` (1%) provides a good balance. Lower values (e.g., 0.005) make the optimizer more thorough but may use more LLM calls.
-
-## Comparison with Other Optimizers
-
-| Aspect                   | HierarchicalReflectiveOptimizer                     | MetaPromptOptimizer               | EvolutionaryOptimizer               |
-| ------------------------ | --------------------------------------- | --------------------------------- | ----------------------------------- |
-| **Approach**             | Root cause analysis → targeted fixes    | Generate variations → evaluate    | Genetic algorithm with populations  |
-| **Metric Requirements**  | **Requires reasons** (ScoreResult)      | Scores only                       | Scores only                         |
-| **Best For**             | Refining complex prompts systematically | General prompt improvement        | Exploring diverse prompt structures |
-| **Iterations**           | Multiple (with early stopping)          | Multiple rounds                   | Multiple generations                |
-| **LLM Calls**            | Moderate (analysis + improvements)      | High (many candidate generations) | Very high (full populations)        |
-| **Failure Understanding** | Deep (identifies specific failure modes) | Limited                           | None (purely score-driven)          |
-
-## Troubleshooting
-
-**Issue:** Optimizer reports no improvements found
-
-- **Solution:** Check that your metric returns detailed `reason` fields. Ensure the dataset has sufficient examples of failures to analyze.
-
-**Issue:** Root cause analysis seems generic
-
-- **Solution:** Use a stronger `reasoning_model` (e.g., GPT-4 instead of GPT-3.5). Ensure your metric's reasons are specific and actionable.
-
-**Issue:** Optimization is slow
-
-- **Solution:** Reduce `n_samples`, increase `num_threads`, or decrease `max_parallel_batches` to balance speed vs. thoroughness.
-
-**Issue:** Rate limiting errors
-
-- **Solution:** Decrease `max_parallel_batches` and `num_threads` to reduce concurrent API calls.
-
-## Research and References
-
-The Reflective Optimizer is inspired by techniques in:
-
-- Hierarchical analysis for scalable root cause identification
-- Reflective prompting for self-improvement
-- Targeted refinement over broad exploration
-
 ## Next Steps
 
-- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
-- Learn about [Dataset Requirements](/agent_optimization/opik_optimizer/datasets)
-- Try the [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart) for runnable examples
-- Read about [creating effective metrics](/evaluation/metrics/overview) that provide good feedback for optimization
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

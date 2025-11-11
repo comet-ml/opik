@@ -1,12 +1,8 @@
-import os
 import logging
 
 import opik
-import litellm
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
+from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.evaluation import evaluator as opik_evaluator
 
 from typing import Any, TypeVar
@@ -28,10 +24,6 @@ from .types import (
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
 
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
-
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
@@ -51,16 +43,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     complex prompt that you want to systematically refine based on understanding why it fails.
 
     Args:
-        reasoning_model: LiteLLM model name for reasoning and analysis (default: "openai/gpt-4.1")
-        num_threads: Number of parallel threads for evaluation (default: 12)
-        verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
-        seed: Random seed for reproducibility (default: 42)
+        model: LiteLLM model name for the optimization algorithm (reasoning and analysis)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
         max_parallel_batches: Maximum number of batches to process concurrently during
-            hierarchical root cause analysis (default: 5)
-        batch_size: Number of test cases per batch for root cause analysis (default: 25)
-        max_iterations: Maximum number of optimization iterations (default: 5)
-        convergence_threshold: Stop if relative improvement is below this threshold (default: 0.01)
-        **model_kwargs: Additional arguments passed to the LLM model
+            hierarchical root cause analysis
+        batch_size: Number of test cases per batch for root cause analysis
+        convergence_threshold: Stop if relative improvement is below this threshold
+        n_threads: Number of parallel threads for evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     DEFAULT_ROUNDS = 10
@@ -69,138 +62,33 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        reasoning_model: str = "openai/gpt-4.1",
-        num_threads: int = 12,
-        verbose: int = 1,
-        seed: int = 42,
+        model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         max_parallel_batches: int = 5,
         batch_size: int = 25,
-        max_iterations: int = DEFAULT_MAX_ITERATIONS,
         convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
-        **model_kwargs: Any,
+        n_threads: int = 12,
+        verbose: int = 1,
+        seed: int = 42,
     ):
         super().__init__(
-            model=reasoning_model, verbose=verbose, seed=seed, **model_kwargs
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
         )
-        self.reasoning_model = reasoning_model
-        self.num_threads = num_threads
+        self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
-        self.max_iterations = max_iterations
         self.convergence_threshold = convergence_threshold
+        self._should_stop_optimization = False  # Flag to exit all loops
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
             call_model_fn=self._call_model_async,
-            reasoning_model=self.reasoning_model,
+            reasoning_model=self.model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
             batch_size=self.batch_size,
             verbose=self.verbose,
         )
-
-    def _prepare_model_params(
-        self,
-        model_kwargs: dict[str, Any],
-        response_model: type[T] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Prepare parameters for LiteLLM call by filtering and adding monitoring.
-
-        Args:
-            model_kwargs: Additional model parameters
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            Dictionary of parameters ready for litellm.completion/acompletion
-        """
-        current_model_kwargs = self.model_kwargs.copy()
-        current_model_kwargs.update(model_kwargs)
-
-        # Filter out optimizer-specific kwargs that shouldn't be passed to LiteLLM
-        filtered_call_kwargs = current_model_kwargs.copy()
-        filtered_call_kwargs.pop("n_trials", None)
-        filtered_call_kwargs.pop("n_samples", None)
-        filtered_call_kwargs.pop("n_iterations", None)
-        filtered_call_kwargs.pop("min_examples", None)
-        filtered_call_kwargs.pop("max_examples", None)
-        filtered_call_kwargs.pop("project_name", None)
-
-        final_params_for_litellm = (
-            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
-        )
-
-        # Add structured output support if response_model is provided
-        # According to LiteLLM docs: https://docs.litellm.ai/docs/completion/json_mode
-        # Pass the Pydantic model directly to response_format
-        if response_model is not None:
-            final_params_for_litellm["response_format"] = response_model
-
-        return final_params_for_litellm
-
-    def _parse_response(
-        self,
-        response: Any,
-        response_model: type[T] | None = None,
-    ) -> T | str:
-        """
-        Parse LiteLLM response, with optional structured output parsing.
-
-        Args:
-            response: The response from litellm.completion/acompletion
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        content = response.choices[0].message.content
-
-        # When using structured outputs with Pydantic models, LiteLLM automatically
-        # parses the response. Parse the JSON string into the Pydantic model
-        if response_model is not None:
-            return response_model.model_validate_json(content)
-
-        return content
-
-    @_throttle.rate_limited(_rate_limiter)
-    def _call_model(
-        self,
-        model: str,
-        messages: list[dict[str, str]],
-        seed: int,
-        model_kwargs: dict[str, Any],
-        response_model: type[T] | None = None,
-    ) -> T | str:
-        """
-        Call the LLM model with optional structured output.
-
-        Args:
-            model: The model to use for the call
-            messages: List of message dictionaries with 'role' and 'content' keys
-            seed: Random seed for reproducibility
-            model_kwargs: Additional model parameters
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        self.increment_llm_counter()
-
-        final_params_for_litellm = self._prepare_model_params(
-            model_kwargs, response_model
-        )
-
-        response = litellm.completion(
-            model=model,
-            messages=messages,
-            seed=seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-
-        return self._parse_response(response, response_model)
 
     @_throttle.rate_limited(_rate_limiter)
     async def _call_model_async(
@@ -212,7 +100,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         response_model: type[T] | None = None,
     ) -> T | str:
         """
-        Async version of _call_model using litellm.acompletion.
+        Adapter for async LLM calls with HierarchicalRootCauseAnalyzer signature.
+
+        This adapter translates the analyzer's expected signature to the base class
+        _call_model_async signature, ensuring project_name and tags are properly set.
 
         Args:
             model: The model to use for the call
@@ -225,21 +116,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             If response_model is provided, returns an instance of that model.
             Otherwise, returns the raw string response.
         """
-        self.increment_llm_counter()
-
-        final_params_for_litellm = self._prepare_model_params(
-            model_kwargs, response_model
-        )
-
-        response = await litellm.acompletion(
-            model=model,
+        # Call the base class async method which properly handles project_name and tags
+        return await super()._call_model_async(
             messages=messages,
+            model=model,
             seed=seed,
-            num_retries=6,
-            **final_params_for_litellm,
+            response_model=response_model,
+            is_reasoning=True,
+            **model_kwargs,
         )
-
-        return self._parse_response(response, response_model)
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         """
@@ -249,10 +134,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             Dictionary containing optimizer-specific configuration
         """
         return {
-            "reasoning_model": self.reasoning_model,
-            "num_threads": self.num_threads,
+            "model": self.model,
+            "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
-            "max_iterations": self.max_iterations,
             "convergence_threshold": self.convergence_threshold,
             "seed": self.seed,
             "verbose": self.verbose,
@@ -330,6 +214,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
             cleaned_model_output = raw_model_output.strip()
 
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
+
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
@@ -344,10 +234,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset=dataset,
             task=llm_task,
             scoring_metrics=[_create_metric_class(metric)],
-            task_threads=self.num_threads,
+            task_threads=self.n_threads,
             nb_samples=n_samples,
             experiment_config=experiment_config,
             verbose=self.verbose,
+            project_name=self.project_name,
         )
 
         return result
@@ -403,10 +294,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
 
         improve_prompt_response = self._call_model(
-            model=self.reasoning_model,
             messages=[{"role": "user", "content": improve_prompt_prompt}],
+            model=self.model,
             seed=attempt_seed,
-            model_kwargs={},
             response_model=ImprovedPrompt,
         )
 
@@ -461,7 +351,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         improved_chat_prompt = chat_prompt.ChatPrompt(
             name=prompt.name,
             messages=messages_as_dicts,
-            tools=prompt.tools,
+            tools=best_prompt.tools,
+            function_map=best_prompt.function_map,
         )
 
         # Evaluate improved prompt
@@ -503,23 +394,28 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
+        max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
+        *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
         # Reset counters at the start of optimization
-        self.reset_counters()
-
-        # Configure prompt model if not set
-        self.configure_prompt_model(prompt)
+        self._reset_counters()
+        self._should_stop_optimization = False  # Reset stop flag
 
         # Setup agent class
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
+
+        # Set project name from parameter
+        self.project_name = project_name
 
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
             metadata={"optimizer": self.__class__.__name__},
         )
+        self.current_optimization_id = optimization.id
         logger.debug(f"Created optimization with ID: {optimization.id}")
 
         reporting.display_header(
@@ -535,7 +431,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
                 "max_retries": max_retries,
-                "max_iterations": self.max_iterations,
+                "max_trials": max_trials,
                 "convergence_threshold": self.convergence_threshold,
             },
             verbose=self.verbose,
@@ -569,9 +465,20 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Multi-iteration optimization loop
         iteration = 0
         previous_iteration_score = initial_score
+        trials_used = 0
 
-        for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"Starting iteration {iteration}/{self.max_iterations}")
+        while trials_used < max_trials:
+            iteration += 1
+            logger.info(
+                f"Starting iteration {iteration} (trials: {trials_used}/{max_trials})"
+            )
+
+            # Check if we should stop (flag set by inner loops)
+            if self._should_stop_optimization:
+                logger.info(
+                    f"Stopping optimization: reached max_trials limit ({max_trials})."
+                )
+                break
 
             with reporting.display_optimization_iteration(
                 iteration=iteration, verbose=self.verbose
@@ -616,7 +523,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     improved_score = None
 
                     for attempt in range(1, max_attempts + 1):
-                        # Generate and evaluate improvement
+                        # Check if we've reached the trial limit before starting a new trial
+                        if trials_used >= max_trials:
+                            logger.info(
+                                f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
+                                f"Stopping optimization."
+                            )
+                            self._should_stop_optimization = True
+                            break
+
+                        # Generate and evaluate improvement (this is 1 trial)
                         (
                             improved_chat_prompt,
                             improved_score,
@@ -633,6 +549,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             attempt=attempt,
                             max_attempts=max_attempts,
                         )
+                        trials_used += 1
 
                         # Check if we got improvement
                         if improved_score > best_score:
@@ -642,7 +559,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             break
 
                         # No improvement - should we retry?
-                        if attempt < max_attempts:
+                        if attempt < max_attempts and trials_used < max_trials:
                             reporting.display_retry_attempt(
                                 attempt=attempt,
                                 max_attempts=max_attempts,
@@ -653,6 +570,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             logger.debug(
                                 f"No improvement after {attempt} attempts for '{root_cause.name}'"
                             )
+
+                    # Break out of failure mode loop if flag is set
+                    if self._should_stop_optimization:
+                        break
 
                     # Check if final result is an improvement
                     if (
@@ -731,29 +652,23 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Prepare details for the result
         details = {
-            "model": best_prompt.model or self.model,
+            "model": self.model,
             "temperature": (best_prompt.model_kwargs or {}).get("temperature")
-            or self.model_kwargs.get("temperature"),
-            "reasoning_model": self.reasoning_model,
-            "num_threads": self.num_threads,
+            or self.model_parameters.get("temperature"),
+            "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_retries": max_retries,
             "n_samples": n_samples,
             "auto_continue": auto_continue,
-            "max_iterations": self.max_iterations,
+            "max_trials": max_trials,
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
+            "trials_used": trials_used,
         }
 
         # Extract tool prompts if tools exist
-        tool_prompts = None
-        if final_tools := getattr(best_prompt, "tools", None):
-            tool_prompts = {
-                tool.get("function", {}).get("name", f"tool_{idx}"): tool.get(
-                    "function", {}
-                ).get("description", "")
-                for idx, tool in enumerate(final_tools)
-            }
+        final_tools = getattr(best_prompt, "tools", None)
+        tool_prompts = self._extract_tool_prompts(final_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

@@ -172,7 +172,7 @@ authentication:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
-  # Description: Whether to enable virtual threads for Jetty’s thread pool.
+  # Description: Whether to enable virtual threads for Jetty's thread pool.
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
@@ -185,7 +185,25 @@ server:
   # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
   applicationConnectors:
     - type: http
+      # Default: 8080
+      # Description: The port on which the application HTTP connector listens
+      port: ${SERVER_APPLICATION_PORT:-8080}
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
+  adminConnectors:
+    - type: http
+      # Default: 8081
+      # Description: The port on which the admin HTTP connector listens
+      port: ${SERVER_ADMIN_PORT:-8081}
+
+# Jackson JSON processing configuration
+# Controls limits for JSON deserialization to prevent memory exhaustion
+jacksonConfig:
+  # Default: 104857600 (100MB)
+  # Description: Maximum size for individual string values during JSON deserialization. 
+  #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
+  #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
+  maxStringLength: ${JACKSON_MAX_STRING_LENGTH:-104857600}
 
 # Configuration for batch operations
 batchOperations:
@@ -313,12 +331,24 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals (global default)
+  claimIntervalRatio: ${REDIS_SCORING_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming (global default)
+  pendingMessageDuration: ${REDIS_SCORING_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10, global default)
+  maxRetries: ${REDIS_SCORING_MAX_RETRIES:-3}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
   ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
   ## longPollingDuration: (optional, but highly recommended) per stream long polling duration, overrides global value
   ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
+  ## claimIntervalRatio: (optional) per stream claim interval ratio, overrides global value
+  ## pendingMessageDuration: (optional) per stream pending message duration, overrides global value
+  ## maxRetries: (optional) per stream max retries, overrides global value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
@@ -327,6 +357,9 @@ onlineScoring:
       poolingInterval: ${REDIS_SCORING_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
       longPollingDuration: ${REDIS_SCORING_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_LLM_AS_JUDGE_MAX_RETRIES:-}
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
@@ -334,6 +367,9 @@ onlineScoring:
       poolingInterval: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
       longPollingDuration: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
     - scorer: trace_thread_llm_as_judge
       streamName: stream_scoring_trace_thread_llm_as_judge
       codec: java
@@ -341,6 +377,9 @@ onlineScoring:
       poolingInterval: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
       longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_MAX_RETRIES:-}
     - scorer: trace_thread_user_defined_metric_python
       streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
@@ -348,6 +387,9 @@ onlineScoring:
       poolingInterval: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
       longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -429,8 +471,15 @@ clickHouseLogAppender:
 
 workspaceSettings:
   # Default: 50
-  # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
-    maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all workspace sizes).
+  # This value is calculated via estimated size based on spans table
+  maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Default: 100
+  # Description: Maximum size of a project in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all project sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-100}
 
 # Configuration AWS S3
 s3Config:
@@ -443,6 +492,12 @@ s3Config:
   s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+
+# Attachments configuration
+attachmentsConfig:
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # Default: 256000 (256KB)
+  stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -515,6 +570,15 @@ traceThreadConfig:
   # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${OPIK_REDIS_TRACE_THREAD_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${OPIK_REDIS_TRACE_THREAD_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10)
+  maxRetries: ${OPIK_REDIS_TRACE_THREAD_MAX_RETRIES:-3}
 
 # Job timeout configuration
 jobTimeout:
@@ -581,6 +645,12 @@ webhook:
   # Default: 5s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: ${WEBHOOK_CONNECTION_TIMEOUT:-5s}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${WEBHOOK_PENDING_MESSAGE_DURATION:-10m}
   debouncing:
     # Default: true
     # Description: Whether or not webhook event debouncing is enabled

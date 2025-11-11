@@ -38,8 +38,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -73,7 +73,7 @@ class LlmProviderApiKeyResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -159,7 +159,9 @@ class LlmProviderApiKeyResourceTest {
     }
 
     private Stream<Arguments> testUpdateProviderApiKey() {
-        var updateAll = factory.manufacturePojo(ProviderApiKeyUpdate.class);
+        var updateAll = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder()
+                .providerName(null)
+                .build();
 
         Function<ProviderApiKey, ProviderApiKey> getExpectedAll = (ProviderApiKey original) -> original.toBuilder()
                 .name(updateAll.name())
@@ -226,6 +228,7 @@ class LlmProviderApiKeyResourceTest {
                 .headers(null)
                 .configuration(null)
                 .baseUrl(null)
+                .providerName(null)
                 .build();
         llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
                 workspaceName, 204);
@@ -243,6 +246,8 @@ class LlmProviderApiKeyResourceTest {
         return factory.manufacturePojo(ProviderApiKey.class).toBuilder()
                 .createdBy(USER)
                 .lastUpdatedBy(USER)
+                .provider(LlmProvider.OPEN_AI) // avoid using a custom provider as it has additional requirements
+                .providerName(null)
                 .build();
     }
 
@@ -308,13 +313,14 @@ class LlmProviderApiKeyResourceTest {
         var testProvider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
                 .name(CUSTOM_LLM_MODEL_PREFIX + "some_model_name")
                 .provider(LlmProvider.CUSTOM_LLM)
+                .providerName(UUID.randomUUID().toString())
                 .apiKey(emptyString)
                 .build();
         var createdProvider = llmProviderApiKeyResourceClient.createProviderApiKey(testProvider, apiKey, workspaceName,
                 HttpStatus.SC_CREATED);
 
         var testProviderUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder()
-                .apiKey(emptyString).build();
+                .apiKey(emptyString).providerName(null).build();
         llmProviderApiKeyResourceClient.updateProviderApiKey(createdProvider.id(), testProviderUpdate, apiKey,
                 workspaceName, HttpStatus.SC_NO_CONTENT);
 
@@ -532,5 +538,120 @@ class LlmProviderApiKeyResourceTest {
             assertThat(actualEntity.lastUpdatedAt()).isAfter(expectedEntity.lastUpdatedAt());
             assertThat(actualEntity.lastUpdatedBy()).isEqualTo(expectedEntity.lastUpdatedBy());
         }
+    }
+
+    @ParameterizedTest
+    @EmptySource
+    @NullSource
+    @DisplayName("Create custom provider with blank providerName should fail")
+    void createCustomProviderWithBlankProviderNameShouldFail(String blankProviderName) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var customProvider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .provider(LlmProvider.CUSTOM_LLM)
+                .providerName(blankProviderName)
+                .apiKey("")
+                .build();
+
+        try (var actualResponse = llmProviderApiKeyResourceClient.createProviderApiKey(
+                JsonUtils.writeValueAsString(customProvider), apiKey, workspaceName, 422)) {
+            var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+            assertThat(actualError.errors())
+                    .contains("providerName provider_name is required for custom LLM providers");
+        }
+    }
+
+    @Test
+    @DisplayName("Create multiple custom providers with different providerNames should succeed")
+    void createMultipleCustomProvidersWithDifferentNamesShouldSucceed() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var customProvider1 = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .provider(LlmProvider.CUSTOM_LLM)
+                .providerName("ollama")
+                .apiKey("")
+                .build();
+
+        var customProvider2 = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .provider(LlmProvider.CUSTOM_LLM)
+                .providerName("vllm")
+                .apiKey("")
+                .build();
+
+        // Both should succeed because they have different providerNames
+        var created1 = llmProviderApiKeyResourceClient.createProviderApiKey(customProvider1, apiKey, workspaceName,
+                201);
+        var created2 = llmProviderApiKeyResourceClient.createProviderApiKey(customProvider2, apiKey, workspaceName,
+                201);
+
+        assertThat(created1.providerName()).isEqualTo("ollama");
+        assertThat(created2.providerName()).isEqualTo("vllm");
+    }
+
+    @Test
+    @DisplayName("Create duplicate custom provider with same providerName should fail")
+    void createDuplicateCustomProviderWithSameNameShouldFail() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var customProvider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .provider(LlmProvider.CUSTOM_LLM)
+                .providerName("ollama")
+                .apiKey("")
+                .build();
+
+        // First creation should succeed
+        llmProviderApiKeyResourceClient.createProviderApiKey(customProvider, apiKey, workspaceName, 201);
+
+        // Second creation with the same providerName should fail
+        llmProviderApiKeyResourceClient.createProviderApiKey(customProvider, apiKey, workspaceName, 409);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Create non-custom provider with providerName should succeed (providerName is ignored)")
+    void createNonCustomProviderWithProviderNameShouldSucceed(LlmProvider provider) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var providerWithName = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .provider(provider)
+                .providerName("should-be-ignored")
+                .build();
+
+        // Should succeed - providerName is simply ignored for non-custom providers
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(providerWithName, apiKey, workspaceName,
+                201);
+
+        // Fetch the actual object from DB to verify providerName was set to null
+        var actual = llmProviderApiKeyResourceClient.getById(created.id(), workspaceName, apiKey, 200);
+
+        // Verify the provider was created but providerName was ignored (should be null for non-custom providers)
+        assertThat(actual.provider()).isEqualTo(provider);
+        // The providerName should be null since it's ignored for non-custom providers
+        assertThat(actual.providerName()).isNull();
+    }
+
+    private Stream<Arguments> createNonCustomProviderWithProviderNameShouldSucceed() {
+        return Stream.of(
+                arguments(LlmProvider.OPEN_AI),
+                arguments(LlmProvider.ANTHROPIC),
+                arguments(LlmProvider.GEMINI),
+                arguments(LlmProvider.OPEN_ROUTER),
+                arguments(LlmProvider.VERTEX_AI));
     }
 }

@@ -40,6 +40,7 @@ public class WebhookPublisher {
      * @param eventType    The type of event
      * @param alertId      The alert ID
      * @param workspaceId  The workspace ID associated with the event
+     * @param workspaceName The workspace name associated with the event
      * @param webhookUrl   The URL to send the webhook to
      * @param payload      The payload to include in the webhook
      * @param headers      Optional custom headers to include in the HTTP request
@@ -49,6 +50,7 @@ public class WebhookPublisher {
     public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
             @NonNull Alert alert,
             @NonNull String workspaceId,
+            @NonNull String workspaceName,
             @NonNull T payload,
             int maxRetries) {
 
@@ -73,6 +75,7 @@ public class WebhookPublisher {
                 .secret(alert.webhook().secretToken())
                 .maxRetries(maxRetries)
                 .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
                 .createdAt(Instant.now())
                 .build();
 

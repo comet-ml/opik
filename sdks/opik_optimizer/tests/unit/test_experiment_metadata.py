@@ -90,7 +90,6 @@ def dummy_prompt() -> ChatPrompt:
         tools=[tool_schema],
         function_map={"sample_tool": sample_tool},
         model="test-model",
-        project_name="prompt-project",
     )
 
 
@@ -123,7 +122,9 @@ def test_prepare_experiment_config_merges_metadata(dummy_prompt: ChatPrompt) -> 
     )
 
     assert config["project_name"] == _DummyAgent.project_name
-    assert config["agent_config"]["project_name"] == dummy_prompt.project_name
+    assert (
+        "project_name" not in config["agent_config"]
+    )  # ChatPrompt doesn't have project_name, gets dropped
     assert config["agent_config"]["model"] == dummy_prompt.model
     assert config["configuration"]["custom"] == "value"
     assert config["extra"] == {"flag": True}

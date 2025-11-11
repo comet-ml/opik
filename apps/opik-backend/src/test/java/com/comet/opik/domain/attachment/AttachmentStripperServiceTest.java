@@ -1,8 +1,8 @@
 package com.comet.opik.domain.attachment;
 
 import com.comet.opik.api.attachment.EntityType;
+import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -21,7 +21,6 @@ import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createLargePngBase
 import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createShortBase64;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,7 +30,7 @@ import static org.mockito.Mockito.when;
 class AttachmentStripperServiceTest {
 
     @Mock
-    private S3Config s3Config;
+    private AttachmentsConfig attachmentsConfig;
 
     @Mock
     private OpikConfiguration opikConfiguration;
@@ -52,12 +51,11 @@ class AttachmentStripperServiceTest {
     void setUp() {
         objectMapper = new ObjectMapper();
 
-        // Mock S3Config to return default threshold
-        when(s3Config.getStripAttachmentsMinSize()).thenReturn(5000);
-        lenient().when(s3Config.isMinIO()).thenReturn(true); // Use MinIO mode for unit tests (direct upload)
+        // Mock AttachmentsConfig to return default threshold
+        when(attachmentsConfig.getStripMinSize()).thenReturn(5000L);
 
-        // Mock OpikConfiguration to return the S3Config
-        when(opikConfiguration.getS3Config()).thenReturn(s3Config);
+        // Mock OpikConfiguration to return the configs
+        when(opikConfiguration.getAttachmentsConfig()).thenReturn(attachmentsConfig);
 
         // Use OpenTelemetry no-op implementation and EventBus mock for async uploads
         attachmentStripperService = new AttachmentStripperService(objectMapper, opikConfiguration, eventBus);

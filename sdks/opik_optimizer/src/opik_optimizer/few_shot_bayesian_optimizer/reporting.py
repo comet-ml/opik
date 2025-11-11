@@ -8,12 +8,12 @@ from rich.text import Text
 if TYPE_CHECKING:
     from .few_shot_bayesian_optimizer import FewShotPromptTemplate
 
-from ..reporting_utils import (
+from ..reporting_utils import (  # noqa: F401
     convert_tqdm_to_rich,
-    display_configuration,  # noqa: F401
-    display_header,  # noqa: F401
+    display_configuration,
+    display_header,
     display_messages,
-    display_result,  # noqa: F401
+    display_result,
     get_console,
     suppress_opik_logs,
 )

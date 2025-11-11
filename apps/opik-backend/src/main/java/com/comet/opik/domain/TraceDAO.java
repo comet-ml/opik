@@ -33,6 +33,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -84,6 +85,8 @@ interface TraceDAO {
     Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection);
 
     Mono<Trace> findById(UUID id, Connection connection);
+
+    Flux<Trace> findByIds(List<UUID> ids, Connection connection);
 
     Mono<TraceDetails> getTraceDetailsById(UUID id, Connection connection);
 
@@ -327,7 +330,7 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String SELECT_BY_ID = """
+    private static final String SELECT_BY_IDS = """
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -345,7 +348,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
-                   AND entity_id = :id
+                   AND entity_id IN :ids
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -364,7 +367,7 @@ class TraceDAOImpl implements TraceDAO {
                FROM authored_feedback_scores FINAL
                WHERE entity_type = 'trace'
                  AND workspace_id = :workspace_id
-                 AND entity_id = :id
+                 AND entity_id IN :ids
              ),
              feedback_scores_with_ranking AS (
                  SELECT workspace_id,
@@ -440,6 +443,7 @@ class TraceDAOImpl implements TraceDAO {
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
                 toInt64(countIf(s.type = 'llm')) AS llm_span_count,
+                arraySort(groupUniqArrayIf(s.provider, s.provider != '')) as providers,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
@@ -452,7 +456,7 @@ class TraceDAOImpl implements TraceDAO {
                             NULL) AS duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND id = :id
+                AND id IN :ids
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS t
@@ -462,10 +466,11 @@ class TraceDAOImpl implements TraceDAO {
                     usage,
                     total_estimated_cost,
                     id,
-                    type
+                    type,
+                    provider
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                  AND trace_id = :id
+                  AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
@@ -484,7 +489,7 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
-                    AND entity_id = :id
+                    AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
@@ -530,7 +535,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM guardrails
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
-                    AND entity_id = :id
+                    AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
@@ -703,7 +708,8 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
-                    toInt64(countIf(type = 'llm')) as llm_span_count
+                    toInt64(countIf(type = 'llm')) as llm_span_count,
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -779,6 +785,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -832,6 +839,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
+                  , s.providers AS providers
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -993,6 +1001,7 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
@@ -1410,6 +1419,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                <if(uuid_from_time)>AND id BETWEEN :uuid_from_time AND :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -1500,7 +1510,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -1521,7 +1532,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM trace_threads final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)>
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
+                <endif>
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -1722,7 +1737,7 @@ class TraceDAOImpl implements TraceDAO {
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
-                LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -1777,7 +1792,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -1798,7 +1814,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM trace_threads final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)>
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
+                <endif>
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -2027,7 +2047,7 @@ class TraceDAOImpl implements TraceDAO {
                 GROUP BY
                     t.workspace_id, t.project_id, t.thread_id
             ) AS t
-            LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+            <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
@@ -2106,7 +2126,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -2541,16 +2562,6 @@ class TraceDAOImpl implements TraceDAO {
         return template;
     }
 
-    private Flux<? extends Result> getById(UUID id, Connection connection) {
-        var statement = connection.createStatement(SELECT_BY_ID)
-                .bind("id", id);
-
-        Segment segment = startSegment("traces", "Clickhouse", "getById");
-
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> endSegment(segment));
-    }
-
     private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
         var statement = connection.createStatement(SELECT_DETAILS_BY_ID)
                 .bind("id", id);
@@ -2588,9 +2599,24 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
-        return getById(id, connection)
-                .flatMap(result -> mapToDto(result, Set.of()))
+        return findByIds(List.of(id), connection)
                 .singleOrEmpty();
+    }
+
+    @Override
+    @WithSpan
+    public Flux<Trace> findByIds(@NonNull List<UUID> ids, @NonNull Connection connection) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Finding traces by IDs in batch, count '{}'", ids.size());
+
+        var statement = connection.createStatement(SELECT_BY_IDS)
+                .bind("ids", ids.toArray(UUID[]::new));
+
+        Segment segment = startSegment("traces", "Clickhouse", "findByIds");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .flatMap(result -> mapToDto(result, Set.of()));
     }
 
     @Override
@@ -2607,7 +2633,16 @@ class TraceDAOImpl implements TraceDAO {
 
     private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
 
-        return result.map((row, rowMetadata) -> Trace.builder()
+        return result.map((row, rowMetadata) -> mapRowToTrace(row, rowMetadata, exclude));
+    }
+
+    private Trace mapRowToTrace(Row row, RowMetadata rowMetadata, Set<Trace.TraceField> exclude) {
+        @SuppressWarnings("unchecked")
+        List<String> providers = (List<String>) row.get(Trace.TraceField.PROVIDERS.getValue(), List.class);
+
+        JsonNode metadata = getMetadataWithProviders(row, exclude, providers);
+
+        return Trace.builder()
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
                 .name(StringUtils.defaultIfBlank(
@@ -2616,19 +2651,17 @@ class TraceDAOImpl implements TraceDAO {
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
+                                row,
                                 value))
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated",
+                                row,
                                 value))
                         .orElse(null))
-                .metadata(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
-                        .orElse(null))
+                .metadata(metadata)
                 .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
@@ -2652,12 +2685,14 @@ class TraceDAOImpl implements TraceDAO {
                         .filter(not(List::isEmpty))
                         .orElse(null))
                 .spanCount(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
+                        .ofNullable(
+                                getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
                         .orElse(0))
                 .llmSpanCount(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
                                 Integer.class))
                         .orElse(0))
+                .providers(providers)
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
@@ -2681,7 +2716,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
-                .build());
+                .build();
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
@@ -2885,6 +2920,13 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
+
+        // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> {
+                    template.add("uuid_from_time", uuid_from_time);
+                    template.add("uuid_to_time", traceSearchCriteria.uuidToTime());
+                });
         return template;
     }
 
@@ -2900,6 +2942,12 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
+
+        // Bind UUID BETWEEN bounds for time-based filtering
+        if (traceSearchCriteria.uuidFromTime() != null) {
+            statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
+            statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
+        }
     }
 
     @Override
@@ -3471,5 +3519,18 @@ class TraceDAOImpl implements TraceDAO {
                     log.info("Closing trace search stream");
                     endSegment(segment);
                 });
+    }
+
+    private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {
+        // Parse base metadata from database
+        JsonNode baseMetadata = Optional
+                .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
+                .filter(str -> !str.isBlank())
+                .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                .orElse(null);
+
+        // Inject providers as first field in metadata
+        return JsonUtils.prependField(
+                baseMetadata, Trace.TraceField.PROVIDERS.getValue(), providers);
     }
 }

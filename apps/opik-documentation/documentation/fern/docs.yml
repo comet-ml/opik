@@ -172,9 +172,15 @@ navigation:
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm
-          - page: Evaluate multi-turn conversations
-            path: docs/evaluation/evaluate_threads.mdx
-            slug: evaluate_threads
+          - page: Evaluate agent trajectories
+            path: docs/evaluation/evaluate_agent_trajectory.mdx
+            slug: evaluate_agent_trajectory
+          - page: Evaluate multimodal traces
+            path: docs/evaluation/evaluate_multimodal.mdx
+            slug: evaluate_multimodal
+          - page: Evaluate multi-turn agents
+            path: docs/evaluation/evaluate_multi_turn_agents.mdx
+            slug: evaluate_multi_turn_agents
           - page: Manually logging experiments
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
@@ -196,15 +202,33 @@ navigation:
               - page: Hallucination
                 path: docs/evaluation/metrics/hallucination.mdx
                 slug: hallucination
+              - page: LLM Juries
+                path: docs/evaluation/metrics/llm_juries.mdx
+                slug: llm_juries
               - page: G-Eval
                 path: docs/evaluation/metrics/g_eval.mdx
                 slug: g_eval
+              - page: Compliance risk
+                path: docs/evaluation/metrics/compliance_risk.mdx
+                slug: compliance_risk
+              - page: Prompt uncertainty
+                path: docs/evaluation/metrics/prompt_diagnostics.mdx
+                slug: prompt_diagnostics
               - page: Moderation
                 path: docs/evaluation/metrics/moderation.mdx
                 slug: moderation
               - page: Usefulness
                 path: docs/evaluation/metrics/usefulness.mdx
                 slug: usefulness
+              - page: Summarization consistency
+                path: docs/evaluation/metrics/summarization_consistency.mdx
+                slug: summarization_consistency
+              - page: Summarization coherence
+                path: docs/evaluation/metrics/summarization_coherence.mdx
+                slug: summarization_coherence
+              - page: Dialogue helpfulness
+                path: docs/evaluation/metrics/dialogue_helpfulness.mdx
+                slug: dialogue_helpfulness
               - page: Answer relevance
                 path: docs/evaluation/metrics/answer_relevance.mdx
                 slug: answer_relevance
@@ -214,12 +238,24 @@ navigation:
               - page: Context recall
                 path: docs/evaluation/metrics/context_recall.mdx
                 slug: context_recall
+              - page: Trajectory accuracy
+                path: docs/evaluation/metrics/trajectory_accuracy.mdx
+                slug: trajectory_accuracy
+              - page: Agent task completion
+                path: docs/evaluation/metrics/agent_task_completion.mdx
+                slug: agent_task_completion
+              - page: Agent tool correctness
+                path: docs/evaluation/metrics/agent_tool_correctness.mdx
+                slug: agent_tool_correctness
               - page: Conversational metrics
                 path: docs/evaluation/metrics/conversation_threads_metrics.mdx
                 slug: conversation_threads_metrics
               - page: Custom model
                 path: docs/evaluation/metrics/custom_model.mdx
                 slug: custom_model
+              - page: Advanced configuration
+                path: docs/evaluation/metrics/advanced_configuration.mdx
+                slug: advanced_configuration
               - page: Custom metric
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
@@ -236,6 +272,9 @@ navigation:
               - page: Best practices for evaluating agents
                 path: docs/evaluation/evaluate_agents.mdx
                 slug: evaluate_agents
+              - page: Evaluate threads
+                path: docs/evaluation/evaluate_threads.mdx
+                slug: evaluate_threads
               - page: Cookbook - Evaluate hallucination metric
                 path: docs/cookbook/evaluate_hallucination_metric.mdx
                 slug: evaluate_hallucination_metric
@@ -251,6 +290,9 @@ navigation:
           - page: Prompt Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
+          - page: Prompt Generator and Improver
+            path: docs/prompt_engineering/improve.mdx
+            slug: improve
           - page: Opik's MCP server
             path: docs/prompt_engineering/mcp_server.mdx
             slug: mcp_server
@@ -583,97 +625,125 @@ navigation:
             slug: opentelemetry
   - tab: agent-optimization
     layout:
-      - page: Opik Agent Optimizer
-        icon: fa-regular fa-house
-        path: docs/agent_optimization/overview.mdx
-        slug: overview
-      - section: Opik Agent Optimizer Guide
-        slug: /opik_optimizer
+      - section: Getting Started
+        skip-slug: true
         contents:
-          - page: Optimizer Quickstart
+          - page: Opik Agent Optimizer
+            icon: fa-regular fa-house
+            path: docs/agent_optimization/overview.mdx
+            slug: overview
+          - page: Quickstart
             icon: fa-regular fa-bolt
-            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
+            path: docs/agent_optimization/getting_started/quickstart.mdx
             slug: quickstart
-          - page: Optimizer Concepts
-            icon: fa-regular fa-lightbulb
-            path: docs/agent_optimization/opik_optimizer/concepts.mdx
-            slug: concepts
-          - page: Datasets for Optimization
-            icon: fa-regular fa-database
-            path: docs/agent_optimization/opik_optimizer/datasets.mdx
-            slug: datasets
-          - page: Models for Optimization
-            icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/models.mdx
-            slug: models
-          - page: API Reference
-            icon: fa-regular fa-square-terminal
-            path: docs/agent_optimization/opik_optimizer/reference.mdx
-            slug: reference
-          - page: Optimizer & SDK FAQ
+          - page: Quickstart notebook
+            icon: fa-regular fa-play
+            path: docs/agent_optimization/getting_started/quickstart_notebook.mdx
+            slug: quickstart_notebook
+          - page: FAQ
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
+          - page: Changelog
+            icon: fa-regular fa-calendar
+            path: docs/agent_optimization/getting_started/changelog.mdx
+            slug: changelog
+      - section: Optimization
+        slug: /optimization
+        contents:
+          - page: Concepts
+            icon: fa-regular fa-lightbulb
+            path: docs/agent_optimization/opik_optimizer/concepts.mdx
+            slug: concepts
+          - page: Define datasets
+            icon: fa-regular fa-database
+            path: docs/agent_optimization/optimization/define_datasets.mdx
+            slug: define_datasets
+          - page: Define metrics
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/optimization/define_metrics.mdx
+            slug: define_metrics
+          - page: Optimize prompts
+            icon: fa-regular fa-wand-magic-sparkles
+            path: docs/agent_optimization/optimization/optimize_prompts.mdx
+            slug: optimize_prompts
+          - page: Optimize agents
+            icon: fa-regular fa-diagram-project
+            path: docs/agent_optimization/optimization/optimize_agents/overview.mdx
+            slug: optimize_agents
+          - page: Optimize multimodal
+            icon: fa-regular fa-image
+            path: docs/agent_optimization/optimization/optimize_multimodal.mdx
+            slug: optimize_multimodal
+          - page: Dashboard results
+            icon: fa-regular fa-chart-simple
+            path: docs/agent_optimization/optimization/dashboard_results.mdx
+            slug: dashboard_results
       - section: Optimization Algorithms
         slug: /algorithms
         contents:
-          - page: Evolutionary Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
-            slug: evolutionary_optimizer
-          - page: Few-Shot Bayesian Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
-            slug: fewshot_bayesian_optimizer
-          - page: MetaPrompt Optimizer
+          - page: Overview
+            icon: fa-regular fa-list
+            path: docs/agent_optimization/algorithms/overview.mdx
+            slug: overview
+          - page: Benchmarks
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/algorithms/benchmarks.mdx
+            slug: benchmarks
+          - page: MetaPrompt
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
-          - page: Hierarchical Reflective Optimizer
+          - page: Hierarchical Reflective
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
             slug: hierarchical_reflective_optimizer
-          - page: MIPRO Optimizer
+          - page: Few-Shot Bayesian
             icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
-            slug: mipro_optimizer
-          - page: GEPA Optimizer
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: Evolutionary
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+            slug: evolutionary_optimizer
+          - page: GEPA
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
             slug: gepa_optimizer
-          - page: Tool Optimization (MCP & Function Calling)
-            icon: fa-regular fa-tools
-            path: docs/agent_optimization/algorithms/tool_optimization.mdx
-            slug: tool_optimization
-      - section: Optimization Best Practices
-        slug: /best_practices
+          - page: Parameter
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/parameter_optimizer.mdx
+            slug: parameter_optimizer
+      - section: Cookbooks & Tutorials
+        slug: /cookbooks
         contents:
-          - page: Prompt Engineering
-            icon: fa-regular fa-book
-            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
-            slug: prompt_engineering
-          - page: Multi-Metric Optimization
-            icon: fa-regular fa-chart-line
-            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
-            slug: multi_metric_optimization
-      - section: Example Projects and Cookbooks
-        slug: /optimizer-cookbooks
-        contents:
-          - page: Introduction Example
+          - page: Optimizer introduction
             icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
             slug: optimizer_introduction_cookbook
-          - page: Synthetic Data
+          - page: Synthetic data optimizer
             icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
       - section: Advanced Topics
         slug: /advanced
         contents:
-          - page: Extending Optimizers
+          - page: Extending optimizers
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/extending_optimizers.mdx
             slug: extending_optimizers
+          - page: Custom metrics
+            icon: fa-regular fa-sliders
+            path: docs/agent_optimization/advanced/custom_metrics.mdx
+            slug: custom_metrics
+          - page: Chaining optimizers
+            icon: fa-regular fa-objects-align-bottom
+            path: docs/agent_optimization/advanced/chaining_optimizers.mdx
+            slug: chaining_optimizers
+          - page: API Reference
+            icon: fa-regular fa-square-terminal
+            path: docs/agent_optimization/opik_optimizer/reference.mdx
+            slug: api_reference
   - tab: self-host
     layout:
       - page: Overview
@@ -743,6 +813,12 @@ navigation:
               - page: Evaluate Function
                 path: docs/reference/typescript-sdk/evaluation/evaluate.mdx
                 slug: evaluate_function
+              - page: Evaluate Prompt Function
+                path: docs/reference/typescript-sdk/evaluation/evaluatePrompt.mdx
+                slug: evaluate_prompt_function
+              - page: Models
+                path: docs/reference/typescript-sdk/evaluation/models.mdx
+                slug: models
               - page: Metrics
                 path: docs/reference/typescript-sdk/evaluation/metrics.mdx
                 slug: metrics
@@ -798,6 +874,9 @@ navigation:
           - page: Evaluate your LLM Application
             path: docs/opik-university/3_evaluation/3.4-evaluation-evaluate-llm-application.mdx
             slug: evaluate-llm-app
+          - page: No-code LLM Evaluation Workflow
+            path: docs/opik-university/3_evaluation/3.5-evaluation-ui-workflow.mdx
+            slug: evaluation-ui-workflow
       - section: Prompt Engineering
         slug: /prompt-engineering
         contents:
@@ -867,6 +946,9 @@ redirects:
     permanent: true
   - source: "docs/agent_optimization/opik_optimizer/litellm_support"
     destination: "/docs/agent_optimization/opik_optimizer/models"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/mipro_optimizer"
+    destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   # Integration redirects - from /tracing/integrations/ to /integrations/ (clean URLs)
   - source: "/docs/opik/tracing/integrations/overview"
@@ -1134,4 +1216,66 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/dynamic_tracing_control"
     destination: "/docs/opik/tracing/log_traces#disabling-the-logging-process"
+    permanent: true
+  # Agent optimization restructuring redirects
+  - source: "/docs/opik/agent_optimization/opik_optimizer/quickstart"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/datasets"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/models"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best_practices/multi-metric-optimization"
+    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best_practices/multi_metric_optimization"
+    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/multi_metric_optimization"
+    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/overview"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/concepts"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/multi_metric_optimization"
+    destination: "/docs/opik/agent_optimization/multi-metric-optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/faq"
+    destination: "/docs/opik/agent_optimization/faq"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/reference"
+    destination: "/docs/opik/agent_optimization/api-reference"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/reference"
+    destination: "/docs/opik/agent_optimization/api-reference"
+    permanent: true
+  # Common redirects
+  - source: "/docs/opik/typescript-sdk/opik-query-language"
+    destination: "/docs/opik/reference/typescript-sdk/opik-query-language"
+    permanent: true
+  - source: "/docs/opik/tracing/opentelemetry/overview"
+    destination: "/docs/opik/integrations/opentelemetry"
+    permanent: true
+  - source: "/docs/opik/tracing/log_agents"
+    destination: "/docs/opik/tracing/log_traces"
+    permanent: true
+  - source: "/docs/opik/changelog/2024/9/31"
+    destination: "/docs/opik/changelog"
+    permanent: true
+  - source: "/docs/opik/self-host/kubernetes/backup"
+    destination: "/docs/opik/self-host/backup"
+    permanent: true
+  - source: "/docs/opik/tracing/debug_mode"
+    destination: "/docs/opik/tracing/sdk_configuration#debug-mode-and-logging"
+    permanent: true
+  - source: "/docs/opik/getting-started/logging-traces/"
+    destination: "/docs/opik/quickstart"
     permanent: true

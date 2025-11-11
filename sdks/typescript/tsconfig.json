@@ -17,7 +17,6 @@
     "baseUrl": ".",
     "paths": {
       "opik": ["./src/opik/index.ts"],
-      "opik/vercel": ["./src/opik/integrations/vercel/index.ts"],
       "@/*": ["./src/opik/*"],
       "@tests/*": ["./tests/*"]
     }
@@ -28,6 +27,7 @@
     "src/opik/integrations/opik-langchain",
     "src/opik/integrations/opik-openai",
     "src/opik/integrations/opik-gemini",
+    "src/opik/integrations/opik-vercel",
     "src/opik/configure"
   ]
 }

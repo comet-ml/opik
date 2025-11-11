@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
@@ -9,6 +10,7 @@ import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -43,7 +45,7 @@ public interface TraceThreadService {
 
     String THREADS_LOCK = "trace-threads-process";
 
-    Mono<Void> processTraceThreads(Map<String, Instant> threadIdAndLastUpdateAts, UUID projectId);
+    Mono<Void> processTraceThreads(Map<String, ThreadTimestamps> threadInfo, UUID projectId);
 
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
@@ -62,6 +64,8 @@ public interface TraceThreadService {
 
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
 
+    Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId, Instant timestamp);
+
     Mono<UUID> getThreadModelId(UUID projectId, String threadId);
 
     Mono<Void> updateThreadSampledValue(UUID projectId, List<TraceThreadSampling> threadSamplingPerRule);
@@ -69,6 +73,8 @@ public interface TraceThreadService {
     Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
 
     Mono<Void> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
+
+    Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(List<UUID> threadModelIds);
 }
 
 @Slf4j
@@ -86,34 +92,43 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private final @NonNull TraceThreadOnlineScorerPublisher onlineScorePublisher;
     private final @NonNull WorkspaceConfigurationService workspaceConfigurationService;
 
-    public Mono<Void> processTraceThreads(@NonNull Map<String, Instant> threadIdAndLastUpdateAts,
+    public Mono<Void> processTraceThreads(@NonNull Map<String, ThreadTimestamps> threadInfo,
             @NonNull UUID projectId) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> processThreadAsync(threadIdAndLastUpdateAts, projectId)
+                Mono.defer(() -> processThreadAsync(threadInfo, projectId)
                         .collectList()
                         .flatMap(traceThreads -> this.saveTraceThreads(projectId, traceThreads))
                         .then()),
                 LOCK_DURATION);
     }
 
-    private Flux<TraceThreadModel> processThreadAsync(Map<String, Instant> threadIdAndLastUpdateAts, UUID projectId) {
-        return Flux.deferContextual(context -> Flux.fromIterable(threadIdAndLastUpdateAts.entrySet())
-                .flatMap(threadIdAndLastUpdateAt -> {
+    private Flux<TraceThreadModel> processThreadAsync(Map<String, ThreadTimestamps> threadInfo, UUID projectId) {
+        return Flux.deferContextual(context -> Flux.fromIterable(threadInfo.entrySet())
+                .flatMap(entry -> {
                     String workspaceId = context.get(RequestContext.WORKSPACE_ID);
                     String userName = context.get(RequestContext.USER_NAME);
-                    String threadId = threadIdAndLastUpdateAt.getKey();
-                    Instant lastUpdatedAt = threadIdAndLastUpdateAt.getValue();
+                    String threadId = entry.getKey();
+                    ThreadTimestamps timestamps = entry.getValue();
 
-                    return traceThreadIdService.getOrCreateTraceThreadId(workspaceId, projectId, threadId)
-                            .map(traceThreadId -> mapToModel(traceThreadId, userName, lastUpdatedAt));
+                    // Extract timestamp from earliest trace (first trace in chronological order)
+                    Instant earliestTraceTimestamp = IdGenerator.extractTimestampFromUUIDv7(timestamps.firstTraceId());
+
+                    return traceThreadIdService
+                            .getOrCreateTraceThreadId(workspaceId, projectId, threadId, earliestTraceTimestamp)
+                            .map(traceThreadId -> mapToModel(traceThreadId, userName, timestamps.lastUpdatedAt()));
                 }));
     }
 
     @Override
     public Mono<UUID> getOrCreateThreadId(@NonNull UUID projectId, @NonNull String threadId) {
+        return getOrCreateThreadId(projectId, threadId, null);
+    }
+
+    @Override
+    public Mono<UUID> getOrCreateThreadId(@NonNull UUID projectId, @NonNull String threadId, Instant timestamp) {
         return Mono.deferContextual(context -> traceThreadIdService
-                .getOrCreateTraceThreadId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId)
+                .getOrCreateTraceThreadId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId, timestamp)
                 .map(TraceThreadIdModel::id));
     }
 
@@ -169,6 +184,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 scoredAt, threadIds, projectId, ex))
                         .then(),
                 LOCK_DURATION);
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(@NonNull List<UUID> threadModelIds) {
+        return traceThreadIdService.getTraceThreadIdsByThreadModelIds(threadModelIds);
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
@@ -409,8 +429,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     if (traceThread.threadModelId() != null) {
                         return Mono.just(traceThread);
                     }
-                    // If it does not have a trace thread model id, create a new one
-                    return getOrCreateThreadId(projectId, traceThread.id())
+                    // If it does not have a trace thread model id, create a new one using the minimum trace timestamp
+                    return getOrCreateThreadId(projectId, traceThread.id(), traceThread.createdAt())
                             .map(id -> traceThread.toBuilder().threadModelId(id).build());
                 })
                 // If it has a trace thread model id, check if the trace thread entity exists in the database

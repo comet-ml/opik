@@ -10,4 +10,5 @@ export interface DatasetItemPagePublic {
     size?: number;
     total?: number;
     columns?: OpikApi.ColumnPublic[];
+    sortableBy?: string[];
 }

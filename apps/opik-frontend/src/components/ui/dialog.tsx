@@ -171,7 +171,7 @@ const DialogDescription = React.forwardRef<
   <DialogPrimitive.Description
     ref={ref}
     className={cn(
-      "pt-4 comet-body-s text-muted-foreground break-words whitespace-pre-wrap",
+      "comet-body-s text-muted-foreground break-words whitespace-pre-wrap",
       className,
     )}
     {...props}

@@ -1,0 +1,507 @@
+---
+title: Models
+---
+
+The TypeScript SDK provides flexible model configuration through direct integration with the Vercel AI SDK. You can use models from multiple providers with a simple, unified interface.
+
+## Overview
+
+The TypeScript SDK supports three ways to configure models for evaluation and prompt generation:
+
+1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-4o"`, `"claude-3-5-sonnet-latest"`)
+2. **LanguageModel instances** - Pre-configured Vercel AI SDK models with custom settings
+3. **OpikBaseModel implementations** - Custom model integrations for unsupported providers
+
+## Quick Start
+
+### Using Model ID Strings
+
+The simplest approach is to pass a model ID string directly:
+
+```typescript
+import { evaluatePrompt } from "opik";
+import { Hallucination } from "opik";
+
+// OpenAI model
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+});
+
+// Anthropic model
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "claude-3-5-sonnet-latest",
+});
+
+// Google Gemini model
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gemini-2.0-flash",
+});
+
+// Use in metrics
+const metric = new Hallucination({ model: "gpt-4o" });
+```
+
+### Using LanguageModel Instances
+
+For advanced scenarios, use LanguageModel instances from Vercel AI SDK:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { evaluatePrompt } from "opik";
+
+// Create a LanguageModel instance
+const customModel = openai("gpt-4o");
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: customModel,
+});
+```
+
+## Generation Parameters
+
+### Parameters for Metrics
+
+All LLM Judge metrics support these generation parameters directly in the constructor:
+
+```typescript
+import { Hallucination } from "opik";
+
+const metric = new Hallucination({
+  model: "gpt-4o",
+  temperature: 0.3, // Control randomness (0.0-2.0)
+  seed: 42, // For reproducible outputs
+  maxTokens: 1000, // Maximum response length
+});
+
+// Use in evaluation
+const score = await metric.score({
+  input: "What is the capital of France?",
+  output: "The capital of France is Paris.",
+  context: ["France is a country in Western Europe."],
+});
+```
+
+For advanced generation parameters, use `modelSettings`:
+
+```typescript
+import { Hallucination } from "opik";
+
+const metric = new Hallucination({
+  model: "gpt-4o",
+  temperature: 0.5,
+  modelSettings: {
+    topP: 0.9, // Nucleus sampling
+    topK: 50, // Top-K sampling
+    presencePenalty: 0.1, // Reduce repetition
+    frequencyPenalty: 0.2, // Reduce phrase repetition
+    stopSequences: ["END"], // Custom stop sequences
+  },
+});
+```
+
+### Parameters for evaluatePrompt
+
+The `evaluatePrompt` function supports only `temperature` and `seed`:
+
+```typescript
+import { evaluatePrompt } from "opik";
+import { Hallucination, AnswerRelevance } from "opik";
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+  temperature: 0.7,
+  seed: 42,
+  scoringMetrics: [
+    new Hallucination({
+      model: "gpt-4o",
+      temperature: 0.3, // Full parameter support in metrics
+      seed: 12345,
+      maxTokens: 1000,
+    }),
+  ],
+});
+```
+
+**Note**: For full control over all Vercel AI SDK parameters, create a `LanguageModel` instance with your desired configuration and pass it to the `model` parameter. See [Using LanguageModel Instances](#using-languagemodel-instances) below.
+
+## Supported Providers
+
+### OpenAI
+
+OpenAI models are supported through the `@ai-sdk/openai` package.
+
+**Example model IDs**:
+
+```typescript
+"gpt-4o";
+"gpt-4o-mini";
+"gpt-4-turbo";
+```
+
+**Usage**:
+
+```typescript
+import { evaluatePrompt } from "opik";
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+});
+```
+
+For a complete list of available models, see the [Vercel AI SDK OpenAI provider documentation](https://sdk.vercel.ai/providers/ai-sdk-providers/openai).
+
+### Anthropic
+
+Anthropic's Claude models are supported through the `@ai-sdk/anthropic` package.
+
+**Example model IDs**:
+
+```typescript
+"claude-3-5-sonnet-latest";
+"claude-3-5-haiku-latest";
+```
+
+**Usage**:
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "claude-3-5-sonnet-latest",
+});
+```
+
+For a complete list of available models, see the [Vercel AI SDK Anthropic provider documentation](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic).
+
+### Google Gemini
+
+Google's Gemini models are supported through the `@ai-sdk/google` package.
+
+**Example model IDs**:
+
+```typescript
+"gemini-2.0-flash";
+"gemini-1.5-pro";
+```
+
+**Usage**:
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gemini-2.0-flash",
+});
+```
+
+For a complete list of available models, see the [Vercel AI SDK Google provider documentation](https://sdk.vercel.ai/providers/ai-sdk-providers/google).
+
+## Using Models in Opik
+
+### Using LanguageModel Instances
+
+For advanced scenarios requiring full Vercel AI SDK features (such as structured outputs, custom headers, or provider-specific parameters), create `LanguageModel` instances directly:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { evaluatePrompt } from "opik";
+import { Hallucination } from "opik";
+
+// Create models with advanced configuration
+const genModel = openai("gpt-4o-mini", {
+  structuredOutputs: true, // Provider-specific feature
+});
+
+const evalModel = anthropic("claude-3-5-sonnet-latest");
+
+// Use different models for generation and evaluation
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: genModel,
+  scoringMetrics: [new Hallucination({ model: evalModel })],
+});
+```
+
+This approach gives you full control over Vercel AI SDK parameters that aren't exposed through Opik's simple interface.
+
+## Using Models with Metrics
+
+LLM Judge metrics accept model configuration:
+
+### With Model ID String
+
+```typescript
+import { Hallucination, AnswerRelevance } from "opik";
+
+// Use different models for different metrics
+const hallucinationMetric = new Hallucination({ model: "gpt-4o" });
+const relevanceMetric = new AnswerRelevance({
+  model: "claude-3-5-sonnet-latest",
+});
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+  scoringMetrics: [hallucinationMetric, relevanceMetric],
+});
+```
+
+### With LanguageModel Instance
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { Hallucination } from "opik";
+
+// Create model for metric evaluation
+const judgeModel = openai("gpt-4o");
+
+const metric = new Hallucination({ model: judgeModel });
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+  scoringMetrics: [metric],
+});
+```
+
+## Custom Model Implementation
+
+For unsupported providers, implement the `OpikBaseModel` interface:
+
+### OpikBaseModel Interface
+
+```typescript
+abstract class OpikBaseModel {
+  constructor(public readonly modelName: string) {}
+
+  /**
+   * Generate a string response from a text prompt
+   */
+  abstract generateString(input: string): Promise<string>;
+
+  /**
+   * Generate a response from messages with provider-specific format
+   */
+  abstract generateProviderResponse(messages: OpikMessage[]): Promise<unknown>;
+}
+```
+
+### Example Implementation
+
+```typescript
+import { OpikBaseModel, OpikMessage } from "opik";
+
+class CustomProviderModel extends OpikBaseModel {
+  private apiKey: string;
+  private baseUrl: string;
+
+  constructor(modelName: string, apiKey: string, baseUrl: string) {
+    super(modelName);
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+  }
+
+  async generateString(input: string): Promise<string> {
+    const messages: OpikMessage[] = [
+      {
+        role: "user",
+        content: input,
+      },
+    ];
+
+    const response = await this.generateProviderResponse(messages);
+    // Extract text from provider response format
+    return response.choices[0].message.content;
+  }
+
+  async generateProviderResponse(messages: OpikMessage[]): Promise<unknown> {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: messages,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+}
+
+// Usage
+const customModel = new CustomProviderModel(
+  "custom-model-v1",
+  process.env.CUSTOM_API_KEY,
+  "https://api.custom-provider.com"
+);
+
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: customModel,
+});
+```
+
+## Model Resolution
+
+The SDK automatically resolves models in this order:
+
+1. **If a string is provided**: Auto-detects provider and creates appropriate model
+2. **If LanguageModel is provided**: Uses the instance directly
+3. **If OpikBaseModel is provided**: Uses the custom implementation
+4. **If undefined**: Defaults to `"gpt-4o"`
+
+```typescript
+// String → Auto-detected as OpenAI
+model: "gpt-4o";
+
+// LanguageModel → Used directly
+import { openai } from "@ai-sdk/openai";
+model: openai("gpt-4o");
+
+// Custom implementation
+model: new CustomProviderModel("my-model", apiKey, baseUrl);
+
+// Undefined → Defaults to "gpt-4o"
+model: undefined;
+```
+
+## Best Practices
+
+### 1. Use Model ID Strings for Simplicity
+
+For most use cases, use model ID strings directly:
+
+```typescript
+import { Hallucination } from "opik";
+
+const metric = new Hallucination({ model: "gpt-4o" });
+```
+
+The Opik SDK handles model configuration internally for optimal evaluation performance.
+
+### 2. Match Model Capabilities to Task
+
+Choose models based on task requirements:
+
+```typescript
+// Complex reasoning: GPT-4o, Claude Sonnet
+model: "gpt-4o";
+model: "claude-3-5-sonnet-latest";
+
+// Fast responses: GPT-4o-mini, Gemini Flash
+model: "gpt-4o-mini";
+model: "gemini-2.0-flash";
+
+// Long context: Claude, Gemini
+model: "claude-3-5-sonnet-latest"; // 200K context
+model: "gemini-1.5-pro"; // 1M context
+```
+
+### 3. Use Different Models for Tasks and Metrics
+
+Optimize costs by using different models:
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o-mini", // Cheaper for generation
+  scoringMetrics: [
+    new Hallucination({ model: "gpt-4o" }), // More accurate for evaluation
+  ],
+});
+```
+
+### 4. Configure API Keys
+
+Set up environment variables for each provider:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Google
+export GOOGLE_API_KEY="..."
+```
+
+### 5. Handle Rate Limits
+
+Use appropriate worker counts to avoid rate limits:
+
+```typescript
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+  taskWorkers: 5, // Limit parallel requests
+});
+```
+
+## Troubleshooting
+
+### API Key Not Found
+
+```typescript
+// Error: API key not found for provider
+
+// Solution: Set environment variable
+process.env.OPENAI_API_KEY = "sk-...";
+```
+
+### Model Not Supported
+
+```typescript
+// Error: Unsupported model ID
+
+// Solution: Use custom implementation
+class MyModel extends OpikBaseModel {
+  // ... implementation
+}
+```
+
+### Rate Limit Errors
+
+```typescript
+// Error: Rate limit exceeded
+
+// Solution: Reduce worker count
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: "gpt-4o",
+  taskWorkers: 3, // Reduce from default 10
+});
+```
+
+## See Also
+
+- [evaluatePrompt Function](/reference/typescript-sdk/evaluation/evaluatePrompt) - Using models with prompt evaluation
+- [Metrics](/reference/typescript-sdk/evaluation/metrics) - Using models with LLM Judge metrics
+- [Vercel AI SDK Documentation](https://sdk.vercel.ai/docs) - Full LanguageModel documentation

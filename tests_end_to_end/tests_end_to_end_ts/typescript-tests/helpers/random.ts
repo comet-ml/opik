@@ -8,3 +8,7 @@ export function getRandomString(length: number): string {
 export function generateProjectName(): string {
   return `project_${getRandomString(5)}`;
 }
+
+export function generateDatasetName(): string {
+  return `dataset_${getRandomString(5)}`;
+}

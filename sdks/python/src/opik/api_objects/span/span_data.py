@@ -7,6 +7,7 @@ import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
 from opik.types import (
+    DistributedTraceHeadersDict,
     ErrorInfoDict,
     FeedbackScoreDict,
     LLMProvider,
@@ -112,7 +113,7 @@ class SpanData:
             if value is None:
                 continue
 
-            if key not in self.__dict__:
+            if key not in self.__dict__ and key != "prompts":
                 LOGGER.debug(
                     "An attempt to update span with parameter name it doesn't have: %s",
                     key,
@@ -135,6 +136,11 @@ class SpanData:
                 continue
             elif key == "tags":
                 self.tags = data_helpers.merge_tags(self.tags, new_tags=value)
+                continue
+            elif key == "prompts":
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=new_data.get("metadata"), prompts=value
+                )
                 continue
 
             self.__dict__[key] = value
@@ -197,3 +203,9 @@ class SpanData:
             "total_cost": self.total_cost,
             "attachments": self.attachments,
         }
+
+    def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
+        return DistributedTraceHeadersDict(
+            opik_trace_id=self.trace_id,
+            opik_parent_span_id=self.id,
+        )

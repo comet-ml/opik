@@ -14,6 +14,8 @@ TEST RESULTS:
 {formatted_batch}
 ```
 
+Important constraint: Base your analysis exclusively on the TEST RESULTS shown above. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results.
+
 Think through the failures systematically:
 
 1. IDENTIFY: List all distinct types of failures you observe in the test results
@@ -86,6 +88,10 @@ INSTRUCTIONS FOR IMPROVING THE PROMPT:
 
 4. **Maintain Structure**: Keep the same message structure (role and content format). Only modify the content where necessary.
 
-5. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
+5. **Do NOT Add Messages**: Do not add new messages to the prompt. Only modify existing messages. The number of messages in the prompt must remain exactly the same.
+
+6. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
+
+Do not remove any variables or placeholders from any prompt message. You can reposition them within the same message content if needed but never remove them.
 
 Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""

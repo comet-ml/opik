@@ -3,11 +3,12 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { useNavigate } from "@tanstack/react-router";
-import capitalize from "lodash/capitalize";
 
 import useAlertsList from "@/api/alerts/useAlertsList";
 import AlertsRowActionsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsRowActionsCell";
 import AlertsEventsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsEventsCell";
+import AlertTypeCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertTypeCell";
+import { ALERT_TYPE_LABELS } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -61,12 +62,9 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "alert_type",
-    label: "Type",
+    label: "Destination",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => {
-      if (!row.alert_type) return capitalize(ALERT_TYPE.general);
-      return capitalize(row.alert_type);
-    },
+    cell: AlertTypeCell as never,
   },
   {
     id: "webhook_url",
@@ -121,7 +119,7 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "alert_type",
-    label: "Type",
+    label: "Destination",
     type: COLUMN_TYPE.category,
   },
   {
@@ -196,7 +194,7 @@ const AlertsTab: React.FunctionComponent = () => {
           keyComponentProps: {
             options: Object.values(ALERT_TYPE).map((type) => ({
               value: type,
-              label: capitalize(type),
+              label: ALERT_TYPE_LABELS[type],
             })),
             placeholder: "Select type",
           },

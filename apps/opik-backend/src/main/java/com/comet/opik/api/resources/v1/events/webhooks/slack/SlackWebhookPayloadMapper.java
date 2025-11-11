@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events.webhooks.slack;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
@@ -10,10 +11,16 @@ import com.comet.opik.api.events.webhooks.WebhookEvent;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Maps webhook events to Slack-specific payload format with block structure.
@@ -23,6 +30,9 @@ import java.util.Map;
 public class SlackWebhookPayloadMapper {
 
     private static final int SLACK_HEADER_BLOCK_LIMIT = 150;
+    private static final int SLACK_TEXT_BLOCK_LIMIT = 3000;
+    public static final String BASE_URL_METADATA_KEY = "base_url";
+    private static final String DEFAULT_BASE_URL = "http://localhost:5173";
 
     /**
      * Converts a webhook event to Slack webhook payload.
@@ -41,8 +51,8 @@ public class SlackWebhookPayloadMapper {
         // Add summary section
         blocks.add(createSummaryBlock(event));
 
-        // Add details section
-        blocks.add(createDetailsBlock(event));
+        // Add details section(s) with 3000 character limit handling
+        blocks.addAll(createDetailsBlocks(event));
 
         return SlackWebhookPayload.builder()
                 .blocks(blocks)
@@ -65,41 +75,69 @@ public class SlackWebhookPayloadMapper {
         return SlackBlock.section(summary);
     }
 
-    private static SlackBlock createDetailsBlock(@NonNull WebhookEvent<Map<String, Object>> event) {
-        String details = buildDetailsText(event);
-        return SlackBlock.section(details);
-    }
-
-    private static String buildDetailsText(@NonNull WebhookEvent<Map<String, Object>> event) {
+    private static List<SlackBlock> createDetailsBlocks(@NonNull WebhookEvent<Map<String, Object>> event) {
         List<?> metadata = (List<?>) event.getPayload().getOrDefault("metadata", List.of());
 
-        return switch (event.getEventType()) {
-            case PROMPT_CREATED -> buildPromptCreatedDetails(metadata);
-            case PROMPT_DELETED -> buildPromptDeletedDetails(metadata);
-            case PROMPT_COMMITTED -> buildPromptCommittedDetails(metadata);
-            case TRACE_ERRORS -> buildTraceErrorsDetails(metadata);
-            case TRACE_FEEDBACK_SCORE -> buildTraceFeedbackScoreDetails(metadata);
-            case TRACE_THREAD_FEEDBACK_SCORE -> buildTraceThreadFeedbackScoreDetails(metadata);
-            case TRACE_GUARDRAILS_TRIGGERED -> buildGuardrailsTriggeredDetails(metadata);
-        };
-    }
+        var metadataUrl = event.getAlertMetadata().getOrDefault(BASE_URL_METADATA_KEY, DEFAULT_BASE_URL);
+        metadataUrl = metadataUrl.endsWith("/") ? metadataUrl : metadataUrl + "/";
 
-    private static String buildPromptCreatedDetails(@NonNull List<?> metadata) {
-        if (metadata.isEmpty()) {
-            return "No prompts created";
+        String baseUrl = metadataUrl + event.getWorkspaceName();
+
+        DetailsBuildResult result = switch (event.getEventType()) {
+            case PROMPT_CREATED -> buildPromptCreatedDetails(metadata, baseUrl);
+            case PROMPT_DELETED -> buildPromptDeletedDetails(metadata);
+            case PROMPT_COMMITTED -> buildPromptCommittedDetails(metadata, baseUrl);
+            case TRACE_ERRORS -> buildTraceErrorsDetails(metadata, baseUrl);
+            case TRACE_FEEDBACK_SCORE -> buildTraceFeedbackScoreDetails(metadata, baseUrl);
+            case TRACE_THREAD_FEEDBACK_SCORE -> buildTraceThreadFeedbackScoreDetails(metadata, baseUrl);
+            case TRACE_GUARDRAILS_TRIGGERED -> buildGuardrailsTriggeredDetails(metadata, baseUrl);
+            case EXPERIMENT_FINISHED -> buildExperimentFinishedDetails(metadata, baseUrl);
+            case TRACE_COST -> buildCostDetails(metadata, baseUrl);
+            case TRACE_LATENCY -> buildLatencyDetails(metadata, baseUrl);
+        };
+
+        var blocks = new ArrayList<SlackBlock>();
+        blocks.add(SlackBlock.section(result.mainText));
+
+        // Add fallback block if text was truncated
+        if (result.fallbackText != null) {
+            blocks.add(SlackBlock.section(result.fallbackText));
         }
 
-        List<String> promptIds = metadata.stream()
-                .map(item -> (Prompt) item)
-                .map(prompt -> String.format("`%s`", prompt.id()))
-                .toList();
-
-        return "*Prompt IDs:*\n" + String.join(", ", promptIds);
+        return blocks;
     }
 
-    private static String buildPromptDeletedDetails(@NonNull List<?> metadata) {
+    /**
+     * Result of building details text with optional fallback.
+     */
+    private record DetailsBuildResult(String mainText, String fallbackText) {
+        DetailsBuildResult(String mainText) {
+            this(mainText, null);
+        }
+    }
+
+    private static DetailsBuildResult buildPromptCreatedDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
-            return "No prompts deleted";
+            return new DetailsBuildResult("No prompts created");
+        }
+
+        List<String> promptLinks = metadata.stream()
+                .map(item -> (Prompt) item)
+                .map(prompt -> buildPromptLink(prompt.id(), baseUrl))
+                .toList();
+
+        String mainText = "*Prompts Created:*\n" + String.join("\n", promptLinks);
+        String fallbackText = String.format("Overall %d Prompts created, you could check them here: <%s|View All>",
+                promptLinks.size(), baseUrl + "/prompts");
+
+        return checkSlackTextLimit(mainText, "*Prompts Created:*\n", promptLinks,
+                fallbackText);
+    }
+
+    private static DetailsBuildResult buildPromptDeletedDetails(List<?> metadata) {
+        if (metadata.isEmpty()) {
+            return new DetailsBuildResult("No prompts deleted");
         }
 
         List<String> promptIds = metadata.stream()
@@ -108,79 +146,174 @@ public class SlackWebhookPayloadMapper {
                 .map(prompt -> String.format("`%s`", prompt.id()))
                 .toList();
 
-        return "*Prompt IDs:*\n" + String.join(", ", promptIds);
+        return new DetailsBuildResult("*Deleted Prompt IDs:*\n" + String.join(", ", promptIds));
     }
 
-    private static String buildPromptCommittedDetails(@NonNull List<?> metadata) {
+    private static DetailsBuildResult buildPromptCommittedDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
-            return "No prompts committed";
+            return new DetailsBuildResult("No prompts committed");
         }
 
         List<String> commits = metadata.stream()
                 .map(item -> (PromptVersion) item)
-                .map(version -> String.format("Prompt `%s` committed with version `%s`",
-                        version.promptId(), version.commit()))
+                .map(version -> buildPromptCommitLink(version.promptId(), version.id(), baseUrl))
                 .toList();
 
-        return String.join("\n", commits);
+        String mainText = "*Prompts Committed:*\n" + String.join("\n", commits);
+        String fallbackText = String.format(
+                "Overall %d Prompts commits created, you could check them here: <%s|View All>",
+                commits.size(), baseUrl + "/prompts");
+
+        return checkSlackTextLimit(mainText, "*Prompts Committed:*\n", commits, fallbackText);
     }
 
-    private static String buildTraceErrorsDetails(@NonNull List<?> metadata) {
+    private static DetailsBuildResult buildTraceErrorsDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
-            return "No trace errors";
+            return new DetailsBuildResult("No trace errors");
         }
 
-        List<String> traceIds = metadata.stream()
+        // Deduplicate traces with project IDs
+        Set<Pair<UUID, UUID>> traceWithProjectIds = metadata.stream()
                 .map(item -> (List<Trace>) item)
                 .flatMap(List::stream)
-                .map(trace -> String.format("`%s`", trace.id()))
+                .map(trace -> Pair.of(trace.id(), trace.projectId()))
+                .collect(Collectors.toSet());
+
+        List<String> traceLinks = traceWithProjectIds.stream()
+                .map(pair -> buildTraceLink(pair.getLeft(), pair.getRight(), baseUrl))
                 .toList();
 
-        return "*Trace IDs:*\n" + String.join(", ", traceIds);
+        String mainText = "*Traces with Errors:*\n" + String.join("\n", traceLinks);
+        String fallbackText = String.format(
+                "Overall %d Traces with errors created, you could check them here: <%s|View All>",
+                traceLinks.size(), baseUrl + "/projects");
+
+        return checkSlackTextLimit(mainText, "*Traces with Errors:*\n", traceLinks, fallbackText);
     }
 
-    private static String buildTraceFeedbackScoreDetails(@NonNull List<?> metadata) {
+    private static DetailsBuildResult buildTraceFeedbackScoreDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
-            return "No feedback scores";
+            return new DetailsBuildResult("No feedback scores");
         }
 
-        List<String> scores = metadata.stream()
+        List<String> scoreLinks = metadata.stream()
                 .map(item -> (List<FeedbackScoreItem.FeedbackScoreBatchItem>) item)
                 .flatMap(List::stream)
-                .map(score -> String.format("• Trace ID: `%s`\n  *%s* = %.2f",
-                        score.id(), score.name(), score.value()))
+                .map(fs -> buildTraceFeedbackScoreLink(fs, baseUrl))
                 .toList();
 
-        return String.join("\n", scores);
+        String mainText = "*Traces Feedback Scores:*\n" + String.join("\n", scoreLinks);
+        String fallbackText = String.format(
+                "Overall %d Traces Feedback Scores created, you could check them here: <%s|View All>",
+                scoreLinks.size(), baseUrl + "/projects");
+
+        return checkSlackTextLimit(mainText, "*Traces Feedback Scores:*\n", scoreLinks, fallbackText);
     }
 
-    private static String buildTraceThreadFeedbackScoreDetails(@NonNull List<?> metadata) {
+    private static DetailsBuildResult buildTraceThreadFeedbackScoreDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
-            return "No thread feedback scores";
+            return new DetailsBuildResult("No thread feedback scores");
         }
 
-        List<String> scores = metadata.stream()
+        List<String> scoreLinks = metadata.stream()
                 .map(item -> (List<FeedbackScoreItem.FeedbackScoreBatchItemThread>) item)
                 .flatMap(List::stream)
-                .map(score -> String.format("• Thread ID: `%s`\n  *%s* = %.2f",
-                        score.threadId(), score.name(), score.value()))
+                .map(fs -> buildThreadFeedbackScoreLink(fs, baseUrl))
                 .toList();
 
-        return String.join("\n", scores);
+        String mainText = "*Threads Feedback Scores:*\n" + String.join("\n", scoreLinks);
+        String fallbackText = String.format(
+                "Overall %d Threads Feedback Scores created, you could check them here: <%s|View All>",
+                scoreLinks.size(), baseUrl + "/projects");
+
+        return checkSlackTextLimit(mainText, "*Threads Feedback Scores:*\n", scoreLinks, fallbackText);
     }
 
-    private static String buildGuardrailsTriggeredDetails(@NonNull List<?> metadata) {
+    private static DetailsBuildResult buildGuardrailsTriggeredDetails(List<?> metadata,
+            String baseUrl) {
         if (metadata.isEmpty()) {
-            return "No guardrails triggered";
+            return new DetailsBuildResult("No guardrails triggered");
         }
 
-        List<String> traceIds = metadata.stream()
+        // Deduplicate guardrails by entity ID (trace ID)
+        Set<Pair<UUID, UUID>> traceWithProjectIds = metadata.stream()
                 .map(item -> (List<Guardrail>) item)
                 .flatMap(List::stream)
-                .map(guardrail -> String.format("`%s`", guardrail.entityId()))
+                .map(gr -> Pair.of(gr.entityId(), gr.projectId()))
+                .collect(Collectors.toSet());
+
+        List<String> guardrailLinks = traceWithProjectIds.stream()
+                .map(pair -> buildTraceLink(pair.getLeft(), pair.getRight(), baseUrl))
                 .toList();
 
-        return "*Trace IDs:*\n" + String.join(", ", traceIds);
+        String mainText = "*Traces with Guardrails Triggered:*\n" + String.join("\n", guardrailLinks);
+        String fallbackText = String.format(
+                "Overall %d Traces with Guardrails Triggered created, you could check them here: <%s|View All>",
+                guardrailLinks.size(), baseUrl + "/projects");
+
+        return checkSlackTextLimit(mainText, "*Traces with Guardrails Triggered:*\n", guardrailLinks, fallbackText);
+    }
+
+    private static DetailsBuildResult buildExperimentFinishedDetails(List<?> metadata,
+            String baseUrl) {
+        if (metadata.isEmpty()) {
+            return new DetailsBuildResult("No experiments finished");
+        }
+
+        List<String> experimentLinks = metadata.stream()
+                .map(item -> (List<Experiment>) item)
+                .flatMap(List::stream)
+                .map(experiment -> buildExperimentLink(experiment.id(), experiment.datasetId(), baseUrl))
+                .toList();
+
+        String mainText = "*Experiments Finished:*\n" + String.join("\n", experimentLinks);
+        String fallbackText = String.format(
+                "Overall %d Experiments finished, you could check them here: <%s|View All>",
+                experimentLinks.size(), baseUrl + "/experiments");
+
+        return checkSlackTextLimit(mainText, "*Experiments Finished:*\n", experimentLinks, fallbackText);
+    }
+
+    private static DetailsBuildResult buildCostDetails(List<?> metadata,
+            String baseUrl) {
+        // TODO: implement cost details mapping
+        return new DetailsBuildResult("implement later");
+    }
+
+    private static DetailsBuildResult buildLatencyDetails(List<?> metadata,
+            String baseUrl) {
+        // TODO: implement latency details mapping
+        return new DetailsBuildResult("implement later");
+    }
+
+    private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,
+            List<String> links, String fallbackText) {
+        // Check if exceeds limit
+        if (text.length() > SLACK_TEXT_BLOCK_LIMIT) {
+            // Truncate and create fallback
+            List<String> includedLinks = new ArrayList<>();
+            int currentLength = mainText.length();
+
+            for (String link : links) {
+                int lineLength = link.length() + 1; // +1 for newline
+                if (currentLength + lineLength <= SLACK_TEXT_BLOCK_LIMIT - 50) {
+                    includedLinks.add(link);
+                    currentLength += lineLength;
+                } else {
+                    break;
+                }
+            }
+
+            var updatedText = mainText + String.join("\n", includedLinks);
+
+            return new DetailsBuildResult(updatedText, fallbackText);
+        }
+
+        return new DetailsBuildResult(text);
     }
 
     private static String formatEventType(@NonNull AlertEventType eventType) {
@@ -192,6 +325,71 @@ public class SlackWebhookPayloadMapper {
             case TRACE_FEEDBACK_SCORE -> "Trace Feedback Score";
             case TRACE_THREAD_FEEDBACK_SCORE -> "Thread Feedback Score";
             case TRACE_GUARDRAILS_TRIGGERED -> "Guardrail Triggered";
+            case EXPERIMENT_FINISHED -> "Experiment Finished";
+            case TRACE_COST -> "Cost Alert";
+            case TRACE_LATENCY -> "Latency Alert";
         };
+    }
+
+    /**
+     * Builds a Slack-formatted link to a prompt in the UI.
+     */
+    private static String buildPromptLink(@NonNull UUID promptId, @NonNull String baseUrl) {
+        String url = String.format("%s/prompts/%s", baseUrl, promptId);
+        return String.format("Prompt `%s` | <%s|View>", promptId, url);
+    }
+
+    /**
+     * Builds a Slack-formatted link to a prompt commit in the UI.
+     */
+    private static String buildPromptCommitLink(@NonNull UUID promptId, @NonNull UUID commitId,
+            @NonNull String baseUrl) {
+        String url = String.format("%s/prompts/%s?activeVersionId=%s", baseUrl, promptId, commitId);
+        return String.format("Prompt `%s` (version `%s`) | <%s|View>", promptId, commitId, url);
+    }
+
+    /**
+     * Builds a Slack-formatted link to a trace in the UI.
+     */
+    private static String buildTraceLink(@NonNull UUID traceId, @NonNull UUID projectId,
+            @NonNull String baseUrl) {
+        String url = String.format("%s/projects/%s/traces?trace=%s",
+                baseUrl, projectId, traceId);
+        return String.format("Trace `%s` | <%s|View>", traceId, url);
+    }
+
+    /**
+     * Builds a Slack-formatted link to a trace feedback score in the UI.
+     */
+    private static String buildTraceFeedbackScoreLink(@NonNull FeedbackScoreItem.FeedbackScoreBatchItem fs,
+            @NonNull String baseUrl) {
+
+        String url = String.format("%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
+                baseUrl, fs.projectId(), fs.id());
+        return String.format("Trace Score  *%s* = %.2f, reason: %s | <%s|View>",
+                fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
+    }
+
+    /**
+     * Builds a Slack-formatted link to a thread feedback score in the UI.
+     */
+    private static String buildThreadFeedbackScoreLink(@NonNull FeedbackScoreItem.FeedbackScoreBatchItemThread fs,
+            @NonNull String baseUrl) {
+        String url = String.format("%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
+                baseUrl, fs.projectId(), fs.threadId());
+        return String.format("Thread Score  *%s* = %.2f, reason: %s | <%s|View>",
+                fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
+    }
+
+    /**
+     * Builds a Slack-formatted link to an experiment in the UI.
+     */
+    private static String buildExperimentLink(@NonNull UUID experimentId, @NonNull UUID datasetId,
+            @NonNull String baseUrl) {
+        String experimentsParam = String.format("[\"%s\"]", experimentId);
+        String encodedExperimentsParam = URLEncoder.encode(experimentsParam, StandardCharsets.UTF_8);
+        String url = String.format("%s/experiments/%s/compare?experiments=%s",
+                baseUrl, datasetId, encodedExperimentsParam);
+        return String.format("Experiment `%s` | <%s|View>", experimentId, url);
     }
 }

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from contextlib import contextmanager
 from typing import Any
 
@@ -12,6 +13,24 @@ from rich.text import Text
 from .utils import get_optimization_run_url_by_id
 
 PANEL_WIDTH = 70
+
+
+def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
+    """
+    Calculate percentage change safely, handling division by zero.
+
+    Args:
+        current: Current value
+        baseline: Baseline value to compare against
+
+    Returns:
+        Tuple of (percentage_change, has_percentage) where:
+        - percentage_change: The percentage change if calculable, otherwise 0
+        - has_percentage: True if percentage was calculated, False if baseline was zero
+    """
+    if baseline == 0:
+        return 0.0, False
+    return ((current - baseline) / baseline) * 100, True
 
 
 def get_console(*args: Any, **kwargs: Any) -> Console:
@@ -36,35 +55,61 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
 
     from opik.evaluation import report
 
+    # Store original functions
+    original_display_experiment_results = report.display_experiment_results
+    original_display_experiment_link = report.display_experiment_link
+
+    # Replace with no-ops
     report.display_experiment_results = lambda *args, **kwargs: None
     report.display_experiment_link = lambda *args, **kwargs: None
 
     try:
         yield
     finally:
+        # Restore everything
         opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
+        report.display_experiment_results = original_display_experiment_results
+        report.display_experiment_link = original_display_experiment_link
 
 
 @contextmanager
 def suppress_opik_logs() -> Any:
     """Suppress Opik startup logs by temporarily increasing the log level."""
-    # Optimizer log level
-    optimizer_logger = logging.getLogger("opik_optimizer")
+    # Get all loggers we need to suppress
+    opik_client_logger = logging.getLogger("opik.api_objects.opik_client")
+    opik_logger = logging.getLogger("opik")
 
-    # Get the Opik logger
-    opik_logger = logging.getLogger("opik.api_objects.opik_client")
+    # Store original log levels
+    original_client_level = opik_client_logger.level
+    original_opik_level = opik_logger.level
 
-    # Store original log level
-    original_level = opik_logger.level
-
-    # Set log level to ERROR to suppress INFO messages
-    opik_logger.setLevel(optimizer_logger.level)
+    # Set log level to WARNING to suppress INFO messages
+    opik_client_logger.setLevel(logging.WARNING)
+    opik_logger.setLevel(logging.WARNING)
 
     try:
         yield
     finally:
-        # Restore original log level
-        opik_logger.setLevel(original_level)
+        # Restore original log levels
+        opik_client_logger.setLevel(original_client_level)
+        opik_logger.setLevel(original_opik_level)
+
+
+def format_prompt_snippet(text: str, max_length: int = 100) -> str:
+    """
+    Normalize whitespace in a prompt snippet and truncate it for compact display.
+
+    Args:
+        text: Raw text to summarize.
+        max_length: Maximum characters to keep before adding an ellipsis.
+
+    Returns:
+        str: Condensed snippet safe for inline logging.
+    """
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if len(normalized) > max_length:
+        return normalized[:max_length] + "…"
+    return normalized
 
 
 def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:
@@ -196,18 +241,18 @@ def display_result(
     content: Text | Panel = []
 
     if best_score > initial_score:
-        if initial_score == 0:
+        perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
+        if has_percentage:
             content += [
                 Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
                     style="bold green",
                 )
             ]
         else:
-            perc_change = (best_score - initial_score) / initial_score
             content += [
                 Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
                     style="bold green",
                 )
             ]

@@ -9,31 +9,26 @@ single system prompt for single-turn tasks. It maps Opik datasets and metrics in
 format, runs GEPA’s optimization using a task model and a reflection model, and returns a standard
 `OptimizationResult` compatible with the Opik SDK.
 
-<Warning>
-  GEPA integration is currently in <strong>Beta</strong>. APIs and defaults may evolve, and performance characteristics
-  can change as we iterate. Please report issues or feedback on GitHub.
-</Warning>
-
 <Note>
-  When to use: Choose `GepaOptimizer` when you have a single-turn task (one user input → one model
+  `GepaOptimizer` is ideal when you have a single-turn task (one user input → one model
   response) and you want to optimize the system prompt using a reflection-driven search.
-
-Key trade-offs:
-
-- GEPA (DefaultAdapter) focuses on a single system prompt; multi-turn or tool-heavy flows are not the target.
-- Requires both a task model and a reflection model (can be the same; often the reflection model is stronger).
-- GEPA runs additional reflection passes; expect extra LLM calls compared to simple optimizers.
-
 </Note>
 
-## Requirements
+## How it works
 
-- Python: `pip install opik-optimizer gepa`
-- Models: Uses LiteLLM-style model names for both the task model and reflection model (e.g.,
-  `openai/gpt-4o-mini`, `openai/gpt-4o`). Set the appropriate environment variables (e.g.,
-  `OPENAI_API_KEY`). See [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support).
+The GEPA optimizer companies two key approaches to optimize agents:
 
-## Quick Example (Tiny Test)
+1. **Reflection**: The optimizer uses the outcomes from evaluations to improve the prompts.
+2. **Evolution**: The optimizer uses an evolutionary algorithm to explore the space of prompts.
+
+You can learn more about the algorithm in the [GEPA paper](https://arxiv.org/abs/2507.19457) but in
+short, the optimizer will:
+
+<Frame>
+  <img src="/img/agent_optimization/gepa_optimizer.png" alt="GEPA Optimizer" />
+</Frame>
+
+## Quickstart
 
 ```python
 """
@@ -60,8 +55,7 @@ prompt = ChatPrompt(
 
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
-    reflection_model="openai/gpt-4o",  # stronger reflector is often helpful
-    project_name="GEPA_TinyTest",
+    n_threads=6,
     temperature=0.2,
     max_tokens=200,
 )
@@ -70,7 +64,7 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_metric_calls=12,
+    max_trials=12,
     reflection_minibatch_size=2,
     n_samples=5,
 )
@@ -78,131 +72,90 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
-> Reference implementation: `sdks/opik_optimizer/scripts/litellm_gepa_tiny_test_example.py`
+### Determinism and tool usage
 
-## Example (Hotpot-style with LiteLLM)
+- GEPA’s seed is forwarded directly to the underlying `gepa.optimize` call, but any non-determinism in your prompt (tool calls, non-zero temperature, external APIs) will still introduce variance. To test seeding in isolation, disable tools or substitute cached responses.
+- GEPA emits its own baseline evaluation inside the optimization loop. You’ll see one baseline score from Opik’s wrapper and another from GEPA before the first trial; this is expected and does not double-charge the metric budget.
+- Reflection only triggers after GEPA accepts at least `reflection_minibatch_size` unique prompts. If the minibatch is larger than the trial budget, the optimizer logs a warning and skips reflection.
 
-The following mirrors our example that uses a Hotpot-style dataset and LiteLLM models.
+### GEPA scores vs. Opik scores
+
+- The **GEPA Score** column reflects the aggregate score GEPA computes on its train/validation split when deciding which candidates stay on the Pareto front. It is useful for understanding how GEPA’s evolutionary search ranks prompts.
+- The **Opik Score** column is a fresh evaluation performed through Opik’s metric pipeline on the same dataset (respecting `n_samples`). This is the score you should use when comparing against your baseline or other optimizers.
+- Because the GEPA score is based on GEPA’s internal aggregation, it can diverge from the Opik score for the same prompt. This is expected—treat the GEPA score as a hint about why GEPA kept or discarded a candidate, and rely on the Opik score for final comparisons.
+
+### `skip_perfect_score`
+
+- When `skip_perfect_score=True`, GEPA immediately ignores any candidate whose GEPA score meets or exceeds the `perfect_score` threshold (default `1.0`). This keeps the search moving toward imperfect prompts instead of spending budget refining already perfect ones.
+- Set `skip_perfect_score=False` if your metric tops out below `1.0`, or if you still want to see how GEPA mutates a perfect-scoring prompt—for example, when you care about ties being broken by Opik’s rescoring step rather than GEPA’s aggregate.
+
+## Configuration Options
+
+### Optimizer parameters
+
+The optimizer has the following parameters:
+
+<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for the optimization algorithm</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
+<ParamField path="n_threads" type="int" optional={true} default="6">Number of parallel threads for evaluation</ParamField>
+<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
+<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+
+### `optimize_prompt` parameters
+
+The `optimize_prompt` method has the following parameters:
+
+
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
+<ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Optional number of items to test in the dataset</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="project_name" type="str" optional={true} default="Optimization" />
+<ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
+<ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
+<ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (default: "pareto")</ParamField>
+<ParamField path="skip_perfect_score" type="bool" optional={true} default="True">Skip candidates with perfect scores (default: True)</ParamField>
+<ParamField path="perfect_score" type="float" optional={true} default="1.0">Score considered perfect (default: 1.0)</ParamField>
+<ParamField path="use_merge" type="bool" optional={true} default="False">Enable merge operations (default: False)</ParamField>
+<ParamField path="max_merge_invocations" type="int" optional={true} default="5">Maximum merge invocations (default: 5)</ParamField>
+<ParamField path="run_dir" type="str | None" optional={true}>Directory for run outputs (default: None)</ParamField>
+<ParamField path="track_best_outputs" type="bool" optional={true} default="False">Track best outputs during optimization (default: False)</ParamField>
+<ParamField path="display_progress_bar" type="bool" optional={true} default="False">Display progress bar (default: False)</ParamField>
+<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility (default: 42)</ParamField>
+<ParamField path="raise_on_exception" type="bool" optional={true} default="True">Raise exceptions instead of continuing (default: True)</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+### Model Support
+
+GEPA coordinates two model contexts:
+- `GepaOptimizer.model`: LiteLLM model string the optimizer uses for internal reasoning (reflection, mutation prompts, etc.).
+- `ChatPrompt.model`: The model evaluated against your dataset—this should match what you run in production.
+
+Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
 
 ```python
-from typing import Any, Dict
-
-import opik
-from opik_optimizer import ChatPrompt
-from opik_optimizer.gepa_optimizer import GepaOptimizer
-from opik_optimizer.datasets import hotpot_300
-from opik_optimizer.utils import search_wikipedia
-
-from opik.evaluation.metrics import LevenshteinRatio
-from opik.evaluation.metrics.score_result import ScoreResult
-
-dataset = hotpot_300()
-
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
-    metric = LevenshteinRatio()
-    return metric.score(reference=dataset_item["answer"], output=llm_output)
-
-prompt = ChatPrompt(
-    system="Answer the question",
-    user="{question}",
-    tools=[
-        {
-            "type": "function",
-            "function": {
-                "name": "search_wikipedia",
-                "description": "This function is used to search wikipedia abstracts.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The query parameter is the term or phrase to search for.",
-                        },
-                    },
-                    "required": ["query"],
-                },
-            },
-        },
-    ],
-    function_map={"search_wikipedia": opik.track(type="tool")(search_wikipedia)},
-)
-
 optimizer = GepaOptimizer(
-    model="openai/gpt-4o-mini",   # task model
-    reflection_model="openai/gpt-4o",  # reflection model
-    project_name="GEPA-Hotpot",
-    temperature=0.7,
-    max_tokens=400,
-)
-
-result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=levenshtein_ratio,
-    max_metric_calls=60,
-    reflection_minibatch_size=5,
-    candidate_selection_strategy="best",
-    n_samples=12,
-)
-
-result.display()
-```
-
-> Reference implementation: `sdks/opik_optimizer/scripts/litellm_gepa_hotpot_example.py`
-
-## Usage Notes
-
-- Single-turn focus: GEPA’s default adapter targets optimizing a single system message for single-turn tasks.
-- Dataset mapping: The optimizer heuristically infers input/output keys when not provided. Ensure your dataset items
-  contain a clear input field (e.g., `text`, `question`) and a reference label/answer field.
-- Metrics: Any metric that returns an Opik `ScoreResult` can be used (e.g., `LevenshteinRatio`).
-- Budget: `max_metric_calls` determines the optimization budget; higher budgets can find better prompts at more cost.
-- Reflection batching: `reflection_minibatch_size` controls how many items are considered per reflection step.
-
-## API Summary
-
-Constructor:
-
-```python
-GepaOptimizer(
-    model: str,
-    project_name: str | None = None,
-    reflection_model: str | None = None,  # defaults to model if None
-    verbose: int = 1,
-    **model_kwargs,
+    model="anthropic/claude-3-opus-20240229",
+    model_parameters={
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
 )
 ```
 
-Common `model_kwargs` include LiteLLM parameters such as `temperature`, `max_tokens`, and others.
+Reflection is handled internally; there is no separate `reflection_model` argument to set.
 
-Optimization:
+## Limitations & tips
 
-```python
-opt_result = optimizer.optimize_prompt(
-    prompt: ChatPrompt,
-    dataset: opik.Dataset,
-    metric: Callable[[dict, str], ScoreResult],
-    max_metric_calls: int,
-    reflection_minibatch_size: int = 3,
-    candidate_selection_strategy: str = "pareto",  # e.g., "pareto" or "best"
-    n_samples: int | None = None,
-)
-```
+- **Instruction-focused**: The current wrapper optimizes the instruction/system portion of your prompt. If you rely heavily on few-shot exemplars, consider pairing GEPA with the Few-Shot Bayesian optimizer or an Evolutionary run.
+- **Reflection can misfire**: GEPA’s reflective mutations are only as good as the metric reasons you supply. If `ScoreResult.reason` is vague, the optimizer may reinforce bad behaviors. Invest in descriptive metrics before running GEPA at scale.
+- **Cost-aware**: Although GEPA is more sample-efficient than some RL-based methods, reflection and Pareto scoring still consume multiple LLM calls per trial. Start with small `max_trials` and monitor API usage.
 
-The returned `OptimizationResult` includes the best prompt, score, and useful `details` such as
-GEPA’s best candidate, validation scores, and the evolution history.
+## Next Steps
 
-## Comparisons & Benchmarks
-
-- Comparisons: GEPA targets optimizing a single system prompt for single-turn tasks, similar in scope
-  to MetaPrompt on simple flows. Unlike Evolutionary or MIPRO, it does not aim to explore widely different
-  prompt structures or multi-step agent graphs. For chat prompts heavily reliant on few-shot examples,
-  the Few-shot Bayesian optimizer may be more appropriate.
-- Benchmarks: TBD. GEPA is newly integrated; we will add results as we complete our evaluation runs.
-
-## Troubleshooting
-
-- Install error: Ensure `pip install gepa` completes successfully in the same environment as `opik-optimizer`.
-- API keys: Set provider keys (e.g., `OPENAI_API_KEY`) for LiteLLM to load your chosen models.
-- Low improvements: Increase `max_metric_calls`, try a stronger `reflection_model`, or adjust the starting system prompt.
-- Mismatch fields: Confirm your dataset’s input/output field names align with your prompt’s placeholders and metric’s reference.
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

@@ -25,20 +25,19 @@ import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
-import static com.comet.opik.domain.ExperimentResponseBuilder.DELETED_DATASET;
 
 @UtilityClass
 public class ExperimentsTestUtils {
@@ -57,10 +56,19 @@ public class ExperimentsTestUtils {
                 .collect(Collectors.groupingBy(experiment -> extractGroupValues(experiment, groups)));
 
         // Convert to ExperimentGroupItem format (similar to what comes from database)
-        List<ExperimentGroupItem> groupItems = experimentGroups.keySet().stream()
-                .map(g -> ExperimentGroupItem.builder()
-                        .groupValues(g)
-                        .build())
+        // Include lastCreatedExperimentAt for each group
+        List<ExperimentGroupItem> groupItems = experimentGroups.entrySet().stream()
+                .map(entry -> {
+                    var lastCreatedAt = entry.getValue().stream()
+                            .map(Experiment::createdAt)
+                            .filter(Objects::nonNull)
+                            .max(Instant::compareTo)
+                            .orElse(null);
+                    return ExperimentGroupItem.builder()
+                            .groupValues(entry.getKey())
+                            .lastCreatedExperimentAt(lastCreatedAt)
+                            .build();
+                })
                 .toList();
 
         // Build enrichment info (dataset mapping)
@@ -69,8 +77,9 @@ public class ExperimentsTestUtils {
                 .datasetMap(datasetMap)
                 .build();
 
-        // Build the nested response structure
-        return buildGroupResponse(groupItems, enrichInfoHolder, groups);
+        // Build the nested response structure using the production builder
+        // This will automatically compute groupsSorting
+        return experimentResponseBuilder.buildGroupResponse(groupItems, enrichInfoHolder, groups);
     }
 
     /**
@@ -339,67 +348,6 @@ public class ExperimentsTestUtils {
                                 .build(),
                         (existing, replacement) -> existing // Keep first one in case of duplicates
                 ));
-    }
-
-    /**
-     * Build the nested ExperimentGroupResponse structure.
-     */
-    private ExperimentGroupResponse buildGroupResponse(List<ExperimentGroupItem> groupItems,
-            ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
-        var contentMap = new HashMap<String, ExperimentGroupResponse.GroupContent>();
-
-        for (ExperimentGroupItem item : groupItems) {
-            buildNestedGroups(contentMap, item.groupValues(), 0, enrichInfoHolder, groups);
-        }
-
-        return ExperimentGroupResponse.builder()
-                .content(contentMap)
-                .build();
-    }
-
-    /**
-     * Recursively build nested groups structure.
-     */
-    private void buildNestedGroups(Map<String, ExperimentGroupResponse.GroupContent> parentLevel,
-            List<String> groupValues, int depth, ExperimentGroupEnrichInfoHolder enrichInfoHolder,
-            List<GroupBy> groups) {
-        if (depth >= groupValues.size()) {
-            return;
-        }
-
-        String groupingValue = groupValues.get(depth);
-        if (groupingValue == null) {
-            return;
-        }
-
-        ExperimentGroupResponse.GroupContent currentLevel = parentLevel.computeIfAbsent(
-                groupingValue,
-                key -> buildGroupNode(key, enrichInfoHolder, groups.get(depth)));
-
-        // Recursively build nested groups
-        buildNestedGroups(currentLevel.groups(), groupValues, depth + 1, enrichInfoHolder, groups);
-    }
-
-    /**
-     * Build a single group node with appropriate labeling.
-     */
-    private ExperimentGroupResponse.GroupContent buildGroupNode(String groupingValue,
-            ExperimentGroupEnrichInfoHolder enrichInfoHolder, GroupBy group) {
-        return switch (group.field()) {
-            case DATASET_ID -> {
-                String label = Optional
-                        .ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
-                        .map(Dataset::name)
-                        .orElse(DELETED_DATASET);
-                yield ExperimentGroupResponse.GroupContent.builder()
-                        .label(label)
-                        .groups(new HashMap<>())
-                        .build();
-            }
-            default -> ExperimentGroupResponse.GroupContent.builder()
-                    .groups(new HashMap<>())
-                    .build();
-        };
     }
 
     /**

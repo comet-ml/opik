@@ -66,9 +66,8 @@ LLMs perform better when given relevant context and examples of the desired inpu
       model="openai/gpt-4", # Or your preferred chat model
       min_examples=1,
       max_examples=5,
-      n_iterations=20 # Number of Bayesian optimization trials
   )
-  ```
+```
 
 ### 4. Utilizing Response Schemas (Structured Outputs)
 
@@ -156,14 +155,7 @@ Evolutionary or genetic algorithms can be applied to "evolve" prompts over gener
 
 ## Systematic Prompt Optimization with Opik Agent Optimizer
 
-While the techniques above are valuable for manual prompt engineering, the [Opik Agent Optimizer SDK](/agent_optimization/opik_optimizer/quickstart) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, optimizers can explore a vast design space to find high-performing prompts.
-
-<Note>
-  All optimizers require a `model` parameter during initialization, which specifies the LLM to be used. Thanks to
-  **LiteLLM integration**, you can specify models from various providers (OpenAI, Azure, Anthropic, Gemini, local
-  models, etc.) using the LiteLLM model string format. See the [LiteLLM Support for
-  Optimizers](/agent_optimization/opik_optimizer/litellm_support) page for more details.
-</Note>
+While the techniques above are valuable for manual prompt engineering, the [Opik Agent Optimizer SDK](/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, optimizers can explore a vast design space to find high-performing prompts.
 
 We provide several distinct optimization algorithms, each suited for different scenarios:
 
@@ -171,4 +163,4 @@ We provide several distinct optimization algorithms, each suited for different s
 2.  [**Few-shot Bayesian Optimizer**](/agent_optimization/algorithms/fewshot_bayesian_optimizer): Finds the optimal set and number of few-shot examples for **chat models** by using Bayesian optimization.
 3.  [**Evolutionary Optimizer**](/agent_optimization/algorithms/evolutionary_optimizer): Evolves prompts using genetic algorithms, capable of multi-objective optimization (e.g., performance vs. length) and using LLMs for advanced genetic operations.
 
-Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Agent Optimizer Quickstart](/agent_optimization/opik_optimizer/quickstart).
+Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Agent Optimizer Quickstart](/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook).

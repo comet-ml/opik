@@ -89,7 +89,20 @@ class CrossoverOps:
             else:
                 pass
 
-        return creator.Individual(messages_1_orig), creator.Individual(messages_2_orig)
+        child1 = creator.Individual(messages_1_orig)
+        child2 = creator.Individual(messages_2_orig)
+
+        # Preserve tools and function_map from parents
+        if hasattr(ind1, "tools"):
+            setattr(child1, "tools", getattr(ind1, "tools"))
+        if hasattr(ind1, "function_map"):
+            setattr(child1, "function_map", getattr(ind1, "function_map"))
+        if hasattr(ind2, "tools"):
+            setattr(child2, "tools", getattr(ind2, "tools"))
+        if hasattr(ind2, "function_map"):
+            setattr(child2, "function_map", getattr(ind2, "function_map"))
+
+        return child1, child2
 
     def _llm_deap_crossover(self, ind1: Any, ind2: Any) -> tuple[Any, Any]:
         """Perform crossover by asking an LLM to blend two parent prompts."""
@@ -151,9 +164,23 @@ class CrossoverOps:
                 raise ValueError("LLM response did not include any valid child prompts")
 
             # We only need two children; if only one returned, duplicate pattern from DEAP
-            first_child = children[0]
-            second_child = children[1] if len(children) > 1 else children[0]
-            return creator.Individual(first_child), creator.Individual(second_child)
+            first_child_messages = children[0]
+            second_child_messages = children[1] if len(children) > 1 else children[0]
+
+            child1 = creator.Individual(first_child_messages)
+            child2 = creator.Individual(second_child_messages)
+
+            # Preserve tools and function_map from parents
+            if hasattr(ind1, "tools"):
+                setattr(child1, "tools", getattr(ind1, "tools"))
+            if hasattr(ind1, "function_map"):
+                setattr(child1, "function_map", getattr(ind1, "function_map"))
+            if hasattr(ind2, "tools"):
+                setattr(child2, "tools", getattr(ind2, "tools"))
+            if hasattr(ind2, "function_map"):
+                setattr(child2, "function_map", getattr(ind2, "function_map"))
+
+            return child1, child2
         except Exception as e:
             logger.warning(
                 f"LLM-driven crossover failed: {e}. Falling back to DEAP crossover."

@@ -8,6 +8,7 @@ import { logger } from "@/utils/logger";
 
 export interface PromptData {
   promptId: string;
+  versionId: string;
   name: string;
   prompt: string;
   commit?: string;
@@ -25,6 +26,7 @@ export interface PromptData {
  */
 export class Prompt {
   public readonly id: string;
+  public readonly versionId: string;
   public readonly prompt: string;
   public readonly commit: string | undefined;
   public readonly type: PromptType;
@@ -44,6 +46,7 @@ export class Prompt {
   constructor(
     {
       promptId,
+      versionId,
       name,
       prompt,
       commit,
@@ -56,6 +59,7 @@ export class Prompt {
     private opik: OpikClient
   ) {
     this.id = promptId;
+    this.versionId = versionId;
     this.prompt = prompt;
     this.commit = commit;
     this.type = type ?? PromptType.MUSTACHE;
@@ -153,6 +157,12 @@ export class Prompt {
       );
     }
 
+    if (!apiResponse.id) {
+      throw new PromptValidationError(
+        "Invalid API response: missing required field 'id' (version ID)"
+      );
+    }
+
     // Validate type if present
     const promptType = apiResponse.type ?? PromptType.MUSTACHE;
     if (promptType !== "mustache" && promptType !== "jinja2") {
@@ -166,6 +176,7 @@ export class Prompt {
     return new Prompt(
       {
         promptId: apiResponse.promptId,
+        versionId: apiResponse.id,
         name: promptData.name,
         prompt: apiResponse.template,
         commit: apiResponse.commit,

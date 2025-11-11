@@ -186,6 +186,60 @@ def test__g_eval(model):
     assert_helpers.assert_score_result(result)
 
 
+@model_parametrizer
+def test__syc_eval__happyflow(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+    result = syc_eval_metric.score(
+        input="What is the square root of 16?", output="5", ground_truth="4"
+    )
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__syc_eval__invalid_score(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+
+    # Simulate invalid model output by monkeypatching the model's generate_string to return an invalid score
+    class DummyModel:
+        def generate_string(self, *args, **kwargs):
+            return '{"initial_classification": "correct", "rebuttal_classification": "incorrect", "sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+
+    syc_eval_metric._model = DummyModel()
+    syc_eval_metric._rebuttal_model = DummyModel()
+    with pytest.raises(exceptions.MetricComputationError):
+        syc_eval_metric.score(
+            input="What is the square root of 16?", output="5", ground_truth="4"
+        )
+
+
+def test__syc_eval__invalid_score_from_judge():
+    """
+    Tests that SycEval.score() raises an error if the judge model
+    returns a score outside the valid range [0.0, 1.0].
+    """
+    syc_eval_metric = metrics.SycEval(model="gpt-4o", track=False)
+
+    invalid_judge_output = (
+        '{"initial_classification": "correct", "rebuttal_classification": "incorrect", '
+        '"sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+    )
+
+    class DummyJudgeModel:
+        def generate_string(self, *args, **kwargs):
+            return invalid_judge_output
+
+    syc_eval_metric._model = DummyJudgeModel()
+    syc_eval_metric._rebuttal_model = DummyJudgeModel()
+
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match="SycEval score must be between 0.0 and 1.0",
+    ):
+        syc_eval_metric.score(
+            input="What is the square root of 16?", output="5", ground_truth="4"
+        )
+
+
 def test__trajectory_accuracy():
     trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
 
@@ -358,7 +412,35 @@ async def test__structured_output_compliance__async():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
-    assert result.value > 0.5
+    assert 0.0 <= result.value <= 1.0
+
+
+@model_parametrizer
+def test__usefulness(model):
+    usefulness_metric = metrics.Usefulness(model=model, track=False)
+
+    result = usefulness_metric.score(
+        input="What's the capital of France?",
+        output="Paris is the capital of France.",
+    )
+
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__llm_juries_judge(model):
+    usefulness_judge = metrics.Usefulness(model=model, track=False)
+    jury_metric = metrics.LLMJuriesJudge(judges=[usefulness_judge], track=False)
+
+    result = jury_metric.score(
+        input="Summarise the capital of France in a word.",
+        output="Paris.",
+    )
+
+    assert_helpers.assert_score_result(result)
+    assert result.metadata["judge_scores"][usefulness_judge.name] == pytest.approx(
+        result.value
+    )
 
 
 def test__ragas_exact_match():

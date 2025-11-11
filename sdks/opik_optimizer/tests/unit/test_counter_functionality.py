@@ -14,7 +14,6 @@ from opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer impo
 from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import (
     EvolutionaryOptimizer,
 )
-from opik_optimizer.mipro_optimizer.mipro_optimizer import MiproOptimizer
 from opik_optimizer.optimization_config import chat_prompt
 
 
@@ -36,6 +35,8 @@ class TestCounterFunctionality:
                 n_samples: int | None = None,
                 auto_continue: bool = False,
                 agent_class: type[Any] | None = None,
+                project_name: str = "Optimization",
+                *args: Any,
                 **kwargs: Any,
             ) -> Any:
                 pass
@@ -66,13 +67,13 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
+        optimizer._increment_llm_counter()
         assert optimizer.llm_call_counter == 1
 
-        optimizer.increment_tool_counter()
+        optimizer._increment_tool_counter()
         assert optimizer.tool_call_counter == 1
 
-        optimizer.reset_counters()
+        optimizer._reset_counters()
         assert optimizer.llm_call_counter == 0
         assert optimizer.tool_call_counter == 0
 
@@ -84,8 +85,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -98,8 +99,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -112,8 +113,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -126,22 +127,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
-
-        assert optimizer.llm_call_counter == 1
-        assert optimizer.tool_call_counter == 1
-
-    def test_mipro_optimizer_counters(self) -> None:
-        """Test that MiproOptimizer has proper counters."""
-        optimizer = MiproOptimizer(model="gpt-4o-mini")
-
-        assert optimizer.llm_call_counter == 0
-        assert optimizer.tool_call_counter == 0
-
-        # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -151,15 +138,15 @@ class TestCounterFunctionality:
         optimizer = GepaOptimizer(model="gpt-4o-mini")
 
         # Increment counters
-        optimizer.increment_llm_counter()
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 2
         assert optimizer.tool_call_counter == 1
 
         # Reset counters
-        optimizer.reset_counters()
+        optimizer._reset_counters()
 
         assert optimizer.llm_call_counter == 0
         assert optimizer.tool_call_counter == 0
@@ -174,7 +161,7 @@ class TestCounterFunctionality:
         )
 
         # Setup agent class
-        agent_class = optimizer.setup_agent_class(prompt)
+        agent_class = optimizer._setup_agent_class(prompt)
         agent = agent_class(prompt)
 
         # Check that agent has optimizer reference

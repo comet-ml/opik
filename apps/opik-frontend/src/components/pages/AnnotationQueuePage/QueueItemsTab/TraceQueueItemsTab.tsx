@@ -77,6 +77,7 @@ import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
   {
@@ -250,6 +251,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   annotationQueue,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const truncationEnabled = useTruncationEnabled();
 
   const [search = "", setSearch] = useQueryParam("trace_search", StringParam, {
     updateType: "replaceIn",
@@ -341,7 +343,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       page: page as number,
       size: size as number,
       search: search as string,
-      truncate: true,
+      truncate: truncationEnabled,
     },
     {
       placeholderData: keepPreviousData,
@@ -613,6 +615,8 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
     </>

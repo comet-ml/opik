@@ -5,6 +5,11 @@ description: Configure automated webhook notifications to stay informed about ev
 
 Alerts allow you to configure automated webhook notifications for important events in your Opik workspace. When specific events occur — such as trace errors, new feedback scores, or prompt changes — Opik sends HTTP POST requests to your configured endpoint with detailed event data.
 
+Opik provides three destination types for alerts:
+- **Slack**: Native integration with automatic message formatting for Slack
+- **PagerDuty**: Native integration with automatic event formatting for PagerDuty
+- **General**: For custom webhooks, no-code automation platforms, or middleware services
+
 <Frame>
   <img src="/img/production/alerts_configuration.png" alt="Alerts configuration in Opik" />
 </Frame>
@@ -32,11 +37,17 @@ Alerts allow you to configure automated webhook notifications for important even
    - **Enable alert**: Toggle on to activate the alert immediately
 
 3. **Configure webhook settings**
+   - **Destination**: Select the alert destination type:
+     - **General**: For custom webhooks, no-code automation platforms, or middleware services
+     - **Slack**: For native Slack webhook integration (automatically formats messages for Slack)
+     - **PagerDuty**: For native PagerDuty integration (automatically formats events for PagerDuty)
    - **Endpoint URL**: Enter your webhook URL (must start with `http://` or `https://`)
-   - Example: `https://hooks.slack.com/services/`
+     - For Slack: Use your Slack Incoming Webhook URL (e.g., `https://hooks.slack.com/services/...`)
+     - For PagerDuty: Use your PagerDuty Events API v2 integration URL (e.g., `https://events.pagerduty.com/v2/enqueue`)
+     - For General: Use any HTTP endpoint that can receive POST requests
 
 4. **Advanced webhook settings** (optional)
-   - **Secret token**: Add a secret token to verify webhook authenticity
+   - **Secret token**: Add a secret token to verify webhook authenticity (recommended for General destination)
    - **Custom headers**: Add HTTP headers for authentication or routing
      - Example: `X-Custom-Auth: Bearer your-token-here`
 
@@ -56,17 +67,90 @@ Alerts allow you to configure automated webhook notifications for important even
 
 ## Integration examples
 
-### Slack integration
+Opik supports three main approaches for integrating alerts with external systems:
 
-Send alerts to a Slack channel using Slack's Incoming Webhooks:
+1. **Native integrations** (Slack, PagerDuty): Use built-in formatting for popular services - no middleware required
+2. **General webhooks**: Send alerts to custom endpoints, no-code platforms, or middleware services
+3. **Middleware services** (Optional): Add custom logic, routing, or transformations before forwarding to destinations
 
-1. [Create a Slack app and enable Incoming Webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
-2. Create a webhook URL (e.g., `https://hooks.slack.com/services/T00000000/B00000000/XXXX`)
-3. Create a middleware service that transforms Opik's payload into Slack's Block Kit format
-4. In middleware service use Slack webhook URL created in step 2
-5. In Opik, create an alert with your middleware service URL as webhook URL
+### Slack integration (Native)
 
-Example of middleware formatting service:
+Opik provides native Slack integration that automatically formats alert messages for Slack's Block Kit format.
+
+#### Prerequisites
+- [Create a Slack app and enable Incoming Webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
+- Generate a webhook URL (e.g., `https://hooks.slack.com/services/T00000000/B00000000/XXXX`)
+
+#### Setup steps
+
+1. **In Slack**:
+   - Create a Slack app in your workspace
+   - Enable Incoming Webhooks
+   - Add the webhook to your desired channel
+   - Copy the webhook URL
+
+2. **In Opik**:
+   - Go to Configuration → Alerts tab
+   - Click "Create new alert"
+   - Give your alert a descriptive name
+   - Select **Slack** as the destination type
+   - Paste your Slack webhook URL in the Endpoint URL field
+   - Add triggers for the events you want to monitor
+   - Click "Test connection" to verify
+   - Click "Create alert"
+
+Opik will automatically format all alert payloads into Slack-compatible messages with rich formatting, including:
+- Alert name and event type
+- Event count and details
+- Relevant metadata
+- Links to view full details in Opik
+
+### PagerDuty integration (Native)
+
+Opik provides native PagerDuty integration that automatically formats alert events for PagerDuty's Events API v2.
+
+#### Prerequisites
+- A PagerDuty account with permission to create integrations
+- Access to a service where you want to receive alerts
+
+#### Setup steps
+
+1. **In PagerDuty**:
+   - Navigate to Services → select your service → Integrations tab
+   - Click "Add Integration"
+   - Select "Events API V2"
+   - Give the integration a name (e.g., "Opik Alerts")
+   - Save the integration and copy the Integration Key
+
+2. **In Opik**:
+   - Go to Configuration → Alerts tab
+   - Click "Create new alert"
+   - Give your alert a descriptive name
+   - Select **PagerDuty** as the destination type
+   - Enter the PagerDuty Events API v2 endpoint: `https://events.pagerduty.com/v2/enqueue`
+   - In the **Routing Key** field, enter your PagerDuty Integration Key (this field appears when PagerDuty is selected as the destination)
+   - Add triggers for the events you want to monitor
+   - Click "Test connection" to verify
+   - Click "Create alert"
+
+Opik will automatically format all alert payloads into PagerDuty-compatible events with:
+- Severity levels based on event type
+- Detailed event information
+- Custom fields for filtering and routing
+- Deduplication keys to prevent duplicate incidents
+
+### Custom integration with middleware service (Optional)
+
+For more complex integrations or custom formatting requirements, you can use a middleware service to transform Opik's payload before sending it to your destination. This approach works with any destination type (General, Slack, or PagerDuty).
+
+#### When to use middleware
+
+- **Custom message formatting**: Transform payload structure or add custom fields
+- **Multi-destination routing**: Send alerts to different endpoints based on event type
+- **Additional processing**: Enrich alerts with data from other systems
+- **Legacy systems**: Adapt Opik alerts to older webhook formats
+
+#### Example middleware for Slack with custom formatting
 
 ```python
 import requests
@@ -76,6 +160,7 @@ def transform_to_slack(opik_payload):
     alert_name = opik_payload['payload']['alertName']
     event_count = opik_payload['payload']['eventCount']
     
+    # Custom formatting logic
     return {
         "blocks": [
             {
@@ -98,6 +183,19 @@ def transform_to_slack(opik_payload):
                     "type": "mrkdwn",
                     "text": f"View in Opik: https://www.comet.com/opik"
                 }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Environment:*\nProduction"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Priority:*\nHigh"
+                    }
+                ]
             }
         ]
     }
@@ -116,6 +214,13 @@ def opik_to_slack():
     return {'status': 'success'}, 200
 ```
 
+#### Setup for middleware approach
+
+1. Deploy your middleware service to a publicly accessible endpoint
+2. In Opik, create an alert with destination type **General**
+3. Use your middleware service URL as the Endpoint URL
+4. Configure your middleware to forward to the final destination (Slack, PagerDuty, etc.)
+
 ### Using no-code automation platforms
 
 No-code automation tools like [n8n](https://n8n.io), [Make.com](https://www.make.com), and [IFTTT](https://ifttt.com) provide an easy way to connect Opik alerts to other services—without writing or deploying code. These platforms can receive webhooks from Opik, apply filters or conditions, and trigger actions such as sending Slack messages, logging data in Google Sheets, or creating incidents in PagerDuty.
@@ -127,16 +232,17 @@ No-code automation tools like [n8n](https://n8n.io), [Make.com](https://www.make
 **To use them:**
 
 1. **Create a new workflow or scenario** and add a **Webhook trigger** node/module
-2. **Copy the webhook URL** generated by the platform and paste it into your Opik alert configuration
-3. **Secure the connection** by validating the Authorization header or including a secret token parameter
-4. **Add filters or routing logic** to handle different eventType values from Opik (for example, trace:errors or trace:feedback_score)
-5. **Chain the desired actions**, such as notifications, database updates, or analytics tracking
+2. **Copy the webhook URL** generated by the platform
+3. **In Opik**, create an alert with destination type **General** and paste the webhook URL from your automation platform
+4. **Secure the connection** by validating the Authorization header or including a secret token parameter
+5. **Add filters or routing logic** to handle different eventType values from Opik (for example, trace:errors or trace:feedback_score)
+6. **Chain the desired actions**, such as notifications, database updates, or analytics tracking
 
-These tools also provide built-in monitoring, retries, and visual flow editors, making them suitable for both technical and non-technical users who want to automate Opik alert handling securely and efficiently.
+These tools also provide built-in monitoring, retries, and visual flow editors, making them suitable for both technical and non-technical users who want to automate Opik alert handling securely and efficiently. This approach works well when you need to route alerts to multiple destinations or apply complex business logic.
 
 ### Custom dashboard integration
 
-Build a custom monitoring dashboard that receives alerts:
+Build a custom monitoring dashboard that receives alerts using the **General** destination type:
 
 ```python
 from fastapi import FastAPI, Request
@@ -178,7 +284,7 @@ async def get_dashboard():
 
 ## Supported event types
 
-Opik supports seven types of alert events:
+Opik supports eight types of alert events:
 
 ### Observability events
 
@@ -232,6 +338,15 @@ Opik supports seven types of alert events:
 - **Project scope**: Workspace-wide
 - **Payload**: Array of deleted prompt objects
 - **Use case**: Audit prompt deletions, maintain prompt governance
+
+### Evaluation events
+
+**Experiment finished**
+- **Event type**: `experiment:finished`
+- **Triggered when**: An experiment completes in the workspace
+- **Project scope**: Workspace-wide
+- **Payload**: Array of experiment objects with completion details
+- **Use case**: Automate experiment notifications, track evaluation completions
 
 ### Want us to support more event types?
 
@@ -452,6 +567,34 @@ All webhook events follow a consistent payload structure:
 }
 ```
 
+### Experiment finished payload
+
+```json
+{
+  "metadata": [
+    {
+      "id": "experiment-uuid",
+      "name": "Experiment Name",
+      "dataset_id": "dataset-uuid",
+      "created_at": "2025-01-15T10:00:00Z",
+      "created_by": "user@example.com",
+      "last_updated_at": "2025-01-15T10:05:00Z",
+      "last_updated_by": "user@example.com",
+      "feedback_scores": [
+        {
+          "name": "accuracy",
+          "value": 0.92
+        },
+        {
+          "name": "latency",
+          "value": 1.5
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Securing your webhooks
 
 ### Using secret tokens
@@ -492,6 +635,8 @@ def handle_webhook():
         handle_trace_errors(data)
     elif event_type == 'trace:feedback_score':
         handle_feedback_score(data)
+    elif event_type == 'experiment:finished':
+        handle_experiment_finished(data)
     
     return {'status': 'success'}, 200
 ```

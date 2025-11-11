@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
@@ -29,6 +30,7 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -94,6 +96,7 @@ public class DatasetsResource {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
 
     @GET
     @Path("/{id}")
@@ -387,6 +390,32 @@ public class DatasetsResource {
     }
 
     @POST
+    @Path("/{dataset_id}/items/from-traces")
+    @Operation(operationId = "createDatasetItemsFromTraces", summary = "Create dataset items from traces", description = "Create dataset items from traces with enriched metadata", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromTraces(
+            @PathParam("dataset_id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = CreateDatasetItemsFromTracesRequest.class))) @NotNull @Valid CreateDatasetItemsFromTracesRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items from traces for dataset '{}', trace count '{}' on workspaceId '{}'",
+                datasetId, request.traceIds().size(), workspaceId);
+
+        itemService.createFromTraces(datasetId, request.traceIds(), request.enrichmentOptions())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+
+        log.info("Created dataset items from traces for dataset '{}', trace count '{}' on workspaceId '{}'",
+                datasetId, request.traceIds().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
     @Path("/items/delete")
     @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = "Delete dataset items", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
@@ -417,6 +446,8 @@ public class DatasetsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
             @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("search") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
@@ -430,10 +461,24 @@ public class DatasetsResource {
 
         var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
 
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
+        var metadata = workspaceMetadataService
+                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
+
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
+                .sortingFields(sortingFields)
+                .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .build();
@@ -444,6 +489,13 @@ public class DatasetsResource {
                 datasetItemSearchCriteria, page, size, workspaceId);
 
         var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
+                .map(it -> {
+                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
+                    if (metadata.cannotUseDynamicSorting()) {
+                        return it.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return it;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

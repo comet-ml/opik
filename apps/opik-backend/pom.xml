@@ -19,9 +19,9 @@
         <dropwizard.version>4.0.14</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
-        <mysql.version>9.4.0</mysql.version>
+        <mysql.version>9.5.0</mysql.version>
         <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
-        <stringtemplate.version>3.49.4</stringtemplate.version>
+        <stringtemplate.version>3.50.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
@@ -31,9 +31,9 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.52.0</redisson.version>
-        <opentelmetry.version>2.20.0</opentelmetry.version>
-        <aws.java.sdk.version>2.35.0</aws.java.sdk.version>
-        <json-path.version>2.9.0</json-path.version>
+        <opentelmetry.version>2.21.0</opentelmetry.version>
+        <aws.java.sdk.version>2.38.2</aws.java.sdk.version>
+        <json-path.version>2.10.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
@@ -63,7 +63,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.7.1</version>
+                <version>1.8.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -269,7 +269,7 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-http-client-jdk</artifactId>
-            <version>1.7.1</version>
+            <version>1.8.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -302,7 +302,7 @@
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
-            <version>3.7.6</version>
+            <version>3.8.0</version>
             <scope>test</scope>
         </dependency>
 

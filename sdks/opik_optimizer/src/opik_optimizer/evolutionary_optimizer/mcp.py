@@ -168,16 +168,21 @@ def finalize_mcp_result(
     result: Any,
     context: EvolutionaryMCPContext,
     panel_style: str,
+    optimizer: Any = None,
 ) -> None:
     final_tools = (
         result.details.get("final_tools") if isinstance(result.details, dict) else None
     )
-    tool_prompts = {
-        (tool.get("function", {}).get("name") or tool.get("name")): tool.get(
-            "function", {}
-        ).get("description")
-        for tool in (final_tools or [])
-    }
+    # Use optimizer's centralized method if available, otherwise inline
+    if optimizer and hasattr(optimizer, "_extract_tool_prompts"):
+        tool_prompts = optimizer._extract_tool_prompts(final_tools) or {}
+    else:
+        tool_prompts = {
+            (tool.get("function", {}).get("name") or tool.get("name")): tool.get(
+                "function", {}
+            ).get("description")
+            for tool in (final_tools or [])
+        }
     if tool_prompts.get(context.tool_name):
         reporting.display_tool_description(
             tool_prompts[context.tool_name],

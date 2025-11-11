@@ -46,7 +46,9 @@ class RecursiveCallbackInjector:
                 callbacks=current_callback_value
             ):
                 current_callback_value.append(callback_func)
-            elif not self._is_opik_callback_function(current_callback_value):
+            elif not self._is_opik_callback_function(
+                current_callback_value
+            ) and callable(current_callback_value):
                 setattr(
                     agent, callback_field_name, [current_callback_value, callback_func]
                 )

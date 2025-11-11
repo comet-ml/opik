@@ -17,6 +17,7 @@ import useWebhookTestMutation from "@/api/alerts/useWebhookTestMutation";
 import { useToast } from "@/components/ui/use-toast";
 import { z } from "zod";
 import { buildDocsUrl } from "@/lib/utils";
+import { ALERT_TYPE } from "@/types/alerts";
 
 type TestWebhookSectionProps = {
   form: UseFormReturn<AlertFormType>;
@@ -28,6 +29,10 @@ const urlSchema = z
   .string({ required_error: "Endpoint URL is required" })
   .min(1, { message: "Endpoint URL is required" })
   .url({ message: "Please enter a valid URL" });
+
+const routingKeySchema = z
+  .string()
+  .min(1, { message: "Routing key is required for PagerDuty integration" });
 
 const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
   form,
@@ -97,6 +102,21 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
         variant: "destructive",
       });
       return;
+    }
+
+    if (payload.alert_type === ALERT_TYPE.pagerduty) {
+      const routingKey = payload.metadata?.routing_key || "";
+      const routingKeyValidation = routingKeySchema.safeParse(routingKey);
+      if (!routingKeyValidation.success) {
+        const errorMessage =
+          routingKeyValidation.error.errors[0]?.message ||
+          "Routing key is required for PagerDuty integration";
+        toast({
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     mutate(payload, {
@@ -202,6 +222,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
                 <WebhookPayloadExample
                   eventType={item.eventType}
                   alertType={alertType}
+                  alert={getAlert()}
                   actionButton={
                     <Button
                       type="button"

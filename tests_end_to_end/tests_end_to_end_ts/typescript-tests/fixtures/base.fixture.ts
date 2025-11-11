@@ -6,12 +6,13 @@
 import { test as base } from '@playwright/test';
 import { getEnvironmentConfig } from '../config/env.config';
 import { TestHelperClient } from '../helpers/test-helper-client';
-import { generateProjectName } from '../helpers/random';
+import { generateProjectName, generateDatasetName } from '../helpers/random';
 
 export type BaseFixtures = {
   envConfig: ReturnType<typeof getEnvironmentConfig>;
   helperClient: TestHelperClient;
   projectName: string;
+  datasetName: string;
 };
 
 export const test = base.extend<BaseFixtures>({
@@ -37,6 +38,11 @@ export const test = base.extend<BaseFixtures>({
   projectName: async ({}, use) => {
     const name = generateProjectName();
     process.env.OPIK_PROJECT_NAME = name;
+    await use(name);
+  },
+
+  datasetName: async ({}, use) => {
+    const name = generateDatasetName();
     await use(name);
   },
 });

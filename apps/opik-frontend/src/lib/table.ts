@@ -24,12 +24,41 @@ export const hasAnyVisibleColumns = <TColumnData>(
   selectedColumns: string[],
 ) => columns.some(({ id }) => selectedColumns.includes(id));
 
+/**
+ * Determines if a column can be sorted based on the backend's sortable_by response.
+ * Handles multiple matching patterns:
+ * 1. Direct match: column id exactly matches a sortable field
+ * 2. Wildcard match: "data.*" allows sorting any field under "data." prefix
+ * 3. Legacy single field: fields without dots that match wildcard patterns
+ * 4. Prefix match: "output.field" matches if "output" is sortable
+ *
+ * @param id - The column identifier (e.g., "id", "data.field", "output.result")
+ * @param sortableColumns - Array of sortable field patterns from backend
+ * @returns true if the column can be sorted
+ */
 export const isColumnSortable = (id: string, sortableColumns: string[]) => {
+  // Direct match: exact field name is sortable
   if (sortableColumns.includes(id)) return true;
 
   const keys = id.split(".");
 
-  return keys.length > 1 ? sortableColumns.includes(`${keys[0]}.*`) : false;
+  // Wildcard pattern match: e.g., "data.*" allows "data.field"
+  if (keys.length > 1 && sortableColumns.includes(`${keys[0]}.*`)) {
+    return true;
+  }
+
+  // Legacy field match: single field name matching wildcard pattern
+  // e.g., "expected_answer" matches when "data.*" is sortable
+  if (keys.length === 1 && sortableColumns.includes("data.*")) {
+    return true;
+  }
+
+  // Prefix match: e.g., "output.output" sortable if "output" is sortable
+  if (keys.length > 1 && sortableColumns.includes(keys[0])) {
+    return true;
+  }
+
+  return false;
 };
 
 export const convertColumnDataToColumn = <TColumnData, TData>(

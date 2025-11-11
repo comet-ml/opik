@@ -1,0 +1,65 @@
+import React, { useCallback, useRef, useState } from "react";
+import { Wand2 } from "lucide-react";
+
+import { PromptWithLatestVersion } from "@/types/prompts";
+import { Button } from "@/components/ui/button";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import useLoadPlayground from "@/hooks/useLoadPlayground";
+
+type ImproveInPlaygroundButtonProps = {
+  prompt?: PromptWithLatestVersion;
+};
+
+const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
+  prompt,
+}) => {
+  const resetKeyRef = useRef(0);
+  const [open, setOpen] = useState<boolean>(false);
+
+  const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
+    useLoadPlayground();
+
+  const handleLoadPlayground = useCallback(() => {
+    loadPlayground({
+      promptContent: prompt?.latest_version?.template ?? "",
+      promptId: prompt?.id,
+      promptVersionId: prompt?.latest_version?.id,
+      autoImprove: true,
+    });
+  }, [loadPlayground, prompt]);
+
+  return (
+    <>
+      <TooltipWrapper content="Opens the prompt in the Playground for improvement">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!prompt || isPendingProviderKeys}
+          onClick={() => {
+            if (isPlaygroundEmpty) {
+              handleLoadPlayground();
+            } else {
+              resetKeyRef.current = resetKeyRef.current + 1;
+              setOpen(true);
+            }
+          }}
+        >
+          <Wand2 className="mr-1.5 size-3.5" />
+          Improve prompt
+        </Button>
+      </TooltipWrapper>
+      <ConfirmDialog
+        key={resetKeyRef.current}
+        open={Boolean(open)}
+        setOpen={setOpen}
+        onConfirm={handleLoadPlayground}
+        title="Load prompt"
+        description="Loading this prompt into the Playground will replace any unsaved changes. This action cannot be undone."
+        confirmText="Load prompt"
+      />
+    </>
+  );
+};
+
+export default ImproveInPlaygroundButton;

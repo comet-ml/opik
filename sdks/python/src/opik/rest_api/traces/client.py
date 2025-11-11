@@ -283,6 +283,8 @@ class TracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -308,6 +310,10 @@ class TracesClient:
 
         exclude : typing.Optional[str]
 
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -332,6 +338,8 @@ class TracesClient:
             strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -831,6 +839,8 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -843,6 +853,10 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -859,7 +873,12 @@ class TracesClient:
         client.traces.get_trace_stats()
         """
         _response = self._raw_client.get_trace_stats(
-            project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
+            project_id=project_id,
+            project_name=project_name,
+            filters=filters,
+            from_time=from_time,
+            to_time=to_time,
+            request_options=request_options,
         )
         return _response.data
 
@@ -977,6 +996,8 @@ class TracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -999,6 +1020,10 @@ class TracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1023,6 +1048,8 @@ class TracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -1141,6 +1168,8 @@ class TracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -1165,6 +1194,12 @@ class TracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1181,6 +1216,8 @@ class TracesClient:
             limit=limit,
             truncate=truncate,
             strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1195,6 +1232,8 @@ class TracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -1219,6 +1258,12 @@ class TracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1235,6 +1280,8 @@ class TracesClient:
             limit=limit,
             truncate=truncate,
             strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1651,6 +1698,8 @@ class AsyncTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -1675,6 +1724,10 @@ class AsyncTracesClient:
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1703,6 +1756,8 @@ class AsyncTracesClient:
             strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -2243,6 +2298,8 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -2255,6 +2312,10 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2274,7 +2335,12 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_trace_stats(
-            project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
+            project_id=project_id,
+            project_name=project_name,
+            filters=filters,
+            from_time=from_time,
+            to_time=to_time,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2401,6 +2467,8 @@ class AsyncTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -2423,6 +2491,10 @@ class AsyncTracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2450,6 +2522,8 @@ class AsyncTracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         )
         return _response.data
@@ -2577,6 +2651,8 @@ class AsyncTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2601,6 +2677,12 @@ class AsyncTracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2617,6 +2699,8 @@ class AsyncTracesClient:
             limit=limit,
             truncate=truncate,
             strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -2632,6 +2716,8 @@ class AsyncTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        from_time: typing.Optional[dt.datetime] = OMIT,
+        to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2656,6 +2742,12 @@ class AsyncTracesClient:
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
+        from_time : typing.Optional[dt.datetime]
+            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+
+        to_time : typing.Optional[dt.datetime]
+            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2672,6 +2764,8 @@ class AsyncTracesClient:
             limit=limit,
             truncate=truncate,
             strip_attachments=strip_attachments,
+            from_time=from_time,
+            to_time=to_time,
             request_options=request_options,
         ) as r:
             async for data in r.data:

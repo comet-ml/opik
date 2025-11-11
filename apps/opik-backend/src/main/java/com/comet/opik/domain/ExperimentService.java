@@ -17,6 +17,7 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -49,6 +50,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED;
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
@@ -131,7 +133,7 @@ public class ExperimentService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             var ids = experiments.stream().map(Experiment::datasetId).collect(Collectors.toUnmodifiableSet());
             return Mono.zip(
-                    promptService.getVersionsCommitByVersionsIds(getPromptVersionIds(experiments)),
+                    promptService.getVersionsInfoByVersionsIds(getPromptVersionIds(experiments)),
                     Mono.fromCallable(() -> datasetService.findByIds(ids, workspaceId))
                             .subscribeOn(Schedulers.boundedElastic())
                             .map(this::getDatasetMap))
@@ -152,23 +154,18 @@ public class ExperimentService {
         return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
     }
 
-    private List<PromptVersionLink> buildPromptVersions(Map<UUID, String> promptVersions, Experiment experiment) {
+    private List<PromptVersionLink> buildPromptVersions(Map<UUID, PromptVersionInfo> promptVersionsInfo,
+            Experiment experiment) {
         if (hasPromptVersionLinks(experiment)) {
 
             Stream<PromptVersionLink> promptVersionLinks = Optional.ofNullable(experiment.promptVersions())
                     .orElseGet(List::of)
                     .stream()
-                    .map(version -> new PromptVersionLink(
-                            version.id(),
-                            promptVersions.get(version.id()),
-                            version.promptId()));
+                    .map(version -> enrichPromptVersionLink(version, promptVersionsInfo.get(version.id())));
 
             Stream<PromptVersionLink> promptVersionLink = Optional.ofNullable(experiment.promptVersion())
                     .stream()
-                    .map(version -> new PromptVersionLink(
-                            version.id(),
-                            promptVersions.get(version.id()),
-                            version.promptId()));
+                    .map(version -> enrichPromptVersionLink(version, promptVersionsInfo.get(version.id())));
 
             List<PromptVersionLink> versionLinks = Stream.concat(promptVersionLinks, promptVersionLink).distinct()
                     .toList();
@@ -179,30 +176,33 @@ public class ExperimentService {
         return null;
     }
 
-    private PromptVersionLink buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
+    private PromptVersionLink buildPromptVersion(Map<UUID, PromptVersionInfo> promptVersionsInfo,
+            Experiment experiment) {
         if (hasPromptVersionLinks(experiment)) {
 
             PromptVersionLink versionLink = experiment.promptVersion();
 
             if (versionLink != null) {
-                return new PromptVersionLink(
-                        versionLink.id(),
-                        promptVersions.get(versionLink.id()),
-                        versionLink.promptId());
+                return enrichPromptVersionLink(versionLink, promptVersionsInfo.get(versionLink.id()));
             } else {
                 return Optional.ofNullable(experiment.promptVersions())
                         .stream()
                         .flatMap(List::stream)
                         .findFirst()
-                        .map(version -> new PromptVersionLink(
-                                version.id(),
-                                promptVersions.get(version.id()),
-                                version.promptId()))
+                        .map(version -> enrichPromptVersionLink(version, promptVersionsInfo.get(version.id())))
                         .orElse(null);
             }
         }
 
         return null;
+    }
+
+    private PromptVersionLink enrichPromptVersionLink(PromptVersionLink version, PromptVersionInfo info) {
+        return new PromptVersionLink(
+                version.id(),
+                info != null ? info.commit() : null,
+                version.promptId(),
+                info != null ? info.promptName() : null);
     }
 
     private Set<UUID> getPromptVersionIds(List<Experiment> experiments) {
@@ -307,7 +307,7 @@ public class ExperimentService {
                     Set<UUID> promptVersionIds = getPromptVersionIds(experiment);
 
                     return Mono.zip(
-                            promptService.getVersionsCommitByVersionsIds(promptVersionIds),
+                            promptService.getVersionsInfoByVersionsIds(promptVersionIds),
                             Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
                                     .subscribeOn(Schedulers.boundedElastic()))
                             .map(tuple -> experiment.toBuilder()
@@ -471,6 +471,35 @@ public class ExperimentService {
 
         return experimentDAO.getExperimentWorkspaces(experimentIds)
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
+    }
+
+    @WithSpan
+    public Mono<Void> finishExperiments(@NonNull Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            log.info("Finishing experiments, count '{}', workspaceId '{}'", ids.size(), workspaceId);
+
+            return experimentDAO.getByIds(ids)
+                    .collectList()
+                    .doOnNext(experiments -> {
+                        if (CollectionUtils.isNotEmpty(experiments)) {
+                            log.info("Raising alert event for finished experiments, count '{}'", experiments.size());
+                            eventBus.post(AlertEvent.builder()
+                                    .eventType(EXPERIMENT_FINISHED)
+                                    .workspaceId(workspaceId)
+                                    .workspaceName(workspaceName)
+                                    .userName(userName)
+                                    .payload(experiments)
+                                    .build());
+                        }
+                    })
+                    .then();
+        });
     }
 
     @WithSpan

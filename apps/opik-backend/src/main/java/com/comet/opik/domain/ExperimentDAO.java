@@ -147,6 +147,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(id)> AND id = :id <endif>
+                <if(ids_list)> AND id IN :ids_list <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
@@ -397,14 +398,15 @@ class ExperimentDAO {
                 SELECT
                     dataset_id,
                     metadata,
-                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids,
+                    created_at
                 FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
             )
-            SELECT <groupSelects>
+            SELECT <groupSelects>, max(created_at) AS last_created_experiment_at
             FROM experiments_filtered
             GROUP BY <groupBy>
             ;
@@ -778,6 +780,18 @@ class ExperimentDAO {
                         statement -> statement.bind("id", id).bind("limit", limit)))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
+    }
+
+    @WithSpan
+    Flux<Experiment> getByIds(@NonNull Set<UUID> ids) {
+        log.info("Getting experiment by ids '{}'", ids);
+        var template = new ST(FIND);
+        template.add("ids_list", ids);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> get(
+                        template.render(), connection,
+                        statement -> statement.bind("ids_list", ids.toArray(UUID[]::new))))
+                .flatMap(this::mapToDto);
     }
 
     @WithSpan
@@ -1229,6 +1243,7 @@ class ExperimentDAO {
 
             return ExperimentGroupItem.builder()
                     .groupValues(groupValues)
+                    .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
                     .build();
         });
     }

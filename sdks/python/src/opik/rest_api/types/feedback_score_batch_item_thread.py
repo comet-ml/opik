@@ -13,6 +13,7 @@ class FeedbackScoreBatchItemThread(UniversalBaseModel):
     If null, the default project is used
     """
 
+    project_id: typing.Optional[str] = None
     name: str
     category_name: typing.Optional[str] = None
     value: float

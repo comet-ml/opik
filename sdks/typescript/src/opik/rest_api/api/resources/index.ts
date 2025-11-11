@@ -24,6 +24,7 @@ export * as check from "./check";
 export * as automationRuleEvaluators from "./automationRuleEvaluators";
 export * as chatCompletions from "./chatCompletions";
 export * as guardrails from "./guardrails";
+export * as manualEvaluation from "./manualEvaluation";
 export * as openTelemetryIngestion from "./openTelemetryIngestion";
 export * as serviceToggles from "./serviceToggles";
 export * as traces from "./traces";

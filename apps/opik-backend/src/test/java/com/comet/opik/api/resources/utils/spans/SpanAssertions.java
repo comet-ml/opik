@@ -4,12 +4,17 @@ import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
@@ -18,12 +23,72 @@ import static org.assertj.core.api.Assertions.within;
 
 public class SpanAssertions {
 
+    public static final Map<Span.SpanField, Function<Span, Span>> EXCLUDE_FUNCTIONS = new EnumMap<>(
+            Span.SpanField.class);
+
+    static {
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.NAME, it -> it.toBuilder().name(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TYPE, it -> it.toBuilder().type(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.START_TIME, it -> it.toBuilder().startTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.END_TIME, it -> it.toBuilder().endTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.INPUT, it -> it.toBuilder().input(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.OUTPUT, it -> it.toBuilder().output(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.METADATA, it -> it.toBuilder().metadata(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.MODEL, it -> it.toBuilder().model(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.PROVIDER, it -> it.toBuilder().provider(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TAGS, it -> it.toBuilder().tags(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.USAGE, it -> it.toBuilder().usage(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.COMMENTS, it -> it.toBuilder().comments(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST,
+                it -> it.toBuilder().totalEstimatedCost(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
+                it -> it.toBuilder().totalEstimatedCostVersion(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
+    }
+
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
             "totalEstimatedCostVersion", "comments"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor"};
+
+    /**
+     * Prepares a span for assertion by injecting provider into metadata if provider is set.
+     * This mirrors the backend behavior where provider is automatically injected into metadata.
+     *
+     * @param span the span to prepare
+     * @return a new span with provider injected into metadata if provider is present
+     */
+    private static Span prepareSpanForAssertion(Span span) {
+        if (span.provider() == null || span.provider().isBlank()) {
+            return span;
+        }
+
+        JsonNode metadataWithProvider = JsonUtils.prependField(
+                span.metadata(), Span.SpanField.PROVIDER.getValue(), span.provider());
+
+        return span.toBuilder()
+                .metadata(metadataWithProvider)
+                .build();
+    }
+
+    /**
+     * Prepares a list of spans for assertion by injecting provider into metadata.
+     *
+     * @param spans the spans to prepare
+     * @return a new list of spans with provider injected into metadata where applicable
+     */
+    private static List<Span> prepareSpansForAssertion(List<Span> spans) {
+        return spans.stream()
+                .map(SpanAssertions::prepareSpanForAssertion)
+                .toList();
+    }
 
     public static void assertPage(SpanPage actualPage, int page, int expectedPageSize, int expectedTotal) {
         assertThat(actualPage.page()).isEqualTo(page);
@@ -38,21 +103,41 @@ public class SpanAssertions {
     public static void assertSpan(List<Span> actualSpans, List<Span> expectedSpans, List<Span> unexpectedSpans,
             String userName) {
 
+        // Automatically prepare expected spans with actual provider injected into metadata
+        // We need to use actual provider because it's from the database
+        var preparedExpectedSpans = expectedSpans.stream()
+                .map(expected -> {
+                    var actual = actualSpans.stream()
+                            .filter(a -> a.id().equals(expected.id()))
+                            .findFirst()
+                            .orElse(null);
+                    if (actual == null) {
+                        return prepareSpanForAssertion(expected);
+                    }
+                    // Use actual provider for metadata injection
+                    var expectedWithActualProvider = expected.toBuilder()
+                            .provider(actual.provider())
+                            .build();
+                    return prepareSpanForAssertion(expectedWithActualProvider);
+                })
+                .toList();
+
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS)
                 .ignoringCollectionOrderInFields("tags")
-                .isEqualTo(expectedSpans);
+                .isEqualTo(preparedExpectedSpans);
 
-        assertIgnoredFields(actualSpans, expectedSpans, userName);
+        assertIgnoredFields(actualSpans, preparedExpectedSpans, userName);
 
         if (!unexpectedSpans.isEmpty()) {
+            var preparedUnexpectedSpans = prepareSpansForAssertion(unexpectedSpans);
             assertThat(actualSpans)
                     .usingRecursiveComparison()
                     .ignoringFields(IGNORED_FIELDS)
                     .ignoringCollectionOrderInFields("tags")
-                    .isNotEqualTo(unexpectedSpans);
+                    .isNotEqualTo(preparedUnexpectedSpans);
         }
     }
 

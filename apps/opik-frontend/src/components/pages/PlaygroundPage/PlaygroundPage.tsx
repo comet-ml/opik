@@ -9,8 +9,7 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ResizablePromptContainer from "@/components/pages/PlaygroundPage/ResizablePromptContainer";
 import SetupProviderDialog from "@/components/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import { useTriggerProviderValidation } from "@/store/PlaygroundStore";
-
-const LEGACY_PLAYGROUND_PROMPTS_KEY = "playground-prompts-state";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -24,8 +23,8 @@ const PlaygroundPage = () => {
       workspaceName,
     });
 
-  const providerKeys = useMemo(() => {
-    return providerKeysData?.content?.map((c) => c.provider) || [];
+  const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
+    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
 
   const [datasetId, setDatasetId] = useLocalStorageState<string | null>(
@@ -50,12 +49,6 @@ const PlaygroundPage = () => {
   const handleProviderAdded = useCallback(() => {
     triggerProviderValidation();
   }, [triggerProviderValidation]);
-
-  // @todo: remove later
-  // this field is not used anymore
-  useEffect(() => {
-    localStorage.removeItem(LEGACY_PLAYGROUND_PROMPTS_KEY);
-  }, []);
 
   if (isPendingProviderKeys) {
     return <Loader />;

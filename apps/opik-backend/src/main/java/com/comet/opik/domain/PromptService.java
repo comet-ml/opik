@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
@@ -73,7 +74,7 @@ public interface PromptService {
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
-    Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
+    Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 }
 
 @Singleton
@@ -98,6 +99,7 @@ class PromptServiceImpl implements PromptService {
     public Prompt create(@NonNull Prompt promptRequest) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
         var newPrompt = promptRequest.toBuilder()
@@ -124,7 +126,8 @@ class PromptServiceImpl implements PromptService {
                 .eventType(PROMPT_CREATED)
                 .userName(userName)
                 .workspaceId(workspaceId)
-                .payload(createdPrompt)
+                .workspaceName(workspaceName)
+                .payload(newPrompt)
                 .build());
 
         return createdPrompt;
@@ -244,6 +247,7 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion createPromptVersion(@NonNull CreatePromptVersion createPromptVersion) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
         UUID id = createPromptVersion.version().id() == null
@@ -266,7 +270,7 @@ class PromptServiceImpl implements PromptService {
                     .build();
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId, userName);
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName);
 
             return savedPromptVersion;
         });
@@ -277,7 +281,7 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
-                postPromptCommittedEvent(savedPromptVersion, workspaceId, userName);
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName);
 
                 return savedPromptVersion;
             });
@@ -317,6 +321,7 @@ class PromptServiceImpl implements PromptService {
     @Override
     public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
         var prompt = getById(id);
@@ -339,7 +344,7 @@ class PromptServiceImpl implements PromptService {
             return null;
         });
 
-        postPromptsDeletedEvent(List.of(prompt), workspaceId, userName);
+        postPromptsDeletedEvent(List.of(prompt), workspaceId, workspaceName, userName);
     }
 
     @Override
@@ -352,6 +357,7 @@ class PromptServiceImpl implements PromptService {
         var prompts = getByIds(ids);
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
         transactionTemplate.inTransaction(WRITE, handle -> {
@@ -359,7 +365,7 @@ class PromptServiceImpl implements PromptService {
             return null;
         });
 
-        postPromptsDeletedEvent(prompts, workspaceId, userName);
+        postPromptsDeletedEvent(prompts, workspaceId, workspaceName, userName);
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
@@ -611,7 +617,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
+    public Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(@NonNull Set<UUID> versionsIds) {
 
         if (versionsIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -621,25 +627,29 @@ class PromptServiceImpl implements PromptService {
                 .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
                     PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-                    return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
-                            .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
+                    return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
+                            .collect(toMap(PromptVersionInfo::id, Function.identity()));
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String userName) {
+    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
+            String userName) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
                 .userName(userName)
                 .payload(promptVersion)
                 .build());
     }
 
-    private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String userName) {
+    private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String workspaceName,
+            String userName) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_DELETED)
                 .userName(userName)
                 .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
                 .payload(prompts)
                 .build());
     }

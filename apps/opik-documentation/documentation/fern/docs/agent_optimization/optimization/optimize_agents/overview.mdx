@@ -1,0 +1,42 @@
+---
+title: "Optimize agents"
+description: "Connect the Agent Optimizer to Agent Frameworks."
+---
+
+Agent frameworks orchestrate complex chains of prompts and tools. The Agent Optimizer treats any agent as an `OptimizableAgent`, a thin wrapper with a predictable interface so optimizers can call it repeatedly during a run. This means the optimizer SDK is able to work with most agentic workflows and multi-agent systems out of the box or with minimal changes.
+
+## Existing examples
+Use the sample scripts under `sdks/opik_optimizer/scripts/llm_frameworks/` for framework-specific guidance. Each folder mirrors a working agent integration that doubles as both documentation and regression tests.
+
+## Understanding OptimizableAgent
+
+Every optimizer ships with a default base LiteLLM agent under the hood, so even a basic prompt optimization is set up like an agent in the SDK. You are able to modify this default behaviour, you can plug in your own by subclassing `opik_optimizer.optimizable_agent.OptimizableAgent`:
+
+```python
+from opik_optimizer.optimizable_agent import OptimizableAgent
+
+class MyAgent(OptimizableAgent):
+    def __init__(self, prompt, **kwargs):
+        super().__init__(prompt=prompt, **kwargs)
+        self.app = build_my_agent(prompt)
+
+    def invoke(self, messages, seed=None):
+        return self.app.run(messages, seed=seed)
+```
+
+- `prompt` is a `ChatPrompt` the optimizer mutates.
+- `invoke` receives the message list produced by the optimizer and must return the agent output string.
+- Use `init_agent`/`init_llm` helpers from the base class if you need the built-in LiteLLM wiring.
+
+See `sdks/opik_optimizer/scripts/llm_frameworks/` for working agents (LangGraph, MCP tool runners, etc.). Each script doubles as both an example and a regression test during development.
+
+## How agent optimization works
+
+1. **Log traces** from your agent (LangGraph, Google ADK, etc.) into Opik so you can collect datasets and failure examples.
+2. **Snapshot the agent prompt or plan** as a `ChatPrompt` or optimizer-ready artifact.
+3. **Run optimizers** (MetaPrompt, Hierarchical Reflective, etc.) using your agent’s datasets.
+4. **Deploy the improved instructions** back into the agent runtime.
+
+<Info>
+  Need another framework? Open a request in the roadmap or point us to a repo; we prioritize new guides when we have working scripts under `sdks/opik_optimizer/scripts/llm_frameworks`.
+</Info>

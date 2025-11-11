@@ -3,6 +3,7 @@ package com.comet.opik.utils;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public class ValidationUtils {
@@ -47,6 +48,21 @@ public class ValidationUtils {
     public static void validateProjectNameAndProjectId(String projectName, UUID projectId) {
         if (StringUtils.isBlank(projectName) && projectId == null) {
             throw new BadRequestException("Either 'project_name' or 'project_id' query params must be provided");
+        }
+    }
+
+    public static void validateTimeRangeParameters(Instant startTime, Instant endTime) {
+        boolean startTimePresent = startTime != null;
+        boolean endTimePresent = endTime != null;
+
+        if (startTimePresent != endTimePresent) {
+            throw new BadRequestException(
+                    "Both 'from_time' and 'to_time' parameters must be provided together, or both must be omitted");
+        }
+
+        if (startTimePresent && endTimePresent && !startTime.isBefore(endTime)) {
+            throw new BadRequestException(
+                    "Parameter 'from_time' must be before 'to_time'");
         }
     }
 }

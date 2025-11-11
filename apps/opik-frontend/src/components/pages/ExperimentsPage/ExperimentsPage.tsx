@@ -173,7 +173,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "total_estimated_cost",
-    label: "Total Est. Cost",
+    label: "Total estimated cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     aggregatedCell: CostCell.Aggregation as never,
@@ -183,7 +183,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "total_estimated_cost_avg",
-    label: "Avg. Cost per Trace",
+    label: "Cost per trace (avg.)",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     aggregatedCell: CostCell.Aggregation as never,

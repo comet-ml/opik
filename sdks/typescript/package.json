@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "1.8.85",
+  "version": "1.9.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -37,11 +37,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./vercel": {
-      "types": "./dist/vercel/index.d.ts",
-      "import": "./dist/vercel/index.js",
-      "require": "./dist/vercel/index.cjs"
     }
   },
   "main": "dist/index.cjs",
@@ -55,14 +50,10 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
     "test": "vitest run --exclude 'tests/integration/**/*.test.ts'",
-    "test:integration:api": "vitest run tests/integration/api"
+    "test:integration": "vitest run tests/integration"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.1.9",
     "@eslint/js": "^9.20.0",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.56.0",
-    "@opentelemetry/sdk-node": "^0.201.1",
     "@types/ini": "^4.1.1",
     "@types/mustache": "^4.2.5",
     "@types/node-fetch": "^2.6.12",
@@ -73,9 +64,9 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.16.0",
     "@typescript-eslint/parser": "^8.16.0",
-    "ai": "^4.1.34",
     "eslint": "^9.20.0",
     "globals": "^15.14.0",
+    "msw": "^2.11.6",
     "prettier": "^3.4.1",
     "tsup": "^8.3.6",
     "typescript": "^5.7.2",
@@ -96,6 +87,11 @@
     }
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.27",
+    "@ai-sdk/google": "^2.0.20",
+    "@ai-sdk/google-vertex": "^3.0.40",
+    "@ai-sdk/openai": "^2.0.52",
+    "ai": "^5.0.68",
     "ansi-escapes": "^7.0.0",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",

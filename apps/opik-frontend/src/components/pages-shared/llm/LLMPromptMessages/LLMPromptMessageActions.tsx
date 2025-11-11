@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { RotateCcw, Save } from "lucide-react";
+import { RotateCcw, Save, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { OnChangeFn } from "@/types/shared";
@@ -20,14 +20,29 @@ import usePromptById from "@/api/prompts/usePromptById";
 import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import PromptImprovementDialog from "@/components/shared/PromptImprovementDialog/PromptImprovementDialog";
+import {
+  LLMPromptConfigsType,
+  COMPOSED_PROVIDER_TYPE,
+} from "@/types/providers";
+import { useToast } from "@/components/ui/use-toast";
 
 type ConfirmType = "load" | "reset" | "save";
+
+export interface ImprovePromptConfig {
+  model: string;
+  provider: COMPOSED_PROVIDER_TYPE | "";
+  configs: LLMPromptConfigsType;
+  workspaceName: string;
+  onAccept: (messageId: string, improvedContent: string) => void;
+}
 
 type LLMPromptLibraryActionsProps = {
   message: LLMMessage;
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
   setIsLoading: OnChangeFn<boolean>;
   setIsHoldActionsVisible: OnChangeFn<boolean>;
+  improvePromptConfig?: ImprovePromptConfig;
 };
 
 const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
@@ -35,6 +50,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   onChangeMessage,
   setIsLoading,
   setIsHoldActionsVisible,
+  improvePromptConfig,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
@@ -42,6 +58,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const tempPromptIdRef = useRef<string | undefined>();
   const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
   const isPromptSaveWarningRef = useRef<boolean>(false);
+  const [showImproveWizard, setShowImproveWizard] = useState(false);
+
+  const { toast } = useToast();
 
   const [datasetId] = useLocalStorageState<string | null>(
     PLAYGROUND_SELECTED_DATASET_KEY,
@@ -55,6 +74,59 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     { promptId: promptId! },
     { enabled: !!promptId },
   );
+
+  const hasContent = Boolean(content?.trim());
+  const showGenerateButton = improvePromptConfig && !hasContent;
+  const showImproveButton = improvePromptConfig && hasContent;
+  const hasModel = Boolean(improvePromptConfig?.model?.trim());
+  const isPromptButtonDisabled = !hasModel;
+  const promptButtonTooltip = !hasModel
+    ? "Configure model first"
+    : hasContent
+      ? "Improve prompt with AI"
+      : "Generate prompt with AI";
+
+  const handleOpenWizard = useCallback(() => {
+    setShowImproveWizard(true);
+  }, []);
+
+  // Auto-open improvement wizard when message autoImprove flag is set
+  useEffect(() => {
+    if (
+      message.autoImprove &&
+      improvePromptConfig &&
+      promptId && // Only trigger for message loaded from prompt library
+      hasContent // Only trigger if there's content to improve
+    ) {
+      // Use a small delay to ensure the component is fully mounted and model is loaded
+      const timeoutId = setTimeout(() => {
+        // Clear the flag first to prevent other instances from triggering
+        onChangeMessage({ autoImprove: false });
+
+        // Validate model and provider are configured
+        if (!hasModel) {
+          toast({
+            title: "Model configuration required",
+            description:
+              "Please configure a model and provider before improving the prompt. Select a model from the dropdown above.",
+          });
+          return;
+        }
+
+        setShowImproveWizard(true);
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [
+    message.autoImprove,
+    improvePromptConfig,
+    promptId,
+    hasContent,
+    hasModel,
+    onChangeMessage,
+    toast,
+  ]);
 
   const handleUpdateExternalPromptId = useCallback(
     (selectedPromptId?: string) => {
@@ -159,70 +231,117 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   }, [onChangeMessage, promptData, promptId, setIsLoading]);
 
   return (
-    <div className="flex h-full flex-1 cursor-default flex-nowrap items-center justify-start gap-2">
-      <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
-        <PromptsSelectBox
-          value={promptId}
-          onValueChange={(id) => {
-            if (id !== promptId) {
-              if (content === "" || isUndefined(id)) {
-                handleUpdateExternalPromptId(id);
-              } else {
-                setOpen("load");
-                resetKeyRef.current = resetKeyRef.current + 1;
-                tempPromptIdRef.current = id;
+    <>
+      <div className="flex h-full flex-1 cursor-default flex-nowrap items-center justify-start gap-2">
+        {showGenerateButton && (
+          <TooltipWrapper content={promptButtonTooltip}>
+            <span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenWizard}
+                type="button"
+                disabled={isPromptButtonDisabled}
+              >
+                <Wand2 className="mr-2 size-4" />
+                Generate prompt
+              </Button>
+            </span>
+          </TooltipWrapper>
+        )}
+        {showImproveButton && (
+          <TooltipWrapper content={promptButtonTooltip}>
+            <span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenWizard}
+                type="button"
+                disabled={isPromptButtonDisabled}
+              >
+                <Wand2 className="mr-2 size-4" />
+                Improve prompt
+              </Button>
+            </span>
+          </TooltipWrapper>
+        )}
+        <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
+          <PromptsSelectBox
+            value={promptId}
+            onValueChange={(id) => {
+              if (id !== promptId) {
+                if (content === "" || isUndefined(id)) {
+                  handleUpdateExternalPromptId(id);
+                } else {
+                  setOpen("load");
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                  tempPromptIdRef.current = id;
+                }
               }
-            }
-          }}
-          onOpenChange={onPromptSelectBoxOpenChange}
+            }}
+            onOpenChange={onPromptSelectBoxOpenChange}
+          />
+        </div>
+        <TooltipWrapper content="Discard changes">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={resetDisabled}
+            onClick={() => {
+              resetKeyRef.current = resetKeyRef.current + 1;
+              setOpen("reset");
+            }}
+          >
+            <RotateCcw />
+          </Button>
+        </TooltipWrapper>
+
+        <TooltipWrapper content={saveTooltip}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={saveDisabled}
+            badge={saveWarning}
+            onClick={() => {
+              resetKeyRef.current = resetKeyRef.current + 1;
+              setOpen("save");
+            }}
+          >
+            <Save />
+          </Button>
+        </TooltipWrapper>
+
+        <Separator orientation="vertical" className="ml-1 mr-2 h-6" />
+
+        <ConfirmDialog
+          key={`confirm-${resetKeyRef.current}`}
+          open={open === "load" || open === "reset"}
+          setOpen={setOpen}
+          {...confirmConfig}
+        />
+        <AddNewPromptVersionDialog
+          key={`save-${resetKeyRef.current}`}
+          open={open === "save"}
+          setOpen={setOpen}
+          prompt={promptData}
+          template={content}
+          onSave={onSaveHandler}
         />
       </div>
-      <TooltipWrapper content="Discard changes">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          disabled={resetDisabled}
-          onClick={() => {
-            resetKeyRef.current = resetKeyRef.current + 1;
-            setOpen("reset");
-          }}
-        >
-          <RotateCcw />
-        </Button>
-      </TooltipWrapper>
-
-      <TooltipWrapper content={saveTooltip}>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          disabled={saveDisabled}
-          badge={saveWarning}
-          onClick={() => {
-            resetKeyRef.current = resetKeyRef.current + 1;
-            setOpen("save");
-          }}
-        >
-          <Save />
-        </Button>
-      </TooltipWrapper>
-
-      <Separator orientation="vertical" className="ml-1 mr-2 h-6" />
-
-      <ConfirmDialog
-        key={`confirm-${resetKeyRef.current}`}
-        open={open === "load" || open === "reset"}
-        setOpen={setOpen}
-        {...confirmConfig}
-      />
-      <AddNewPromptVersionDialog
-        key={`save-${resetKeyRef.current}`}
-        open={open === "save"}
-        setOpen={setOpen}
-        prompt={promptData}
-        template={content}
-        onSave={onSaveHandler}
-      />
-    </div>
+      {improvePromptConfig && (
+        <PromptImprovementDialog
+          open={showImproveWizard}
+          setOpen={setShowImproveWizard}
+          id={message.id}
+          originalPrompt={content}
+          model={improvePromptConfig.model}
+          provider={improvePromptConfig.provider}
+          configs={improvePromptConfig.configs}
+          workspaceName={improvePromptConfig.workspaceName}
+          onAccept={improvePromptConfig.onAccept}
+        />
+      )}
+    </>
   );
 };
 

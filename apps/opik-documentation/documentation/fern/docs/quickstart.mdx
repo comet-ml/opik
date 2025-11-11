@@ -202,10 +202,10 @@ popular integrations:
 
     <Steps>
       <Step>
-        Install the Opik AI Vercel SDK:
+        Install the Opik Vercel integration:
 
         ```bash
-        npm install opik
+        npm install opik-vercel
         ```
       </Step>
       <Step>
@@ -225,7 +225,7 @@ popular integrations:
         import { generateText } from "ai";
         import { NodeSDK } from "@opentelemetry/sdk-node";
         import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-        import { OpikExporter } from "opik/vercel";
+        import { OpikExporter } from "opik-vercel";
 
         // Set up OpenTelemetry with Opik
         const sdk = new NodeSDK({
