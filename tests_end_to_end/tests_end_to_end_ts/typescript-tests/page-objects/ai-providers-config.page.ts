@@ -1,18 +1,18 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { BasePage } from './base.page';
 
-export class AIProvidersConfigPage {
-  readonly page: Page;
+export class AIProvidersConfigPage extends BasePage {
   readonly addProviderButton: Locator;
   readonly searchBar: Locator;
 
   constructor(page: Page) {
-    this.page = page;
+    super(page, 'configuration', '?tab=ai-provider');
     this.addProviderButton = page.getByRole('button', { name: 'Add configuration' }).first();
     this.searchBar = page.getByTestId('search-input');
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/default/configuration?tab=ai-provider');
+    await super.goto();
     await this.page.waitForLoadState('networkidle');
   }
 

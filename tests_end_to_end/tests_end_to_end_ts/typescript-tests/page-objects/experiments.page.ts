@@ -1,16 +1,16 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { BasePage } from './base.page';
 
-export class ExperimentsPage {
-  readonly page: Page;
+export class ExperimentsPage extends BasePage {
   readonly searchInput: Locator;
 
   constructor(page: Page) {
-    this.page = page;
+    super(page, 'experiments');
     this.searchInput = page.getByTestId('search-input');
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/default/experiments');
+    await super.goto();
     await this.page.waitForLoadState('networkidle');
   }
 

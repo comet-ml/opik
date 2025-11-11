@@ -5,6 +5,10 @@ node_modules/
 test-results/
 playwright-report/
 playwright/.cache/
+allure-results/
+
+# Auth state files
+.auth/
 
 # Environment variables
 .env
