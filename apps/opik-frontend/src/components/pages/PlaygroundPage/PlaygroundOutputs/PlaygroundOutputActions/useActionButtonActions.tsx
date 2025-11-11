@@ -75,9 +75,9 @@ const useActionButtonActions = ({
 
     isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
-
     abortControllersRef.current.clear();
-  }, []);
+    setIsRunning(false);
+  }, [setIsRunning]);
 
   const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
@@ -172,12 +172,6 @@ const useActionButtonActions = ({
       });
     }
   }, [createdExperiments, datasetId, navigate]);
-
-  useEffect(() => {
-    return () => {
-      stopAll();
-    };
-  }, [stopAll]);
 
   return {
     isRunning,
