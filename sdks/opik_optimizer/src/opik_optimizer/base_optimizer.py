@@ -664,7 +664,8 @@ class BaseOptimizer(ABC):
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            project_name: Opik project name for logging traces (default: "Optimization")
-           optimization_id: Optional ID to use when creating the Opik optimization run.
+           optimization_id: Optional ID to use when creating the Opik optimization run;
+               when provided it must be a valid UUIDv7 string.
            **kwargs: Additional arguments for optimization
         """
         pass

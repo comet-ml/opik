@@ -65,5 +65,6 @@ optimization_result = optimizer.optimize_prompt(
     metric=optimization_metric,
     max_trials=5,
     n_samples=10,
+    optimization_id="019a72cb-23bf-7f20-8504-a2ad8b838f82"
 )
 optimization_result.display()

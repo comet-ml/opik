@@ -210,7 +210,7 @@ optimize_parameter(
 <ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
 <ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
 <ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 
 ## FewShotBayesianOptimizer
 
@@ -864,7 +864,7 @@ optimize_prompt(
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="5" />
 <ParamField path="max_retries" type="int" optional={true} default="2" />
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
