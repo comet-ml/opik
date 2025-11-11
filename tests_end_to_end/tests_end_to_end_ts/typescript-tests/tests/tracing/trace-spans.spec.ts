@@ -10,7 +10,21 @@ test.describe('Trace Spans Tests', () => {
       projectName,
       createTracesWithSpansClient,
     }) => {
-      const { traceConfig, spanConfig } = createTracesWithSpansClient;
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that spans created via the low-level client API are correctly displayed within their parent traces in the UI.
+
+Steps:
+1. Create a project and traces with spans via low-level client (handled by fixture)
+2. Navigate to the project traces page
+3. Load and verify traces exist
+4. For each trace, open the trace details
+5. Verify all expected spans are present with correct names
+
+This test ensures spans created via low-level client are properly associated with traces and visible in the UI.`
+      });
+
+      const { spanConfig } = createTracesWithSpansClient;
       let traceNames: string[];
 
       await test.step('Navigate to project traces page', async () => {
@@ -48,7 +62,21 @@ test.describe('Trace Spans Tests', () => {
       projectName,
       createTracesWithSpansDecorator,
     }) => {
-      const { traceConfig, spanConfig } = createTracesWithSpansDecorator;
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that spans created via the @track decorator are correctly displayed within their parent traces in the UI.
+
+Steps:
+1. Create a project and traces with spans via @track decorator (handled by fixture)
+2. Navigate to the project traces page
+3. Load and verify traces exist
+4. For each trace, open the trace details
+5. Verify all expected spans are present with correct names
+
+This test ensures spans created via decorator are properly associated with traces and visible in the UI.`
+      });
+
+      const { spanConfig } = createTracesWithSpansDecorator;
       let traceNames: string[];
 
       await test.step('Navigate to project traces page', async () => {
@@ -88,7 +116,24 @@ test.describe('Trace Spans Tests', () => {
       projectName,
       createTracesWithSpansClient,
     }) => {
-      const { traceConfig, spanConfig } = createTracesWithSpansClient;
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that span details including feedback scores and metadata are correctly displayed for traces created via low-level client.
+
+Steps:
+1. Create a project and traces with spans via low-level client (handled by fixture)
+2. Navigate to the project traces page
+3. Load and verify traces exist
+4. For each trace, open the trace details
+5. For each span in the trace:
+   - Open the span details
+   - Verify feedback scores are correctly displayed
+   - Verify metadata is correctly displayed
+
+This test ensures span details are properly stored and displayed for low-level client traces.`
+      });
+
+      const { spanConfig } = createTracesWithSpansClient;
       let traceNames: string[];
 
       await test.step('Navigate to project traces page', async () => {
@@ -150,7 +195,24 @@ test.describe('Trace Spans Tests', () => {
       projectName,
       createTracesWithSpansDecorator,
     }) => {
-      const { traceConfig, spanConfig } = createTracesWithSpansDecorator;
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that span details including feedback scores and metadata are correctly displayed for traces created via @track decorator.
+
+Steps:
+1. Create a project and traces with spans via @track decorator (handled by fixture)
+2. Navigate to the project traces page
+3. Load and verify traces exist
+4. For each trace, open the trace details
+5. For each span in the trace:
+   - Open the span details
+   - Verify feedback scores are correctly displayed
+   - Verify metadata is correctly displayed
+
+This test ensures span details are properly stored and displayed for decorator-based traces.`
+      });
+
+      const { spanConfig } = createTracesWithSpansDecorator;
       let traceNames: string[];
 
       await test.step('Navigate to project traces page', async () => {

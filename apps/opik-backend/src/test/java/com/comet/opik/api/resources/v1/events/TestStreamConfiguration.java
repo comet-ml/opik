@@ -41,6 +41,9 @@ public class TestStreamConfiguration implements StreamConfiguration {
     private Duration pendingMessageDuration = Duration.minutes(2);
 
     @Builder.Default
+    private int maxRetries = 3;
+
+    @Builder.Default
     private Codec codec = OnlineScoringCodecs.JAVA.getCodec();
 
     public static TestStreamConfiguration create() {

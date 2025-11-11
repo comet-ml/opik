@@ -18,6 +18,8 @@ export const TraceSearchStreamRequestPublic: core.serialization.Schema<
     limit: core.serialization.number().optional(),
     truncate: core.serialization.boolean().optional(),
     stripAttachments: core.serialization.property("strip_attachments", core.serialization.boolean().optional()),
+    fromTime: core.serialization.property("from_time", core.serialization.date().optional()),
+    toTime: core.serialization.property("to_time", core.serialization.date().optional()),
 });
 
 export declare namespace TraceSearchStreamRequestPublic {
@@ -29,5 +31,7 @@ export declare namespace TraceSearchStreamRequestPublic {
         limit?: number | null;
         truncate?: boolean | null;
         strip_attachments?: boolean | null;
+        from_time?: string | null;
+        to_time?: string | null;
     }
 }

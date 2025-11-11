@@ -21,5 +21,7 @@ public record SpanSearchCriteria(
         boolean stripAttachments,
         UUID lastReceivedSpanId,
         List<SortingField> sortingFields,
-        Set<SpanField> exclude) {
+        Set<SpanField> exclude,
+        UUID uuidFromTime,
+        UUID uuidToTime) {
 }

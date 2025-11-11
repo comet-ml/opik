@@ -166,8 +166,8 @@ class ChatCompletionsResourceTest {
 
             assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessage.getMessage())
-                    .containsIgnoringCase("API key not configured for LLM provider '%s'"
-                            .formatted(llmProvider.getValue()));
+                    .containsIgnoringCase("API key not configured for LLM. provider='%s', model='%s'"
+                            .formatted(llmProvider.getValue(), expectedModel));
         }
 
         @ParameterizedTest

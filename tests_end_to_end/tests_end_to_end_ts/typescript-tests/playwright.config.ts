@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
+import { AUTH_STATE_FILE } from './global-setup';
 
 dotenv.config();
 
@@ -37,6 +38,10 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     navigationTimeout: 30000,
     actionTimeout: 10000,
+    permissions: ['clipboard-read', 'clipboard-write'],
+    storageState: process.env.OPIK_BASE_URL && !process.env.OPIK_BASE_URL.startsWith('http://localhost')
+      ? AUTH_STATE_FILE
+      : undefined,
   },
 
   globalSetup: require.resolve('./global-setup.ts'),
@@ -48,6 +53,18 @@ export default defineConfig({
     timeout: 120000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      // Pass environment variables to Flask service
+      // Flask service will authenticate itself on startup for cloud environments
+      OPIK_BASE_URL: process.env.OPIK_BASE_URL || 'http://localhost:5173',
+      OPIK_TEST_USER_EMAIL: process.env.OPIK_TEST_USER_EMAIL || '',
+      OPIK_TEST_USER_PASSWORD: process.env.OPIK_TEST_USER_PASSWORD || '',
+      // Workspace: 'default' for local, username for cloud (never 'default' on cloud)
+      OPIK_WORKSPACE: process.env.OPIK_BASE_URL?.startsWith('http://localhost')
+        ? 'default'
+        : (process.env.OPIK_TEST_USER_NAME || 'default'),
+      TEST_HELPER_PORT: process.env.TEST_HELPER_PORT || '5555',
+    },
   },
 
   projects: [

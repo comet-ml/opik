@@ -1,7 +1,7 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { BasePage } from './base.page';
 
-export class PlaygroundPage {
-  readonly page: Page;
+export class PlaygroundPage extends BasePage {
   readonly modelSelector: Locator;
   readonly promptInput: Locator;
   readonly runButton: Locator;
@@ -11,12 +11,12 @@ export class PlaygroundPage {
   readonly apiErrorMessages: string[];
 
   constructor(page: Page) {
-    this.page = page;
+    super(page, 'playground');
     this.modelSelector = page.getByRole('combobox').first();
     this.promptInput = page.getByRole('textbox').first();
     this.runButton = page.getByRole('button', { name: 'Run' });
-    this.outputArea = page.locator('p:text("Output A") ~ div').first();
-    this.outputResponse = page.locator('p:text("Output A")').locator('xpath=following-sibling::div[1]');
+    this.outputArea = page.locator('p:text("Output") ~ div').first();
+    this.outputResponse = page.locator('p:text("Output")').locator('xpath=following-sibling::div[1]');
     this.errorMessage = page.locator('text=Please select an LLM model for your prompt');
     this.apiErrorMessages = [
       'messages: at least one message is required',
@@ -31,7 +31,7 @@ export class PlaygroundPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/default/playground');
+    await super.goto();
     await this.page.waitForLoadState('networkidle');
   }
 

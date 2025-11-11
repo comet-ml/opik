@@ -28,6 +28,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
 import { hasImagesInContent } from "@/lib/llm";
 import { supportsImageInput } from "@/lib/modelCapabilities";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetEmptyState from "./DatasetEmptyState";
 
 const EMPTY_DATASETS: Dataset[] = [];
@@ -78,7 +79,7 @@ const PlaygroundOutputActions = ({
     isLoading: isLoadingProject,
   } = useProjectByName(
     {
-      projectName: "playground",
+      projectName: PLAYGROUND_PROJECT_NAME,
     },
     {
       enabled: !!workspaceName,
@@ -216,13 +217,13 @@ const PlaygroundOutputActions = ({
       // If project doesn't exist (404), create it
       if (!projectId && isProjectNotFound) {
         const result = await createProjectMutation.mutateAsync({
-          project: { name: "playground" },
+          project: { name: PLAYGROUND_PROJECT_NAME },
         });
         projectId = result.id;
 
         // Refetch the project query to get the updated project data
         await queryClient.refetchQueries({
-          queryKey: ["project", { projectName: "playground" }],
+          queryKey: ["project", { projectName: PLAYGROUND_PROJECT_NAME }],
         });
       }
 
@@ -510,8 +511,9 @@ const PlaygroundOutputActions = ({
           }
         }}
         projectId={ruleDialogProjectId || playgroundProject?.id}
-        projectName="playground"
+        projectName={PLAYGROUND_PROJECT_NAME}
         datasetColumnNames={datasetColumns.map((c) => c.name)}
+        hideScopeSelector
       />
       <AddEditDatasetDialog
         open={isDatasetDialogOpen}

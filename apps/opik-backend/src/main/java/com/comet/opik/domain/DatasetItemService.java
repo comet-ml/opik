@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
@@ -33,11 +35,17 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
 
     Mono<Void> save(DatasetItemBatch batch);
+
+    Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
+
+    Mono<Void> createFromSpans(UUID datasetId, Set<UUID> spanIds,
+            SpanEnrichmentOptions enrichmentOptions);
 
     Mono<DatasetItem> get(UUID id);
 
@@ -62,7 +70,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetService datasetService;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
+    private final @NonNull TraceEnrichmentService traceEnrichmentService;
+    private final @NonNull SpanEnrichmentService spanEnrichmentService;
+    private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull TransactionTemplate template;
 
     @Override
     @WithSpan
@@ -74,6 +86,88 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return getDatasetId(batch)
                 .flatMap(it -> saveBatch(batch, it))
                 .then();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> createFromTraces(
+            @NonNull UUID datasetId,
+            @NonNull Set<UUID> traceIds,
+            @NonNull TraceEnrichmentOptions enrichmentOptions) {
+
+        log.info("Creating dataset items from '{}' traces for dataset '{}'", traceIds.size(), datasetId);
+
+        // Verify dataset exists
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> {
+                return template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.findById(datasetId, workspaceId)
+                            .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
+                });
+            }).subscribeOn(Schedulers.boundedElastic());
+        }).flatMap(dataset -> {
+            // Enrich traces with metadata
+            return traceEnrichmentService.enrichTraces(traceIds, enrichmentOptions)
+                    .flatMap(enrichedTraces -> {
+                        // Convert enriched traces to dataset items
+                        List<DatasetItem> datasetItems = enrichedTraces.entrySet().stream()
+                                .<DatasetItem>map(entry -> DatasetItem.builder()
+                                        .id(idGenerator.generateId())
+                                        .source(DatasetItemSource.TRACE)
+                                        .traceId(entry.getKey())
+                                        .data(entry.getValue())
+                                        .build())
+                                .toList();
+
+                        // Save dataset items
+                        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
+                        return saveBatch(batch, datasetId);
+                    });
+        }).then();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> createFromSpans(
+            @NonNull UUID datasetId,
+            @NonNull Set<UUID> spanIds,
+            @NonNull SpanEnrichmentOptions enrichmentOptions) {
+
+        log.info("Creating dataset items from '{}' spans for dataset '{}'", spanIds.size(), datasetId);
+
+        // Verify dataset exists
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> {
+                return template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.findById(datasetId, workspaceId)
+                            .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
+                });
+            }).subscribeOn(Schedulers.boundedElastic());
+        }).flatMap(dataset -> {
+            // Enrich spans with metadata
+            return spanEnrichmentService.enrichSpans(spanIds, enrichmentOptions)
+                    .flatMap(enrichedSpans -> {
+                        // Convert enriched spans to dataset items
+                        List<DatasetItem> datasetItems = enrichedSpans.entrySet().stream()
+                                .<DatasetItem>map(entry -> DatasetItem.builder()
+                                        .id(idGenerator.generateId())
+                                        .source(DatasetItemSource.SPAN)
+                                        .spanId(entry.getKey())
+                                        .data(entry.getValue())
+                                        .build())
+                                .toList();
+
+                        // Save dataset items
+                        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
+                        return saveBatch(batch, datasetId);
+                    });
+        }).then();
     }
 
     private Mono<UUID> getDatasetId(DatasetItemBatch batch) {

@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
+import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItemBatch;
@@ -10,12 +12,14 @@ import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -65,6 +69,72 @@ public class DatasetResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public void createDatasetItemsFromTraces(UUID datasetId, CreateDatasetItemsFromTracesRequest request,
+            String apiKey, String workspaceName) {
+        try (var actualResponse = callCreateDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callCreateDatasetItemsFromTraces(UUID datasetId, CreateDatasetItemsFromTracesRequest request,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("from-traces")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public void createDatasetItemsFromSpans(UUID datasetId, CreateDatasetItemsFromSpansRequest request,
+            String apiKey, String workspaceName) {
+        try (var actualResponse = callCreateDatasetItemsFromSpans(datasetId, request, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callCreateDatasetItemsFromSpans(UUID datasetId, CreateDatasetItemsFromSpansRequest request,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("from-spans")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public DatasetItemPage getDatasetItems(UUID datasetId, Map<String, Object> queryParams, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items");
+
+        for (Map.Entry<String, Object> entry : queryParams.entrySet()) {
+            target = target.queryParam(entry.getKey(), entry.getValue());
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetItemPage.class);
         }
     }
 

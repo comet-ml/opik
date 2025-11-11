@@ -20,19 +20,20 @@ import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
+  COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
   datasetItemId?: string;
   datasetName: string | null;
   model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
@@ -74,7 +75,6 @@ const createBatchExperimentItems = async (
   });
 };
 
-export const PLAYGROUND_PROJECT_NAME = "playground";
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",

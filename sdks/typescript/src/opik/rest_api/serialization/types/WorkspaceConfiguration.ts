@@ -14,10 +14,12 @@ export const WorkspaceConfiguration: core.serialization.ObjectSchema<
         "timeout_to_mark_thread_as_inactive",
         core.serialization.string().optional(),
     ),
+    truncationOnTables: core.serialization.property("truncation_on_tables", core.serialization.boolean().optional()),
 });
 
 export declare namespace WorkspaceConfiguration {
     export interface Raw {
         timeout_to_mark_thread_as_inactive?: string | null;
+        truncation_on_tables?: boolean | null;
     }
 }

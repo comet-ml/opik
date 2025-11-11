@@ -15,6 +15,7 @@ export const test = base.extend<BaseFixtures & DatasetsFixtures>({
     }
 
     await helperClient.createDataset(datasetName);
+    await helperClient.waitForDatasetVisible(datasetName);
     await use(datasetName);
 
     try {

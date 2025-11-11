@@ -111,6 +111,30 @@ public class SpanService {
     }
 
     @WithSpan
+    public Flux<Span> getByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting spans for '{}' traces", traceIds.size());
+
+        return spanDAO.getByTraceIds(traceIds)
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
+    }
+
+    @WithSpan
+    public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting '{}' spans by IDs", ids.size());
+
+        return spanDAO.getByIds(ids)
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
+    }
+
+    @WithSpan
     public Mono<UUID> create(@NonNull Span span) {
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
