@@ -504,8 +504,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Error: Delete non-existent tag")
-        void deleteTag__whenTagNotFound__thenReturnNotFound() {
+        @DisplayName("Success: Delete non-existent tag is idempotent")
+        void deleteTag__whenTagNotFound__thenReturnNoContent() {
             // Given
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 2);
@@ -515,13 +515,10 @@ class DatasetVersionResourceTest {
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
             String versionHash = version.versionHash();
 
-            // When - Try to delete a non-existent tag
-            try (var response = datasetResourceClient.callDeleteVersionTag(datasetId, versionHash, "nonexistent",
-                    API_KEY, TEST_WORKSPACE)) {
+            // When - Try to delete a non-existent tag (should be idempotent)
+            datasetResourceClient.deleteVersionTag(datasetId, versionHash, "nonexistent", API_KEY, TEST_WORKSPACE);
 
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
+            // Then - Should succeed without error (idempotent operation)
         }
 
         @Test

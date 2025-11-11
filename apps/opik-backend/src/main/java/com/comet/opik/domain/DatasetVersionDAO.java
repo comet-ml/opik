@@ -38,12 +38,13 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                (
-                    SELECT JSON_ARRAYAGG(tag)
-                    FROM dataset_version_tags
-                    WHERE version_id = dv.id
-                ) AS tags
-            FROM dataset_versions dv
+                COALESCE(t.tags, JSON_ARRAY()) AS tags
+            FROM dataset_versions AS dv
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
             WHERE dv.id = :id AND dv.workspace_id = :workspace_id
             """)
     Optional<DatasetVersion> findById(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
@@ -51,12 +52,13 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                (
-                    SELECT JSON_ARRAYAGG(tag)
-                    FROM dataset_version_tags
-                    WHERE version_id = dv.id
-                ) AS tags
-            FROM dataset_versions dv
+                COALESCE(t.tags, JSON_ARRAY()) AS tags
+            FROM dataset_versions AS dv
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id = :dataset_id
                 AND dv.version_hash = :version_hash
                 AND dv.workspace_id = :workspace_id
@@ -67,15 +69,16 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                (
-                    SELECT JSON_ARRAYAGG(tag)
-                    FROM dataset_version_tags
-                    WHERE version_id = dv.id
-                ) AS tags
-            FROM dataset_versions dv
+                COALESCE(t.tags, JSON_ARRAY()) AS tags
+            FROM dataset_versions AS dv
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id = :dataset_id
                 AND dv.workspace_id = :workspace_id
-            ORDER BY dv.created_at DESC
+            ORDER BY dv.id DESC
             LIMIT :limit OFFSET :offset
             """)
     List<DatasetVersion> findByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId,
@@ -83,23 +86,6 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("SELECT COUNT(*) FROM dataset_versions WHERE dataset_id = :dataset_id AND workspace_id = :workspace_id")
     long countByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId);
-
-    @SqlQuery("""
-            SELECT
-                dv.*,
-                (
-                    SELECT JSON_ARRAYAGG(tag)
-                    FROM dataset_version_tags
-                    WHERE version_id = dv.id
-                ) AS tags
-            FROM dataset_versions dv
-            WHERE dv.dataset_id = :dataset_id
-                AND dv.workspace_id = :workspace_id
-            ORDER BY dv.created_at DESC
-            LIMIT 1
-            """)
-    Optional<DatasetVersion> findLatestVersion(@Bind("dataset_id") UUID datasetId,
-            @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
             INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id)
@@ -115,13 +101,14 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                (
-                    SELECT JSON_ARRAYAGG(tag)
-                    FROM dataset_version_tags
-                    WHERE version_id = dv.id
-                ) AS tags
-            FROM dataset_versions dv
+                COALESCE(t.tags, JSON_ARRAY()) AS tags
+            FROM dataset_versions AS dv
             INNER JOIN dataset_version_tags dvt ON dv.id = dvt.version_id
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
             WHERE dvt.dataset_id = :dataset_id
                 AND dvt.tag = :tag
                 AND dv.workspace_id = :workspace_id

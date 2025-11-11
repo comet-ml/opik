@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -21,9 +22,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -158,7 +156,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
         // For now, use timestamp-based hash as placeholder
-        String versionHash = calculatePlaceholderVersionHash(datasetId);
+        String versionHash = DatabaseUtils.calculatePlaceholderVersionHash(datasetId);
 
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
@@ -172,23 +170,16 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             // Create new version
             var versionId = idGenerator.generateId();
-            var version = DatasetVersion.builder()
-                    .id(versionId)
-                    .datasetId(datasetId)
-                    .versionHash(versionHash)
-                    .itemsCount(itemsCount)
-                    .itemsAdded(itemsAdded)
-                    .itemsModified(itemsModified)
-                    .itemsDeleted(itemsDeleted)
-                    .changeDescription(request.changeDescription())
-                    .metadata(request.metadata())
-                    .createdBy(userName)
-                    .lastUpdatedBy(userName)
-                    .build();
+            var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
+                    versionId, datasetId, versionHash,
+                    itemsCount, itemsAdded, itemsModified, itemsDeleted,
+                    request, userName);
 
-            DatabaseUtils.handleStateDbDuplicateConstraint(
-                    () -> datasetVersionDAO.insert(version, workspaceId),
-                    ERROR_VERSION_HASH_EXISTS.formatted(versionHash, datasetId));
+            EntityConstraintHandler.handle(() -> {
+                datasetVersionDAO.insert(version, workspaceId);
+                return version;
+            }).withError(() -> new EntityAlreadyExistsException(
+                    new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(versionHash, datasetId)))));
 
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
 
@@ -201,9 +192,11 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             // Add custom tag if provided
             if (StringUtils.isNotBlank(request.tag())) {
-                DatabaseUtils.handleStateDbDuplicateConstraint(
-                        () -> datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId),
-                        ERROR_TAG_EXISTS.formatted(request.tag()));
+                EntityConstraintHandler.handle(() -> {
+                    datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId);
+                    return null;
+                }).withError(() -> new EntityAlreadyExistsException(
+                        new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(request.tag())))));
             }
 
             // TODO OPIK-3015: Create immutable snapshots in ClickHouse dataset_item_versions table
@@ -264,7 +257,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findLatestVersion(datasetId, workspaceId);
+            return dao.findByTag(datasetId, LATEST_TAG, workspaceId);
         });
     }
 
@@ -285,9 +278,11 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                             ERROR_VERSION_HASH_NOT_FOUND.formatted(versionHash, datasetId)));
 
             // Insert tag
-            DatabaseUtils.handleStateDbDuplicateConstraint(
-                    () -> dao.insertTag(datasetId, tagRequest.tag(), version.id(), userName, workspaceId),
-                    ERROR_TAG_EXISTS.formatted(tagRequest.tag()));
+            EntityConstraintHandler.handle(() -> {
+                dao.insertTag(datasetId, tagRequest.tag(), version.id(), userName, workspaceId);
+                return null;
+            }).withError(() -> new EntityAlreadyExistsException(
+                    new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(tagRequest.tag())))));
 
             return null;
         });
@@ -310,14 +305,11 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        int deleted = template.inTransaction(WRITE, handle -> {
+        template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.deleteTag(datasetId, tag, workspaceId);
+            dao.deleteTag(datasetId, tag, workspaceId);
+            return null;
         });
-
-        if (deleted == 0) {
-            throw new NotFoundException(ERROR_TAG_NOT_FOUND.formatted(tag, datasetId));
-        }
 
         log.info("Deleted tag '{}' from dataset: '{}'", tag, datasetId);
     }
@@ -345,32 +337,5 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(datasetId, hashOrTag));
         });
-    }
-
-    /**
-     * Calculate placeholder hash for version identification.
-     * TODO OPIK-3015: Replace with actual content-based hash from dataset items.
-     */
-    private String calculatePlaceholderVersionHash(UUID datasetId) {
-        try {
-            // Use timestamp + dataset ID for unique hash per commit
-            String input = datasetId.toString() + ":" + System.currentTimeMillis();
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-
-            // Convert to hex string (first 16 chars for display)
-            StringBuilder hexString = new StringBuilder();
-            for (int i = 0; i < 8; i++) {
-                String hex = Integer.toHexString(0xff & hashBytes[i]);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-
-            return hexString.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
-        }
     }
 }

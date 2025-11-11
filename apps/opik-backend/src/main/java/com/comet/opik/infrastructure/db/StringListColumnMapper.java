@@ -9,7 +9,6 @@ import org.jdbi.v3.core.statement.StatementContext;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -30,7 +29,7 @@ public class StringListColumnMapper implements ColumnMapper<List<String>> {
 
     private List<String> performMapping(String json) {
         if (StringUtils.isBlank(json)) {
-            return new ArrayList<>();
+            return List.of();
         }
 
         return JsonUtils.readValue(json, LIST_TYPE_REFERENCE);
