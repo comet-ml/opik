@@ -497,7 +497,7 @@ class SpanDAO {
             ;
             """;
 
-    private static final String SELECT_BY_ID = """
+    private static final String SELECT_BY_IDS = """
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -515,7 +515,7 @@ class SpanDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
-                  AND entity_id = :id
+                  AND entity_id IN :ids
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -533,7 +533,7 @@ class SpanDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
-                  AND entity_id = :id
+                  AND entity_id IN :ids
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -622,10 +622,10 @@ class SpanDAO {
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) AS duration
                 FROM spans
-                WHERE id = :id
+                WHERE id IN :ids
                 AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1
+                LIMIT 1 BY id
             ) AS s
             LEFT JOIN (
                 SELECT
@@ -638,7 +638,7 @@ class SpanDAO {
                     entity_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
-                AND entity_id = :id
+                AND entity_id IN :ids
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS c ON s.id = c.entity_id
@@ -1670,9 +1670,7 @@ class SpanDAO {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> getById(id, connection))
-                .flatMap(this::mapToDto)
+        return getByIds(Set.of(id))
                 .singleOrEmpty();
     }
 
@@ -1692,16 +1690,6 @@ class SpanDAO {
                 })
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
-    }
-
-    private Publisher<? extends Result> getById(UUID id, Connection connection) {
-        var statement = connection.createStatement(SELECT_BY_ID)
-                .bind("id", id);
-
-        Segment segment = startSegment("spans", "Clickhouse", "get_by_id");
-
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                .doFinally(signalType -> endSegment(segment));
     }
 
     @WithSpan
@@ -1734,6 +1722,27 @@ class SpanDAO {
                             .bind("trace_ids", traceIds.toArray(new UUID[0]));
 
                     Segment segment = startSegment("spans", "Clickhouse", "get_by_trace_ids");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(this::mapToDto);
+    }
+
+    @WithSpan
+    public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Flux.empty();
+        }
+
+        log.info("Getting '{}' spans by IDs", ids.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_BY_IDS)
+                            .bind("ids", ids.toArray(new UUID[0]));
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_by_ids");
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .doFinally(signalType -> endSegment(segment));

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
@@ -85,6 +86,28 @@ public class DatasetResourceClient {
                 .path(datasetId.toString())
                 .path("items")
                 .path("from-traces")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public void createDatasetItemsFromSpans(UUID datasetId, CreateDatasetItemsFromSpansRequest request,
+            String apiKey, String workspaceName) {
+        try (var actualResponse = callCreateDatasetItemsFromSpans(datasetId, request, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callCreateDatasetItemsFromSpans(UUID datasetId, CreateDatasetItemsFromSpansRequest request,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("from-spans")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

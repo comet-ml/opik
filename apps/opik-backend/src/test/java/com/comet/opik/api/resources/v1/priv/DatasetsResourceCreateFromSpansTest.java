@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -19,7 +20,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.TraceEnrichmentOptions;
+import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -53,13 +54,13 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration tests for creating dataset items from traces endpoint.
- * Extracted from DatasetsResourceTest to reduce file size.
+ * Integration tests for creating dataset items from spans endpoint.
+ * Follows the same pattern as DatasetsResourceCreateFromTracesTest.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Create dataset items from traces:")
+@DisplayName("Create dataset items from spans:")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class DatasetsResourceCreateFromTracesTest {
+class DatasetsResourceCreateFromSpansTest {
 
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
@@ -121,9 +122,15 @@ class DatasetsResourceCreateFromTracesTest {
         return datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
     }
 
+    private void assertMapKeysPresence(Map<String, JsonNode> data, Set<String> expectedKeys,
+            Set<String> unexpectedKeys) {
+        expectedKeys.forEach(key -> assertThat(data).containsKey(key));
+        unexpectedKeys.forEach(key -> assertThat(data).doesNotContainKey(key));
+    }
+
     @Test
-    @DisplayName("Success - create dataset items from traces with all enrichment options")
-    void createDatasetItemsFromTraces__success() {
+    @DisplayName("Success - create dataset items from spans with all enrichment options")
+    void createDatasetItemsFromSpans__success() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -134,32 +141,42 @@ class DatasetsResourceCreateFromTracesTest {
         var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        // Create traces with spans
+        // Create trace and spans
         String projectName = GENERATOR.generate().toString();
-        var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .projectName(projectName)
+                .build();
+
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .traceId(trace.id())
+                .name("span1")
                 .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt 1\"}"))
                 .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 1\"}"))
                 .tags(Set.of("tag1", "tag2"))
                 .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value1\"}"))
-                .usage(Map.of("tokens", 100L))
+                .usage(Map.of("tokens", 100))
                 .build();
 
-        var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+        var span2 = factory.manufacturePojo(Span.class).toBuilder()
                 .projectName(projectName)
+                .traceId(trace.id())
+                .name("span2")
                 .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt 2\"}"))
                 .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response 2\"}"))
                 .tags(Set.of("tag3"))
                 .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value2\"}"))
-                .usage(Map.of("tokens", 200L))
+                .usage(Map.of("tokens", 200))
                 .build();
 
-        traceResourceClient.createTrace(trace1, apiKey, workspaceName);
-        traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+        spanResourceClient.createSpan(span1, apiKey, workspaceName);
+        spanResourceClient.createSpan(span2, apiKey, workspaceName);
 
-        // Add feedback scores to trace1
+        // Add feedback scores to span1
         var feedbackScore1 = FeedbackScoreBatchItem.builder()
-                .id(trace1.id())
+                .id(span1.id())
                 .projectName(projectName)
                 .name("accuracy")
                 .value(BigDecimal.valueOf(0.95))
@@ -168,16 +185,16 @@ class DatasetsResourceCreateFromTracesTest {
                 .build();
 
         var feedbackScore2 = FeedbackScoreBatchItem.builder()
-                .id(trace1.id())
+                .id(span1.id())
                 .projectName(projectName)
                 .name("relevance")
                 .value(BigDecimal.valueOf(0.88))
                 .source(ScoreSource.SDK)
                 .build();
 
-        traceResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey, workspaceName);
+        spanResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey, workspaceName);
 
-        // Add comment to trace1
+        // Add comment to span1
         var comment = new Comment(
                 null,
                 "Test comment",
@@ -186,34 +203,12 @@ class DatasetsResourceCreateFromTracesTest {
                 null,
                 null);
 
-        traceResourceClient.createComment(comment, trace1.id(), apiKey, workspaceName, 201);
-
-        // Create spans for trace1
-        var span1 = factory.manufacturePojo(Span.class).toBuilder()
-                .projectName(projectName)
-                .traceId(trace1.id())
-                .name("span1")
-                .input(JsonUtils.getJsonNodeFromString("{\"input\": \"span1 input\"}"))
-                .output(JsonUtils.getJsonNodeFromString("{\"output\": \"span1 output\"}"))
-                .build();
-
-        var span2 = factory.manufacturePojo(Span.class).toBuilder()
-                .projectName(projectName)
-                .traceId(trace1.id())
-                .parentSpanId(span1.id())
-                .name("span2")
-                .input(JsonUtils.getJsonNodeFromString("{\"input\": \"span2 input\"}"))
-                .output(JsonUtils.getJsonNodeFromString("{\"output\": \"span2 output\"}"))
-                .build();
-
-        spanResourceClient.createSpan(span1, apiKey, workspaceName);
-        spanResourceClient.createSpan(span2, apiKey, workspaceName);
+        spanResourceClient.createComment(comment, span1.id(), apiKey, workspaceName, 201);
 
         // Create request with all enrichment options
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
-                .traceIds(Set.of(trace1.id(), trace2.id()))
-                .enrichmentOptions(TraceEnrichmentOptions.builder()
-                        .includeSpans(true)
+        var request = CreateDatasetItemsFromSpansRequest.builder()
+                .spanIds(Set.of(span1.id(), span2.id()))
+                .enrichmentOptions(SpanEnrichmentOptions.builder()
                         .includeTags(true)
                         .includeFeedbackScores(true)
                         .includeComments(true)
@@ -223,7 +218,7 @@ class DatasetsResourceCreateFromTracesTest {
                 .build();
 
         // Call endpoint
-        datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+        datasetResourceClient.createDatasetItemsFromSpans(datasetId, request, apiKey, workspaceName);
 
         // Verify dataset items were created
         var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName);
@@ -232,24 +227,14 @@ class DatasetsResourceCreateFromTracesTest {
 
         // Verify enriched data
         var item1 = actualEntity.content().stream()
-                .filter(item -> item.traceId().equals(trace1.id()))
+                .filter(item -> item.spanId() != null && item.spanId().equals(span1.id()))
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(item1.source()).isEqualTo(DatasetItemSource.TRACE);
-        assertThat(item1.data()).containsKey("input");
-        assertThat(item1.data()).containsKey("expected_output");
-        assertThat(item1.data()).containsKey("spans");
-        assertThat(item1.data()).containsKey("tags");
-        assertThat(item1.data()).containsKey("metadata");
-        assertThat(item1.data()).containsKey("feedback_scores");
-        assertThat(item1.data()).containsKey("comments");
-        assertThat(item1.data()).containsKey("usage");
-
-        // Verify spans are included
-        JsonNode spansNode = item1.data().get("spans");
-        assertThat(spansNode.isArray()).isTrue();
-        assertThat(spansNode).hasSize(2);
+        assertThat(item1.source()).isEqualTo(DatasetItemSource.SPAN);
+        assertMapKeysPresence(item1.data(),
+                Set.of("input", "expected_output", "tags", "metadata", "feedback_scores", "comments", "usage"),
+                Set.of());
 
         // Verify feedback scores are included and properly serialized (without timestamps)
         JsonNode feedbackScoresNode = item1.data().get("feedback_scores");
@@ -279,7 +264,7 @@ class DatasetsResourceCreateFromTracesTest {
 
     @Test
     @DisplayName("Success - create dataset items with no enrichment options")
-    void createDatasetItemsFromTraces__withNoEnrichmentOptions__success() {
+    void createDatasetItemsFromSpans__withNoEnrichmentOptions__success() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -290,25 +275,58 @@ class DatasetsResourceCreateFromTracesTest {
         var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        // Create trace
+        // Create trace and span WITH metadata
         String projectName = GENERATOR.generate().toString();
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .projectName(projectName)
-                .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
-                .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response\"}"))
                 .build();
 
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
-        // Create request with no enrichment options
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
-                .traceIds(Set.of(trace.id()))
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .traceId(trace.id())
+                .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
+                .output(JsonUtils.getJsonNodeFromString("{\"response\": \"test response\"}"))
+                .tags(Set.of("tag1", "tag2"))
+                .metadata(JsonUtils.getJsonNodeFromString("{\"key\": \"value\"}"))
+                .usage(Map.of("tokens", 100))
+                .build();
+
+        spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+        // Add feedback scores to span
+        var feedbackScore = FeedbackScoreBatchItem.builder()
+                .id(span.id())
+                .projectName(projectName)
+                .name("accuracy")
+                .value(BigDecimal.valueOf(0.95))
+                .reason("High accuracy")
+                .source(ScoreSource.SDK)
+                .build();
+
+        spanResourceClient.feedbackScores(List.of(feedbackScore), apiKey, workspaceName);
+
+        // Add comment to span
+        var comment = new Comment(
+                null,
+                "Test comment",
+                null,
+                null,
+                null,
+                null);
+
+        spanResourceClient.createComment(comment, span.id(), apiKey, workspaceName, 201);
+
+        // Create request with no enrichment options (all disabled)
+        var request = CreateDatasetItemsFromSpansRequest.builder()
+                .spanIds(Set.of(span.id()))
                 .enrichmentOptions(
-                        TraceEnrichmentOptions.builder().build())
+                        SpanEnrichmentOptions.builder().build())
                 .build();
 
         // Call endpoint
-        datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+        datasetResourceClient.createDatasetItemsFromSpans(datasetId, request, apiKey, workspaceName);
 
         // Verify dataset item was created with only input and output
         var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName);
@@ -316,16 +334,16 @@ class DatasetsResourceCreateFromTracesTest {
         assertThat(actualEntity.content()).hasSize(1);
 
         var item = actualEntity.content().getFirst();
-        assertThat(item.data()).containsKey("input");
-        assertThat(item.data()).containsKey("expected_output");
-        assertThat(item.data()).doesNotContainKey("spans");
-        assertThat(item.data()).doesNotContainKey("tags");
-        assertThat(item.data()).doesNotContainKey("metadata");
+
+        // Verify enrichment fields are NOT included even though they exist on the span
+        assertMapKeysPresence(item.data(),
+                Set.of("input", "expected_output"),
+                Set.of("tags", "metadata", "feedback_scores", "comments", "usage"));
     }
 
     @Test
     @DisplayName("when dataset not found, then return 404")
-    void createDatasetItemsFromTraces__whenDatasetNotFound__thenReturn404() {
+    void createDatasetItemsFromSpans__whenDatasetNotFound__thenReturn404() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -334,13 +352,13 @@ class DatasetsResourceCreateFromTracesTest {
 
         UUID nonExistentDatasetId = UUID.randomUUID();
 
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
-                .traceIds(Set.of(UUID.randomUUID()))
+        var request = CreateDatasetItemsFromSpansRequest.builder()
+                .spanIds(Set.of(UUID.randomUUID()))
                 .enrichmentOptions(
-                        TraceEnrichmentOptions.builder().build())
+                        SpanEnrichmentOptions.builder().build())
                 .build();
 
-        try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(nonExistentDatasetId,
+        try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(nonExistentDatasetId,
                 request, apiKey, workspaceName)) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
@@ -348,8 +366,8 @@ class DatasetsResourceCreateFromTracesTest {
     }
 
     @Test
-    @DisplayName("when trace IDs are empty, then return 422")
-    void createDatasetItemsFromTraces__whenTraceIdsAreEmpty__thenReturn422() {
+    @DisplayName("when span IDs are empty, then return 422")
+    void createDatasetItemsFromSpans__whenSpanIdsAreEmpty__thenReturn422() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -360,13 +378,13 @@ class DatasetsResourceCreateFromTracesTest {
         var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
-                .traceIds(Set.of())
+        var request = CreateDatasetItemsFromSpansRequest.builder()
+                .spanIds(Set.of())
                 .enrichmentOptions(
-                        TraceEnrichmentOptions.builder().build())
+                        SpanEnrichmentOptions.builder().build())
                 .build();
 
-        try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(datasetId, request, apiKey,
+        try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(datasetId, request, apiKey,
                 workspaceName)) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
@@ -374,8 +392,8 @@ class DatasetsResourceCreateFromTracesTest {
     }
 
     @Test
-    @DisplayName("Success - enrichment options enabled but trace has no additional data")
-    void createDatasetItemsFromTraces__withAllEnrichmentOptionsButNoData__success() {
+    @DisplayName("Success - enrichment options enabled but span has no additional data")
+    void createDatasetItemsFromSpans__withAllEnrichmentOptionsButNoData__success() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -386,24 +404,31 @@ class DatasetsResourceCreateFromTracesTest {
         var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
         var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-        // Create simple trace with only input and output, no tags, metadata, usage, etc.
+        // Create trace and simple span with only input and output, no tags, metadata, usage, etc.
         String projectName = GENERATOR.generate().toString();
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .projectName(projectName)
+                .build();
+
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .traceId(trace.id())
                 .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"simple prompt\"}"))
                 .output(JsonUtils.getJsonNodeFromString("{\"response\": \"simple response\"}"))
                 .tags(null)
                 .metadata(null)
                 .usage(null)
+                .provider(null)
                 .build();
 
-        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        spanResourceClient.createSpan(span, apiKey, workspaceName);
 
         // Create request with ALL enrichment options enabled
-        var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
-                .traceIds(Set.of(trace.id()))
-                .enrichmentOptions(TraceEnrichmentOptions.builder()
-                        .includeSpans(true)
+        var request = CreateDatasetItemsFromSpansRequest.builder()
+                .spanIds(Set.of(span.id()))
+                .enrichmentOptions(SpanEnrichmentOptions.builder()
                         .includeTags(true)
                         .includeFeedbackScores(true)
                         .includeComments(true)
@@ -413,7 +438,7 @@ class DatasetsResourceCreateFromTracesTest {
                 .build();
 
         // Call endpoint
-        datasetResourceClient.createDatasetItemsFromTraces(datasetId, request, apiKey, workspaceName);
+        datasetResourceClient.createDatasetItemsFromSpans(datasetId, request, apiKey, workspaceName);
 
         // Verify dataset item was created with only input and output
         var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName);
@@ -421,16 +446,11 @@ class DatasetsResourceCreateFromTracesTest {
         assertThat(actualEntity.content()).hasSize(1);
 
         var item = actualEntity.content().getFirst();
-        assertThat(item.source()).isEqualTo(DatasetItemSource.TRACE);
-        assertThat(item.data()).containsKey("input");
-        assertThat(item.data()).containsKey("expected_output");
+        assertThat(item.source()).isEqualTo(DatasetItemSource.SPAN);
 
-        // Verify enrichment fields are NOT included when trace has no data for them
-        assertThat(item.data()).doesNotContainKey("spans");
-        assertThat(item.data()).doesNotContainKey("tags");
-        assertThat(item.data()).doesNotContainKey("metadata");
-        assertThat(item.data()).doesNotContainKey("feedback_scores");
-        assertThat(item.data()).doesNotContainKey("comments");
-        assertThat(item.data()).doesNotContainKey("usage");
+        // Verify enrichment fields are NOT included when span has no data for them
+        assertMapKeysPresence(item.data(),
+                Set.of("input", "expected_output"),
+                Set.of("tags", "metadata", "feedback_scores", "comments", "usage"));
     }
 }
