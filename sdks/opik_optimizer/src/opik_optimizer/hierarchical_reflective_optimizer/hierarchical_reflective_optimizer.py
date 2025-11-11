@@ -395,9 +395,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
-        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -415,10 +415,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             auto_continue: Whether to continue optimization automatically after each round.
             agent_class: Optional agent implementation to execute prompt evaluations.
             project_name: Opik project name for trace logging (default: "Optimization").
-            max_trials: Maximum number of optimization iterations to run.
-            max_retries: Maximum retries allowed for addressing a failure mode.
             optimization_id: Optional ID for the Opik optimization run; when provided it must
                 be a valid UUIDv7 string.
+            max_trials: Maximum number of optimization iterations to run.
+            max_retries: Maximum retries allowed for addressing a failure mode.
         """
         # Reset counters at the start of optimization
         self._reset_counters()

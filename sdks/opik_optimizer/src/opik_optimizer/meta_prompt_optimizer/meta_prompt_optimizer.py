@@ -355,11 +355,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
-        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -386,6 +386,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             agent_class: Custom agent class for prompt execution. If None, uses default
                 LiteLLM-based agent. Must inherit from OptimizableAgent.
             project_name: Opik project name for logging traces and experiments. Default: "Optimization"
+            optimization_id: Optional ID to use when creating the Opik optimization run; when
+                provided it must be a valid UUIDv7 string.
             max_trials: Maximum total number of prompts to evaluate across all rounds.
                 Optimizer stops when this limit is reached.
             mcp_config: Optional MCP (Model Context Protocol) execution configuration for
@@ -393,8 +395,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             candidate_generator: Optional custom function to generate candidate prompts.
                 Overrides default meta-reasoning generator. Should return list[ChatPrompt].
             candidate_generator_kwargs: Optional kwargs to pass to candidate_generator.
-            optimization_id: Optional ID to use when creating the Opik optimization run; when
-                provided it must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Contains the best prompt found, final score, optimization

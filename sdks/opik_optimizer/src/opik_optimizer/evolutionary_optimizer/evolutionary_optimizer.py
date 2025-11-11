@@ -514,9 +514,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
-        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -530,10 +530,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
             auto_continue: Whether to continue automatically after each generation.
             agent_class: Optional agent implementation for executing prompts.
             project_name: Opik project name for logging traces (default: "Optimization").
-            max_trials: Maximum number of prompt evaluations allowed.
-            mcp_config: MCP tool-calling configuration (default: None).
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
+            max_trials: Maximum number of prompt evaluations allowed.
+            mcp_config: MCP tool-calling configuration (default: None).
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)

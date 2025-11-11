@@ -156,6 +156,7 @@ class GepaOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
@@ -168,7 +169,8 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
-        optimization_id: str | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
