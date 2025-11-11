@@ -68,7 +68,7 @@ const ScoresContent: React.FunctionComponent<ScoresContentProps> = ({
       definitions.push({
         id: "comments",
         name: "Comments",
-        description: "Free-text feedback",
+        description: "Text field for open feedback or additional notes.",
         type: FEEDBACK_DEFINITION_TYPE.categorical,
         details: {
           categories: {},
