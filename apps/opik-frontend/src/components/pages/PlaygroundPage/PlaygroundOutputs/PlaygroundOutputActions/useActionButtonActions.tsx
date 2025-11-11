@@ -175,6 +175,10 @@ const useActionButtonActions = ({
 
   useEffect(() => {
     return () => {
+      // Prevent queued items from starting
+      setIsToStop(true);
+
+      // Reset running state
       setIsRunning(false);
     };
   }, [setIsRunning]);
