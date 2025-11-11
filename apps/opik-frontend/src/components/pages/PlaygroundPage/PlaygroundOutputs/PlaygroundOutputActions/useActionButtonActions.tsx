@@ -175,11 +175,9 @@ const useActionButtonActions = ({
 
   useEffect(() => {
     return () => {
-      if (isRunning) {
-        setIsRunning(false);
-      }
+      setIsRunning(false);
     };
-  }, [isRunning, setIsRunning]);
+  }, [setIsRunning]);
 
   return {
     isRunning,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 
@@ -72,30 +72,18 @@ const useNavigationBlocker = ({
     [handleCancelNavigation],
   );
 
-  const DialogComponent = useMemo(
-    () => (
-      <ConfirmDialog
-        open={showDialog}
-        setOpen={handleDialogOpenChange}
-        onConfirm={handleConfirmNavigation}
-        onCancel={handleCancelNavigation}
-        title={title}
-        description={description}
-        confirmText={confirmText}
-        cancelText={cancelText}
-        confirmButtonVariant="destructive"
-      />
-    ),
-    [
-      showDialog,
-      handleDialogOpenChange,
-      handleConfirmNavigation,
-      handleCancelNavigation,
-      title,
-      description,
-      confirmText,
-      cancelText,
-    ],
+  const DialogComponent = (
+    <ConfirmDialog
+      open={showDialog}
+      setOpen={handleDialogOpenChange}
+      onConfirm={handleConfirmNavigation}
+      onCancel={handleCancelNavigation}
+      title={title}
+      description={description}
+      confirmText={confirmText}
+      cancelText={cancelText}
+      confirmButtonVariant="destructive"
+    />
   );
 
   return {
