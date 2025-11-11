@@ -24,9 +24,17 @@ export class EnvConfigManager {
   private loadConfig(): EnvConfig {
     const baseUrl = process.env.OPIK_BASE_URL || 'http://localhost:5173';
 
+    // Workspace rules:
+    // - Local environment: always 'default'
+    // - Cloud environment: always equals username (never 'default')
+    const isLocal = baseUrl.startsWith('http://localhost');
+    const workspace = isLocal
+      ? 'default'
+      : (process.env.OPIK_TEST_USER_NAME || process.env.OPIK_TEST_WORKSPACE || '');
+
     return {
       baseUrl,
-      workspace: process.env.OPIK_TEST_USER_NAME || 'default',
+      workspace,
       projectName: process.env.OPIK_TEST_PROJECT_NAME || 'automated_tests_project',
       apiKey: process.env.OPIK_API_KEY,
       testUserEmail: process.env.OPIK_TEST_USER_EMAIL,
@@ -54,6 +62,13 @@ export class EnvConfigManager {
       if (missingVars.length > 0) {
         throw new Error(
           `Missing required environment variables for non-local environment: ${missingVars.join(', ')}`
+        );
+      }
+
+      // Validate workspace is set for cloud environments
+      if (!this.config.workspace) {
+        throw new Error(
+          'Workspace must be set for cloud environments. Provide OPIK_TEST_USER_NAME or OPIK_TEST_WORKSPACE.'
         );
       }
     }
