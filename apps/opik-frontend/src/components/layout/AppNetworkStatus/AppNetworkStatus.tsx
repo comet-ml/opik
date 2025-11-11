@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-import OpikIcon from "@/icons/opik.svg?react";
+import CometIcon from "@/icons/comet.svg?react";
 import { usePingBackend } from "@/api/debug/useIsAlive";
 import useIsNetworkOnline from "@/hooks/useIsNetworkOnline";
 import { WifiOffIcon, WifiIcon, SatelliteDishIcon } from "lucide-react";
@@ -40,7 +40,7 @@ const AppNetworkStatus = () => {
             }
           >
             <span>
-              <OpikIcon className="size-5" />
+              <CometIcon className="size-5" />
             </span>
           </TooltipWrapper>
         </div>
