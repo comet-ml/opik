@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.Content;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import lombok.NonNull;
@@ -53,8 +55,39 @@ public class InstructionStrategy implements StructuredOutputStrategy {
 
         if (lastUserMessageIndex != -1) {
             UserMessage userMessage = (UserMessage) modifiableMessages.get(lastUserMessageIndex);
-            String newContent = userMessage.singleText() + instruction;
-            UserMessage modifiedUserMessage = UserMessage.from(newContent);
+
+            // Handle both single-text and multi-content (with images/videos) messages
+            UserMessage modifiedUserMessage;
+            if (userMessage.contents().size() == 1 && userMessage.contents().get(0) instanceof TextContent) {
+                // Simple case: single text content - use singleText()
+                String newContent = userMessage.singleText() + instruction;
+                modifiedUserMessage = UserMessage.from(newContent);
+            } else {
+                // Multi-content case: append instruction to the first text content, preserve other content
+                var contentBuilder = UserMessage.builder();
+                boolean instructionAdded = false;
+
+                for (var content : userMessage.contents()) {
+                    if (!instructionAdded && content instanceof TextContent textContent) {
+                        // Append instruction to the first text content
+                        contentBuilder.addContent(new TextContent(textContent.text() + instruction));
+                        instructionAdded = true;
+                    } else {
+                        // Preserve other content (images, videos) as-is
+                        contentBuilder.addContent(content);
+                    }
+                }
+
+                // If no text content was found, add instruction as a new text content at the beginning
+                if (!instructionAdded) {
+                    var newContents = new ArrayList<Content>();
+                    newContents.add(new TextContent(instruction));
+                    newContents.addAll(userMessage.contents());
+                    modifiedUserMessage = UserMessage.builder().contents(newContents).build();
+                } else {
+                    modifiedUserMessage = contentBuilder.build();
+                }
+            }
 
             // Remove the original user message
             modifiableMessages.remove(lastUserMessageIndex);

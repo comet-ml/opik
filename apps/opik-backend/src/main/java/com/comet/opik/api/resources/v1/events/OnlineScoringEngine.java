@@ -73,11 +73,16 @@ public class OnlineScoringEngine {
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
      * @param trace         the sampled Trace to be scored
+     * @param structuredOutputStrategy the strategy for structured output
+     * @param llmProvider   the LLM provider type
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
-        var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider) {
+        var modelName = evaluatorCode.model().name();
+        var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace, llmProvider,
+                modelName);
         var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
 
         return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
@@ -89,20 +94,25 @@ public class OnlineScoringEngine {
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
      * @param traces        the sampled traces from the trace threads to be scored
+     * @param structuredOutputStrategy the strategy for structured output
+     * @param llmProvider   the LLM provider type
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
             @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
-            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NotNull StructuredOutputStrategy structuredOutputStrategy,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider) {
+        var modelName = evaluatorCode.model().name();
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
-                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces, llmProvider, modelName);
         var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
 
         return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
     }
 
     static List<ChatMessage> renderThreadMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider, @NotNull String modelName) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = variablesMap.keySet().stream()
                 .map(variableName -> switch (variableName) {
@@ -127,7 +137,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> buildUserMessage(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage, llmProvider, modelName);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -148,10 +158,13 @@ public class OnlineScoringEngine {
      * @param templateMessages a list of messages with variables to fill with a Trace value
      * @param variablesMap     a map of template variable to a path to a value into a Trace
      * @param trace            the trace with value to use to replace template variables
+     * @param llmProvider      the LLM provider type
+     * @param modelName        the model name
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider, @NotNull String modelName) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = toReplacements(variablesMap, trace);
         // render the message templates from evaluator rule
@@ -161,7 +174,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> buildUserMessage(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage, llmProvider, modelName);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -222,7 +235,23 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    private UserMessage buildUserMessage(String content) {
+    private UserMessage buildUserMessage(String content, @NotNull com.comet.opik.api.LlmProvider llmProvider,
+            @NotNull String modelName) {
+        // Custom LLM providers (vLLM, Ollama, etc.) don't support multi-content messages with VideoContent/ImageContent
+        // EXCEPT for specific multimodal models:
+        // - vLLM/Ollama Qwen-VL/VI models: Match patterns like qwen-vl, qwen2-vl, qwen2.5vi, etc.
+        // - vLLM/Ollama LLaVA models: Match patterns like llava, llava-v1.6, etc.
+        // - Any model with "vision" or "multimodal" in the name
+        String lowerModelName = modelName.toLowerCase();
+        boolean supportsMultimodal = lowerModelName.matches(".*qwen.*(vl|vi).*")
+                || lowerModelName.contains("llava")
+                || lowerModelName.contains("vision")
+                || lowerModelName.contains("multimodal");
+
+        if (llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM && !supportsMultimodal) {
+            return UserMessage.from(content);
+        }
+
         var matcher = MEDIA_PLACEHOLDER_PATTERN.matcher(content);
 
         if (!matcher.find()) {

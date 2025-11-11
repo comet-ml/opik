@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.LogItem.LogLevel;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -526,7 +527,7 @@ class OnlineScoringEngineTest {
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId);
         var renderedMessages = OnlineScoringEngine.renderMessages(
-                evaluatorCode.messages(), evaluatorCode.variables(), trace);
+                evaluatorCode.messages(), evaluatorCode.variables(), trace, LlmProvider.OPEN_AI, "gpt-4o");
 
         assertThat(renderedMessages).hasSize(2);
 
@@ -552,7 +553,8 @@ class OnlineScoringEngineTest {
                 .build();
 
         var renderedMessages = OnlineScoringEngine.renderThreadMessages(
-                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace));
+                evaluatorCode.messages(), Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), List.of(trace),
+                LlmProvider.OPEN_AI, "gpt-4o");
 
         assertThat(renderedMessages).hasSize(2);
 
@@ -574,7 +576,7 @@ class OnlineScoringEngineTest {
                 .build();
 
         var request = OnlineScoringEngine.prepareThreadLlmRequest(evaluatorCode, List.of(trace),
-                new ToolCallingStrategy());
+                new ToolCallingStrategy(), LlmProvider.OPEN_AI);
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
@@ -587,7 +589,8 @@ class OnlineScoringEngineTest {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
-        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy());
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy(),
+                LlmProvider.OPEN_AI);
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
@@ -601,7 +604,7 @@ class OnlineScoringEngineTest {
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(
-                evaluatorCode, trace, new InstructionStrategy());
+                evaluatorCode, trace, new InstructionStrategy(), LlmProvider.OPEN_AI);
 
         assertThat(request.responseFormat()).isNull();
 
@@ -717,7 +720,7 @@ class OnlineScoringEngineTest {
 
         // Render a message using the variable
         var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Test value: {{testVar}}"));
-        var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
+        var rendered = OnlineScoringEngine.renderMessages(template, variables, trace, LlmProvider.OPEN_AI, "gpt-4o");
         assertThat(rendered).hasSize(1);
         var userMessage = rendered.getFirst();
         assertThat(userMessage).isInstanceOf(UserMessage.class);
@@ -744,7 +747,7 @@ class OnlineScoringEngineTest {
                                 "Second image: " + IMAGE_PLACEHOLDER.formatted(htmlEscapedUrl2)));
 
         var renderedMessages = OnlineScoringEngine.renderMessages(
-                messages, Map.of(), Trace.builder().build());
+                messages, Map.of(), Trace.builder().build(), LlmProvider.OPEN_AI, "gpt-4o");
 
         assertThat(renderedMessages).hasSize(1);
         var userMessage = renderedMessages.getFirst();
@@ -773,7 +776,7 @@ class OnlineScoringEngineTest {
                         ChatMessageType.USER, "My image: " + IMAGE_PLACEHOLDER.formatted(mustacheVariable)));
         // When using triple braces, Mustache doesn't escape the URL
         var rendered = OnlineScoringEngine.renderMessages(
-                messages, Map.of(placeholder, expectedUrl), Trace.builder().build());
+                messages, Map.of(placeholder, expectedUrl), Trace.builder().build(), LlmProvider.OPEN_AI, "gpt-4o");
 
         assertThat(rendered).hasSize(1);
         assertThat(rendered.getFirst()).isInstanceOf(UserMessage.class);
@@ -785,5 +788,62 @@ class OnlineScoringEngineTest {
         assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
         // With triple braces, URL is not escaped - no HTML entities present
         assertThat(((ImageContent) parts.get(1)).image().url().toString()).isEqualTo(expectedUrl);
+    }
+
+    @Test
+    @DisplayName("vLLM Qwen-VL models should parse video placeholders")
+    void renderMessagesWithVllmQwenVlModelParsesVideoPlaceholder() {
+        var videoUrl = "https://example.com/video.mp4";
+        var videoPlaceholder = "<<<video>>>" + videoUrl + "<<</video>>>";
+        var messages = List.of(
+                new LlmAsJudgeMessage(ChatMessageType.USER, "Watch this: " + videoPlaceholder));
+
+        var rendered = OnlineScoringEngine.renderMessages(
+                messages, Map.of(), Trace.builder().build(), LlmProvider.CUSTOM_LLM, "custom-llm/Qwen2-VL-7B");
+
+        assertThat(rendered).hasSize(1);
+        var userMessage = (UserMessage) rendered.getFirst();
+        var parts = userMessage.contents();
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("Watch this: ");
+        assertThat(parts.get(1)).isInstanceOf(dev.langchain4j.data.message.VideoContent.class);
+    }
+
+    @Test
+    @DisplayName("vLLM Qwen-VI models should parse video placeholders")
+    void renderMessagesWithVllmQwenViModelParsesVideoPlaceholder() {
+        var videoUrl = "https://example.com/video.mp4";
+        var videoPlaceholder = "<<<video>>>" + videoUrl + "<<</video>>>";
+        var messages = List.of(
+                new LlmAsJudgeMessage(ChatMessageType.USER, "Watch this: " + videoPlaceholder));
+
+        var rendered = OnlineScoringEngine.renderMessages(
+                messages, Map.of(), Trace.builder().build(), LlmProvider.CUSTOM_LLM, "custom-llm/qwen2.5vi:3b");
+
+        assertThat(rendered).hasSize(1);
+        var userMessage = (UserMessage) rendered.getFirst();
+        var parts = userMessage.contents();
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("Watch this: ");
+        assertThat(parts.get(1)).isInstanceOf(dev.langchain4j.data.message.VideoContent.class);
+    }
+
+    @Test
+    @DisplayName("non-Qwen custom LLM models should NOT parse video placeholders")
+    void renderMessagesWithNonQwenCustomLlmKeepsPlainText() {
+        var videoUrl = "https://example.com/video.mp4";
+        var videoPlaceholder = "<<<video>>>" + videoUrl + "<<</video>>>";
+        var messages = List.of(
+                new LlmAsJudgeMessage(ChatMessageType.USER, "Watch this: " + videoPlaceholder));
+
+        var rendered = OnlineScoringEngine.renderMessages(
+                messages, Map.of(), Trace.builder().build(), LlmProvider.CUSTOM_LLM, "custom-llm/llama-3.2");
+
+        assertThat(rendered).hasSize(1);
+        var userMessage = (UserMessage) rendered.getFirst();
+        // Should be plain text, not parsed
+        assertThat(userMessage.singleText()).isEqualTo("Watch this: " + videoPlaceholder);
     }
 }
