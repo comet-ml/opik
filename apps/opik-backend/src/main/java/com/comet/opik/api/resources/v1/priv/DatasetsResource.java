@@ -716,12 +716,7 @@ public class DatasetsResource {
         DatasetVersion version = versionService.commitVersion(datasetId, request);
         log.info("Created version '{}' for dataset '{}' on workspace '{}'", version.id(), datasetId, workspaceId);
 
-        URI uri = uriInfo.getAbsolutePathBuilder()
-                .build();
-
-        return Response.created(uri)
-                .entity(version)
-                .build();
+        return Response.ok(version).build();
     }
 
     @GET

@@ -350,7 +350,7 @@ public class DatasetResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(versionCreate))) {
 
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(DatasetVersion.class);
         }
     }

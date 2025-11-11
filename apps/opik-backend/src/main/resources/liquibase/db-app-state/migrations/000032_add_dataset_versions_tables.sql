@@ -1,11 +1,12 @@
 --liquibase formatted sql
---changeset idoberko2:add_dataset_versions_tables
+--changeset idoberko2:000032_add_dataset_versions_tables
 --comment: Create dataset_versions and dataset_version_tags tables for Git-like versioning
 
 CREATE TABLE IF NOT EXISTS dataset_versions (
     id CHAR(36) NOT NULL,
     dataset_id CHAR(36) NOT NULL,
     version_hash VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(150) NOT NULL,
     items_count INT DEFAULT 0,
     items_added INT DEFAULT 0,
     items_modified INT DEFAULT 0,
@@ -16,19 +17,13 @@ CREATE TABLE IF NOT EXISTS dataset_versions (
     created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin',
-    workspace_id VARCHAR(150) NOT NULL,
     CONSTRAINT `dataset_versions_pk` PRIMARY KEY (id),
-    CONSTRAINT `dataset_versions_dataset_hash_uk` UNIQUE (dataset_id, version_hash),
+    CONSTRAINT `dataset_versions_dataset_hash_uk` UNIQUE (workspace_id, dataset_id, version_hash),
     CONSTRAINT `dataset_versions_dataset_id_fk` FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE
 );
 
--- Index for listing versions by dataset (ordered by creation time)
-CREATE INDEX idx_dataset_versions_dataset_created ON dataset_versions(dataset_id, created_at DESC);
-
--- Index for workspace-level queries
-CREATE INDEX idx_dataset_versions_workspace ON dataset_versions(workspace_id);
-
 CREATE TABLE IF NOT EXISTS dataset_version_tags (
+    workspace_id VARCHAR(150) NOT NULL,
     dataset_id CHAR(36) NOT NULL,
     tag VARCHAR(100) NOT NULL,
     version_id CHAR(36) NOT NULL,
@@ -36,17 +31,10 @@ CREATE TABLE IF NOT EXISTS dataset_version_tags (
     created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin',
-    workspace_id VARCHAR(150) NOT NULL,
-    CONSTRAINT `dataset_version_tags_pk` PRIMARY KEY (dataset_id, tag),
+    CONSTRAINT `dataset_version_tags_pk` PRIMARY KEY (workspace_id, dataset_id, tag),
     CONSTRAINT `dataset_version_tags_dataset_id_fk` FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
     CONSTRAINT `dataset_version_tags_version_id_fk` FOREIGN KEY (version_id) REFERENCES dataset_versions(id) ON DELETE CASCADE
 );
-
--- Index for looking up tags by version
-CREATE INDEX idx_dataset_version_tags_version ON dataset_version_tags(version_id);
-
--- Index for workspace-level queries
-CREATE INDEX idx_dataset_version_tags_workspace ON dataset_version_tags(workspace_id);
 
 --rollback DROP TABLE IF EXISTS dataset_version_tags;
 --rollback DROP TABLE IF EXISTS dataset_versions;

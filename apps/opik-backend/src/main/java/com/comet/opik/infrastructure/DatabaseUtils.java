@@ -1,16 +1,14 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.error.ErrorMessage;
 import io.dropwizard.db.DataSourceFactory;
-import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 
-import java.sql.SQLIntegrityConstraintViolationException;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @UtilityClass
@@ -33,24 +31,32 @@ public class DatabaseUtils {
     }
 
     /**
-     * Handle SQL duplicate constraint violations in the state database (MySQL) with a specific error message.
+     * Calculate placeholder hash for version identification.
+     * TODO OPIK-3015: Replace with actual content-based hash from dataset items.
      *
-     * @param operation the database operation to execute
-     * @param errorMessage the error message to include in the exception if a duplicate constraint is violated
-     * @throws EntityAlreadyExistsException if a duplicate constraint violation occurs
-     * @throws UnableToExecuteStatementException if any other SQL exception occurs
+     * @param datasetId the dataset identifier
+     * @return a hex string hash (first 16 characters of SHA-256)
      */
-    public static void handleStateDbDuplicateConstraint(@NonNull Runnable operation,
-            @NonNull String errorMessage) {
+    public static String calculatePlaceholderVersionHash(UUID datasetId) {
         try {
-            operation.run();
-        } catch (UnableToExecuteStatementException e) {
-            if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                log.debug("Duplicate constraint violation: {}", errorMessage);
-                throw new EntityAlreadyExistsException(new ErrorMessage(List.of(errorMessage)));
-            } else {
-                throw e;
+            // Use timestamp + dataset ID for unique hash per commit
+            String input = datasetId.toString() + ":" + System.currentTimeMillis();
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+
+            // Convert to hex string (first 16 chars for display)
+            StringBuilder hexString = new StringBuilder();
+            for (int i = 0; i < 8; i++) {
+                String hex = Integer.toHexString(0xff & hashBytes[i]);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
             }
+
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
         }
     }
 }
