@@ -70,11 +70,11 @@ const ScoresContent: React.FunctionComponent<ScoresContentProps> = ({
         name: "Comments",
         description: "Text field for open feedback or additional notes.",
         type: FEEDBACK_DEFINITION_TYPE.categorical,
+        created_at: "",
+        last_updated_at: "",
         details: {
           categories: {},
         },
-        created_at: "",
-        last_updated_at: "",
       });
     }
 
@@ -85,14 +85,24 @@ const ScoresContent: React.FunctionComponent<ScoresContentProps> = ({
     annotationQueue.comments_enabled,
   ]);
 
-  const columns = useMemo(
-    () =>
-      convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
-        DEFAULT_COLUMNS,
-        {},
-      ),
-    [],
-  );
+  const columns = useMemo(() => {
+    // If only Comments row is shown (no feedback definitions), hide "Available values" column
+    const hasOnlyComments =
+      annotationQueue.comments_enabled &&
+      annotationQueue.feedback_definition_names.length === 0;
+
+    const columnsToShow = hasOnlyComments
+      ? DEFAULT_COLUMNS.filter((col) => col.id !== "values")
+      : DEFAULT_COLUMNS;
+
+    return convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
+      columnsToShow,
+      {},
+    );
+  }, [
+    annotationQueue.comments_enabled,
+    annotationQueue.feedback_definition_names.length,
+  ]);
 
   // Only hide the table if comments are disabled AND there are no feedback definitions
   if (
