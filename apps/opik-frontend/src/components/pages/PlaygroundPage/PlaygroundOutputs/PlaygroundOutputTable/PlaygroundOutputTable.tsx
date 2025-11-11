@@ -81,9 +81,7 @@ const PlaygroundOutputTable = ({
   }, [datasetItems, hydrateDatasetItemData]);
 
   const noDataMessage =
-    isLoadingDatasetItems || isHydrating
-      ? "Loading..."
-      : "No dataset items";
+    isLoadingDatasetItems || isHydrating ? "Loading..." : "No dataset items";
 
   const rows = useMemo(() => {
     return hydratedDatasetItems.map((di) => {

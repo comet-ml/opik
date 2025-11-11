@@ -21,7 +21,9 @@ const hasImages = (item: unknown): boolean => {
       return true;
     }
     // Check for image URLs
-    if (/https?:\/\/[^\s"]+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i.test(itemString)) {
+    if (
+      /https?:\/\/[^\s"]+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i.test(itemString)
+    ) {
       return true;
     }
     // Check for image tags

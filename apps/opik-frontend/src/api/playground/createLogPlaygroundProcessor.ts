@@ -278,7 +278,10 @@ const createLogPlaygroundProcessor = ({
         await createBatchExperimentItems(experimentItems);
       } catch (error: unknown) {
         // Handle 504 Gateway Timeout and other timeout errors gracefully
-        const axiosError = error as { response?: { status?: number }; code?: string };
+        const axiosError = error as {
+          response?: { status?: number };
+          code?: string;
+        };
         const isTimeout =
           axiosError.response?.status === 504 ||
           axiosError.code === "ECONNABORTED" ||

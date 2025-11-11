@@ -268,14 +268,22 @@ const useCompletionProxyStreaming = ({
         // Handle different types of errors
         let errorMessage: string | null = null;
         if (!isStopped) {
-          if (typedError.name === "TypeError" && typedError.message.includes("fetch")) {
+          if (
+            typedError.name === "TypeError" &&
+            typedError.message.includes("fetch")
+          ) {
             errorMessage =
               "Network error: Unable to connect to the AI provider. Please check your connection and try again.";
-          } else if (typedError.message.includes("timeout") || typedError.message.includes("Timeout")) {
+          } else if (
+            typedError.message.includes("timeout") ||
+            typedError.message.includes("Timeout")
+          ) {
             errorMessage =
               "Request timed out. The AI provider took too long to respond. This may happen with large requests. Please try again.";
           } else {
-            errorMessage = typedError.message || "An unexpected error occurred while calling the AI provider.";
+            errorMessage =
+              typedError.message ||
+              "An unexpected error occurred while calling the AI provider.";
           }
         }
 
