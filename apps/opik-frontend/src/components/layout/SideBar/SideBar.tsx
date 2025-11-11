@@ -308,6 +308,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         type: MENU_ITEM_TYPE.link,
         icon: Book,
         label: "Documentation",
+        entityType: ENTITY_TYPE.documentation,
       },
       {
         id: "quickstart",
@@ -315,6 +316,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         icon: GraduationCap,
         label: "Quickstart guide",
         onClick: openQuickstart,
+        entityType: ENTITY_TYPE.quickstartGuide,
       },
       {
         id: "provideFeedback",
@@ -322,6 +324,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         icon: MessageCircleQuestion,
         label: "Provide feedback",
         onClick: () => setOpenProvideFeedback(true),
+        entityType: ENTITY_TYPE.provideFeedback,
       },
     ]);
 

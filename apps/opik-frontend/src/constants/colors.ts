@@ -19,6 +19,11 @@ export enum ENTITY_TYPE {
   onlineEvaluation = "onlineEvaluation",
   automations = "automations",
   configuration = "configuration",
+  
+  // Bottom menu items
+  documentation = "documentation",
+  quickstartGuide = "quickstartGuide",
+  provideFeedback = "provideFeedback",
 }
 
 /**
@@ -31,15 +36,20 @@ export const ENTITY_COLORS: Record<ENTITY_TYPE, string> = {
   [ENTITY_TYPE.dataset]: "var(--color-yellow)",
   [ENTITY_TYPE.prompt]: "var(--color-purple)",
   [ENTITY_TYPE.experiment]: "var(--color-green)",
-  [ENTITY_TYPE.optimization]: "var(--color-turquoise)",
-  [ENTITY_TYPE.trial]: "var(--color-turquoise)",
+  [ENTITY_TYPE.optimization]: "var(--color-yellow)", // Star icon = yellow
+  [ENTITY_TYPE.trial]: "var(--color-yellow)",
   [ENTITY_TYPE.annotationQueue]: "var(--color-pink)",
 
   // Application sections
-  [ENTITY_TYPE.home]: "var(--color-gray)",
+  [ENTITY_TYPE.home]: "var(--color-orange)", // Brown/orange
   [ENTITY_TYPE.playground]: "var(--color-burgundy)",
-  [ENTITY_TYPE.onlineEvaluation]: "var(--color-orange)",
+  [ENTITY_TYPE.onlineEvaluation]: "var(--color-pink)",
   [ENTITY_TYPE.automations]: "var(--color-blue)",
   [ENTITY_TYPE.configuration]: "var(--color-gray)",
+  
+  // Bottom menu items
+  [ENTITY_TYPE.documentation]: "var(--color-green)",
+  [ENTITY_TYPE.quickstartGuide]: "var(--color-blue)",
+  [ENTITY_TYPE.provideFeedback]: "var(--color-gray)", // Black/dark gray
 };
 
