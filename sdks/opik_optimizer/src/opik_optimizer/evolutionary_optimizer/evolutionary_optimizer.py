@@ -516,6 +516,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         project_name: str = "Optimization",
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
+        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -548,6 +549,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = opik_optimization_run.id
         except Exception as e:

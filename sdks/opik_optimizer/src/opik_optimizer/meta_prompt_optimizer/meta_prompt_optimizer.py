@@ -359,6 +359,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -445,6 +446,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
             logger.debug(f"Created optimization with ID: {optimization.id}")

@@ -452,6 +452,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         max_trials: int = 10,
+        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -483,6 +484,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
         except Exception:

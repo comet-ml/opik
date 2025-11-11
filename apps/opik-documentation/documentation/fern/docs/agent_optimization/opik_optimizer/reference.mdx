@@ -22,6 +22,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 - **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
+- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
 - **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
@@ -188,7 +189,8 @@ optimize_parameter(
     callbacks: list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None = None,
     timeout: float | None = None,
     local_trials: int | None = None,
-    local_search_scale: float | None = None
+    local_search_scale: float | None = None,
+    optimization_id: str | None = None
 )
 ```
 
@@ -208,6 +210,7 @@ optimize_parameter(
 <ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
 <ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
 <ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
 
 ## FewShotBayesianOptimizer
 
@@ -295,6 +298,7 @@ optimize_prompt(
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
     max_trials: int = 10,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -312,6 +316,7 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true} />
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -440,6 +445,7 @@ optimize_prompt(
     mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
     candidate_generator: collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None = None,
     candidate_generator_kwargs: dict[str, typing.Any] | None = None,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -460,6 +466,7 @@ optimize_prompt(
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
 <ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
 <ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs to pass to candidate_generator.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true} />
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -604,6 +611,7 @@ optimize_prompt(
     project_name: str = 'Optimization',
     max_trials: int = 10,
     mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -622,6 +630,7 @@ optimize_prompt(
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10" />
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool calling configuration (default: None)</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true} />
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -717,7 +726,8 @@ optimize_prompt(
     track_best_outputs: bool = False,
     display_progress_bar: bool = False,
     seed: int = 42,
-    raise_on_exception: bool = True
+    raise_on_exception: bool = True,
+    optimization_id: str | None = None
 )
 ```
 
@@ -744,6 +754,7 @@ optimize_prompt(
 <ParamField path="display_progress_bar" type="bool" optional={true} default="False">Display progress bar (default: False)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility (default: 42)</ParamField>
 <ParamField path="raise_on_exception" type="bool" optional={true} default="True">Raise exceptions instead of continuing (default: True)</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true} />
 
 ## HierarchicalReflectiveOptimizer
 
@@ -834,6 +845,7 @@ optimize_prompt(
     project_name: str = 'Optimization',
     max_trials: int = 5,
     max_retries: int = 2,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -852,6 +864,7 @@ optimize_prompt(
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="5" />
 <ParamField path="max_retries" type="int" optional={true} default="2" />
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 

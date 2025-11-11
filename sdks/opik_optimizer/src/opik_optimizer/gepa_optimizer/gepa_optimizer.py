@@ -168,6 +168,7 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
+        optimization_id: str | None = None,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
@@ -257,9 +258,14 @@ class GepaOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             ) as optimization:
                 try:
-                    opt_id = optimization.id if optimization is not None else None
+                    opt_id = (
+                        optimization.id
+                        if optimization is not None
+                        else optimization_id
+                    )
                     self.current_optimization_id = opt_id
                 except Exception:
                     opt_id = None

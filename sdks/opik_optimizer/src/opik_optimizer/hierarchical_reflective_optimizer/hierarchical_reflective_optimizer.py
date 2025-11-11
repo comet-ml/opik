@@ -397,6 +397,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         project_name: str = "Optimization",
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
+        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -414,6 +415,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
             metadata={"optimizer": self.__class__.__name__},
+            optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
         logger.debug(f"Created optimization with ID: {optimization.id}")
