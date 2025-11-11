@@ -51,16 +51,32 @@ export interface LogProcessor {
   log: (run: LogQueueParams) => void;
 }
 
+// Timeout for batch requests - 60 seconds should be enough for most cases
+// but prevents hanging indefinitely on large payloads
+const BATCH_REQUEST_TIMEOUT_MS = 60000;
+
 const createBatchTraces = async (traces: LogTrace[]) => {
-  return api.post(`${TRACES_REST_ENDPOINT}batch`, {
-    traces: traces.map(snakeCaseObj),
-  });
+  return api.post(
+    `${TRACES_REST_ENDPOINT}batch`,
+    {
+      traces: traces.map(snakeCaseObj),
+    },
+    {
+      timeout: BATCH_REQUEST_TIMEOUT_MS,
+    },
+  );
 };
 
 const createBatchSpans = async (spans: LogSpan[]) => {
-  return api.post(`${SPANS_REST_ENDPOINT}batch`, {
-    spans: spans.map(snakeCaseObj),
-  });
+  return api.post(
+    `${SPANS_REST_ENDPOINT}batch`,
+    {
+      spans: spans.map(snakeCaseObj),
+    },
+    {
+      timeout: BATCH_REQUEST_TIMEOUT_MS,
+    },
+  );
 };
 
 const createExperiment = async (experiment: LogExperiment) => {
@@ -70,9 +86,15 @@ const createExperiment = async (experiment: LogExperiment) => {
 const createBatchExperimentItems = async (
   experimentItems: LogExperimentItem[],
 ) => {
-  await api.post(`${EXPERIMENTS_REST_ENDPOINT}items`, {
-    experiment_items: experimentItems.map(snakeCaseObj),
-  });
+  await api.post(
+    `${EXPERIMENTS_REST_ENDPOINT}items`,
+    {
+      experiment_items: experimentItems.map(snakeCaseObj),
+    },
+    {
+      timeout: BATCH_REQUEST_TIMEOUT_MS,
+    },
+  );
 };
 
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
@@ -171,6 +193,13 @@ const getExperimentItemFromRun = (
 };
 
 const CREATE_EXPERIMENT_CONCURRENCY_RATE = 5;
+// Reduced batch size for playground to handle large multimodal payloads
+// Smaller batches reduce the chance of timeout on large image payloads
+const PLAYGROUND_BATCH_SIZE = 10;
+const PLAYGROUND_FLUSH_INTERVAL = 3000; // Slightly longer flush interval to allow more batching
+// Max payload size: 1.5MB to prevent timeouts with large image payloads
+// This is conservative - base64 images can be very large
+const MAX_PAYLOAD_SIZE_BYTES = 1.5 * 1024 * 1024;
 
 const createLogPlaygroundProcessor = ({
   onAddExperimentRegistry,
@@ -180,33 +209,95 @@ const createLogPlaygroundProcessor = ({
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
 
-  const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
-    try {
-      await createBatchSpans(spans);
-    } catch {
-      onError(new Error("There has been an error with logging spans"));
-    }
-  });
+  const spanBatch = createBatchProcessor<LogSpan>(
+    async (spans) => {
+      try {
+        await createBatchSpans(spans);
+      } catch (error: unknown) {
+        // Handle 504 Gateway Timeout and other timeout errors gracefully
+        // These are expected for large payloads and shouldn't block the user experience
+        const axiosError = error as {
+          response?: { status?: number };
+          code?: string;
+        };
+        const isTimeout =
+          axiosError.response?.status === 504 ||
+          axiosError.code === "ECONNABORTED" ||
+          axiosError.code === "ETIMEDOUT";
 
-  const traceBatch = createBatchProcessor<LogTrace>(async (traces) => {
-    try {
-      await createBatchTraces(traces);
-      onCreateTraces(traces);
-    } catch {
-      onError(new Error("There has been an error with logging traces"));
-    }
-  });
+        if (isTimeout) {
+          // Silently fail for timeout errors - logging failures shouldn't block the user
+          // The data will be lost but the user can continue working
+          console.warn(
+            "Batch span logging timed out. This may happen with large payloads.",
+          );
+        } else {
+          onError(new Error("There has been an error with logging spans"));
+        }
+      }
+    },
+    PLAYGROUND_BATCH_SIZE,
+    PLAYGROUND_FLUSH_INTERVAL,
+    MAX_PAYLOAD_SIZE_BYTES,
+  );
+
+  const traceBatch = createBatchProcessor<LogTrace>(
+    async (traces) => {
+      try {
+        await createBatchTraces(traces);
+        onCreateTraces(traces);
+      } catch (error: unknown) {
+        // Handle 504 Gateway Timeout and other timeout errors gracefully
+        const axiosError = error as {
+          response?: { status?: number };
+          code?: string;
+        };
+        const isTimeout =
+          axiosError.response?.status === 504 ||
+          axiosError.code === "ECONNABORTED" ||
+          axiosError.code === "ETIMEDOUT";
+
+        if (isTimeout) {
+          // Silently fail for timeout errors - logging failures shouldn't block the user
+          console.warn(
+            "Batch trace logging timed out. This may happen with large payloads.",
+          );
+        } else {
+          onError(new Error("There has been an error with logging traces"));
+        }
+      }
+    },
+    PLAYGROUND_BATCH_SIZE,
+    PLAYGROUND_FLUSH_INTERVAL,
+    MAX_PAYLOAD_SIZE_BYTES,
+  );
 
   const experimentItemsBatch = createBatchProcessor<LogExperimentItem>(
     async (experimentItems) => {
       try {
         await createBatchExperimentItems(experimentItems);
-      } catch {
-        onError(
-          new Error("There has been an error with logging experiment items"),
-        );
+      } catch (error: unknown) {
+        // Handle 504 Gateway Timeout and other timeout errors gracefully
+        const axiosError = error as { response?: { status?: number }; code?: string };
+        const isTimeout =
+          axiosError.response?.status === 504 ||
+          axiosError.code === "ECONNABORTED" ||
+          axiosError.code === "ETIMEDOUT";
+
+        if (isTimeout) {
+          // Silently fail for timeout errors
+          console.warn(
+            "Batch experiment items logging timed out. This may happen with large payloads.",
+          );
+        } else {
+          onError(
+            new Error("There has been an error with logging experiment items"),
+          );
+        }
       }
     },
+    PLAYGROUND_BATCH_SIZE,
+    PLAYGROUND_FLUSH_INTERVAL,
   );
 
   const experimentsQueue = asyncLib.queue<LogExperiment>(async (e) => {

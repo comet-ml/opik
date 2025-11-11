@@ -1,5 +1,6 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
+import { AlertCircle } from "lucide-react";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import {
@@ -46,14 +47,22 @@ const PlaygroundOutputCell: React.FunctionComponent<
       return <PlaygroundOutputLoader />;
     }
 
+    const isError = value?.startsWith("Error:");
+
     return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
-        {value}
-      </MarkdownPreview>
+      <div className="flex items-start gap-2">
+        {isError && (
+          <AlertCircle className="mt-1 size-4 shrink-0 text-destructive" />
+        )}
+        <MarkdownPreview
+          className={cn("flex-1", {
+            "text-muted-gray dark:text-foreground": stale,
+            "text-destructive": isError,
+          })}
+        >
+          {value}
+        </MarkdownPreview>
+      </div>
     );
   };
 

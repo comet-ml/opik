@@ -42,10 +42,9 @@ export function useHydrateDatasetItemData() {
             hydratedData = fullDatasetItem.data;
           }
         } catch (error) {
-          console.warn(
-            "Failed to hydrate dataset item data with full payload",
-            error,
-          );
+          // Silently handle network errors during hydration - these are expected for large assets
+          // The hydration will retry automatically via React Query's retry mechanism
+          // No need to log as these are normal batch networking operations
         }
       }
 

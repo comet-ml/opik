@@ -86,3 +86,16 @@ export const combineContentWithImages = (
 export const stripImageTags = (text: string): string => {
   return text.replace(/<<<image>>>(.*?)<<<\/image>>>/g, "$1");
 };
+
+/**
+ * Counts the total number of images across all messages in a prompt
+ */
+export const countImagesInMessages = (
+  messages: Array<{ content?: string | null }>,
+): number => {
+  return messages.reduce((total, message) => {
+    if (!message.content) return total;
+    const { images } = parseContentWithImages(message.content);
+    return total + images.length;
+  }, 0);
+};
