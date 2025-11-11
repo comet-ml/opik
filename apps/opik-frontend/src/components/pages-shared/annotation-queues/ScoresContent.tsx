@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { CellContext } from "@tanstack/react-table";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import {
   FeedbackDefinition,
@@ -8,7 +9,8 @@ import { COLUMN_TYPE, ColumnData, ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import FeedbackDefinitionsValueCell from "@/components/shared/DataTableCells/FeedbackDefinitionsValueCell";
-import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
 
@@ -16,12 +18,32 @@ interface ScoresContentProps {
   annotationQueue: AnnotationQueue;
 }
 
+// Custom cell renderer for feedback option names
+// Comments row is rendered without color, while other feedback definitions have colors
+const FeedbackOptionNameCell = (context: CellContext<unknown, string>) => {
+  const value = context.getValue();
+
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="gap-1.5"
+    >
+      {value === "Comments" ? (
+        <span className="comet-body-s">{value}</span>
+      ) : (
+        <ColoredTagNew label={value} className="px-0" />
+      )}
+    </CellWrapper>
+  );
+};
+
 export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
   {
     id: "name",
     label: "Feedback options",
     type: COLUMN_TYPE.numberDictionary,
-    cell: FeedbackScoreNameCell as never,
+    cell: FeedbackOptionNameCell as never,
   },
   {
     id: "description",
