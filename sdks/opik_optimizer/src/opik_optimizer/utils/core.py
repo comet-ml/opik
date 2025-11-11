@@ -47,6 +47,7 @@ class OptimizationContextManager:
         objective_name: str,
         name: str | None = None,
         metadata: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
     ):
         """
         Initialize the optimization context.
@@ -63,6 +64,7 @@ class OptimizationContextManager:
         self.objective_name = objective_name
         self.name = name
         self.metadata = metadata
+        self.optimization_id = optimization_id
         self.optimization: Optimization | None = None
 
     def __enter__(self) -> Optimization | None:
@@ -73,6 +75,7 @@ class OptimizationContextManager:
                 objective_name=self.objective_name,
                 name=self.name,
                 metadata=self.metadata,
+                optimization_id=self.optimization_id,
             )
 
             if self.optimization:
@@ -263,6 +266,7 @@ def optimization_context(
     objective_name: str,
     name: str | None = None,
     metadata: dict[str, Any] | None = None,
+    optimization_id: str | None = None,
 ) -> OptimizationContextManager:
     """
     Create a context manager for handling optimization lifecycle.
@@ -284,6 +288,7 @@ def optimization_context(
         objective_name=objective_name,
         name=name,
         metadata=metadata,
+        optimization_id=optimization_id,
     )
 
 

@@ -1477,8 +1477,9 @@ class Opik:
         objective_name: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        optimization_id: Optional[str] = None,
     ) -> optimization.Optimization:
-        id = id_helpers.generate_id()
+        id = optimization_id or id_helpers.generate_id()
 
         self._rest_client.optimizations.create_optimization(
             id=id,

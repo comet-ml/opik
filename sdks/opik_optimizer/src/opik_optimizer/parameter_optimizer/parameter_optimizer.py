@@ -108,6 +108,7 @@ class ParameterOptimizer(BaseOptimizer):
         timeout: float | None = None,
         local_trials: int | None = None,
         local_search_scale: float | None = None,
+        optimization_id: str | None = None,
     ) -> OptimizationResult:
         """
         Optimize model parameters using Bayesian optimization.
@@ -126,6 +127,8 @@ class ParameterOptimizer(BaseOptimizer):
             timeout: Maximum time in seconds for optimization
             local_trials: Number of trials for local search (overrides local_search_ratio)
             local_search_scale: Scale factor for local search narrowing (0.0-1.0)
+            optimization_id: Optional ID to use when creating the Opik optimization run;
+                when provided it must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Structured result describing the best parameters found
@@ -152,6 +155,7 @@ class ParameterOptimizer(BaseOptimizer):
             dataset_name=dataset.name,
             objective_name=metric_name,
             metadata={"optimizer": self.__class__.__name__},
+            optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
         logger.debug(f"Created optimization with ID: {optimization.id}")

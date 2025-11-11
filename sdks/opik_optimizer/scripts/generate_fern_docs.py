@@ -386,7 +386,6 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 - **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
-- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
 - **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
