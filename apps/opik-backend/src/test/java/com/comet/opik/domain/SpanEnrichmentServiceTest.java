@@ -57,7 +57,7 @@ class SpanEnrichmentServiceTest {
         void enrichSpans__whenSpanIdsAreEmpty__thenReturnEmptyMap() {
             // given
             Set<UUID> spanIds = Set.of();
-            var options = SpanEnrichmentService.SpanEnrichmentOptions.builder().build();
+            var options = SpanEnrichmentOptions.builder().build();
 
             // when
             Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(spanIds, options).block();
@@ -80,7 +80,7 @@ class SpanEnrichmentServiceTest {
 
             when(spanService.getByIds(Set.of(spanId))).thenReturn(Flux.just(span));
 
-            var options = SpanEnrichmentService.SpanEnrichmentOptions.builder().build();
+            var options = SpanEnrichmentOptions.builder().build();
 
             // when
             Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService.enrichSpans(Set.of(spanId), options)
@@ -117,7 +117,7 @@ class SpanEnrichmentServiceTest {
 
             when(spanService.getByIds(Set.of(spanId))).thenReturn(Flux.just(span));
 
-            var options = SpanEnrichmentService.SpanEnrichmentOptions.builder()
+            var options = SpanEnrichmentOptions.builder()
                     .includeTags(true)
                     .includeFeedbackScores(true)
                     .includeComments(true)
@@ -159,7 +159,7 @@ class SpanEnrichmentServiceTest {
 
             when(spanService.getByIds(Set.of(spanId1, spanId2))).thenReturn(Flux.just(span1, span2));
 
-            var options = SpanEnrichmentService.SpanEnrichmentOptions.builder().build();
+            var options = SpanEnrichmentOptions.builder().build();
 
             // when
             Map<UUID, Map<String, JsonNode>> result = spanEnrichmentService
@@ -187,7 +187,7 @@ class SpanEnrichmentServiceTest {
 
             when(spanService.getByIds(Set.of(spanId))).thenReturn(Flux.just(span));
 
-            var options = SpanEnrichmentService.SpanEnrichmentOptions.builder()
+            var options = SpanEnrichmentOptions.builder()
                     .includeTags(true)
                     .build();
 
@@ -223,7 +223,7 @@ class SpanEnrichmentServiceTest {
 
             when(spanService.getByIds(Set.of(spanId))).thenReturn(Flux.just(span));
 
-            var options = SpanEnrichmentService.SpanEnrichmentOptions.builder()
+            var options = SpanEnrichmentOptions.builder()
                     .includeTags(true)
                     .includeFeedbackScores(true)
                     .includeComments(true)

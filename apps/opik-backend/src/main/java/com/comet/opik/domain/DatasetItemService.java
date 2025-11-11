@@ -12,7 +12,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
-import com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -46,7 +45,7 @@ public interface DatasetItemService {
     Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
 
     Mono<Void> createFromSpans(UUID datasetId, Set<UUID> spanIds,
-            SpanEnrichmentService.SpanEnrichmentOptions enrichmentOptions);
+            SpanEnrichmentOptions enrichmentOptions);
 
     Mono<DatasetItem> get(UUID id);
 
@@ -135,7 +134,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Mono<Void> createFromSpans(
             @NonNull UUID datasetId,
             @NonNull Set<UUID> spanIds,
-            @NonNull SpanEnrichmentService.SpanEnrichmentOptions enrichmentOptions) {
+            @NonNull SpanEnrichmentOptions enrichmentOptions) {
 
         log.info("Creating dataset items from '{}' spans for dataset '{}'", spanIds.size(), datasetId);
 

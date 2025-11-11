@@ -20,7 +20,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.SpanEnrichmentService;
+import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -208,7 +208,7 @@ class DatasetsResourceCreateFromSpansTest {
         // Create request with all enrichment options
         var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span1.id(), span2.id()))
-                .enrichmentOptions(SpanEnrichmentService.SpanEnrichmentOptions.builder()
+                .enrichmentOptions(SpanEnrichmentOptions.builder()
                         .includeTags(true)
                         .includeFeedbackScores(true)
                         .includeComments(true)
@@ -322,7 +322,7 @@ class DatasetsResourceCreateFromSpansTest {
         var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span.id()))
                 .enrichmentOptions(
-                        SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
+                        SpanEnrichmentOptions.builder().build())
                 .build();
 
         // Call endpoint
@@ -355,7 +355,7 @@ class DatasetsResourceCreateFromSpansTest {
         var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(UUID.randomUUID()))
                 .enrichmentOptions(
-                        SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
+                        SpanEnrichmentOptions.builder().build())
                 .build();
 
         try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(nonExistentDatasetId,
@@ -381,7 +381,7 @@ class DatasetsResourceCreateFromSpansTest {
         var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of())
                 .enrichmentOptions(
-                        SpanEnrichmentService.SpanEnrichmentOptions.builder().build())
+                        SpanEnrichmentOptions.builder().build())
                 .build();
 
         try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromSpans(datasetId, request, apiKey,
@@ -428,7 +428,7 @@ class DatasetsResourceCreateFromSpansTest {
         // Create request with ALL enrichment options enabled
         var request = CreateDatasetItemsFromSpansRequest.builder()
                 .spanIds(Set.of(span.id()))
-                .enrichmentOptions(SpanEnrichmentService.SpanEnrichmentOptions.builder()
+                .enrichmentOptions(SpanEnrichmentOptions.builder()
                         .includeTags(true)
                         .includeFeedbackScores(true)
                         .includeComments(true)
