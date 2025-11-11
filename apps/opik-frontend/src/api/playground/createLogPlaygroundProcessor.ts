@@ -216,14 +216,13 @@ const createLogPlaygroundProcessor = ({
       } catch (error: unknown) {
         // Handle 504 Gateway Timeout and other timeout errors gracefully
         // These are expected for large payloads and shouldn't block the user experience
-        const axiosError = error as {
-          response?: { status?: number };
-          code?: string;
-        };
-        const isTimeout =
-          axiosError.response?.status === 504 ||
-          axiosError.code === "ECONNABORTED" ||
-          axiosError.code === "ETIMEDOUT";
+        let isTimeout = false;
+        if (isAxiosLikeError(error)) {
+          isTimeout =
+            error.response?.status === 504 ||
+            error.code === "ECONNABORTED" ||
+            error.code === "ETIMEDOUT";
+        }
 
         if (isTimeout) {
           // Silently fail for timeout errors - logging failures shouldn't block the user
