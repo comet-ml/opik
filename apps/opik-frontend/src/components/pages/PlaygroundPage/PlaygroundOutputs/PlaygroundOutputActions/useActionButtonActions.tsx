@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -50,7 +50,7 @@ const useActionButtonActions = ({
 
   const isRunning = useIsRunning();
   const setIsRunning = useSetIsRunning();
-  const [isToStop, setIsToStop] = useState(false);
+  const isToStopRef = useRef(false);
   const createdExperiments = useCreatedExperiments();
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
@@ -73,7 +73,7 @@ const useActionButtonActions = ({
       return;
     }
 
-    setIsToStop(true);
+    isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
 
     abortControllersRef.current.clear();
@@ -127,7 +127,7 @@ const useActionButtonActions = ({
   const { createCombinations, processCombination } =
     usePromptDatasetItemCombination({
       workspaceName,
-      isToStop,
+      isToStopRef,
       datasetItems,
       datasetName,
       selectedRuleIds,
@@ -151,7 +151,7 @@ const useActionButtonActions = ({
         processCombination(combination, logProcessor),
       () => {
         setIsRunning(false);
-        setIsToStop(false);
+        isToStopRef.current = false;
         abortControllersRef.current.clear();
       },
     );
@@ -175,13 +175,9 @@ const useActionButtonActions = ({
 
   useEffect(() => {
     return () => {
-      // Prevent queued items from starting
-      setIsToStop(true);
-
-      // Reset running state
-      setIsRunning(false);
+      stopAll();
     };
-  }, [setIsRunning]);
+  }, [stopAll]);
 
   return {
     isRunning,
