@@ -549,7 +549,7 @@ export const prettifyMessage = (
 
     // attempt to improve JSON string if the message is serialised JSON string
     if (isString(processedMessage)) {
-      const json = safelyParseJSON(processedMessage);
+      const json = safelyParseJSON(processedMessage, true);
 
       if (!isEmpty(json)) {
         processedMessage = JSON.stringify(json, null, 2);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, RefObject } from "react";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
@@ -185,7 +185,7 @@ const wrapMediaWithTags = (content: string): string => {
 
 interface UsePromptDatasetItemCombinationArgs {
   datasetItems: DatasetItem[];
-  isToStop: boolean;
+  isToStopRef: RefObject<boolean>;
   workspaceName: string;
   datasetName: string | null;
   selectedRuleIds: string[] | null;
@@ -195,7 +195,7 @@ interface UsePromptDatasetItemCombinationArgs {
 
 const usePromptDatasetItemCombination = ({
   datasetItems,
-  isToStop,
+  isToStopRef,
   workspaceName,
   datasetName,
   selectedRuleIds,
@@ -205,17 +205,9 @@ const usePromptDatasetItemCombination = ({
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
 
-  // the reason why we need ref here is that the value is taken in a deep callback
-  // the prop is just taken as the value on the moment of creation
-  const isToStopRef = useRef(isToStop);
-
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
   });
-
-  useEffect(() => {
-    isToStopRef.current = isToStop;
-  }, [isToStop]);
 
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
@@ -320,6 +312,7 @@ const usePromptDatasetItemCombination = ({
     },
 
     [
+      isToStopRef,
       hydrateDatasetItemData,
       addAbortController,
       updateOutput,

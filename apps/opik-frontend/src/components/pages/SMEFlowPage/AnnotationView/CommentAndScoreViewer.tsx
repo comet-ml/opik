@@ -37,6 +37,11 @@ const CommentAndScoreViewer: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
 
+  // Check if feedback definitions exist
+  const hasFeedbackDefinitions =
+    annotationQueue?.feedback_definition_names &&
+    annotationQueue.feedback_definition_names.length > 0;
+
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].key,
     (keyboardEvent: KeyboardEvent) => {
@@ -56,9 +61,11 @@ const CommentAndScoreViewer: React.FC = () => {
     { enableOnFormTags: true },
   );
 
+  // Only register feedback scores hotkey if there are feedback definitions
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].key,
     (keyboardEvent: KeyboardEvent) => {
+      if (!hasFeedbackDefinitions) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       const firstInput = feedbackScoresRef.current?.querySelector(
@@ -67,6 +74,7 @@ const CommentAndScoreViewer: React.FC = () => {
       firstInput?.focus();
     },
     { enableOnFormTags: true },
+    [hasFeedbackDefinitions],
   );
 
   return (
@@ -91,42 +99,46 @@ const CommentAndScoreViewer: React.FC = () => {
         value={currentAnnotationState.comment?.text || ""}
         onValueChange={updateComment}
       />
-      <div ref={feedbackScoresRef} className="relative mt-6">
-        <FeedbackScoresEditor
-          key={currentItem?.id}
-          feedbackScores={currentAnnotationState.scores}
-          onUpdateFeedbackScore={updateFeedbackScore}
-          onDeleteFeedbackScore={deleteFeedbackScore}
-          feedbackDefinitionNames={annotationQueue?.feedback_definition_names}
-          className="mt-4 px-0"
-          header={
-            <div className="flex items-center gap-1 pb-2">
-              <span className="comet-body-s-accented truncate">
-                Feedback scores
-              </span>
-              <ExplainerIcon
-                {...EXPLAINERS_MAP[EXPLAINER_ID.feedback_scores_hotkeys]}
-              />
-              <div className="flex-auto" />
-              <TooltipWrapper
-                content={
-                  SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].description
-                }
-                hotkeys={[
-                  SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].display,
-                ]}
-              >
-                <HotkeyDisplay
-                  hotkey={SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].display}
-                  variant="outline"
-                  size="sm"
-                  className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
+      {hasFeedbackDefinitions && (
+        <div ref={feedbackScoresRef} className="relative mt-6">
+          <FeedbackScoresEditor
+            key={currentItem?.id}
+            feedbackScores={currentAnnotationState.scores}
+            onUpdateFeedbackScore={updateFeedbackScore}
+            onDeleteFeedbackScore={deleteFeedbackScore}
+            feedbackDefinitionNames={annotationQueue?.feedback_definition_names}
+            className="mt-4 px-0"
+            header={
+              <div className="flex items-center gap-1 pb-2">
+                <span className="comet-body-s-accented truncate">
+                  Feedback scores
+                </span>
+                <ExplainerIcon
+                  {...EXPLAINERS_MAP[EXPLAINER_ID.feedback_scores_hotkeys]}
                 />
-              </TooltipWrapper>
-            </div>
-          }
-        />
-      </div>
+                <div className="flex-auto" />
+                <TooltipWrapper
+                  content={
+                    SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].description
+                  }
+                  hotkeys={[
+                    SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].display,
+                  ]}
+                >
+                  <HotkeyDisplay
+                    hotkey={
+                      SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].display
+                    }
+                    variant="outline"
+                    size="sm"
+                    className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
+                  />
+                </TooltipWrapper>
+              </div>
+            }
+          />
+        </div>
+      )}
     </div>
   );
 };
