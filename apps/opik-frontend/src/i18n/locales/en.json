@@ -1,0 +1,1156 @@
+{
+  "common": {
+    "welcome": "Welcome",
+    "home": "Home",
+    "search": "Search",
+    "filter": "Filter",
+    "save": "Save",
+    "cancel": "Cancel",
+    "browse": "Browse",
+    "delete": "Delete",
+    "selectValue": "Select value",
+    "noItems": "No items",
+    "noDataToShow": "No data to show",
+    "edit": "Edit",
+    "create": "Create",
+    "update": "Update",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "loading": "Loading",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "download": "Download",
+    "upload": "Upload",
+    "name": "Name",
+    "description": "Description",
+    "date": "Date",
+    "time": "Time",
+    "status": "Status",
+    "actions": "Actions",
+    "settings": "Settings",
+    "documentation": "Documentation",
+    "help": "Help",
+    "feedback": "Feedback",
+    "logout": "Logout",
+    "login": "Login",
+    "language": "Language",
+    "average": "avg.",
+    "total": "Total",
+    "input": "Input",
+    "output": "Output",
+    "recent": "recent",
+    "comments": "Comments",
+    "readMore": "Read more",
+    "columns": "Columns",
+    "selectAll": "Select all",
+    "noSearchResults": "No search results",
+    "noData": "No data",
+    "allSelected": "All selected",
+    "showingFirst": "Showing first {count} items.",
+    "loadMore": "Load more",
+    "noSearchResultsFirst": "No search results for the first {count} items",
+    "filters": "Filters",
+    "groups": "Groups",
+    "clearAll": "Clear all",
+    "where": "Where",
+    "addFilter": "Add filter",
+    "addGroup": "Add group",
+    "maxLevelsReached": "Maximum {count} levels reached",
+    "by": "By",
+    "and": "And",
+    "duplicateGroup": "Duplicate group with same field and key",
+    "compare": "Compare",
+    "compareExperiments": "Compare experiments",
+    "deleteExperiments": "Delete experiments",
+    "deleteExperimentsConfirm": "Deleting experiments will remove all samples in these experiments. Related traces won't be affected. This action cannot be undone. Are you sure you want to continue?",
+    "manageAIProviders": "Manage AI providers",
+    "notSet": "Not set",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "showingRange": "Showing {{from}}-{{to}} of {{total}}"
+  },
+  "traces": {
+    "pageTitle": "Traces",
+    "setGuardrail": "Set a guardrail",
+    "tabs": {
+      "traces": "Traces",
+      "spans": "Spans",
+      "threads": "Threads",
+      "metrics": "Metrics",
+      "onlineEvaluation": "Online evaluation",
+      "annotationQueues": "Annotation queues"
+    },
+    "emptyState": {
+      "title": "Log your first trace",
+      "description": "Logging traces helps you understand the flow of your application and identify specific points in your application that may be causing issues.",
+      "readDocumentation": "Read documentation",
+      "exploreQuickstart": "Explore Quickstart guide"
+    },
+    "actions": {
+      "deleteTraces": "Delete traces",
+      "deleteConfirm": "Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?",
+      "addTags": "Add tags",
+      "addTagsTooltip": "Add tags",
+      "evaluate": "Evaluate",
+      "evaluateTooltip": "Evaluate",
+      "delete": "Delete",
+      "deleteTooltip": "Delete"
+    },
+    "addTagDialog": {
+      "titleTraces": "Add tag to {{count}} traces",
+      "titleSpans": "Add tag to {{count}} spans",
+      "maxEntitiesWarning": "You can only add tags to up to {{max}} entities at a time. Please select fewer entities.",
+      "newTagPlaceholder": "New tag",
+      "addTag": "Add tag",
+      "successTitle": "Success",
+      "successDescriptionTraces": "Tag \"{{tag}}\" added to {{count}} selected traces",
+      "successDescriptionSpans": "Tag \"{{tag}}\" added to {{count}} selected spans"
+    },
+    "addToDropdown": {
+      "addTo": "Add to",
+      "dataset": "Dataset",
+      "annotationQueue": "Annotation queue"
+    }
+  },
+  "threads": {
+    "emptyState": {
+      "title": "Log your first thread",
+      "description": "Threads allow you to group traces together to help you evaluate your LLM model outputs in their specific context."
+    },
+    "actions": {
+      "deleteThreads": "Delete threads",
+      "deleteConfirm": "Deleting threads will also remove all linked traces and their data. This action cannot be undone. Are you sure you want to continue?"
+    }
+  },
+  "navigation": {
+    "home": "Home",
+    "projects": "Projects",
+    "experiments": "Experiments",
+    "optimizationRuns": "Optimization runs",
+    "datasets": "Datasets",
+    "annotationQueues": "Annotation queues",
+    "promptLibrary": "Prompt library",
+    "playground": "Playground",
+    "onlineEvaluation": "Online evaluation",
+    "configuration": "Configuration",
+    "documentation": "Documentation",
+    "quickstartGuide": "Quickstart guide",
+    "provideFeedback": "Provide feedback"
+  },
+  "sections": {
+    "observability": "Observability",
+    "evaluation": "Evaluation",
+    "promptEngineering": "Prompt engineering",
+    "production": "Production"
+  },
+  "home": {
+    "title": "Welcome back to Opik",
+    "welcomeBanner": {
+      "title": "Welcome to Opik 👋",
+      "subtitle": "Opik helps you build safer, more reliable AI systems through advanced tracing, experiment management, evaluation, and real-time monitoring"
+    },
+    "statistics": {
+      "projects": "Projects",
+      "traces": "Traces",
+      "experiments": "Experiments",
+      "prompts": "Prompts"
+    },
+    "sections": {
+      "overallPerformance": "Overall performance",
+      "observability": "Observability",
+      "evaluation": "Evaluation",
+      "optimizationRuns": "Optimization runs",
+      "getStarted": "Get started"
+    },
+    "overallPerformance": {
+      "totalEstimatedSpend": "Total estimated spend",
+      "filterProjects": "Filter projects",
+      "allProjects": "All projects",
+      "search": "Search",
+      "presentingLatest": "Presenting the latest {count} projects, sorted by recent activity.",
+      "noSearchResults": "No search results"
+    },
+    "costOverview": {
+      "title": "Cost overview",
+      "noCostsAvailable": "No costs available",
+      "noDataMessage": "No data found for your current filters. This may happen if there are no LLM calls in the selected time range. Try adjusting your filters to explore available data",
+      "documentationText": "Check our documentation to learn more about the cost.",
+      "comparePeriods": "Compares the total cost between the current and previous periods."
+    },
+    "metricsOverview": {
+      "unlockMetrics": "Unlock your metrics!",
+      "integrateMessage": "Integrate your project with Opik to evaluate your AI.",
+      "metricsWillAppear": "Metrics will appear here once data starts flowing.",
+      "noMetricsAvailable": "No metrics available",
+      "noMetricsProjectsMessage": "Log your first project metrics to see them here",
+      "noMetricsFiltersMessage": "No metrics found for your current filters. This may happen if there are no traces or metrics in the selected range. Try adjusting your filters to explore available data",
+      "compareMessage": "Compares the average value of {metric} between the current and previous periods.",
+      "documentationText": "Check our documentation to learn more about the {metric}."
+    },
+    "observability": {
+      "title": "Observability",
+      "project": "Project",
+      "lastUpdated": "Last updated",
+      "feedbackScores": "Feedback scores",
+      "traceCount": "Trace count",
+      "errors": "Errors",
+      "noProjects": "There are no projects yet",
+      "createNewProject": "Create new project",
+      "allProjects": "All projects"
+    },
+    "evaluation": {
+      "title": "Evaluation",
+      "experiment": "Experiment",
+      "dataset": "Dataset",
+      "itemCount": "Item count",
+      "feedbackScores": "Feedback scores",
+      "created": "Created",
+      "noExperiments": "There are no experiments yet",
+      "createNewExperiment": "Create new experiment",
+      "allExperiments": "All experiments"
+    },
+    "optimizationRuns": {
+      "title": "Optimization runs",
+      "optimization": "Optimization",
+      "dataset": "Dataset",
+      "optimizer": "Optimizer",
+      "bestScore": "Best score",
+      "status": "Status",
+      "trials": "Trials",
+      "created": "Created",
+      "noOptimizations": "There are no optimization runs yet",
+      "createNewOptimization": "Create new optimization",
+      "allOptimizationRuns": "All optimization runs"
+    },
+    "getStarted": {
+      "title": "Get started",
+      "logTrace": "Log a trace",
+      "runExperiment": "Run an experiment",
+      "setGuardrail": "Set a guardrail",
+      "tryPlayground": "Try out playground",
+      "logTraceDialogTitle": "Log a trace",
+      "logTraceDialogSubtitle": "Select a framework and follow the instructions to integrate Comet with your code, or explore our ready-to-run examples on the right"
+    }
+  },
+  "projects": {
+    "title": "Projects",
+    "createNew": "Create new project",
+    "createProject": "Create project",
+    "updateProject": "Update project",
+    "editProject": "Edit project",
+    "explainerDescription": "Organize your work by app, integration, or environment. Projects keep traces, metrics, and evaluations separate, making it easier to manage, monitor, and collaborate.",
+    "deleteProjects": "Delete projects",
+    "deleteProjectsConfirm": "Deleting projects will also remove all the traces and their data. This action can't be undone. Are you sure you want to continue?",
+    "noProjects": "There are no projects yet",
+    "noSearchResults": "No search results",
+    "searchByName": "Search by name",
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "project": "Project",
+      "description": "Description",
+      "duration": "Duration (avg.)",
+      "durationP90": "Duration (p90)",
+      "durationP99": "Duration (p99)",
+      "totalCost": "Total cost",
+      "errors": "Errors",
+      "tags": "Tags",
+      "createdAt": "Created",
+      "createdBy": "Created by",
+      "lastUpdatedAt": "Last updated",
+      "guardrails": "Guardrails",
+      "guardrailsFailed": "{count} failed"
+    },
+    "dialog": {
+      "createTitle": "Create a new project",
+      "editTitle": "Edit project",
+      "nameLabel": "Name",
+      "namePlaceholder": "Project name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Project description",
+      "cancel": "Cancel",
+      "logTracesToProject": "Log traces to your project"
+    },
+    "actions": {
+      "delete": "Delete",
+      "deleteTooltip": "Delete"
+    },
+    "explainer": {
+      "description": "Set up a new project to organize, isolate, and monitor different LLM workflows and apps."
+    }
+  },
+  "experiments": {
+    "title": "Experiments",
+    "createNew": "Create new experiment",
+    "noExperiments": "There are no experiments yet",
+    "noSearchResults": "No search results",
+    "searchByName": "Search by name",
+    "refreshList": "Refresh experiments list",
+    "dialog": {
+      "title": "Create a new experiment",
+      "description": "Select a dataset, assign the relevant evaluators, and follow the instructions to track and compare your training runs",
+      "selectEvaluators": "Select evaluators",
+      "heuristicsMetrics": "Heuristics metrics",
+      "llmJudges": "LLM Judges",
+      "learnCustomMetrics": "Learn about custom metrics",
+      "step1": "1. Select dataset",
+      "step2": "2. Install the SDK",
+      "step3": "3. Create an Experiment",
+      "selectDatasetPlaceholder": "Select a dataset",
+      "evaluators": {
+        "equals": {
+          "label": "Equals",
+          "description": "Checks if the output exactly matches the text."
+        },
+        "regexMatch": {
+          "label": "Regex match",
+          "description": "Verifies pattern conformity using regex."
+        },
+        "contains": {
+          "label": "Contains",
+          "description": "Identifies presence of a substring."
+        },
+        "isJson": {
+          "label": "isJson",
+          "description": "Validates JSON format compliance."
+        },
+        "levenshtein": {
+          "label": "Levenshtein",
+          "description": "Calculates text similarity via edit distance."
+        },
+        "hallucination": {
+          "label": "Hallucination",
+          "description": "Detects generated false information."
+        },
+        "moderation": {
+          "label": "Moderation",
+          "description": "Checks adherence to content standards."
+        },
+        "answerRelevance": {
+          "label": "Answer relevance",
+          "description": "Evaluates how well the answer fits the question."
+        },
+        "contextRecall": {
+          "label": "Context recall",
+          "description": "Measures retrieval of relevant context."
+        },
+        "contextPrecision": {
+          "label": "Context precision",
+          "description": "Checks accuracy of provided context details."
+        }
+      }
+    },
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "dataset": "Dataset",
+      "traceCount": "Trace count",
+      "totalEstimatedCost": "Total estimated cost",
+      "costPerTrace": "Cost per trace (avg.)",
+      "feedbackScores": "Feedback scores (avg.)",
+      "comments": "Comments",
+      "createdAt": "Created at",
+      "createdBy": "Created by",
+      "lastUpdatedAt": "Last updated"
+    },
+    "charts": {
+      "noChartsTitle": "No charts to show",
+      "noChartsMessage": "Please expand a group to see its chart. You can expand up to {count} deepest groups simultaneously."
+    },
+    "sortingMessage": {
+      "lastExperimentCreated": "Last experiment created"
+    },
+    "explainer": {
+      "description": "Experiments help you evaluate and compare different LLM configurations and prompts using your datasets."
+    }
+  },
+  "datasets": {
+    "title": "Datasets",
+    "createNew": "Create new dataset",
+    "dialog": {
+      "editTitle": "Edit dataset",
+      "createTitle": "Create a new dataset",
+      "explainerDescription": "Create different datasets to evaluate your LLM application in different contexts, scenarios, or environments.",
+      "noSamplesFound": "No dataset samples found",
+      "updateDataset": "Update dataset",
+      "createDataset": "Create dataset",
+      "nameLabel": "Name",
+      "namePlaceholder": "Dataset name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Dataset description",
+      "uploadCsvLabel": "Upload a CSV",
+      "uploadCsvDescription": "Your CSV file can contain up to 1,000 rows, for larger datasets use the SDK instead.",
+      "learnMore": "Learn more",
+      "uploadPlaceholder": "Drop a CSV file to upload or",
+      "validCsvFormat": "Valid CSV format",
+      "processingCsv": "Processing the CSV",
+      "processingMessage": "This should take less than a minute. You can safely close this popup while we work.",
+      "close": "Close",
+      "cancel": "Cancel",
+      "confirmTitle": "File can't be uploaded",
+      "confirmDescription": "This file cannot be uploaded because it does not pass validation. If you continue, the dataset will be created without any items. You can add items manually later, or go back and upload a valid file.",
+      "createEmpty": "Create empty dataset",
+      "goBack": "Go back",
+      "errorUploading": "Error uploading dataset items",
+      "errorUploadingDescription": "Failed to add dataset items"
+    },
+    "noDatasets": "There are no datasets yet",
+    "noSearchResults": "No search results",
+    "searchByName": "Search by name",
+    "itemCount": "Item count",
+    "uploadData": "Upload data",
+    "viewItems": "View items",
+    "deleteDatasets": "Delete datasets",
+    "deleteConfirm": "Deleting these datasets will also remove all their items. Any experiments linked to them will be moved to a 'Deleted datasets' group. This action cannot be undone. Are you sure you want to continue?",
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "itemCount": "Item count",
+      "experimentCount": "Experiment count",
+      "mostRecentExperiment": "Most recent experiment",
+      "tags": "Tags",
+      "lastUpdated": "Last updated",
+      "createdAt": "Created",
+      "createdBy": "Created by",
+      "lastUpdatedAt": "Last updated"
+    },
+    "explainer": {
+      "description": "Datasets are collections of input/output examples used to evaluate and optimize your LLM applications."
+    }
+  },
+  "prompts": {
+    "title": "Prompts",
+    "library": "Prompt Library",
+    "createNew": "Create new prompt",
+    "noPrompts": "No prompts yet",
+    "editPrompt": "Edit prompt",
+    "deletePrompt": "Delete prompt",
+    "version": "Version",
+    "commit": "Commit",
+    "variables": "Variables",
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "versions": "Versions",
+      "createdAt": "Created at",
+      "createdBy": "Created by",
+      "lastUpdatedAt": "Last updated"
+    },
+    "searchPrompts": "Search prompts...",
+    "deleteConfirm": "Are you sure you want to delete this prompt?",
+    "addPrompt": "Add prompt",
+    "viewPrompt": "View prompt"
+  },
+  "playground": {
+    "title": "Playground",
+    "newChat": "New chat",
+    "selectModel": "Select model",
+    "temperature": "Temperature",
+    "maxTokens": "Max tokens",
+    "systemPrompt": "System prompt",
+    "userMessage": "User message",
+    "send": "Send",
+    "stop": "Stop",
+    "clear": "Clear",
+    "saveAsPrompt": "Save as prompt"
+  },
+  "traces": {
+    "title": "Traces",
+    "viewTrace": "View trace",
+    "traceId": "Trace ID",
+    "spanId": "Span ID",
+    "duration": "Duration",
+    "startTime": "Start time",
+    "endTime": "End time",
+    "status": "Status",
+    "input": "Input",
+    "output": "Output",
+    "metadata": "Metadata",
+    "tags": "Tags",
+    "feedbackScores": "Feedback scores",
+    "noTraces": "No traces yet",
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "type": "Type",
+      "startTime": "Start time",
+      "endTime": "End time",
+      "duration": "Duration",
+      "tokens": "Tokens",
+      "estimatedCost": "Est. cost",
+      "input": "Input",
+      "output": "Output",
+      "tags": "Tags",
+      "feedbackScores": "Feedback scores"
+    },
+    "searchTraces": "Search traces...",
+    "spans": "Spans",
+    "viewDetails": "View details"
+  },
+  "configuration": {
+    "title": "Configuration",
+    "general": "General",
+    "apiKeys": "API Keys",
+    "providerKeys": "Provider Keys",
+    "alerts": "Alerts",
+    "integrations": "Integrations",
+    "teamSettings": "Team Settings",
+    "workspace": "Workspace",
+    "members": "Members",
+    "billing": "Billing"
+  },
+  "alerts": {
+    "title": "Alerts",
+    "createNew": "Create new alert",
+    "noAlerts": "No alerts yet",
+    "editAlert": "Edit alert",
+    "deleteAlert": "Delete alert",
+    "alertName": "Alert name",
+    "condition": "Condition",
+    "notification": "Notification",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "optimization": {
+    "title": "Optimization runs",
+    "bestScore": "Best score",
+    "trials": "Trials",
+    "compareTrials": "Compare trials",
+    "viewDetails": "View details",
+    "createNew": "Create new optimization",
+    "noOptimizations": "There are no optimizations yet\nOptimizations help improve your LLM application's performance, accuracy, and overall user experience",
+    "noSearchResults": "No search results",
+    "searchByName": "Search by name",
+    "refreshList": "Refresh optimizations list",
+    "deleteOptimizations": "Delete optimizations",
+    "deleteConfirm": "Deleting these optimization runs will remove all their trials and associated data. Related traces won't be affected. This action cannot be undone. Are you sure you want to continue?",
+    "dialog": {
+      "title": "Start an optimization run",
+      "description": "Select a dataset, choose the optimizer you would like to use, and we will improve your prompt for you",
+      "optimizationAlgorithms": "Optimization algorithms",
+      "step1": "1. Select dataset",
+      "step2": "2. Install the SDK",
+      "step3": "3. Create an Optimization run",
+      "selectDatasetPlaceholder": "Select a dataset",
+      "algorithms": {
+        "metaPromptOptimizer": {
+          "label": "Meta optimizer",
+          "description": "Optimizes prompts using meta learning."
+        },
+        "fewShotOptimizer": {
+          "label": "Few-shot Bayesian optimizer",
+          "description": "Optimizes prompts using few-shot learning and Bayesian optimization."
+        },
+        "evolutionaryOptimizer": {
+          "label": "Evolutionary optimizer",
+          "description": "Optimizes prompts using evolution."
+        },
+        "gepaOptimizer": {
+          "label": "GEPA optimizer",
+          "description": "Applies Genetic-Pareto search with reflection guidance."
+        }
+      }
+    },
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "dataset": "Dataset",
+      "created": "Created",
+      "createdBy": "Created by",
+      "trialCount": "Trial count",
+      "optimizer": "Optimizer",
+      "bestScore": "Best score",
+      "status": "Status"
+    },
+    "explainer": {
+      "description": "Optimization runs help you systematically improve your LLM prompts and configurations using automated algorithms."
+    }
+  },
+  "annotationQueues": {
+    "title": "Annotation Queues",
+    "createNew": "Create new queue",
+    "noQueues": "There are no annotation queues yet",
+    "noSearchResults": "No search results",
+    "searchByName": "Search by name",
+    "deleteQueues": "Delete annotation queues",
+    "deleteConfirm": "Deleting these annotation queues will permanently remove all associated annotations and reviews. This action cannot be undone. Are you sure you want to continue?",
+    "itemsToAnnotate": "Items to annotate",
+    "completed": "Completed",
+    "pending": "Pending",
+    "scope": {
+      "trace": "Trace",
+      "traces": "Traces",
+      "thread": "Thread",
+      "threads": "Threads",
+      "selectScope": "Select scope"
+    },
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "project": "Project",
+      "instructions": "Instructions",
+      "scope": "Scope",
+      "feedbackScores": "Feedback scores (avg.)",
+      "itemCount": "Item count",
+      "reviewedBy": "Reviewed by",
+      "progress": "Progress",
+      "createdAt": "Created at",
+      "createdBy": "Created by",
+      "lastUpdated": "Last updated"
+    },
+    "dialog": {
+      "createTitle": "Create a new annotation queue",
+      "editTitle": "Edit annotation queue",
+      "createButton": "Create annotation queue",
+      "updateButton": "Update annotation queue",
+      "name": "Name",
+      "namePlaceholder": "Annotation queue name",
+      "project": "Project",
+      "scope": "Scope",
+      "instructions": "Instructions",
+      "instructionsPlaceholder": "Instructions for annotators",
+      "availableFeedbackScores": "Available feedback scores",
+      "annotationGuidelines": "Annotation guidelines",
+      "annotationGuidelinesDesc": "Set how items are scored and labeled, and provide instructions so annotators give consistent feedback.",
+      "shareQueue": "Share annotation queue",
+      "shareQueueDesc": "You must invite annotators to your workspace for them to review the items. After creating the queue, you'll get a direct link to share with them.",
+      "selectProject": "Select a project",
+      "selectProjects": "Select projects",
+      "allProjects": "All projects",
+      "selectFeedbackDefinition": "Select a feedback definition",
+      "selectFeedbackDefinitions": "Select feedback definitions",
+      "addNewFeedbackDefinition": "Add new feedback definition",
+      "validation": {
+        "nameRequired": "Name is required",
+        "nameMaxLength": "Name cannot exceed 255 characters",
+        "projectRequired": "Project is required",
+        "feedbackRequired": "At least one feedback definition is required"
+      }
+    },
+    "searchQueues": "Search queues...",
+    "deleteQueue": "Delete queue",
+    "emptyState": {
+      "title": "Organize your annotations",
+      "description": "Annotation queues let you organize traces for review and labeling, making it easy to collect feedback and improve LLM outputs.",
+      "readDocumentation": "Read documentation",
+      "createFirstQueue": "Create your first queue"
+    }
+  },
+  "onlineEvaluation": {
+    "title": "Online evaluation",
+    "createNewRule": "Create new rule",
+    "searchById": "Search by ID",
+    "noRules": "There are no rules yet",
+    "noSearchResults": "No search results",
+    "deleteRules": "Delete evaluation rules",
+    "deleteRulesConfirm": "Deleting online evaluation rules will stop scoring for all new traces. Existing traces that have already been scores won't be affected. This action can't be undone. Are you sure you want to continue?\n\nTip: To pause scoring without deleting, disable the rules.",
+    "emptyState": {
+      "title": "Automate your scores",
+      "description": "An automated rule is a predefined logic that scores LLM outputs in real-time based on set criteria, ensuring efficient and consistent performance assessment.",
+      "readDocumentation": "Read documentation",
+      "createFirstRule": "Create your first rule"
+    },
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "project": "Project",
+      "lastUpdated": "Last updated",
+      "createdBy": "Created by",
+      "created": "Created",
+      "samplingRate": "Sampling rate",
+      "scope": "Scope",
+      "status": "Status"
+    },
+    "dialog": {
+      "createTitle": "Create a new rule",
+      "editTitle": "Edit rule",
+      "createButton": "Create rule",
+      "updateButton": "Update rule",
+      "name": "Name",
+      "namePlaceholder": "Rule name",
+      "project": "Project",
+      "scope": "Scope",
+      "scopeTooltip": "Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.",
+      "selectScope": "Select scope",
+      "trace": "Trace",
+      "thread": "Thread",
+      "enableRule": "Enable rule",
+      "enableRuleDesc": "Enable or disable this evaluation rule",
+      "type": "Type",
+      "llmAsJudge": "LLM-as-judge",
+      "codeMetric": "Code metric",
+      "codeMetricDisabled": "This feature is not available for this environment",
+      "codeMetricCannotUpdate": "Code metric cannot be updated. This feature is not available for this environment",
+      "model": "Model",
+      "selectModel": "Select a model",
+      "template": "Template",
+      "customTemplate": "Custom",
+      "messages": "Messages",
+      "addMessage": "Add message",
+      "variables": "Variables",
+      "variablesDesc": "Define custom variables to reference in your prompt using mustache syntax",
+      "scores": "Scores",
+      "scoresDesc": "Define what scores the model can output and map them to numerical values",
+      "filtering": "Filtering",
+      "filteringDesc": "Apply filters to control when this rule runs",
+      "samplingRate": "Sampling rate",
+      "samplingRateDesc": "Set the percentage of traces this rule will evaluate",
+      "addFilter": "Add filter",
+      "scopeChangeWarning": "You're about to lose your changes",
+      "scopeChangeDesc": "If you change the evaluation scope, your current rule settings — including prompt, model, and variable mappings — will be reset.\nAre you sure you want to continue?",
+      "resetAndContinue": "Reset and continue",
+      "llmAsJudgeDesc": "LLM-as-a-Judge uses a language model to score outputs based on custom natural language criteria like relevance, clarity, or factual accuracy.",
+      "codeMetricDesc": "Code metric evaluates outputs programmatically using custom Python functions that implement specific scoring logic and return numerical results.",
+      "noConfiguredProviders": "No configured providers",
+      "configureProvider": "Configure a provider in settings to enable model selection",
+      "variableMapping": "Variable mapping",
+      "variableMappingDesc": "Detected variables in your prompt (e.g., {{variable1}}) will appear below. For each one, select a field from a recent trace to map it — including image fields like input.image_url or output.image_base64. These mappings auto-fill the variables during rule execution.",
+      "noVariablesDetected": "No variables detected",
+      "noVariablesDesc": "Add variables to your prompt using mustache syntax (e.g., {{variable_name}})",
+      "selectField": "Select a field",
+      "searchFields": "Search fields...",
+      "goToSettings": "Go to settings",
+      "templates": {
+        "custom": "Custom LLM-as-judge",
+        "customDesc": "Use our template editor to write your own LLM as a Judge metric",
+        "hallucination": "Hallucination",
+        "hallucinationDesc": "Check if the output contains any hallucinations",
+        "moderation": "Moderation",
+        "moderationDesc": "Check if the output contains any harmful content",
+        "context_recall": "Context recall",
+        "context_recallDesc": "Measures if the expected output can be attributed to the provided context",
+        "context_precision": "Context precision",
+        "context_precisionDesc": "Evaluates whether the groundtruth answer is present in the provided context",
+        "answer_relevance": "Answer relevance",
+        "answer_relevanceDesc": "Measures how well the output addresses the given question"
+      },
+      "imageHelper": "You can add a base64 string, image URL, or template variable {{image}}",
+      "selectFieldPlaceholder": "Select a key from recent trace",
+      "templateParsingError": "Template parsing error. The variables cannot be extracted.",
+      "addScore": "Add score",
+      "scoreName": "Score name",
+      "scoreType": "Score type",
+      "scoreDescription": "Score description",
+      "scoreNamePlaceholder": "e.g. Correctness",
+      "scoreDescPlaceholder": "e.g. Whether the output is correct",
+      "scoreTypeBoolean": "Boolean (true/false)",
+      "scoreTypeNumber": "Number (0.0 to 1.0)",
+      "scoreTypeCategory": "Category",
+      "categoryOptions": "Category options",
+      "categoryName": "Category name",
+      "categoryValue": "Category value",
+      "addCategory": "Add category",
+      "categoryNamePlaceholder": "e.g. Good",
+      "categoryValuePlaceholder": "e.g. 1.0",
+      "filteringSampling": "Filtering & Sampling",
+      "filteringSamplingDesc": "Use sampling rate to control how frequently this rule is applied. You can also add filters to select specific {scope} based on their properties. If nothing is defined, the rule will evaluate all {scope}.",
+      "filteringSamplingDescTrace": "Apply filters and sampling to select which traces will be evaluated by this rule",
+      "filteringSamplingDescThread": "Use sampling rate to control how frequently this rule is applied to threads",
+      "filters": "Filters",
+      "addFilterButton": "Add filter",
+      "filterError": "Filter {index}",
+      "samplingRateLabel": "Sampling rate",
+      "samplingRateTooltip": "Percentage of traces to evaluate",
+      "traces": "traces",
+      "threads": "threads",
+      "selectScore": "Select score",
+      "selectStatus": "Select status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "editScore": "Edit a score",
+      "doneEditing": "Done editing",
+      "deleteScore": "Delete a score",
+      "filterColumns": {
+        "id": "ID",
+        "name": "Name",
+        "input": "Input",
+        "output": "Output",
+        "duration": "Duration",
+        "metadata": "Metadata",
+        "tags": "Tags",
+        "threadId": "Thread ID",
+        "feedbackScores": "Feedback scores",
+        "customFilter": "Custom filter",
+        "status": "Status",
+        "createdAt": "Created at",
+        "lastUpdatedAt": "Last updated at",
+        "startTime": "Start time",
+        "endTime": "End time"
+      },
+      "defaultScores": {
+        "correctness": "Correctness",
+        "correctnessDesc": "Whether the assistant's output effectively addresses the user's input",
+        "relevance": "Relevance",
+        "relevanceDesc": "Whether the LLM response is relevant to the conversation context"
+      }
+    }
+  },
+  "configuration": {
+    "title": "Configuration",
+    "tabs": {
+      "feedbackDefinitions": "Feedback definitions",
+      "aiProviders": "AI Providers",
+      "alerts": "Alerts",
+      "workspacePreferences": "Workspace preferences"
+    },
+    "feedbackDefinitions": {
+      "searchPlaceholder": "Search by name",
+      "createNew": "Create new feedback definition",
+      "noDefinitions": "There are no feedback definitions yet",
+      "deleteFeedbackDefinitions": "Delete feedback definitions",
+      "deleteConfirm": "Are you sure you want to delete these feedback definitions?",
+      "explainer": "Create custom fields to manually rate LLM outputs. Use them to collect structured feedback and track quality over time",
+      "columns": {
+        "id": "ID",
+        "feedbackScore": "Feedback score",
+        "description": "Description",
+        "type": "Type",
+        "values": "Values",
+        "created": "Created",
+        "createdBy": "Created by"
+      },
+      "dialog": {
+        "titleCreate": "Create a new feedback definition",
+        "titleEdit": "Edit feedback definition",
+        "submitCreate": "Create feedback definition",
+        "submitUpdate": "Update feedback definition",
+        "name": "Name",
+        "namePlaceholder": "Feedback definition name",
+        "description": "Description",
+        "descriptionPlaceholder": "Feedback definition description",
+        "type": "Type",
+        "typeCategorical": "Categorical",
+        "typeCategoricalDesc": "Use labels (e.g. \"Good\", \"Bad\") to classify outputs qualitatively.",
+        "typeNumerical": "Numerical",
+        "typeNumericalDesc": "Use a numerical range (e.g. 1–5) to rate outputs quantitatively.",
+        "categories": "Categories",
+        "categoryName": "Name",
+        "categoryValue": "0.0",
+        "addCategory": "Add category",
+        "min": "Min",
+        "minPlaceholder": "Min",
+        "max": "Max",
+        "maxPlaceholder": "Max"
+      }
+    },
+    "aiProviders": {
+      "searchPlaceholder": "Search by name",
+      "addProvider": "Add provider",
+      "noProviders": "There are no AI providers yet",
+      "deleteProviders": "Delete AI providers",
+      "deleteConfirm": "Are you sure you want to delete these AI providers?",
+      "columns": {
+        "provider": "Provider",
+        "name": "Name",
+        "created": "Created"
+      },
+      "rowActions": {
+        "edit": "Edit",
+        "delete": "Delete",
+        "deleteTitle": "Delete configuration",
+        "deleteDescription": "This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can't be undone. Are you sure you want to proceed?",
+        "deleteConfirm": "Delete configuration"
+      },
+      "dialog": {
+        "titleAdd": "Add provider configuration",
+        "titleEdit": "Edit provider configuration",
+        "provider": "Provider",
+        "addConfiguration": "Add configuration",
+        "updateConfiguration": "Update configuration",
+        "done": "Done",
+        "deleteConfiguration": "Delete configuration",
+        "apiKey": "API key",
+        "apiKeyPlaceholder": "API key",
+        "location": "Location",
+        "locationPlaceholder": "Location",
+        "providerName": "Provider name",
+        "providerNamePlaceholder": "ollama",
+        "url": "URL",
+        "urlPlaceholder": "https://vllm.example.com/v1",
+        "modelsList": "Models list",
+        "modelsListPlaceholder": "Models list",
+        "providerNameDescription": "A unique identifier for this provider instance (e.g., \"ollama\", \"vLLM\", \"LM-Studio\").",
+        "apiKeyDescription": "Custom providers may not require an API key, depending on your server setup. Learn more in the",
+        "documentation": "documentation",
+        "modelsListDescription": "Comma separated list of available models. Example:",
+        "modelsListExample": "\"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B\""
+      },
+      "explainers": {
+        "whyDoINeedAnAIProvider": "Connect AI providers to test prompts, preview model responses, and score traces using online evaluation rules in the Playground.",
+        "editingExistingKeyTitle": "Editing an existing key",
+        "editingExistingKeyDescription": "A key is already set for this provider. Since AI provider configurations are workspace-wide, adding a new key will overwrite the existing one for all users."
+      },
+      "providerSelect": {
+        "selectProvider": "Select a provider",
+        "customProvider": "Custom provider",
+        "configured": "Configured",
+        "addCustomProvider": "Add custom provider"
+      }
+    },
+    "workspacePreferences": {
+      "columns": {
+        "parameter": "Parameter",
+        "value": "Value"
+      },
+      "threadTimeout": "Thread timeout",
+      "threadTimeoutDesc": "Set the maximum time for a thread to remain active before it's automatically closed",
+      "selectTimeout": "Select timeout duration",
+      "truncation": "Truncation",
+      "truncationDesc": "Enable or disable automatic truncation of long text content",
+      "edit": "Edit"
+    },
+    "alerts": {
+      "searchPlaceholder": "Search by name",
+      "createNew": "Create new alert",
+      "noAlerts": "There are no alerts yet",
+      "deleteAlerts": "Delete alerts",
+      "deleteConfirm": "Are you sure you want to delete these alerts?",
+      "edit": "Edit alert",
+      "test": "Test webhook",
+      "columns": {
+        "name": "Name",
+        "id": "ID",
+        "alertType": "Destination",
+        "endpoint": "Endpoint",
+        "events": "Events",
+        "createdBy": "Created by",
+        "status": "Status",
+        "created": "Created",
+        "updated": "Updated",
+        "enabled": "Enabled",
+        "eventTriggers": "Event triggers",
+        "destination": "Destination"
+      },
+      "selectType": "Select type"
+    },
+    "common": {
+      "searchByName": "Search by name"
+    }
+  },
+  "playground": {
+    "title": "Playground",
+    "resetPlayground": "Reset playground",
+    "datasetEmptyState": {
+      "title": "No datasets available",
+      "description": "Create a dataset with examples to evaluate your prompt on."
+    },
+    "addPrompt": "Add prompt",
+    "resetConfirmTitle": "Reset playground",
+    "resetConfirmDescription": "Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?",
+    "resetConfirmButton": "Reset playground",
+    "duplicate": "Duplicate",
+    "deletePrompt": "Delete prompt",
+    "stopPrompt": "Stop a running prompt",
+    "stopPrompts": "Stop running prompts",
+    "stopAll": "Stop all",
+    "runPrompt": "Run your prompt",
+    "runPrompts": "Run your prompts",
+    "run": "Run",
+    "runAll": "Run all",
+    "selectDataset": "Select a dataset",
+    "createNewDataset": "Create a new dataset",
+    "exploreExperiment": "Explore experiment",
+    "compareExperiments": "Compare experiments",
+    "experimentStoredSingle": "Your run was stored in this experiment. Explore your results to find insights.",
+    "experimentStoredMultiple": "Your run was stored in experiments. Explore comparison results to get insights.",
+    "referenceDatasetVariables": "Reference dataset variables using mustache syntax: {variables}",
+    "tooltips": {
+      "imageCompatibility": "Some prompts contain images but the selected model doesn't support image input. Please change the model or remove images from the messages",
+      "datasetRemoved": "Your dataset has been removed. Select another one",
+      "datasetEmpty": "Selected dataset is empty",
+      "selectModel": "Please select an LLM model for your prompt",
+      "selectModels": "Please select an LLM model for your prompts",
+      "emptyMessages": "Some messages are empty. Please add some text to proceed",
+      "actionDisabled": "Action is disabled"
+    }
+  },
+  "promptPage": {
+    "tabs": {
+      "prompt": "Prompt",
+      "experiments": "Experiments",
+      "commits": "Commits"
+    }
+  },
+  "compareExperimentsPage": {
+    "tabs": {
+      "experimentItems": "Experiment items",
+      "configuration": "Configuration",
+      "feedbackScores": "Feedback scores"
+    }
+  },
+  "compareTrialsPage": {
+    "tabs": {
+      "prompt": "Prompt",
+      "trialItems": "Trial items",
+      "configuration": "Configuration"
+    }
+  },
+  "compareOptimizationsPage": {
+    "title": "Optimization progress",
+    "reloadData": "Reload data",
+    "searchByName": "Search by name",
+    "noExperiments": "No experiments to compare",
+    "noSearchResults": "No search results"
+  },
+  "prompts": {
+    "title": "Prompt library",
+    "createNew": "Create new prompt",
+    "noPrompts": "There are no prompts yet",
+    "noSearchResults": "No search results",
+    "searchByName": "Search by name",
+    "deletePrompts": "Delete prompts",
+    "deletePromptsConfirm": "Deleting these prompts will also remove all associated commits. This action cannot be undone. Are you sure you want to continue?",
+    "deletePrompt": "Delete prompt",
+    "deletePromptConfirm": "Deleting a prompt will also remove all associated commits. This action can't be undone. Are you sure you want to continue?",
+    "actionsMenu": "Actions menu",
+    "explainers": {
+      "whatsThePromptLibrary": "Store and version prompts to maintain consistency and simplify experimentation across projects",
+      "howDoIWriteMyPrompt": "Write prompts as your LLM would receive them, including any dynamic placeholders or formatting.",
+      "whatFormatShouldThePromptBe": "Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}.",
+      "whatFormatShouldTheMetadataBe": "Use a valid JSON object with key-value pairs. Example: {\"key\": \"value\"}"
+    },
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "versions": "Versions",
+      "tags": "Tags",
+      "lastUpdated": "Last updated",
+      "created": "Created",
+      "createdBy": "Created by"
+    },
+    "dialog": {
+      "createTitle": "Create a new prompt",
+      "editTitle": "Edit prompt",
+      "createButton": "Create prompt",
+      "updateButton": "Update prompt",
+      "name": "Name",
+      "namePlaceholder": "Prompt name",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Prompt",
+      "description": "Description",
+      "descriptionPlaceholder": "Prompt description",
+      "images": "Images",
+      "metadata": "Metadata",
+      "metadataInvalid": "Metadata field is not valid"
+    }
+  },
+  "onboarding": {
+    "quickstart": {
+      "title": "Quickstart",
+      "installSDK": "Install SDK",
+      "configureAPI": "Configure API",
+      "firstTrace": "Create your first trace",
+      "explore": "Explore the platform"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "explorer": "Integration Explorer",
+      "quickInstall": "Quick Install",
+      "configure": "Configure",
+      "test": "Test Connection"
+    }
+  },
+  "feedback": {
+    "title": "Provide Feedback",
+    "message": "Your feedback helps us improve Opik",
+    "submit": "Submit Feedback",
+    "thankYou": "Thank you for your feedback!"
+  },
+  "errors": {
+    "general": "An error occurred. Please try again.",
+    "notFound": "The requested resource was not found.",
+    "unauthorized": "You are not authorized to access this resource.",
+    "networkError": "Network error. Please check your connection.",
+    "validationError": "Please check your input and try again."
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalidEmail": "Please enter a valid email address",
+    "invalidURL": "Please enter a valid URL",
+    "minLength": "Minimum length is {{min}} characters",
+    "maxLength": "Maximum length is {{max}} characters"
+  },
+  "table": {
+    "noData": "No data available",
+    "noResults": "No results found",
+    "rowsPerPage": "Rows per page",
+    "of": "of",
+    "page": "Page",
+    "sortBy": "Sort by",
+    "filterBy": "Filter by",
+    "selectAll": "Select all",
+    "clearSelection": "Clear selection",
+    "selectedItems": "{{count}} items selected"
+  },
+  "sorting": {
+    "direction": "Sort direction",
+    "ascending": "Ascending",
+    "descending": "Descending"
+  },
+  "filters": {
+    "apply": "Apply filters",
+    "clear": "Clear filters",
+    "addFilter": "Add filter",
+    "removeFilter": "Remove filter",
+    "key": "key",
+    "value": "value",
+    "selectValue": "Select value",
+    "column": "Column",
+    "operator": "Operator",
+    "operators": {
+      "equals": "=",
+      "contains": "contains",
+      "notContains": "doesn't contain",
+      "startsWith": "starts with",
+      "endsWith": "ends with",
+      "greaterThan": ">",
+      "greaterThanOrEqual": ">=",
+      "lessThan": "<",
+      "lessThanOrEqual": "<=",
+      "isEmpty": "is empty",
+      "isNotEmpty": "is not empty"
+    }
+  },
+  "charts": {
+    "noData": "No data to display",
+    "loading": "Loading chart data..."
+  },
+  "dateTime": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "last7Days": "Last 7 days",
+    "last30Days": "Last 30 days",
+    "lastMonth": "Last month",
+    "custom": "Custom range",
+    "selectDate": "Select date",
+    "selectTime": "Select time",
+    "startDate": "Start date",
+    "endDate": "End date"
+  },
+  "models": {
+    "selectModel": "Select a model",
+    "customModel": "Custom model",
+    "provider": "Provider",
+    "modelName": "Model name",
+    "contextWindow": "Context window",
+    "pricing": "Pricing"
+  },
+  "llm": {
+    "temperature": "Temperature",
+    "maxTokens": "Max tokens",
+    "topP": "Top P",
+    "frequencyPenalty": "Frequency penalty",
+    "presencePenalty": "Presence penalty",
+    "stopSequences": "Stop sequences",
+    "totalTokens": "Total tokens",
+    "inputTokens": "Input tokens",
+    "outputTokens": "Output tokens"
+  }
+}
+

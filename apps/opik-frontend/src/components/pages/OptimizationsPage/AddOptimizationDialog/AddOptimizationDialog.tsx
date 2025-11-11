@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { keepPreviousData } from "@tanstack/react-query";
 import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
@@ -19,30 +20,31 @@ export enum OPTIMIZATION_ALGORITHMS {
   gepaOptimizer = "GepaOptimizer",
 }
 
-const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] =
-  [
+const useOptimizationAlgorithmsOptions = () => {
+  const { t } = useTranslation();
+  return useMemo<DropdownOption<OPTIMIZATION_ALGORITHMS>[]>(() => [
     {
       value: OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
-      label: "Meta optimizer",
-      description: "Optimizes prompts using meta learning.",
+      label: t("optimization.dialog.algorithms.metaPromptOptimizer.label"),
+      description: t("optimization.dialog.algorithms.metaPromptOptimizer.description"),
     },
     {
       value: OPTIMIZATION_ALGORITHMS.fewShotOptimizer,
-      label: "Few-shot Bayesian optimizer",
-      description:
-        "Optimizes prompts using few-shot learning and Bayesian optimization.",
+      label: t("optimization.dialog.algorithms.fewShotOptimizer.label"),
+      description: t("optimization.dialog.algorithms.fewShotOptimizer.description"),
     },
     {
       value: OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer,
-      label: "Evolutionary optimizer",
-      description: "Optimizes prompts using evolution.",
+      label: t("optimization.dialog.algorithms.evolutionaryOptimizer.label"),
+      description: t("optimization.dialog.algorithms.evolutionaryOptimizer.description"),
     },
     {
       value: OPTIMIZATION_ALGORITHMS.gepaOptimizer,
-      label: "GEPA optimizer",
-      description: "Applies Genetic-Pareto search with reflection guidance.",
+      label: t("optimization.dialog.algorithms.gepaOptimizer.label"),
+      description: t("optimization.dialog.algorithms.gepaOptimizer.description"),
     },
-  ];
+  ], [t]);
+};
 
 // Hardcoded code templates for each optimization algorithm
 const OPTIMIZATION_CODE_TEMPLATES: Record<OPTIMIZATION_ALGORITHMS, string> = {
@@ -264,6 +266,8 @@ type AddOptimizationDialogProps = {
 const AddOptimizationDialog: React.FunctionComponent<
   AddOptimizationDialogProps
 > = ({ open, setOpen }) => {
+  const { t } = useTranslation();
+  const OPTIMIZATION_ALGORITHMS_OPTIONS = useOptimizationAlgorithmsOptions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -345,25 +349,24 @@ const AddOptimizationDialog: React.FunctionComponent<
     <SideDialog open={open} setOpen={openChangeHandler}>
       <div className="pb-20">
         <div className="pb-8">
-          <SheetTitle>Start an optimization run</SheetTitle>
+          <SheetTitle>{t("optimization.dialog.title")}</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select a dataset, choose the optimizer you would like to use, and we
-            will improve your prompt for you
+            {t("optimization.dialog.description")}
           </div>
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col gap-2">
-            <div className="comet-title-s">Optimization algorithms</div>
+            <div className="comet-title-s">{t("optimization.dialog.optimizationAlgorithms")}</div>
             {generateList(OPTIMIZATION_ALGORITHMS_OPTIONS)}
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
-              1. Select dataset
+              {t("optimization.dialog.step1")}
             </div>
             <LoadableSelectBox
               options={options}
               value={datasetName}
-              placeholder="Select a dataset"
+              placeholder={t("optimization.dialog.selectDatasetPlaceholder")}
               onChange={setDatasetName}
               onLoadMore={
                 total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
@@ -374,11 +377,11 @@ const AddOptimizationDialog: React.FunctionComponent<
               optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
             />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              2. Install the SDK
+              {t("optimization.dialog.step2")}
             </div>
             <CodeHighlighter data={section1} />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              3. Create an Optimization run
+              {t("optimization.dialog.step3")}
             </div>
             <ConfiguredCodeHighlighter code={section3} />
           </div>

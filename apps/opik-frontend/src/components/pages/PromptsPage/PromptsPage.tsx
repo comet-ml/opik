@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -56,90 +57,96 @@ const COLUMNS_ORDER_KEY = "prompts-columns-order";
 const COLUMNS_SORT_KEY = "prompts-columns-sort";
 const PAGINATION_SIZE_KEY = "prompts-pagination-size";
 
-export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "version_count",
-    label: "Versions",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-    cell: ListCell as never,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-];
+const usePromptsColumns = () => {
+  const { t, i18n } = useTranslation();
 
-export const FILTER_COLUMNS: ColumnData<Prompt>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "version_count",
-    label: "Versions",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-];
+  const DEFAULT_COLUMNS: ColumnData<Prompt>[] = useMemo(() => [
+    {
+      id: "id",
+      label: t("prompts.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
+    },
+    {
+      id: "description",
+      label: t("prompts.columns.description"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "version_count",
+      label: t("prompts.columns.versions"),
+      type: COLUMN_TYPE.number,
+    },
+    {
+      id: "tags",
+      label: t("prompts.columns.tags"),
+      type: COLUMN_TYPE.list,
+      cell: ListCell as never,
+    },
+    {
+      id: "last_updated_at",
+      label: t("prompts.columns.lastUpdated"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.last_updated_at),
+    },
+    {
+      id: "created_at",
+      label: t("prompts.columns.created"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "created_by",
+      label: t("prompts.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+  ], [t, i18n.language]);
+
+  const FILTER_COLUMNS: ColumnData<Prompt>[] = useMemo(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("prompts.columns.name"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "id",
+      label: t("prompts.columns.id"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "description",
+      label: t("prompts.columns.description"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "version_count",
+      label: t("prompts.columns.versions"),
+      type: COLUMN_TYPE.number,
+    },
+    {
+      id: "tags",
+      label: t("prompts.columns.tags"),
+      type: COLUMN_TYPE.list,
+    },
+    {
+      id: "last_updated_at",
+      label: t("prompts.columns.lastUpdated"),
+      type: COLUMN_TYPE.time,
+    },
+    {
+      id: "created_at",
+      label: t("prompts.columns.created"),
+      type: COLUMN_TYPE.time,
+    },
+    {
+      id: "created_by",
+      label: t("prompts.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+  ], [t, i18n.language]);
+
+  return { DEFAULT_COLUMNS, FILTER_COLUMNS };
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -153,6 +160,8 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const PromptsPage: React.FunctionComponent = () => {
+  const { t } = useTranslation();
+  const { DEFAULT_COLUMNS, FILTER_COLUMNS } = usePromptsColumns();
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -205,7 +214,7 @@ const PromptsPage: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no prompts yet" : "No search results";
+  const noDataText = noData ? t("prompts.noPrompts") : t("prompts.noSearchResults");
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -236,7 +245,7 @@ const PromptsPage: React.FunctionComponent = () => {
       generateSelectColumDef<Prompt>(),
       mapColumnDataFields<Prompt, Prompt>({
         id: COLUMN_NAME_ID,
-        label: "Name",
+        label: t("prompts.columns.name"),
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -255,7 +264,7 @@ const PromptsPage: React.FunctionComponent = () => {
         cell: PromptRowActionsCell,
       }),
     ];
-  }, [sortableBy, columnsOrder, selectedColumns]);
+  }, [t, sortableBy, columnsOrder, selectedColumns, DEFAULT_COLUMNS]);
 
   const sortConfig = useMemo(
     () => ({
@@ -300,18 +309,19 @@ const PromptsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Prompt library</h1>
+        <h1 className="comet-title-l truncate break-words">{t("prompts.title")}</h1>
       </div>
       <ExplainerDescription
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
+        description={t("prompts.explainers.whatsThePromptLibrary")}
       />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search by name"
+            placeholder={t("prompts.searchByName")}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
@@ -332,7 +342,7 @@ const PromptsPage: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
           />
           <Button variant="default" size="sm" onClick={handleNewPromptClick}>
-            Create new prompt
+            {t("prompts.createNew")}
           </Button>
         </div>
       </div>
@@ -352,7 +362,7 @@ const PromptsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewPromptClick}>
-                Create new prompt
+                {t("prompts.createNew")}
               </Button>
             )}
           </DataTableNoData>

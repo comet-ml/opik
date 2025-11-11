@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
@@ -53,96 +54,104 @@ const COLUMNS_ORDER_KEY = "alerts-columns-order";
 const COLUMNS_SORT_KEY = "alerts-columns-sort";
 const PAGINATION_SIZE_KEY = "alerts-pagination-size";
 
-export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "alert_type",
-    label: "Destination",
-    type: COLUMN_TYPE.string,
-    cell: AlertTypeCell as never,
-  },
-  {
-    id: "webhook_url",
-    label: "Endpoint",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.webhook?.url || "-",
-  },
-  {
-    id: "triggers",
-    label: "Events",
-    type: COLUMN_TYPE.string,
-    cell: AlertsEventsCell as never,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.created_by || "-",
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-    cell: StatusCell as never,
-    accessorFn: (row) => row.enabled,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => (row.created_at ? formatDate(row.created_at) : "-"),
-  },
-  {
-    id: "last_updated_at",
-    label: "Updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) =>
-      row.last_updated_at ? formatDate(row.last_updated_at) : "-",
-  },
-];
+const useAlertsColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<Alert>[]>(() => [
+    {
+      id: "id",
+      label: t("configuration.alerts.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
+    },
+    {
+      id: "alert_type",
+      label: t("configuration.alerts.columns.alertType"),
+      type: COLUMN_TYPE.string,
+      cell: AlertTypeCell as never,
+    },
+    {
+      id: "webhook_url",
+      label: t("configuration.alerts.columns.endpoint"),
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) => row.webhook?.url || "-",
+    },
+    {
+      id: "triggers",
+      label: t("configuration.alerts.columns.events"),
+      type: COLUMN_TYPE.string,
+      cell: AlertsEventsCell as never,
+    },
+    {
+      id: "created_by",
+      label: t("configuration.alerts.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) => row.created_by || "-",
+    },
+    {
+      id: "status",
+      label: t("configuration.alerts.columns.status"),
+      type: COLUMN_TYPE.string,
+      cell: StatusCell as never,
+      accessorFn: (row) => row.enabled,
+    },
+    {
+      id: "created_at",
+      label: t("configuration.alerts.columns.created"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => (row.created_at ? formatDate(row.created_at) : "-"),
+    },
+    {
+      id: "last_updated_at",
+      label: t("configuration.alerts.columns.updated"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) =>
+        row.last_updated_at ? formatDate(row.last_updated_at) : "-",
+    },
+  ], [t, i18n.language]);
+};
 
-export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "alert_type",
-    label: "Destination",
-    type: COLUMN_TYPE.category,
-  },
-  {
-    id: "webhook_url",
-    label: "Endpoint",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "last_updated_at",
-    label: "Updated",
-    type: COLUMN_TYPE.time,
-  },
-];
+const useAlertsFiltersColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<Alert>[]>(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("configuration.alerts.columns.name"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "id",
+      label: t("configuration.alerts.columns.id"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "alert_type",
+      label: t("configuration.alerts.columns.alertType"),
+      type: COLUMN_TYPE.category,
+    },
+    {
+      id: "webhook_url",
+      label: t("configuration.alerts.columns.endpoint"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "created_by",
+      label: t("configuration.alerts.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "created_at",
+      label: t("configuration.alerts.columns.created"),
+      type: COLUMN_TYPE.time,
+    },
+    {
+      id: "last_updated_at",
+      label: t("configuration.alerts.columns.updated"),
+      type: COLUMN_TYPE.time,
+    },
+  ], [t, i18n.language]);
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -158,6 +167,9 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const AlertsTab: React.FunctionComponent = () => {
+  const { t } = useTranslation();
+  const DEFAULT_COLUMNS = useAlertsColumns();
+  const FILTERS_COLUMNS = useAlertsFiltersColumns();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -196,12 +208,12 @@ const AlertsTab: React.FunctionComponent = () => {
               value: type,
               label: ALERT_TYPE_LABELS[type],
             })),
-            placeholder: "Select type",
+            placeholder: t("configuration.alerts.selectType"),
           },
         },
       } as Record<string, { keyComponentProps: Record<string, unknown> }>,
     }),
-    [],
+    [t],
   );
 
   const { data, isPending } = useAlertsList(
@@ -226,7 +238,7 @@ const AlertsTab: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no alerts yet" : "No search results";
+  const noDataText = noData ? t("configuration.alerts.noAlerts") : t("common.noSearchResults");
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -257,7 +269,7 @@ const AlertsTab: React.FunctionComponent = () => {
       generateSelectColumDef<Alert>(),
       mapColumnDataFields<Alert, Alert>({
         id: "name",
-        label: "Name",
+        label: t("configuration.alerts.columns.name"),
         type: COLUMN_TYPE.string,
         sortable: isColumnSortable("name", sortableBy),
       }),
@@ -270,7 +282,7 @@ const AlertsTab: React.FunctionComponent = () => {
         cell: AlertsRowActionsCell,
       }),
     ];
-  }, [columnsOrder, selectedColumns, sortableBy]);
+  }, [columnsOrder, selectedColumns, sortableBy, DEFAULT_COLUMNS, t]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -309,7 +321,7 @@ const AlertsTab: React.FunctionComponent = () => {
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search by name"
+            placeholder={t("configuration.alerts.searchPlaceholder")}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
@@ -332,7 +344,7 @@ const AlertsTab: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewAlertClick}>
-            Create new alert
+            {t("configuration.alerts.createNew")}
           </Button>
         </div>
       </div>
@@ -351,7 +363,7 @@ const AlertsTab: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewAlertClick}>
-                Create new alert
+                {t("configuration.alerts.createNew")}
               </Button>
             )}
           </DataTableNoData>

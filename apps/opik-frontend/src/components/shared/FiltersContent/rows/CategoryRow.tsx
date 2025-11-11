@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Filter, FilterRowConfig } from "@/types/filters";
 import OperatorSelector from "@/components/shared/FiltersContent/OperatorSelector";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { COLUMN_TYPE } from "@/types/shared";
-import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
+import { getOperatorsMap } from "@/lib/filters-i18n";
 
 type EqualsRowProps = {
   filter: Filter;
@@ -16,7 +17,11 @@ export const CategoryRow: React.FunctionComponent<EqualsRowProps> = ({
   onChange,
   config,
 }) => {
+  const { t, i18n } = useTranslation();
   const value = `${filter.value}`;
+  
+  const operatorsMap = useMemo(() => getOperatorsMap(t), [t, i18n.language]);
+
   return (
     <>
       <td className="p-1">
@@ -24,8 +29,8 @@ export const CategoryRow: React.FunctionComponent<EqualsRowProps> = ({
           operator={filter.operator}
           operators={
             config?.operators ??
-            OPERATORS_MAP[filter.type as COLUMN_TYPE] ??
-            DEFAULT_OPERATORS
+            operatorsMap[filter.type as COLUMN_TYPE] ??
+            []
           }
           disabled
         />
@@ -34,7 +39,7 @@ export const CategoryRow: React.FunctionComponent<EqualsRowProps> = ({
         <SelectBox
           value={value}
           options={[]}
-          placeholder="Select value"
+          placeholder={t("filters.selectValue")}
           onChange={(value) => onChange({ ...filter, value })}
           {...(config?.keyComponentProps ?? {})}
         />

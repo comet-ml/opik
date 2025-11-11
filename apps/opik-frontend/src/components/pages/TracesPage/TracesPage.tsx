@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { StringParam, useQueryParam } from "use-query-params";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
@@ -19,6 +20,7 @@ import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const TracesPage = () => {
+  const { t } = useTranslation();
   const projectId = useProjectIdFromURL();
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
@@ -63,7 +65,7 @@ const TracesPage = () => {
           {isGuardrailsEnabled && (
             <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
               <Construction className="mr-1.5 size-3.5" />
-              Set a guardrail
+              {t("traces.setGuardrail")}
             </Button>
           )}
         </PageBodyStickyContainer>
@@ -84,22 +86,22 @@ const TracesPage = () => {
           <PageBodyStickyContainer direction="horizontal" limitWidth>
             <TabsList variant="underline">
               <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
-                Traces
+                {t("traces.tabs.traces")}
               </TabsTrigger>
               <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.spans}>
-                Spans
+                {t("traces.tabs.spans")}
               </TabsTrigger>
               <TabsTrigger variant="underline" value="threads">
-                Threads
+                {t("traces.tabs.threads")}
               </TabsTrigger>
               <TabsTrigger variant="underline" value="metrics">
-                Metrics
+                {t("traces.tabs.metrics")}
               </TabsTrigger>
               <TabsTrigger variant="underline" value="rules">
-                Online evaluation
+                {t("traces.tabs.onlineEvaluation")}
               </TabsTrigger>
               <TabsTrigger variant="underline" value="annotation-queues">
-                Annotation queues
+                {t("traces.tabs.annotationQueues")}
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>

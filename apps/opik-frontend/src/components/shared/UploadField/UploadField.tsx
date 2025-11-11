@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ const UploadField: React.FC<UploadFieldProps> = ({
   accept = ".csv",
   disabled = false,
 }) => {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | undefined>(undefined);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -96,7 +98,7 @@ const UploadField: React.FC<UploadFieldProps> = ({
             disabled={disabled}
             onClick={() => !disabled && fileInputRef.current?.click()}
           >
-            Browse
+            {t("common.browse")}
           </Button>
         </div>
       </div>

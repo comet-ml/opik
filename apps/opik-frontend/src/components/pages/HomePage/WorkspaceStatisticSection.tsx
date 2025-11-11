@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import useProjectsList from "@/api/projects/useProjectsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
@@ -13,6 +14,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const WorkspaceStatisticSection = () => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -67,7 +69,7 @@ const WorkspaceStatisticSection = () => {
             <LayoutGrid className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">
-            Projects
+            {t("home.statistics.projects")}
             <ExplainerIcon
               {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
             />
@@ -95,7 +97,7 @@ const WorkspaceStatisticSection = () => {
             <FlaskConical className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">
-            Experiments
+            {t("home.statistics.experiments")}
             <ExplainerIcon
               {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
             />
@@ -123,7 +125,7 @@ const WorkspaceStatisticSection = () => {
             <FileTerminal className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">
-            Prompts
+            {t("home.statistics.prompts")}
             <ExplainerIcon
               {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
             />

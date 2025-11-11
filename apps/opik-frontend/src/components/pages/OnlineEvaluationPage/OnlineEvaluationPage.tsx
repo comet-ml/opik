@@ -5,6 +5,7 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import { useTranslation } from "react-i18next";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
@@ -57,66 +58,70 @@ import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRul
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
-const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "project_name",
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    accessorFn: (row) => row.project_name,
-    customMeta: {
-      nameKey: "project_name",
-      idKey: "project_id",
-      resource: RESOURCE_TYPE.project,
+const useOnlineEvaluationColumns = () => {
+  const { t, i18n } = useTranslation();
+
+  return useMemo<ColumnData<EvaluatorsRule>[]>(() => [
+    {
+      id: COLUMN_ID_ID,
+      label: t("onlineEvaluation.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
     },
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "sampling_rate",
-    label: "Sampling rate",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) => `${round(row.sampling_rate * 100, 1)}%`,
-  },
-  {
-    id: "type",
-    label: "Scope",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
-  },
-  {
-    id: "enabled",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-    cell: StatusCell as never,
-  },
-];
+    {
+      id: COLUMN_NAME_ID,
+      label: t("onlineEvaluation.columns.name"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "project_name",
+      label: t("onlineEvaluation.columns.project"),
+      type: COLUMN_TYPE.string,
+      cell: ResourceCell as never,
+      accessorFn: (row) => row.project_name,
+      customMeta: {
+        nameKey: "project_name",
+        idKey: "project_id",
+        resource: RESOURCE_TYPE.project,
+      },
+    },
+    {
+      id: "last_updated_at",
+      label: t("onlineEvaluation.columns.lastUpdated"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.last_updated_at),
+    },
+    {
+      id: "created_by",
+      label: t("onlineEvaluation.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "created_at",
+      label: t("onlineEvaluation.columns.created"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "sampling_rate",
+      label: t("onlineEvaluation.columns.samplingRate"),
+      type: COLUMN_TYPE.number,
+      accessorFn: (row) => `${round(row.sampling_rate * 100, 1)}%`,
+    },
+    {
+      id: "type",
+      label: t("onlineEvaluation.columns.scope"),
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+    },
+    {
+      id: "enabled",
+      label: t("onlineEvaluation.columns.status"),
+      type: COLUMN_TYPE.string,
+      cell: StatusCell as never,
+    },
+  ], [t, i18n.language]);
+};
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -140,6 +145,8 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
+  const { t } = useTranslation();
+  const DEFAULT_COLUMNS = useOnlineEvaluationColumns();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
@@ -194,7 +201,7 @@ export const OnlineEvaluationPage: React.FC = () => {
     [data?.sortable_by],
   );
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? `There are no rules yet` : "No search results";
+  const noDataText = noData ? t("onlineEvaluation.noRules") : t("onlineEvaluation.noSearchResults");
 
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
@@ -227,7 +234,7 @@ export const OnlineEvaluationPage: React.FC = () => {
       generateSelectColumDef<EvaluatorsRule>(),
       mapColumnDataFields<EvaluatorsRule, EvaluatorsRule>({
         id: COLUMN_NAME_ID,
-        label: "Name",
+        label: t("onlineEvaluation.columns.name"),
         type: COLUMN_TYPE.string,
         sortable: sortableBy.includes("name"),
       }),
@@ -252,7 +259,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         cell: RuleRowActionsCell,
       }),
     ];
-  }, [columnsOrder, selectedColumns, sortableBy]);
+  }, [t, columnsOrder, selectedColumns, sortableBy, DEFAULT_COLUMNS]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -311,7 +318,7 @@ export const OnlineEvaluationPage: React.FC = () => {
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
-          Online evaluation
+          {t("onlineEvaluation.title")}
         </h1>
       </div>
       <ExplainerDescription
@@ -323,7 +330,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by ID"
+            placeholder={t("onlineEvaluation.searchById")}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
@@ -344,7 +351,7 @@ export const OnlineEvaluationPage: React.FC = () => {
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewRuleClick}>
-            Create new rule
+            {t("onlineEvaluation.createNewRule")}
           </Button>
         </div>
       </div>

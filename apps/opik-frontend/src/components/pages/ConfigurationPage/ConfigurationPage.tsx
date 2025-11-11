@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Outlet, useMatchRoute } from "@tanstack/react-router";
 import AIProvidersTab from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,6 +20,7 @@ enum CONFIGURATION_TABS {
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
 const ConfigurationPage = () => {
+  const { t } = useTranslation();
   const [tab, setTab] = useQueryParam("tab", StringParam);
   const matchRoute = useMatchRoute();
 
@@ -43,7 +45,7 @@ const ConfigurationPage = () => {
 
   return (
     <div className="pt-6">
-      <h1 className="comet-title-l">Configuration</h1>
+      <h1 className="comet-title-l">{t("configuration.title")}</h1>
 
       <div className="mt-6">
         <Tabs
@@ -56,27 +58,27 @@ const ConfigurationPage = () => {
               variant="underline"
               value={CONFIGURATION_TABS.FEEDBACK_DEFINITIONS}
             >
-              Feedback definitions
+              {t("configuration.tabs.feedbackDefinitions")}
             </TabsTrigger>
             <TabsTrigger
               variant="underline"
               value={CONFIGURATION_TABS.AI_PROVIDER}
             >
-              AI Providers
+              {t("configuration.tabs.aiProviders")}
             </TabsTrigger>
             {isAlertsEnabled && (
               <TabsTrigger
                 variant="underline"
                 value={CONFIGURATION_TABS.ALERTS}
               >
-                Alerts
+                {t("configuration.tabs.alerts")}
               </TabsTrigger>
             )}
             <TabsTrigger
               variant="underline"
               value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}
             >
-              Workspace preferences
+              {t("configuration.tabs.workspacePreferences")}
             </TabsTrigger>
           </TabsList>
 

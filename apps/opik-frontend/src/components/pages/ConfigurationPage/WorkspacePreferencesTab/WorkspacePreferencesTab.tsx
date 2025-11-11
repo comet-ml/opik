@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryParam } from "use-query-params";
 
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -8,6 +9,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
 import useWorkspaceConfigMutation from "@/api/workspaces/useWorkspaceConfigMutation";
 import { formatIso8601Duration } from "@/lib/date";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 
 import {
   WorkspacePreference,
@@ -15,7 +17,6 @@ import {
   WorkspacePreferenceParam,
 } from "./types";
 import {
-  WORKSPACE_PREFERENCES_DEFAULT_COLUMNS,
   WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING,
   WORKSPACE_PREFERENCES_QUERY_PARAMS,
   WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT,
@@ -27,8 +28,28 @@ import { EditThreadTimeoutFormValues } from "./EditThreadTimeoutForm";
 import EditTruncationToggleDialog from "./EditTruncationToggleDialog";
 import useAppStore from "@/store/AppStore";
 
+// Hook to get translated columns
+const useWorkspacePreferencesColumns = (): ColumnData<WorkspacePreference>[] => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("configuration.workspacePreferences.columns.parameter"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "value",
+      label: t("configuration.workspacePreferences.columns.value"),
+      type: COLUMN_TYPE.string,
+    },
+  ], [t, i18n.language]);
+};
+
 const WorkspacePreferencesTab: React.FC = () => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const WORKSPACE_PREFERENCES_DEFAULT_COLUMNS = useWorkspacePreferencesColumns();
   const { data: workspaceConfig, isPending } = useWorkspaceConfig({
     workspaceName: workspaceName,
   });
@@ -53,17 +74,17 @@ const WorkspacePreferencesTab: React.FC = () => {
   const data = useMemo(
     () => [
       {
-        name: "Thread timeout",
-        value: formatIso8601Duration(threadTimeoutValue) ?? "Not set",
+        name: t("configuration.workspacePreferences.threadTimeout"),
+        value: formatIso8601Duration(threadTimeoutValue) ?? t("common.notSet"),
         type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
       },
       {
-        name: "Data truncation in tables",
-        value: truncationToggleValue ? "Enabled" : "Disabled",
+        name: t("configuration.workspacePreferences.truncation"),
+        value: truncationToggleValue ? t("common.enabled") : t("common.disabled"),
         type: WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
       },
     ],
-    [threadTimeoutValue, truncationToggleValue],
+    [threadTimeoutValue, truncationToggleValue, t],
   );
 
   const getPreferencesDialogConfig = useCallback(
@@ -145,7 +166,7 @@ const WorkspacePreferencesTab: React.FC = () => {
         },
       }),
     ];
-  }, [handleEdit]);
+  }, [handleEdit, WORKSPACE_PREFERENCES_DEFAULT_COLUMNS]);
 
   return (
     <>

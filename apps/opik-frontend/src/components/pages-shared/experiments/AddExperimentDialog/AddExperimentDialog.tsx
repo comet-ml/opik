@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { keepPreviousData } from "@tanstack/react-query";
 import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
@@ -85,76 +86,82 @@ interface MetricOption extends DropdownOption<EVALUATOR_MODEL> {
   docHash?: string;
 }
 
-const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
-  {
-    value: EVALUATOR_MODEL.equals,
-    label: "Equals",
-    description: "Checks if the output exactly matches the text.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#equals",
-  },
-  {
-    value: EVALUATOR_MODEL.regex_match,
-    label: "Regex match",
-    description: "Verifies pattern conformity using regex.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#regexmatch",
-  },
-  {
-    value: EVALUATOR_MODEL.contains,
-    label: "Contains",
-    description: "Identifies presence of a substring.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#contains",
-  },
-  {
-    value: EVALUATOR_MODEL.isJSON,
-    label: "isJson",
-    description: "Validates JSON format compliance.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#isjson",
-  },
-  {
-    value: EVALUATOR_MODEL.levenshtein,
-    label: "Levenshtein",
-    description: "Calculates text similarity via edit distance.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#levenshteinratio",
-  },
-];
+const useHeuristicsModelsOptions = () => {
+  const { t } = useTranslation();
+  return useMemo<MetricOption[]>(() => [
+    {
+      value: EVALUATOR_MODEL.equals,
+      label: t("experiments.dialog.evaluators.equals.label"),
+      description: t("experiments.dialog.evaluators.equals.description"),
+      docLink: "/evaluation/metrics/heuristic_metrics",
+      docHash: "#equals",
+    },
+    {
+      value: EVALUATOR_MODEL.regex_match,
+      label: t("experiments.dialog.evaluators.regexMatch.label"),
+      description: t("experiments.dialog.evaluators.regexMatch.description"),
+      docLink: "/evaluation/metrics/heuristic_metrics",
+      docHash: "#regexmatch",
+    },
+    {
+      value: EVALUATOR_MODEL.contains,
+      label: t("experiments.dialog.evaluators.contains.label"),
+      description: t("experiments.dialog.evaluators.contains.description"),
+      docLink: "/evaluation/metrics/heuristic_metrics",
+      docHash: "#contains",
+    },
+    {
+      value: EVALUATOR_MODEL.isJSON,
+      label: t("experiments.dialog.evaluators.isJson.label"),
+      description: t("experiments.dialog.evaluators.isJson.description"),
+      docLink: "/evaluation/metrics/heuristic_metrics",
+      docHash: "#isjson",
+    },
+    {
+      value: EVALUATOR_MODEL.levenshtein,
+      label: t("experiments.dialog.evaluators.levenshtein.label"),
+      description: t("experiments.dialog.evaluators.levenshtein.description"),
+      docLink: "/evaluation/metrics/heuristic_metrics",
+      docHash: "#levenshteinratio",
+    },
+  ], [t]);
+};
 
-const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
-  {
-    value: EVALUATOR_MODEL.hallucination,
-    label: "Hallucination",
-    description: "Detects generated false information.",
-    docLink: "/evaluation/metrics/hallucination",
-  },
-  {
-    value: EVALUATOR_MODEL.moderation,
-    label: "Moderation",
-    description: "Checks adherence to content standards.",
-    docLink: "/evaluation/metrics/moderation",
-  },
-  {
-    value: EVALUATOR_MODEL.answer_relevance,
-    label: "Answer relevance",
-    description: "Evaluates how well the answer fits the question.",
-    docLink: "/evaluation/metrics/answer_relevance",
-  },
-  {
-    value: EVALUATOR_MODEL.context_recall,
-    label: "Context recall",
-    description: "Measures retrieval of relevant context.",
-    docLink: "/evaluation/metrics/context_recall",
-  },
-  {
-    value: EVALUATOR_MODEL.context_precision,
-    label: "Context precision",
-    description: "Checks accuracy of provided context details.",
-    docLink: "/evaluation/metrics/context_precision",
-  },
-];
+const useLLMJudgesModelsOptions = () => {
+  const { t } = useTranslation();
+  return useMemo<MetricOption[]>(() => [
+    {
+      value: EVALUATOR_MODEL.hallucination,
+      label: t("experiments.dialog.evaluators.hallucination.label"),
+      description: t("experiments.dialog.evaluators.hallucination.description"),
+      docLink: "/evaluation/metrics/hallucination",
+    },
+    {
+      value: EVALUATOR_MODEL.moderation,
+      label: t("experiments.dialog.evaluators.moderation.label"),
+      description: t("experiments.dialog.evaluators.moderation.description"),
+      docLink: "/evaluation/metrics/moderation",
+    },
+    {
+      value: EVALUATOR_MODEL.answer_relevance,
+      label: t("experiments.dialog.evaluators.answerRelevance.label"),
+      description: t("experiments.dialog.evaluators.answerRelevance.description"),
+      docLink: "/evaluation/metrics/answer_relevance",
+    },
+    {
+      value: EVALUATOR_MODEL.context_recall,
+      label: t("experiments.dialog.evaluators.contextRecall.label"),
+      description: t("experiments.dialog.evaluators.contextRecall.description"),
+      docLink: "/evaluation/metrics/context_recall",
+    },
+    {
+      value: EVALUATOR_MODEL.context_precision,
+      label: t("experiments.dialog.evaluators.contextPrecision.label"),
+      description: t("experiments.dialog.evaluators.contextPrecision.description"),
+      docLink: "/evaluation/metrics/context_precision",
+    },
+  ], [t]);
+};
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 
@@ -167,12 +174,16 @@ type AddExperimentDialogProps = {
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
 > = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
+  const { t, i18n } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
+  const HEURISTICS_MODELS_OPTIONS = useHeuristicsModelsOptions();
+  const LLM_JUDGES_MODELS_OPTIONS = useLLMJudgesModelsOptions();
+  
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState(initialDatasetName);
   const [models, setModels] = useState<EVALUATOR_MODEL[]>([
-    LLM_JUDGES_MODELS_OPTIONS[0].value,
+    EVALUATOR_MODEL.hallucination,
   ]); // Set the first LLM judge model as checked
   const section1 = "pip install opik";
 
@@ -334,17 +345,16 @@ eval_results = evaluate(
     <SideDialog open={open} setOpen={openChangeHandler}>
       <div className="pb-20">
         <div className="pb-8">
-          <SheetTitle>Create a new experiment</SheetTitle>
+          <SheetTitle>{t("experiments.dialog.title")}</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select a dataset, assign the relevant evaluators, and follow the
-            instructions to track and compare your training runs
+            {t("experiments.dialog.description")}
           </div>
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col gap-2">
-            <div className="comet-title-s">Select evaluators</div>
-            {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
-            {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
+            <div className="comet-title-s">{t("experiments.dialog.selectEvaluators")}</div>
+            {generateList(t("experiments.dialog.heuristicsMetrics"), HEURISTICS_MODELS_OPTIONS)}
+            {generateList(t("experiments.dialog.llmJudges"), LLM_JUDGES_MODELS_OPTIONS)}
             <div className="mt-4">
               <Button variant="secondary" asChild>
                 <a
@@ -353,7 +363,7 @@ eval_results = evaluate(
                   rel="noreferrer"
                   className="flex items-center"
                 >
-                  Learn about custom metrics
+                  {t("experiments.dialog.learnCustomMetrics")}
                   <SquareArrowOutUpRight className="ml-1 size-4" />
                 </a>
               </Button>
@@ -361,12 +371,12 @@ eval_results = evaluate(
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
-              1. Select dataset
+              {t("experiments.dialog.step1")}
             </div>
             <LoadableSelectBox
               options={options}
               value={datasetName}
-              placeholder="Select a dataset"
+              placeholder={t("experiments.dialog.selectDatasetPlaceholder")}
               onChange={setDatasetName}
               onLoadMore={
                 total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
@@ -377,11 +387,11 @@ eval_results = evaluate(
               optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
             />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              2. Install the SDK
+              {t("experiments.dialog.step2")}
             </div>
             <CodeHighlighter data={section1} />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              3. Create an Experiment
+              {t("experiments.dialog.step3")}
             </div>
             <ConfiguredCodeHighlighter code={section3} />
           </div>

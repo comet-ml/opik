@@ -8,6 +8,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { useTranslation } from "react-i18next";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -56,98 +57,106 @@ const COLUMNS_ORDER_KEY = "datasets-columns-order";
 const COLUMNS_SORT_KEY = "datasets-columns-sort";
 const PAGINATION_SIZE_KEY = "datasets-pagination-size";
 
-export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "dataset_items_count",
-    label: "Item count",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-    cell: ListCell as never,
-  },
-  {
-    id: "most_recent_experiment_at",
-    label: "Most recent experiment",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_experiment_at),
-  },
-  {
-    id: "most_recent_optimization_at",
-    label: "Most recent optimization",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_optimization_at),
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-];
+const useDatasetsColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<Dataset>[]>(() => [
+    {
+      id: "id",
+      label: t("datasets.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
+    },
+    {
+      id: "description",
+      label: t("datasets.columns.description"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "dataset_items_count",
+      label: t("datasets.columns.itemCount"),
+      type: COLUMN_TYPE.number,
+    },
+    {
+      id: "tags",
+      label: t("datasets.columns.tags"),
+      type: COLUMN_TYPE.list,
+      cell: ListCell as never,
+    },
+    {
+      id: "most_recent_experiment_at",
+      label: t("datasets.columns.mostRecentExperiment"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.most_recent_experiment_at),
+    },
+    {
+      id: "most_recent_optimization_at",
+      label: t("optimization.title") + " (" + t("common.recent") + ")",
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.most_recent_optimization_at),
+    },
+    {
+      id: "last_updated_at",
+      label: t("datasets.columns.lastUpdatedAt"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.last_updated_at),
+    },
+    {
+      id: "created_at",
+      label: t("datasets.columns.createdAt"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "created_by",
+      label: t("datasets.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+  ], [t, i18n.language]);
+};
 
-export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-];
+const useFiltersColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<Dataset>[]>(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("datasets.columns.name"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "id",
+      label: t("datasets.columns.id"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "description",
+      label: t("datasets.columns.description"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "tags",
+      label: t("datasets.columns.tags"),
+      type: COLUMN_TYPE.list,
+    },
+    {
+      id: "last_updated_at",
+      label: t("datasets.columns.lastUpdated"),
+      type: COLUMN_TYPE.time,
+    },
+    {
+      id: "created_at",
+      label: t("datasets.columns.createdAt"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "created_by",
+      label: t("datasets.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+  ], [t, i18n.language]);
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -162,6 +171,9 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DatasetsPage: React.FunctionComponent = () => {
+  const { t } = useTranslation();
+  const DEFAULT_COLUMNS = useDatasetsColumns();
+  const FILTERS_COLUMNS = useFiltersColumns();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -213,7 +225,7 @@ const DatasetsPage: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no datasets yet" : "No search results";
+  const noDataText = noData ? t("datasets.noDatasets") : t("datasets.noSearchResults");
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -244,7 +256,7 @@ const DatasetsPage: React.FunctionComponent = () => {
       generateSelectColumDef<Dataset>(),
       mapColumnDataFields<Dataset, Dataset>({
         id: COLUMN_NAME_ID,
-        label: "Name",
+        label: t("datasets.columns.name"),
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -263,7 +275,7 @@ const DatasetsPage: React.FunctionComponent = () => {
         cell: DatasetRowActionsCell,
       }),
     ];
-  }, [sortableBy, columnsOrder, selectedColumns]);
+  }, [t, DEFAULT_COLUMNS, sortableBy, columnsOrder, selectedColumns]);
 
   const sortConfig = useMemo(
     () => ({
@@ -310,18 +322,19 @@ const DatasetsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Datasets</h1>
+        <h1 className="comet-title-l truncate break-words">{t("datasets.title")}</h1>
       </div>
       <ExplainerDescription
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_a_dataset]}
+        description={t("datasets.explainer.description")}
       />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search by name"
+            placeholder={t("datasets.searchByName")}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
@@ -342,7 +355,7 @@ const DatasetsPage: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewDatasetClick}>
-            Create new dataset
+            {t("datasets.createNew")}
           </Button>
         </div>
       </div>
@@ -362,7 +375,7 @@ const DatasetsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewDatasetClick}>
-                Create new dataset
+                {t("datasets.createNew")}
               </Button>
             )}
           </DataTableNoData>

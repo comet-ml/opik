@@ -5,6 +5,7 @@ import { ColumnPinningState } from "@tanstack/react-table";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import get from "lodash/get";
+import { useTranslation } from "react-i18next";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -24,11 +25,14 @@ import { formatNumericData } from "@/lib/utils";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
-export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
-  [
-    {
-      id: COLUMN_NAME_ID,
-      label: "Experiment",
+const useEvaluationColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => convertColumnDataToColumn<Experiment, Experiment>(
+    [
+      {
+        id: COLUMN_NAME_ID,
+        label: t("home.evaluation.experiment"),
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       sortable: true,
@@ -41,9 +45,9 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
         }),
       },
     },
-    {
-      id: "dataset",
-      label: "Dataset",
+      {
+        id: "dataset",
+        label: t("home.evaluation.dataset"),
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       customMeta: {
@@ -52,14 +56,14 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
         resource: RESOURCE_TYPE.dataset,
       },
     },
-    {
-      id: "trace_count",
-      label: "Item count",
+      {
+        id: "trace_count",
+        label: t("home.evaluation.itemCount"),
       type: COLUMN_TYPE.number,
     },
-    {
-      id: "feedback_scores",
-      label: "Feedback scores",
+      {
+        id: "feedback_scores",
+        label: t("home.evaluation.feedbackScores"),
       type: COLUMN_TYPE.numberDictionary,
       accessorFn: (row) =>
         get(row, "feedback_scores", []).map((score) => ({
@@ -72,16 +76,17 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
         isAverageScores: true,
       },
     },
-    {
-      id: "created_at",
-      label: "Created",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
-      sortable: true,
-    },
-  ],
-  {},
-);
+      {
+        id: "created_at",
+        label: t("home.evaluation.created"),
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+        sortable: true,
+      },
+    ],
+    {},
+  ), [t, i18n.language]);
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -89,6 +94,8 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const EvaluationSection: React.FunctionComponent = () => {
+  const { t } = useTranslation();
+  const COLUMNS = useEvaluationColumns();
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -107,7 +114,7 @@ const EvaluationSection: React.FunctionComponent = () => {
   );
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
-  const noDataText = "There are no experiments yet";
+  const noDataText = t("home.evaluation.noExperiments");
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -152,7 +159,7 @@ const EvaluationSection: React.FunctionComponent = () => {
   return (
     <div className="pb-4 pt-2">
       <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-        Evaluation
+        {t("home.evaluation.title")}
       </h2>
       <DataTable
         columns={COLUMNS}
@@ -163,7 +170,7 @@ const EvaluationSection: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             <Button variant="link" onClick={handleNewExperimentClick}>
-              Create new experiment
+              {t("home.evaluation.createNewExperiment")}
             </Button>
           </DataTableNoData>
         }
@@ -171,7 +178,7 @@ const EvaluationSection: React.FunctionComponent = () => {
       <div className="flex justify-end pt-1">
         <Link to="/$workspaceName/experiments" params={{ workspaceName }}>
           <Button variant="ghost" className="flex items-center gap-1 pr-0">
-            All experiments <ArrowRight className="size-4" />
+            {t("home.evaluation.allExperiments")} <ArrowRight className="size-4" />
           </Button>
         </Link>
       </div>

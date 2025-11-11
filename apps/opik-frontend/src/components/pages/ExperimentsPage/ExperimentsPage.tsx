@@ -12,6 +12,7 @@ import {
 import get from "lodash/get";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
+import { useTranslation } from "react-i18next";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -51,7 +52,7 @@ import useGroupedExperimentsList, {
 } from "@/hooks/useGroupedExperimentsList";
 import { useExperimentsTableConfig } from "@/components/pages-shared/experiments/useExperimentsTableConfig";
 import {
-  FILTER_AND_GROUP_COLUMNS,
+  useFilterAndGroupColumns,
   useExperimentsGroupsAndFilters,
 } from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
@@ -82,71 +83,74 @@ const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 
-export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: COLUMN_DATASET_ID,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    customMeta: {
-      nameKey: "dataset_name",
-      idKey: "dataset_id",
-      resource: RESOURCE_TYPE.dataset,
+const useExperimentsColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<GroupedExperiment>[]>(() => [
+    {
+      id: COLUMN_ID_ID,
+      label: t("experiments.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
     },
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "duration.p50",
-    label: "Duration (avg.)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p50,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p50",
+    {
+      id: COLUMN_DATASET_ID,
+      label: t("experiments.columns.dataset"),
+      type: COLUMN_TYPE.string,
+      cell: ResourceCell as never,
+      customMeta: {
+        nameKey: "dataset_name",
+        idKey: "dataset_id",
+        resource: RESOURCE_TYPE.dataset,
+      },
     },
-  },
-  {
-    id: "duration.p90",
-    label: "Duration (p90)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p90,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p90",
+    {
+      id: "created_at",
+      label: t("experiments.columns.createdAt"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
     },
-  },
-  {
-    id: "duration.p99",
-    label: "Duration (p99)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p99,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p99",
+    {
+      id: "created_by",
+      label: t("experiments.columns.createdBy"),
+      type: COLUMN_TYPE.string,
     },
-  },
-  {
-    id: "prompt",
-    label: "Prompt commit",
+    {
+      id: "duration.p50",
+      label: t("projects.columns.duration"),
+      type: COLUMN_TYPE.duration,
+      accessorFn: (row) => row.duration?.p50,
+      cell: DurationCell as never,
+      aggregatedCell: DurationCell.Aggregation as never,
+      customMeta: {
+        aggregationKey: "duration.p50",
+      },
+    },
+    {
+      id: "duration.p90",
+      label: t("projects.columns.durationP90"),
+      type: COLUMN_TYPE.duration,
+      accessorFn: (row) => row.duration?.p90,
+      cell: DurationCell as never,
+      aggregatedCell: DurationCell.Aggregation as never,
+      customMeta: {
+        aggregationKey: "duration.p90",
+      },
+    },
+    {
+      id: "duration.p99",
+      label: t("projects.columns.durationP99"),
+      type: COLUMN_TYPE.duration,
+      accessorFn: (row) => row.duration?.p99,
+      cell: DurationCell as never,
+      aggregatedCell: DurationCell.Aggregation as never,
+      customMeta: {
+        aggregationKey: "duration.p99",
+      },
+    },
+    {
+      id: "prompt",
+      label: t("prompts.commit"),
     type: COLUMN_TYPE.list,
     accessorFn: (row) => get(row, ["prompt_versions"], []),
     cell: MultiResourceCell as never,
@@ -162,7 +166,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "trace_count",
-    label: "Trace count",
+    label: t("experiments.columns.traceCount"),
     type: COLUMN_TYPE.number,
     aggregatedCell: TextCell.Aggregation as never,
     customMeta: {
@@ -171,7 +175,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "total_estimated_cost",
-    label: "Total estimated cost",
+    label: t("experiments.columns.totalEstimatedCost"),
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     aggregatedCell: CostCell.Aggregation as never,
@@ -181,7 +185,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: "total_estimated_cost_avg",
-    label: "Cost per trace (avg.)",
+    label: t("experiments.columns.costPerTrace"),
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     aggregatedCell: CostCell.Aggregation as never,
@@ -191,7 +195,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: t("experiments.columns.feedbackScores"),
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
       get(row, "feedback_scores", []).map((score) => ({
@@ -209,21 +213,22 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_COMMENTS_ID,
-    label: "Comments",
+    label: t("experiments.columns.comments"),
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Configuration",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata,
-    cell: CodeCell as never,
-  },
-];
+    {
+      id: COLUMN_METADATA_ID,
+      label: t("configuration.title"),
+      type: COLUMN_TYPE.dictionary,
+      accessorFn: (row) =>
+        isObject(row.metadata)
+          ? JSON.stringify(row.metadata, null, 2)
+          : row.metadata,
+      cell: CodeCell as never,
+    },
+  ], [t, i18n.language]);
+};
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
@@ -234,6 +239,9 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 const ExperimentsPage: React.FC = () => {
+  const { t } = useTranslation();
+  const DEFAULT_COLUMNS = useExperimentsColumns();
+  const FILTER_AND_GROUP_COLUMNS = useFilterAndGroupColumns();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
@@ -339,8 +347,8 @@ const ExperimentsPage: React.FC = () => {
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? "There are no experiments yet"
-    : "No search results";
+    ? t("experiments.noExperiments")
+    : t("experiments.noSearchResults");
 
   const {
     columns,
@@ -510,12 +518,13 @@ const ExperimentsPage: React.FC = () => {
         limitWidth
       >
         <div className="flex items-center">
-          <h1 className="comet-title-l truncate break-words">Experiments</h1>
+          <h1 className="comet-title-l truncate break-words">{t("experiments.title")}</h1>
         </div>
       </PageBodyStickyContainer>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
         <ExplainerDescription
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
+          description={t("experiments.explainer.description")}
         />
       </PageBodyStickyContainer>
       {Boolean(experiments.length) && (
@@ -530,11 +539,10 @@ const ExperimentsPage: React.FC = () => {
               <Card className="flex min-h-[208px] w-full min-w-[400px] flex-col items-center justify-center gap-2">
                 <ChartLine className="size-4 shrink-0 text-light-slate" />
                 <div className="comet-body-s-accented text-foreground">
-                  No charts to show
+                  {t("experiments.charts.noChartsTitle")}
                 </div>
                 <div className="comet-body-s text-muted-slate">
-                  Please expand a group to see its chart. You can expand up to{" "}
-                  {MAX_EXPANDED_DEEPEST_GROUPS} deepest groups simultaneously.
+                  {t("experiments.charts.noChartsMessage", { count: MAX_EXPANDED_DEEPEST_GROUPS })}
                 </div>
               </Card>
             }
@@ -551,7 +559,7 @@ const ExperimentsPage: React.FC = () => {
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search by name"
+            placeholder={t("experiments.searchByName")}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
@@ -571,7 +579,7 @@ const ExperimentsPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
           <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
+          <TooltipWrapper content={t("experiments.refreshList")}>
             <Button
               variant="outline"
               size="icon-sm"
@@ -595,7 +603,7 @@ const ExperimentsPage: React.FC = () => {
             onClick={handleNewExperimentClick}
           >
             <Info className="mr-1.5 size-3.5" />
-            Create new experiment
+            {t("experiments.createNew")}
           </Button>
         </div>
       </PageBodyStickyContainer>
@@ -620,7 +628,7 @@ const ExperimentsPage: React.FC = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
+                {t("experiments.createNew")}
               </Button>
             )}
           </DataTableNoData>

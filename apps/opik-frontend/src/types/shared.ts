@@ -59,6 +59,7 @@ export type Explainer = {
   description: string;
   docLink?: string;
   docHash?: string;
+  translationKey?: string;
 };
 
 export type HeaderIconType = COLUMN_TYPE | "guardrails";

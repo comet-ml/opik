@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Info } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
@@ -27,6 +28,7 @@ import {
   LLM_MESSAGE_ROLE,
   LLMMessage,
   LLMPromptTemplate,
+  LLMJudgeSchema,
 } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
@@ -70,6 +72,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   projectName,
   datasetColumnNames,
 }) => {
+  const { t } = useTranslation();
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
@@ -77,7 +80,38 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
 
-  const templates = LLM_PROMPT_TEMPLATES[scope];
+  // Helper function to translate default score names and descriptions
+  const translateSchema = useCallback((schema: LLMJudgeSchema[]): LLMJudgeSchema[] => {
+    return schema.map(score => {
+      // Translate default "Correctness" score
+      if (score.name === "Correctness") {
+        return {
+          ...score,
+          name: t("onlineEvaluation.dialog.defaultScores.correctness"),
+          description: t("onlineEvaluation.dialog.defaultScores.correctnessDesc"),
+        };
+      }
+      // Translate default "Relevance" score
+      if (score.name === "Relevance") {
+        return {
+          ...score,
+          name: t("onlineEvaluation.dialog.defaultScores.relevance"),
+          description: t("onlineEvaluation.dialog.defaultScores.relevanceDesc"),
+        };
+      }
+      return score;
+    });
+  }, [t]);
+
+  const templates = useMemo(() => {
+    const baseTemplates = LLM_PROMPT_TEMPLATES[scope];
+    return baseTemplates.map(template => ({
+      ...template,
+      label: t(`onlineEvaluation.dialog.templates.${template.value}`) || template.label,
+      description: t(`onlineEvaluation.dialog.templates.${template.value}Desc`) || template.description,
+    }));
+  }, [scope, t]);
+
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
@@ -125,6 +159,19 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     }
   }, [model, config, form]);
 
+  // Translate default schema when component mounts or language changes
+  useEffect(() => {
+    const currentSchema = form.getValues("llmJudgeDetails.schema");
+    const hasDefaultScores = currentSchema.some(
+      score => score.name === "Correctness" || score.name === "Relevance"
+    );
+    
+    if (hasDefaultScores) {
+      const translatedSchema = translateSchema(currentSchema);
+      form.setValue("llmJudgeDetails.schema", translatedSchema, { shouldDirty: false });
+    }
+  }, [t]);
+
   return (
     <>
       <FormField
@@ -140,7 +187,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label>Model</Label>
+              <Label>{t("onlineEvaluation.dialog.model")}</Label>
               <FormControl>
                 <div className="flex h-10 items-center justify-center gap-2">
                   <PromptModelSelect
@@ -183,7 +230,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         render={({ field }) => (
           <FormItem>
             <Label>
-              Prompt{" "}
+              {t("onlineEvaluation.dialog.template")}{" "}
               <ExplainerIcon
                 className="inline"
                 {...EXPLAINERS_MAP[EXPLAINER_ID.whats_that_prompt_select]}
@@ -217,7 +264,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     );
                     form.setValue(
                       "llmJudgeDetails.schema",
-                      templateData.schema,
+                      translateSchema(templateData.schema),
                     );
                     form.setValue(
                       "llmJudgeDetails.template",
@@ -325,12 +372,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center">
-          <Label htmlFor="name">Score definition</Label>
+          <Label htmlFor="name">{t("onlineEvaluation.dialog.scores")}</Label>
           <TooltipWrapper
-            content={`The score definition is used to define which
-feedback scores are returned by this rule.
-To return more than one score, simply add
-multiple scores to this section.`}
+            content={t("onlineEvaluation.dialog.scoresDesc")}
           >
             <Info className="ml-1 size-4 text-light-slate" />
           </TooltipWrapper>

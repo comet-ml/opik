@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { FilterOperator } from "@/types/filters";
 import { DropdownOption } from "@/types/shared";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
@@ -16,11 +17,13 @@ const OperatorSelector: React.FunctionComponent<OperatorSelectorProps> = ({
   onSelect,
   disabled,
 }) => {
+  const { t } = useTranslation();
+  
   return (
     <SelectBox
       value={operator}
       options={operators}
-      placeholder={operator || "Operator"}
+      placeholder={operator || t("filters.operator")}
       onChange={onSelect as never}
       disabled={disabled}
       testId="filter-operator"

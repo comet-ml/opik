@@ -3,6 +3,7 @@ import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import isArray from "lodash/isArray";
 import { Check, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   Popover,
@@ -57,7 +58,7 @@ export type LoadableSelectBoxProps = SingleSelectProps | MultiSelectProps;
 
 export const LoadableSelectBox = ({
   value = "",
-  placeholder = "Select value",
+  placeholder,
   onChange,
   open: controlledOpen,
   onOpenChange,
@@ -75,12 +76,15 @@ export const LoadableSelectBox = ({
   emptyState,
   ...props
 }: LoadableSelectBoxProps) => {
+  const { t } = useTranslation();
+  const defaultPlaceholder = placeholder || t("common.selectValue");
+  
   const showSelectAll =
     multiselect && "showSelectAll" in props ? props.showSelectAll : false;
   const selectAllLabel =
     multiselect && "selectAllLabel" in props && props.selectAllLabel
       ? props.selectAllLabel
-      : "All selected";
+      : t("common.allSelected");
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [width, setWidth] = useState<number | undefined>();
@@ -92,9 +96,9 @@ export const LoadableSelectBox = ({
 
   const noDataText = search
     ? hasMore
-      ? `No search results for the first ${optionsCount} items`
-      : "No search results"
-    : "No data";
+      ? t("common.noSearchResultsFirst", { count: optionsCount })
+      : t("common.noSearchResults")
+    : t("common.noData");
 
   const selectedValues = useMemo(() => {
     return multiselect && isArray(value) ? value : [];
@@ -128,7 +132,7 @@ export const LoadableSelectBox = ({
 
   const renderTitle = () => {
     if (!selectedOptions.length) {
-      return <div className="truncate text-light-slate">{placeholder}</div>;
+      return <div className="truncate text-light-slate">{defaultPlaceholder}</div>;
     }
 
     if (isFunction(parentRenderTitle)) {
@@ -257,7 +261,7 @@ export const LoadableSelectBox = ({
           <SearchInput
             searchText={search}
             setSearchText={setSearch}
-            placeholder="Search"
+            placeholder={t("common.search")}
             variant="ghost"
           ></SearchInput>
           <Separator className="mt-1" />
@@ -338,7 +342,7 @@ export const LoadableSelectBox = ({
                     className="shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate">Select all</div>
+                    <div className="comet-body-s truncate">{t("common.selectAll")}</div>
                   </div>
                 </div>
               </>
@@ -346,10 +350,10 @@ export const LoadableSelectBox = ({
             {hasMoreSection && (
               <div className="flex flex-wrap items-center justify-between border-t border-border px-4">
                 <div className="comet-body-s text-light-slate">
-                  {`Showing first ${optionsCount} items.`}
+                  {t("common.showingFirst", { count: optionsCount })}
                 </div>
                 <Button variant="link" onClick={onLoadMore} type="button">
-                  Load more
+                  {t("common.loadMore")}
                 </Button>
               </div>
             )}

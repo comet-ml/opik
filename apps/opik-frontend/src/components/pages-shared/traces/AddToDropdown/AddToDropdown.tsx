@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Database, UserPen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
   disabled = false,
   dataType = "traces",
 }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
 
@@ -57,7 +59,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={disabled}>
-            Add to
+            {t("traces.addToDropdown.addTo")}
             <ChevronDown className="ml-2 size-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -71,7 +73,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
               disabled={disabled}
             >
               <Database className="mr-2 size-4" />
-              Dataset
+              {t("traces.addToDropdown.dataset")}
             </DropdownMenuItem>
           )}
           {showAddToQueue && (
@@ -83,7 +85,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
               disabled={disabled}
             >
               <UserPen className="mr-2 size-4" />
-              Annotation queue
+              {t("traces.addToDropdown.annotationQueue")}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

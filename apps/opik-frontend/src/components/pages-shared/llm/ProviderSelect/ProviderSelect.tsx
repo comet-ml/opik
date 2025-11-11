@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   configuredProvidersList,
   hasError,
 }) => {
+  const { t } = useTranslation();
   const options = useMemo(() => {
     const providerOptions: ProviderOption[] = [];
 
@@ -97,7 +99,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
           <div className="flex w-full items-center justify-between text-foreground">
             <div className="flex items-center gap-2">
               <Icon />
-              Custom provider
+              {t("configuration.aiProviders.providerSelect.customProvider")}
             </div>
           </div>
         );
@@ -106,7 +108,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       const option = options?.find((o) => o.value === value);
 
       if (!option) {
-        return <SelectValue placeholder="Select a provider" />;
+        return <SelectValue placeholder={t("configuration.aiProviders.providerSelect.selectProvider")} />;
       }
 
       const Icon = option.icon;
@@ -121,7 +123,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         </div>
       );
     },
-    [options],
+    [options, t],
   );
 
   const renderOption = useCallback((option: ProviderOption) => {
@@ -148,11 +150,11 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
             {Icon && <Icon />}
             {option.label}
           </div>
-          {isConfigured && <Tag variant="green">Configured</Tag>}
+          {isConfigured && <Tag variant="green">{t("configuration.aiProviders.providerSelect.configured")}</Tag>}
         </div>
       </SelectItem>
     );
-  }, []);
+  }, [t]);
 
   const handleChange = useCallback(
     (newValue: string) => {
@@ -185,7 +187,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-2">
               <Plus className="size-4 " />
-              Add custom provider
+              {t("configuration.aiProviders.providerSelect.addCustomProvider")}
             </div>
           </div>
         </SelectItem>

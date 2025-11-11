@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import isNumber from "lodash/isNumber";
 
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ type NumericalFeedbackDefinitionDetailsProps = {
 const NumericalFeedbackDefinitionDetails: React.FunctionComponent<
   NumericalFeedbackDefinitionDetailsProps
 > = ({ onChange, details }) => {
+  const { t } = useTranslation();
   const [numericalDetails, setNumericalDetails] =
     useState<NumericalFeedbackDefinitionDetails>(details ?? { min: 0, max: 1 });
 
@@ -40,10 +42,10 @@ const NumericalFeedbackDefinitionDetails: React.FunctionComponent<
   return (
     <>
       <div className="flex flex-col gap-2 pb-4">
-        <Label htmlFor="feedbackDefinitionNumericalMin">Min</Label>
+        <Label htmlFor="feedbackDefinitionNumericalMin">{t("configuration.feedbackDefinitions.dialog.min")}</Label>
         <Input
           id="feedbackDefinitionNumericalMin"
-          placeholder="Min"
+          placeholder={t("configuration.feedbackDefinitions.dialog.minPlaceholder")}
           value={numericalDetails.min}
           type="number"
           step="any"
@@ -57,10 +59,10 @@ const NumericalFeedbackDefinitionDetails: React.FunctionComponent<
       </div>
 
       <div className="flex flex-col gap-2 pb-4">
-        <Label htmlFor="feedbackDefinitionNumericalMax">Max</Label>
+        <Label htmlFor="feedbackDefinitionNumericalMax">{t("configuration.feedbackDefinitions.dialog.max")}</Label>
         <Input
           id="feedbackDefinitionNumericalMax"
-          placeholder="Max"
+          placeholder={t("configuration.feedbackDefinitions.dialog.maxPlaceholder")}
           value={numericalDetails.max}
           type="number"
           step="any"

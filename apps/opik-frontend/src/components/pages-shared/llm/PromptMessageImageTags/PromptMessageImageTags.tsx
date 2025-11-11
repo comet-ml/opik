@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ const PromptMessageImageTags: React.FunctionComponent<
   preview = true,
   editable = true,
 }) => {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [newImage, setNewImage] = useState<string>("");
@@ -194,8 +196,7 @@ const PromptMessageImageTags: React.FunctionComponent<
                 </Button>
               </div>
               <p className="comet-body-xs text-muted-foreground">
-                You can add a base64 string, image URL, or template variable{" "}
-                <code>{`{{image}}`}</code>
+                {t("onlineEvaluation.dialog.imageHelper")}
               </p>
             </div>
           </PopoverContent>

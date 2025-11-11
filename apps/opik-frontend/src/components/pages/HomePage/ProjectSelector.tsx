@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { FilterIcon } from "lucide-react";
 import toLower from "lodash/toLower";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   projects,
   totalProjects,
 }) => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
 
   const selectedProjects = useMemo(() => {
@@ -58,7 +60,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
             <FilterIcon className="mr-1.5 size-3.5" />
-            Filter projects
+            {t("home.overallPerformance.filterProjects")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -72,7 +74,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             <SearchInput
               searchText={search}
               setSearchText={setSearch}
-              placeholder="Search"
+              placeholder={t("home.overallPerformance.search")}
               variant="ghost"
             ></SearchInput>
             <Separator className="mt-1" />
@@ -80,8 +82,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           <div className="max-h-[calc(var(--radix-popper-available-height)-60px)] overflow-y-auto overflow-x-hidden pb-1">
             {hasMoreProjects && (
               <div className="comet-body-xs px-4 py-2 text-muted-slate">
-                Presenting the latest {LOADED_PROJECTS_COUNT} projects, sorted
-                by recent activity.
+                {t("home.overallPerformance.presentingLatest", { count: LOADED_PROJECTS_COUNT })}
               </div>
             )}
             {filteredProjects.map(({ name, id }) => (
@@ -106,13 +107,13 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             ))}
             {filteredProjects.length === 0 && Boolean(search) && (
               <div className="comet-body-s flex h-32 w-56 items-center justify-center text-muted-slate">
-                No search results
+                {t("home.overallPerformance.noSearchResults")}
               </div>
             )}
 
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setProjectIds([])}>
-              All projects
+              {t("home.overallPerformance.allProjects")}
             </DropdownMenuItem>
           </div>
         </DropdownMenuContent>
@@ -131,7 +132,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           />
         ))
       ) : (
-        <RemovableTag label="All projects" size="lg" />
+        <RemovableTag label={t("home.overallPerformance.allProjects")} size="lg" />
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
+import { useTranslation } from "react-i18next";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -29,11 +30,14 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "home-optimizations-columns-width";
 
-export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
-  [
-    {
-      id: COLUMN_NAME_ID,
-      label: "Optimization",
+const useOptimizationColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => convertColumnDataToColumn<Optimization, Optimization>(
+    [
+      {
+        id: COLUMN_NAME_ID,
+        label: t("home.optimizationRuns.optimization"),
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       sortable: true,
@@ -46,9 +50,9 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
         }),
       },
     },
-    {
-      id: "dataset",
-      label: "Dataset",
+      {
+        id: "dataset",
+        label: t("home.optimizationRuns.dataset"),
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       customMeta: {
@@ -57,9 +61,9 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
         resource: RESOURCE_TYPE.dataset,
       },
     },
-    {
-      id: "optimizer",
-      label: "Optimizer",
+      {
+        id: "optimizer",
+        label: t("home.optimizationRuns.optimizer"),
       type: COLUMN_TYPE.string,
       accessorFn: (row) => {
         const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
@@ -67,36 +71,37 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
       },
       explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
     },
-    {
-      id: "objective_name",
-      label: "Best score",
+      {
+        id: "objective_name",
+        label: t("home.optimizationRuns.bestScore"),
       type: COLUMN_TYPE.numberDictionary,
       accessorFn: (row) =>
         getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
       cell: FeedbackScoreTagCell as never,
       explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
     },
-    {
-      id: "status",
-      label: "Status",
+      {
+        id: "status",
+        label: t("home.optimizationRuns.status"),
       type: COLUMN_TYPE.string,
       cell: OptimizationStatusCell as never,
     },
-    {
-      id: "num_trials",
-      label: "Trials",
+      {
+        id: "num_trials",
+        label: t("home.optimizationRuns.trials"),
       type: COLUMN_TYPE.number,
     },
-    {
-      id: "created_at",
-      label: "Created",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
-      sortable: true,
-    },
-  ],
-  {},
-);
+      {
+        id: "created_at",
+        label: t("home.optimizationRuns.created"),
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+        sortable: true,
+      },
+    ],
+    {},
+  ), [t, i18n.language]);
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -104,6 +109,8 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const OptimizationRunsSection: React.FunctionComponent = () => {
+  const { t } = useTranslation();
+  const COLUMNS = useOptimizationColumns();
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -122,7 +129,7 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
   );
 
   const optimizations = useMemo(() => data?.content ?? [], [data?.content]);
-  const noDataText = "There are no optimization runs yet";
+  const noDataText = t("home.optimizationRuns.noOptimizations");
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -167,7 +174,7 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
   return (
     <div className="pb-4 pt-2">
       <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-        Optimization runs
+        {t("home.optimizationRuns.title")}
       </h2>
       <DataTable
         columns={COLUMNS}
@@ -178,7 +185,7 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             <Button variant="link" onClick={handleNewOptimizationClick}>
-              Create new optimization
+              {t("home.optimizationRuns.createNewOptimization")}
             </Button>
           </DataTableNoData>
         }
@@ -186,7 +193,7 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
       <div className="flex justify-end pt-1">
         <Link to="/$workspaceName/optimizations" params={{ workspaceName }}>
           <Button variant="ghost" className="flex items-center gap-1 pr-0">
-            All optimization runs <ArrowRight className="size-4" />
+            {t("home.optimizationRuns.allOptimizationRuns")} <ArrowRight className="size-4" />
           </Button>
         </Link>
       </div>

@@ -16,6 +16,7 @@ import {
   truncateChartLabel,
 } from "@/lib/charts";
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -39,6 +40,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   data,
   keys,
 }) => {
+  const { t } = useTranslation();
   const [activeBar, setActiveBar] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>
@@ -107,7 +109,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
         {noData ? (
           <NoData
             className="min-h-32 text-light-slate"
-            message="No data to show"
+            message={t("common.noDataToShow")}
           />
         ) : (
           <ChartContainer

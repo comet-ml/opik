@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
@@ -45,13 +46,15 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   value,
   onValueChange,
   type = TRACE_DATA_TYPE.traces,
-  placeholder = "Select a key from recent trace",
+  placeholder,
   excludeRoot = false,
   projectName: projectNameProp,
   datasetColumnNames,
 }) => {
+  const { t } = useTranslation();
   const isProjectId = Boolean(projectId);
   const queryClient = useQueryClient();
+  const defaultPlaceholder = placeholder || t("onlineEvaluation.dialog.selectFieldPlaceholder");
 
   const { data, isPending } = useTracesOrSpansList(
     {
@@ -172,7 +175,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       items={items}
       hasError={hasError}
       isLoading={isProjectId ? isPending || isPendingNonTruncated : false}
-      placeholder={placeholder}
+      placeholder={defaultPlaceholder}
     />
   );
 };

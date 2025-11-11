@@ -1,5 +1,6 @@
 import React from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl, cn } from "@/lib/utils";
@@ -20,7 +21,11 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
   isMinimalLink = false,
   iconSize = "size-4",
   className,
+  translationKey,
 }) => {
+  const { t } = useTranslation();
+  const translatedDescription = translationKey ? t(translationKey) : description;
+  
   return (
     <div className={cn(className)}>
       {title && (
@@ -34,7 +39,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
           isMinimalLink && "text-light-slate",
         )}
       >
-        {description}
+        {translatedDescription}
       </span>
       {docLink && (
         <Button
@@ -47,7 +52,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
             target="_blank"
             rel="noreferrer"
           >
-            Read more
+            {t("common.readMore")}
             <SquareArrowOutUpRight className={cn("ml-1 shrink-0", iconSize)} />
           </a>
         </Button>

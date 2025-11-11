@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
 
@@ -21,6 +22,7 @@ type OptimizationProgressChartContainerProps = {
 const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
 > = ({ experiments, bestEntityId, objectiveName = "" }) => {
+  const { t } = useTranslation();
   const chartData = useMemo(() => {
     const retVal: ChartData = {
       data: [],
@@ -71,7 +73,7 @@ const OptimizationProgressChartContainer: React.FC<
       return (
         <NoData
           className="min-h-32 text-light-slate"
-          message="No data to show"
+          message={t("common.noDataToShow")}
         />
       );
     }

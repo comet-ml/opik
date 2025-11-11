@@ -1,4 +1,5 @@
 import React, { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import get from "lodash/get";
 
@@ -19,18 +20,19 @@ const LLMJudgeScores = ({
   scores,
   onChange,
 }: LLMJudgeScoresProps) => {
+  const { t } = useTranslation();
   const generalError = get(validationErrors, "message");
   const handleAddScore = useCallback(() => {
     onChange([
       ...scores,
       {
-        name: "Score name",
-        description: "Score description",
+        name: t("onlineEvaluation.dialog.scoreName"),
+        description: t("onlineEvaluation.dialog.scoreDescription"),
         type: LLM_SCHEMA_TYPE.INTEGER,
         unsaved: false,
       },
     ]);
-  }, [onChange, scores]);
+  }, [onChange, scores, t]);
 
   const handleRemoveScore = useCallback(
     (index: number) => {
@@ -72,7 +74,7 @@ const LLMJudgeScores = ({
         type="button"
       >
         <Plus className="mr-2 size-4" />
-        Add score
+        {t("onlineEvaluation.dialog.addScore")}
       </Button>
     </div>
   );

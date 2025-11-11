@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import isEqual from "fast-deep-equal";
 import TextareaAutosize from "react-textarea-autosize";
 
@@ -17,21 +18,6 @@ import { Input } from "@/components/ui/input";
 import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
 import { get } from "lodash";
 
-const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
-  {
-    value: LLM_SCHEMA_TYPE.DOUBLE,
-    label: "Number",
-  },
-  {
-    value: LLM_SCHEMA_TYPE.INTEGER,
-    label: "Integer",
-  },
-  {
-    value: LLM_SCHEMA_TYPE.BOOLEAN,
-    label: "Boolean",
-  },
-];
-
 type ScoreFieldData = Omit<LLMJudgeSchema, "unsaved">;
 
 interface LLMJudgeScoreProps {
@@ -49,6 +35,23 @@ const LLMJudgeScore = ({
   onChangeScore,
   onRemoveScore,
 }: LLMJudgeScoreProps) => {
+  const { t, i18n } = useTranslation();
+  
+  const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = useMemo(() => [
+    {
+      value: LLM_SCHEMA_TYPE.DOUBLE,
+      label: t("onlineEvaluation.dialog.scoreTypeNumber"),
+    },
+    {
+      value: LLM_SCHEMA_TYPE.INTEGER,
+      label: t("onlineEvaluation.dialog.scoreTypeNumber"),
+    },
+    {
+      value: LLM_SCHEMA_TYPE.BOOLEAN,
+      label: t("onlineEvaluation.dialog.scoreTypeBoolean"),
+    },
+  ], [t, i18n.language]);
+
   const [isEditing, setIsEditing] = useState(false);
   const [scoreData, setScoreData] = useState<ScoreFieldData>({
     name: score.name || "",
@@ -121,7 +124,7 @@ const LLMJudgeScore = ({
               <>
                 <Input
                   dimension="sm"
-                  placeholder="Score name"
+                  placeholder={t("onlineEvaluation.dialog.scoreNamePlaceholder")}
                   className={cn({
                     "border-destructive": nameErrorText,
                   })}
@@ -136,7 +139,7 @@ const LLMJudgeScore = ({
                   </FormErrorSkeleton>
                 )}
                 <TextareaAutosize
-                  placeholder="Score description"
+                  placeholder={t("onlineEvaluation.dialog.scoreDescPlaceholder")}
                   value={scoreData.description}
                   onChange={(event) =>
                     onUpdateField(event.target.value, "description")
@@ -160,7 +163,7 @@ const LLMJudgeScore = ({
             />
 
             {!isEditing ? (
-              <TooltipWrapper content="Edit a score">
+              <TooltipWrapper content={t("onlineEvaluation.dialog.editScore")}>
                 <Button
                   variant="outline"
                   size="icon-sm"
@@ -172,7 +175,7 @@ const LLMJudgeScore = ({
                 </Button>
               </TooltipWrapper>
             ) : (
-              <TooltipWrapper content="Done editing">
+              <TooltipWrapper content={t("onlineEvaluation.dialog.doneEditing")}>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -181,12 +184,12 @@ const LLMJudgeScore = ({
                   type="button"
                 >
                   <Check className="mr-1.5 size-3.5 shrink-0" />
-                  Done editing
+                  {t("onlineEvaluation.dialog.doneEditing")}
                 </Button>
               </TooltipWrapper>
             )}
 
-            <TooltipWrapper content="Delete a score">
+            <TooltipWrapper content={t("onlineEvaluation.dialog.deleteScore")}>
               <Button
                 variant="outline"
                 size="icon-sm"

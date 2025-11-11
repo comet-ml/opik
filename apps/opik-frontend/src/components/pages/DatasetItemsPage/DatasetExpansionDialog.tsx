@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, XCircle, Info } from "lucide-react";
 import { get, isObject, isString, isNumber } from "lodash";
 
@@ -63,6 +64,7 @@ type DatasetExpansionDialogProps = {
 const DatasetExpansionDialog: React.FunctionComponent<
   DatasetExpansionDialogProps
 > = ({ datasetId: initialDatasetId, open, setOpen, onSamplesGenerated }) => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [lastPickedModel, setLastPickedModel] = useLastPickedModel({
@@ -386,7 +388,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
             sampleData.content.length === 0 && (
               <Alert variant="callout" size="sm">
                 <AlertTriangle className="size-4" />
-                <AlertTitle>No dataset samples found</AlertTitle>
+                <AlertTitle>{t("datasets.dialog.noSamplesFound")}</AlertTitle>
                 <AlertDescription>
                   This dataset appears to be empty. Add some sample data to your
                   dataset first before trying to expand it with AI.

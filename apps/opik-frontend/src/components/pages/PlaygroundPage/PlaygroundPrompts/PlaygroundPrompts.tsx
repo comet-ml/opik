@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
@@ -30,6 +31,7 @@ const PlaygroundPrompts = ({
   isPendingProviderKeys,
   onResetHeight,
 }: PlaygroundPromptsState) => {
+  const { t } = useTranslation();
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
@@ -85,7 +87,7 @@ const PlaygroundPrompts = ({
     <>
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-1">
-          <h1 className="comet-title-l">Playground</h1>
+          <h1 className="comet-title-l">{t("playground.title")}</h1>
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_playground]}
           />
@@ -101,12 +103,12 @@ const PlaygroundPrompts = ({
             }}
           >
             <RotateCcw className="mr-2 size-4" />
-            Reset playground
+            {t("playground.resetPlayground")}
           </Button>
 
           <Button variant="outline" size="sm" onClick={handleAddPrompt}>
             <Plus className="mr-2 size-4" />
-            Add prompt
+            {t("playground.addPrompt")}
           </Button>
         </div>
       </div>
@@ -131,9 +133,9 @@ const PlaygroundPrompts = ({
         open={Boolean(open)}
         setOpen={setOpen}
         onConfirm={resetPlayground}
-        title="Reset playground"
-        description="Resetting the Playground will discard all unsaved prompts. This action can’t be undone. Are you sure you want to continue?"
-        confirmText="Reset playground"
+        title={t("playground.resetConfirmTitle")}
+        description={t("playground.resetConfirmDescription")}
+        confirmText={t("playground.resetConfirmButton")}
       />
     </>
   );

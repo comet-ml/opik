@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import {
   Book,
@@ -45,120 +46,124 @@ import SidebarMenuItem, {
 
 const HOME_PATH = "/$workspaceName/home";
 
-const MENU_ITEMS: MenuItemGroup[] = [
-  {
-    id: "home",
-    items: [
-      {
-        id: "home",
-        path: "/$workspaceName/home",
-        type: MENU_ITEM_TYPE.router,
-        icon: LucideHome,
-        label: "Home",
-      },
-    ],
-  },
-  {
-    id: "observability",
-    label: "Observability",
-    items: [
-      {
-        id: "projects",
-        path: "/$workspaceName/projects",
-        type: MENU_ITEM_TYPE.router,
-        icon: LayoutGrid,
-        label: "Projects",
-        count: "projects",
-      },
-    ],
-  },
-  {
-    id: "evaluation",
-    label: "Evaluation",
-    items: [
-      {
-        id: "experiments",
-        path: "/$workspaceName/experiments",
-        type: MENU_ITEM_TYPE.router,
-        icon: FlaskConical,
-        label: "Experiments",
-        count: "experiments",
-      },
-      {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Optimization runs",
-        count: "optimizations",
-      },
-      {
-        id: "datasets",
-        path: "/$workspaceName/datasets",
-        type: MENU_ITEM_TYPE.router,
-        icon: Database,
-        label: "Datasets",
-        count: "datasets",
-      },
-      {
-        id: "annotation_queues",
-        path: "/$workspaceName/annotation-queues",
-        type: MENU_ITEM_TYPE.router,
-        icon: UserPen,
-        label: "Annotation queues",
-        count: "annotation_queues",
-      },
-    ],
-  },
-  {
-    id: "prompt_engineering",
-    label: "Prompt engineering",
-    items: [
-      {
-        id: "prompts",
-        path: "/$workspaceName/prompts",
-        type: MENU_ITEM_TYPE.router,
-        icon: FileTerminal,
-        label: "Prompt library",
-        count: "prompts",
-      },
-      {
-        id: "playground",
-        path: "/$workspaceName/playground",
-        type: MENU_ITEM_TYPE.router,
-        icon: Blocks,
-        label: "Playground",
-      },
-    ],
-  },
-  {
-    id: "production",
-    label: "Production",
-    items: [
-      {
-        id: "online_evaluation",
-        path: "/$workspaceName/online-evaluation",
-        type: MENU_ITEM_TYPE.router,
-        icon: Brain,
-        label: "Online evaluation",
-        count: "rules",
-      },
-    ],
-  },
-  {
-    id: "configuration",
-    label: "Configuration",
-    items: [
-      {
-        id: "configuration",
-        path: "/$workspaceName/configuration",
-        type: MENU_ITEM_TYPE.router,
-        icon: Bolt,
-        label: "Configuration",
-      },
-    ],
-  },
-];
+const useMenuItems = (): MenuItemGroup[] => {
+  const { t } = useTranslation();
+
+  return [
+    {
+      id: "home",
+      items: [
+        {
+          id: "home",
+          path: "/$workspaceName/home",
+          type: MENU_ITEM_TYPE.router,
+          icon: LucideHome,
+          label: t("navigation.home"),
+        },
+      ],
+    },
+    {
+      id: "observability",
+      label: t("sections.observability"),
+      items: [
+        {
+          id: "projects",
+          path: "/$workspaceName/projects",
+          type: MENU_ITEM_TYPE.router,
+          icon: LayoutGrid,
+          label: t("navigation.projects"),
+          count: "projects",
+        },
+      ],
+    },
+    {
+      id: "evaluation",
+      label: t("sections.evaluation"),
+      items: [
+        {
+          id: "experiments",
+          path: "/$workspaceName/experiments",
+          type: MENU_ITEM_TYPE.router,
+          icon: FlaskConical,
+          label: t("navigation.experiments"),
+          count: "experiments",
+        },
+        {
+          id: "optimizations",
+          path: "/$workspaceName/optimizations",
+          type: MENU_ITEM_TYPE.router,
+          icon: SparklesIcon,
+          label: t("navigation.optimizationRuns"),
+          count: "optimizations",
+        },
+        {
+          id: "datasets",
+          path: "/$workspaceName/datasets",
+          type: MENU_ITEM_TYPE.router,
+          icon: Database,
+          label: t("navigation.datasets"),
+          count: "datasets",
+        },
+        {
+          id: "annotation_queues",
+          path: "/$workspaceName/annotation-queues",
+          type: MENU_ITEM_TYPE.router,
+          icon: UserPen,
+          label: t("navigation.annotationQueues"),
+          count: "annotation_queues",
+        },
+      ],
+    },
+    {
+      id: "prompt_engineering",
+      label: t("sections.promptEngineering"),
+      items: [
+        {
+          id: "prompts",
+          path: "/$workspaceName/prompts",
+          type: MENU_ITEM_TYPE.router,
+          icon: FileTerminal,
+          label: t("navigation.promptLibrary"),
+          count: "prompts",
+        },
+        {
+          id: "playground",
+          path: "/$workspaceName/playground",
+          type: MENU_ITEM_TYPE.router,
+          icon: Blocks,
+          label: t("navigation.playground"),
+        },
+      ],
+    },
+    {
+      id: "production",
+      label: t("sections.production"),
+      items: [
+        {
+          id: "online_evaluation",
+          path: "/$workspaceName/online-evaluation",
+          type: MENU_ITEM_TYPE.router,
+          icon: Brain,
+          label: t("navigation.onlineEvaluation"),
+          count: "rules",
+        },
+      ],
+    },
+    {
+      id: "configuration",
+      label: t("navigation.configuration"),
+      items: [
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Bolt,
+          label: t("navigation.configuration"),
+        },
+      ],
+    },
+  ];
+};
 
 type SideBarProps = {
   expanded: boolean;
@@ -169,6 +174,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   expanded,
   setExpanded,
 }) => {
+  const { t } = useTranslation();
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
@@ -177,6 +183,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
+  
+  const MENU_ITEMS = useMenuItems();
 
   const { data: projectData } = useProjectsList(
     {
@@ -296,20 +304,20 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         path: buildDocsUrl(),
         type: MENU_ITEM_TYPE.link,
         icon: Book,
-        label: "Documentation",
+        label: t("navigation.documentation"),
       },
       {
         id: "quickstart",
         type: MENU_ITEM_TYPE.button,
         icon: GraduationCap,
-        label: "Quickstart guide",
+        label: t("navigation.quickstartGuide"),
         onClick: openQuickstart,
       },
       {
         id: "provideFeedback",
         type: MENU_ITEM_TYPE.button,
         icon: MessageCircleQuestion,
-        label: "Provide feedback",
+        label: t("navigation.provideFeedback"),
         onClick: () => setOpenProvideFeedback(true),
       },
     ]);

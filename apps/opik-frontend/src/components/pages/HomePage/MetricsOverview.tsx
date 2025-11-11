@@ -3,6 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
 import { ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import noDataMetricsImageUrl from "/images/no-data-workspace-metrics.png";
 import noDataMetricChartImageUrl from "/images/no-data-workspace-metric-chart.png";
@@ -108,6 +109,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
   intervalStart,
   intervalEnd,
 }) => {
+  const { t } = useTranslation();
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const [selectedMetric, setSelectedMetric] = useState<string | undefined>();
   const projectIds = useMemo(() => {
@@ -223,7 +225,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
                 <PercentageTrend
                   percentage={percentageMap[metric.name]?.percentage}
                   trend={trend}
-                  tooltip={`Compares the average value of ${metric.name} between the current and previous periods.`}
+                  tooltip={t("home.metricsOverview.compareMessage", { metric: metric.name })}
                 />
               </div>
             </li>
@@ -248,7 +250,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
           <ExplainerCallout
             {...EXPLAINERS_MAP[explainerId]}
             id="metrics-overview-explainer"
-            description={`Check our documentation to learn more about the ${selectedMetric}.`}
+            description={t("home.metricsOverview.documentationText", { metric: selectedMetric })}
           ></ExplainerCallout>
         )}
       </>
@@ -269,13 +271,13 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             alt="no data image"
           ></img>
           <div className="absolute inset-0 flex flex-col items-center justify-center p-10">
-            <h1 className="comet-title-m text-center">Unlock your metrics!</h1>
+            <h1 className="comet-title-m text-center">{t("home.metricsOverview.unlockMetrics")}</h1>
             <div className="comet-body mt-2 text-center text-muted-slate">
-              Integrate your project with Opik to evaluate your AI.
-              <br /> Metrics will appear here once data starts flowing.
+              {t("home.metricsOverview.integrateMessage")}
+              <br /> {t("home.metricsOverview.metricsWillAppear")}
             </div>
             <Button className="mt-4" onClick={openQuickstart}>
-              Get started <ChevronRight className="ml-2 size-4 shrink-0" />
+              {t("home.sections.getStarted")} <ChevronRight className="ml-2 size-4 shrink-0" />
             </Button>
           </div>
         </div>
@@ -287,8 +289,8 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
 
   const renderNoMetricsData = () => {
     const description = noMetricsAndProjectsData
-      ? "Log your first project metrics to see them here"
-      : "No metrics found for your current filters. This may happen if there are no traces or metrics in the selected range. Try adjusting your filters to explore available data";
+      ? t("home.metricsOverview.noMetricsProjectsMessage")
+      : t("home.metricsOverview.noMetricsFiltersMessage");
 
     return (
       <div className="relative size-full overflow-hidden">
@@ -298,13 +300,13 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
           alt="no data image"
         ></img>
         <div className="absolute inset-0 flex flex-col items-center justify-center p-10">
-          <h1 className="comet-title-m">No metrics available</h1>
+          <h1 className="comet-title-m">{t("home.metricsOverview.noMetricsAvailable")}</h1>
           <div className="comet-body mt-2 max-w-[60%] text-center text-muted-slate">
             {description}
           </div>
           {noMetricsAndProjectsData && (
             <Button className="mt-4" onClick={openQuickstart}>
-              Get started <ChevronRight className="ml-2 size-4 shrink-0" />
+              {t("home.sections.getStarted")} <ChevronRight className="ml-2 size-4 shrink-0" />
             </Button>
           )}
         </div>

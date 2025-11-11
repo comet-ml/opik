@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MessageCircleWarning } from "lucide-react";
@@ -67,6 +68,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
 }) => {
+  const { t } = useTranslation();
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [selectedProviderId, setSelectedProviderId] = useState<
     string | undefined
@@ -108,14 +110,14 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
   const title = isEdit
-    ? "Edit provider configuration"
-    : "Add provider configuration";
+    ? t("configuration.aiProviders.dialog.titleEdit")
+    : t("configuration.aiProviders.dialog.titleAdd");
 
   const buttonText = provider
     ? providerKey || calculatedProviderKey
-      ? "Update configuration"
-      : "Add configuration"
-    : "Done";
+      ? t("configuration.aiProviders.dialog.updateConfiguration")
+      : t("configuration.aiProviders.dialog.addConfiguration")
+    : t("configuration.aiProviders.dialog.done");
 
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
@@ -235,6 +237,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           <ExplainerDescription
             className="mb-4"
             {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
+            description={t("configuration.aiProviders.explainers.whyDoINeedAnAIProvider")}
           />
           <Form {...form}>
             <form
@@ -249,7 +252,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
                   return (
                     <FormItem>
-                      <Label>Provider</Label>
+                      <Label>{t("configuration.aiProviders.dialog.provider")}</Label>
                       <FormControl>
                         <ProviderSelect
                           disabled={Boolean(providerKey)}
@@ -306,6 +309,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                   {...EXPLAINERS_MAP[
                     EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
                   ]}
+                  title={t("configuration.aiProviders.explainers.editingExistingKeyTitle")}
+                  description={t("configuration.aiProviders.explainers.editingExistingKeyDescription")}
                 />
               )}
               {getProviderDetails()}
@@ -320,13 +325,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                 variant="destructive"
                 onClick={() => setConfirmOpen(true)}
               >
-                Delete configuration
+                {t("configuration.aiProviders.dialog.deleteConfiguration")}
               </Button>
               <div className="flex flex-auto"></div>
             </>
           )}
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="outline">{t("common.cancel")}</Button>
           </DialogClose>
           <Button type="submit" onClick={form.handleSubmit(cloudConfigHandler)}>
             {buttonText}
@@ -337,9 +342,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         open={confirmOpen}
         setOpen={setConfirmOpen}
         onConfirm={deleteProviderKeyHandler}
-        title="Delete configuration"
-        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
-        confirmText="Delete configuration"
+        title={t("configuration.aiProviders.rowActions.deleteTitle")}
+        description={t("configuration.aiProviders.rowActions.deleteDescription")}
+        confirmText={t("configuration.aiProviders.rowActions.deleteConfirm")}
         confirmButtonVariant="destructive"
       />
     </Dialog>

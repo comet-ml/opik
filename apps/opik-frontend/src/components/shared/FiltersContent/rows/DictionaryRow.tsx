@@ -1,14 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Filter, FilterOperator, FilterRowConfig } from "@/types/filters";
 import OperatorSelector from "@/components/shared/FiltersContent/OperatorSelector";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
-import {
-  DEFAULT_OPERATORS,
-  NO_VALUE_OPERATORS,
-  OPERATORS_MAP,
-} from "@/constants/filters";
+import { NO_VALUE_OPERATORS } from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 import { cn } from "@/lib/utils";
+import { getOperatorsMap } from "@/lib/filters-i18n";
 
 type DictionaryRowProps = {
   config?: FilterRowConfig;
@@ -21,6 +19,7 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
   filter,
   onChange,
 }) => {
+  const { t, i18n } = useTranslation();
   const type: "string" | "number" =
     filter.type === COLUMN_TYPE.dictionary ? "string" : "number";
 
@@ -33,10 +32,12 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
 
   const KeyComponent = config?.keyComponent ?? DebounceInput;
 
+  const operatorsMap = useMemo(() => getOperatorsMap(t), [t, i18n.language]);
+
   const operatorSelector = (
     <OperatorSelector
       operator={filter.operator}
-      operators={OPERATORS_MAP[filter.type as COLUMN_TYPE] ?? DEFAULT_OPERATORS}
+      operators={operatorsMap[filter.type as COLUMN_TYPE] ?? []}
       onSelect={(o) => onChange({ ...filter, operator: o })}
     />
   );
@@ -46,7 +47,7 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
       <td className="flex gap-2 p-1">
         <KeyComponent
           className="w-full min-w-32 max-w-[30vw]"
-          placeholder="key"
+          placeholder={t("filters.key")}
           value={filter.key}
           onValueChange={keyValueChangeHandler}
           data-testid="filter-dictionary-key-input"
@@ -64,7 +65,7 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
         ) : (
           <DebounceInput
             className="w-full min-w-40"
-            placeholder="value"
+            placeholder={t("filters.value")}
             value={filter.value}
             onValueChange={(value) =>
               onChange({ ...filter, value: value as string })

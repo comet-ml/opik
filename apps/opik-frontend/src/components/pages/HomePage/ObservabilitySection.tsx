@@ -4,6 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -25,48 +26,52 @@ import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell"
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
-export const SHARED_COLUMNS = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    sortable: true,
-    customMeta: {
-      nameKey: "name",
-      idKey: "id",
-      resource: RESOURCE_TYPE.project,
+const useObservabilityColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("home.observability.project"),
+      type: COLUMN_TYPE.string,
+      cell: ResourceCell as never,
+      sortable: true,
+      customMeta: {
+        nameKey: "name",
+        idKey: "id",
+        resource: RESOURCE_TYPE.project,
+      },
     },
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row: ProjectWithStatistic) =>
-      formatDate(row.last_updated_trace_at ?? row.last_updated_at),
-    sortable: true,
-  },
-  {
-    id: "feedback_scores",
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row: ProjectWithStatistic) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
-    cell: FeedbackScoreListCell as never,
-    customMeta: {
-      getHoverCardName: (row: ProjectWithStatistic) => row.name,
-      isAverageScores: true,
+    {
+      id: "last_updated_at",
+      label: t("home.observability.lastUpdated"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row: ProjectWithStatistic) =>
+        formatDate(row.last_updated_trace_at ?? row.last_updated_at),
+      sortable: true,
     },
-  },
-  {
-    id: "trace_count",
-    label: "Trace count",
-    type: COLUMN_TYPE.number,
-  },
-];
+    {
+      id: "feedback_scores",
+      label: t("home.observability.feedbackScores"),
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row: ProjectWithStatistic) =>
+        get(row, "feedback_scores", []).map((score) => ({
+          ...score,
+          value: formatNumericData(score.value),
+        })),
+      cell: FeedbackScoreListCell as never,
+      customMeta: {
+        getHoverCardName: (row: ProjectWithStatistic) => row.name,
+        isAverageScores: true,
+      },
+    },
+    {
+      id: "trace_count",
+      label: t("home.observability.traceCount"),
+      type: COLUMN_TYPE.number,
+    },
+  ], [t, i18n.language]);
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -74,6 +79,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const ObservabilitySection: React.FunctionComponent = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -97,8 +103,10 @@ const ObservabilitySection: React.FunctionComponent = () => {
     },
   );
 
+  const SHARED_COLUMNS = useObservabilityColumns();
+  
   const projects = useMemo(() => data?.content ?? [], [data?.content]);
-  const noDataText = "There are no projects yet";
+  const noDataText = t("home.observability.noProjects");
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -124,7 +132,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
         ...SHARED_COLUMNS,
         {
           id: "error_count",
-          label: "Errors",
+          label: t("home.observability.errors"),
           type: COLUMN_TYPE.errors,
           cell: ErrorsCountCell as never,
           customMeta: {
@@ -152,7 +160,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
       ],
       {},
     );
-  }, [navigate, workspaceName]);
+  }, [SHARED_COLUMNS, t, navigate, workspaceName]);
 
   const handleRowClick = useCallback(
     (row: ProjectWithStatistic) => {
@@ -179,7 +187,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-        Observability
+        {t("home.observability.title")}
       </h2>
       <DataTable
         columns={columnData}
@@ -190,7 +198,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             <Button variant="link" onClick={handleNewProjectClick}>
-              Create new project
+              {t("home.observability.createNewProject")}
             </Button>
           </DataTableNoData>
         }
@@ -198,7 +206,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
       <div className="flex justify-end pt-1">
         <Link to="/$workspaceName/projects" params={{ workspaceName }}>
           <Button variant="ghost" className="flex items-center gap-1 pr-0">
-            All projects <ArrowRight className="size-4" />
+            {t("home.observability.allProjects")} <ArrowRight className="size-4" />
           </Button>
         </Link>
       </div>

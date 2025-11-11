@@ -2,6 +2,7 @@ import Breadcrumbs from "@/components/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
 import AppDebugInfo from "@/components/layout/AppDebugInfo/AppDebugInfo";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher/LanguageSwitcher";
 
 const TopBar = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
@@ -12,8 +13,11 @@ const TopBar = () => {
         <Breadcrumbs />
       </div>
 
-      <AppDebugInfo />
-      {UserMenu ? <UserMenu /> : <ThemeToggle />}
+      <div className="flex items-center gap-2">
+        <AppDebugInfo />
+        <LanguageSwitcher />
+        {UserMenu ? <UserMenu /> : <ThemeToggle />}
+      </div>
     </nav>
   );
 };

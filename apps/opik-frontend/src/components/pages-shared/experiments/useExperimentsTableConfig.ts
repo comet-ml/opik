@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ColumnSort,
   RowSelectionState,
@@ -73,6 +74,7 @@ export const useExperimentsTableConfig = <
   sortedColumns,
   setSortedColumns,
 }: UseExperimentsTableConfigProps<T>) => {
+  const { t, i18n } = useTranslation();
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
     {
@@ -215,7 +217,7 @@ export const useExperimentsTableConfig = <
       generateDataRowCellDef<T>(
         {
           id: COLUMN_NAME_ID,
-          label: "Name",
+          label: t("experiments.columns.name"),
           type: COLUMN_TYPE.string,
           cell: ResourceCell as never,
           customMeta: {
@@ -264,6 +266,8 @@ export const useExperimentsTableConfig = <
     scoresColumnsOrder,
     defaultColumns,
     actionsCell,
+    t,
+    i18n.language,
   ]);
 
   const sortConfig = useMemo(
@@ -301,13 +305,13 @@ export const useExperimentsTableConfig = <
   const columnSections = useMemo(() => {
     return [
       {
-        title: "Feedback scores",
+        title: t("experiments.columns.feedbackScores"),
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder, t]);
 
   return {
     // State

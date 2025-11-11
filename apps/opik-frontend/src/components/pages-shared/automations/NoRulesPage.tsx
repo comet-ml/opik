@@ -1,5 +1,6 @@
 import React from "react";
 import { Book, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import noDataRulesImageUrl from "/images/no-data-rules.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
@@ -26,10 +27,12 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
   height,
   className,
 }) => {
+  const { t } = useTranslation();
+
   return (
     <Wrapper
-      title="Automate your scores"
-      description="An automated rule is a predefined logic that scores LLM outputs in real-time based on set criteria, ensuring efficient and consistent performance assessment."
+      title={t("onlineEvaluation.emptyState.title")}
+      description={t("onlineEvaluation.emptyState.description")}
       imageUrl={noDataRulesImageUrl}
       height={height}
       className={className}
@@ -42,12 +45,12 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
               rel="noreferrer"
             >
               <Book className="mr-2 size-4"></Book>
-              Read documentation
+              {t("onlineEvaluation.emptyState.readDocumentation")}
             </a>
           </Button>
           <Button onClick={openModal}>
             <Plus className="mr-2 size-4" />
-            Create your first rule
+            {t("onlineEvaluation.emptyState.createFirstRule")}
           </Button>
         </>
       }

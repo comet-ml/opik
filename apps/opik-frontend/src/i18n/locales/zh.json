@@ -1,0 +1,1154 @@
+{
+  "common": {
+    "welcome": "欢迎",
+    "home": "首页",
+    "search": "搜索",
+    "filter": "筛选",
+    "save": "保存",
+    "cancel": "取消",
+    "browse": "浏览",
+    "delete": "删除",
+    "selectValue": "选择值",
+    "noItems": "无项目",
+    "noDataToShow": "无数据显示",
+    "edit": "编辑",
+    "create": "创建",
+    "update": "更新",
+    "close": "关闭",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "loading": "加载中",
+    "error": "错误",
+    "success": "成功",
+    "confirm": "确认",
+    "download": "下载",
+    "upload": "上传",
+    "name": "名称",
+    "description": "描述",
+    "date": "日期",
+    "time": "时间",
+    "status": "状态",
+    "actions": "操作",
+    "settings": "设置",
+    "documentation": "文档",
+    "help": "帮助",
+    "feedback": "反馈",
+    "logout": "退出登录",
+    "login": "登录",
+    "language": "语言",
+    "average": "平均",
+    "total": "总计",
+    "input": "输入",
+    "output": "输出",
+    "recent": "最近",
+    "comments": "评论",
+    "readMore": "了解更多",
+    "columns": "列",
+    "selectAll": "全选",
+    "noSearchResults": "无搜索结果",
+    "noData": "无数据",
+    "allSelected": "全部已选",
+    "showingFirst": "显示前 {count} 项。",
+    "loadMore": "加载更多",
+    "noSearchResultsFirst": "前 {count} 项中无搜索结果",
+    "filters": "筛选",
+    "groups": "分组",
+    "clearAll": "清空全部",
+    "where": "当",
+    "addFilter": "添加筛选",
+    "addGroup": "添加分组",
+    "maxLevelsReached": "已达到最大 {count} 层级",
+    "by": "按",
+    "and": "和",
+    "duplicateGroup": "重复的分组字段和键",
+    "compare": "对比",
+    "compareExperiments": "对比实验",
+    "deleteExperiments": "删除实验",
+    "deleteExperimentsConfirm": "删除实验将删除这些实验中的所有样本。相关的追踪不会受影响。此操作无法撤销。确定要继续吗？",
+    "manageAIProviders": "管理 AI 提供商",
+    "notSet": "未设置",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "showingRange": "显示 {{from}}-{{to}} / 共 {{total}}"
+  },
+  "traces": {
+    "pageTitle": "追踪",
+    "setGuardrail": "设置防护栏",
+    "tabs": {
+      "traces": "追踪",
+      "spans": "跨度",
+      "threads": "线程",
+      "metrics": "指标",
+      "onlineEvaluation": "在线评估",
+      "annotationQueues": "标注队列"
+    },
+    "emptyState": {
+      "title": "记录您的第一个追踪",
+      "description": "记录追踪有助于您理解应用程序的流程，并识别应用程序中可能导致问题的特定点。",
+      "readDocumentation": "阅读文档",
+      "exploreQuickstart": "探索快速入门指南"
+    },
+    "actions": {
+      "deleteTraces": "删除追踪",
+      "deleteConfirm": "删除这些追踪还将从相关的实验样本中删除其数据。此操作无法撤销。确定要继续吗？",
+      "addTags": "添加标签",
+      "addTagsTooltip": "添加标签",
+      "evaluate": "评估",
+      "evaluateTooltip": "评估",
+      "delete": "删除",
+      "deleteTooltip": "删除"
+    },
+    "addTagDialog": {
+      "titleTraces": "为 {{count}} 个追踪添加标签",
+      "titleSpans": "为 {{count}} 个跨度添加标签",
+      "maxEntitiesWarning": "一次最多只能为 {{max}} 个实体添加标签。请选择更少的实体。",
+      "newTagPlaceholder": "新标签",
+      "addTag": "添加标签",
+      "successTitle": "成功",
+      "successDescriptionTraces": "标签 \"{{tag}}\" 已添加到 {{count}} 个选定的追踪",
+      "successDescriptionSpans": "标签 \"{{tag}}\" 已添加到 {{count}} 个选定的跨度"
+    },
+    "addToDropdown": {
+      "addTo": "添加到",
+      "dataset": "数据集",
+      "annotationQueue": "标注队列"
+    }
+  },
+  "threads": {
+    "emptyState": {
+      "title": "记录您的第一个线程",
+      "description": "线程允许您将追踪分组在一起，以帮助您在特定上下文中评估 LLM 模型输出。"
+    },
+    "actions": {
+      "deleteThreads": "删除线程",
+      "deleteConfirm": "删除线程还将删除所有链接的追踪及其数据。此操作无法撤销。确定要继续吗？"
+    }
+  },
+  "navigation": {
+    "home": "首页",
+    "projects": "项目",
+    "experiments": "实验",
+    "optimizationRuns": "优化运行",
+    "datasets": "数据集",
+    "annotationQueues": "标注队列",
+    "promptLibrary": "Prompt 库",
+    "playground": "Playground",
+    "onlineEvaluation": "在线评估",
+    "configuration": "配置",
+    "documentation": "文档",
+    "quickstartGuide": "快速入门指南",
+    "provideFeedback": "提供反馈"
+  },
+  "sections": {
+    "observability": "可观测性",
+    "evaluation": "评估",
+    "promptEngineering": "Prompt 工程",
+    "production": "生产环境"
+  },
+  "home": {
+    "title": "欢迎回到 Opik",
+    "welcomeBanner": {
+      "title": "欢迎来到 Opik 👋",
+      "subtitle": "Opik 通过先进的追踪、实验管理、评估和实时监控，帮助您构建更安全、更可靠的 AI 系统"
+    },
+    "statistics": {
+      "projects": "项目",
+      "traces": "追踪",
+      "experiments": "实验",
+      "prompts": "Prompts"
+    },
+    "sections": {
+      "overallPerformance": "整体表现",
+      "observability": "可观测性",
+      "evaluation": "评估",
+      "optimizationRuns": "优化运行",
+      "getStarted": "快速开始"
+    },
+    "overallPerformance": {
+      "totalEstimatedSpend": "总预估花费",
+      "filterProjects": "筛选项目",
+      "allProjects": "所有项目",
+      "search": "搜索",
+      "presentingLatest": "展示最近 {count} 个项目，按最近活动排序。",
+      "noSearchResults": "无搜索结果"
+    },
+    "costOverview": {
+      "title": "成本概览",
+      "noCostsAvailable": "无可用成本数据",
+      "noDataMessage": "在当前筛选条件下未找到数据。这可能是因为所选时间范围内没有 LLM 调用。请尝试调整筛选条件以查看可用数据",
+      "documentationText": "查看文档以了解更多关于成本的信息。",
+      "comparePeriods": "对比当前时段和前一时段的总成本。"
+    },
+    "metricsOverview": {
+      "unlockMetrics": "解锁您的指标！",
+      "integrateMessage": "将您的项目与 Opik 集成以评估您的 AI。",
+      "metricsWillAppear": "数据开始流入后，指标将显示在此处。",
+      "noMetricsAvailable": "无可用指标",
+      "noMetricsProjectsMessage": "记录您的第一个项目指标以在此处查看",
+      "noMetricsFiltersMessage": "在当前筛选条件下未找到指标。这可能是因为所选范围内没有追踪或指标。请尝试调整筛选条件以查看可用数据",
+      "compareMessage": "对比当前时段和前一时段 {metric} 的平均值。",
+      "documentationText": "查看文档以了解更多关于 {metric} 的信息。"
+    },
+    "observability": {
+      "title": "可观测性",
+      "project": "项目",
+      "lastUpdated": "最后更新",
+      "feedbackScores": "反馈分数",
+      "traceCount": "Trace 数量",
+      "errors": "错误",
+      "noProjects": "暂无项目",
+      "createNewProject": "创建新项目",
+      "allProjects": "所有项目"
+    },
+    "evaluation": {
+      "title": "评估",
+      "experiment": "实验",
+      "dataset": "数据集",
+      "itemCount": "项目数量",
+      "feedbackScores": "反馈分数",
+      "created": "创建时间",
+      "noExperiments": "暂无实验",
+      "createNewExperiment": "创建新实验",
+      "allExperiments": "所有实验"
+    },
+    "optimizationRuns": {
+      "title": "优化运行",
+      "optimization": "优化",
+      "dataset": "数据集",
+      "optimizer": "优化器",
+      "bestScore": "最佳分数",
+      "status": "状态",
+      "trials": "试验",
+      "created": "创建时间",
+      "noOptimizations": "暂无优化运行",
+      "createNewOptimization": "创建新优化",
+      "allOptimizationRuns": "所有优化运行"
+    },
+    "getStarted": {
+      "title": "快速开始",
+      "logTrace": "记录 Trace",
+      "runExperiment": "运行实验",
+      "setGuardrail": "设置护栏",
+      "tryPlayground": "尝试 Playground",
+      "logTraceDialogTitle": "记录 Trace",
+      "logTraceDialogSubtitle": "选择框架并按照说明将 Comet 集成到您的代码中，或探索右侧的即用示例"
+    }
+  },
+  "projects": {
+    "title": "项目",
+    "createNew": "创建新项目",
+    "createProject": "创建项目",
+    "updateProject": "更新项目",
+    "editProject": "编辑项目",
+    "explainerDescription": "按应用、集成或环境组织您的工作。项目使 Traces、指标和评估保持独立，更易于管理、监控和协作。",
+    "deleteProjects": "删除项目",
+    "deleteProjectsConfirm": "删除项目将同时删除所有追踪及其数据。此操作无法撤销。确定要继续吗？",
+    "noProjects": "暂无项目",
+    "noSearchResults": "无搜索结果",
+    "searchByName": "按名称搜索",
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "project": "项目",
+      "description": "描述",
+      "duration": "持续时间（平均）",
+      "durationP90": "持续时间（P90）",
+      "durationP99": "持续时间（P99）",
+      "totalCost": "总成本",
+      "errors": "错误",
+      "tags": "标签",
+      "createdAt": "创建时间",
+      "createdBy": "创建者",
+      "lastUpdatedAt": "最后更新",
+      "guardrails": "护栏",
+      "guardrailsFailed": "{count} 失败"
+    },
+    "dialog": {
+      "createTitle": "创建新项目",
+      "editTitle": "编辑项目",
+      "nameLabel": "名称",
+      "namePlaceholder": "项目名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "项目描述",
+      "cancel": "取消",
+      "logTracesToProject": "记录 Traces 到您的项目"
+    },
+    "actions": {
+      "delete": "删除",
+      "deleteTooltip": "删除"
+    },
+    "explainer": {
+      "description": "创建新项目以组织、隔离和监控不同的 LLM 工作流和应用。"
+    }
+  },
+  "experiments": {
+    "title": "实验",
+    "createNew": "创建新实验",
+    "noExperiments": "暂无实验",
+    "noSearchResults": "无搜索结果",
+    "searchByName": "按名称搜索",
+    "refreshList": "刷新实验列表",
+    "dialog": {
+      "title": "创建新实验",
+      "description": "选择一个数据集，分配相关的评估器，并按照说明跟踪和比较您的训练运行",
+      "selectEvaluators": "选择评估器",
+      "heuristicsMetrics": "启发式指标",
+      "llmJudges": "LLM 评判",
+      "learnCustomMetrics": "了解自定义指标",
+      "step1": "1. 选择数据集",
+      "step2": "2. 安装 SDK",
+      "step3": "3. 创建实验",
+      "selectDatasetPlaceholder": "选择一个数据集",
+      "evaluators": {
+        "equals": {
+          "label": "相等",
+          "description": "检查输出是否与文本完全匹配。"
+        },
+        "regexMatch": {
+          "label": "正则匹配",
+          "description": "使用正则表达式验证模式一致性。"
+        },
+        "contains": {
+          "label": "包含",
+          "description": "识别子字符串的存在。"
+        },
+        "isJson": {
+          "label": "是 JSON",
+          "description": "验证 JSON 格式合规性。"
+        },
+        "levenshtein": {
+          "label": "编辑距离",
+          "description": "通过编辑距离计算文本相似度。"
+        },
+        "hallucination": {
+          "label": "幻觉检测",
+          "description": "检测生成的虚假信息。"
+        },
+        "moderation": {
+          "label": "内容审核",
+          "description": "检查是否符合内容标准。"
+        },
+        "answerRelevance": {
+          "label": "答案相关性",
+          "description": "评估答案与问题的匹配程度。"
+        },
+        "contextRecall": {
+          "label": "上下文召回",
+          "description": "测量相关上下文的检索能力。"
+        },
+        "contextPrecision": {
+          "label": "上下文精确度",
+          "description": "检查提供的上下文详细信息的准确性。"
+        }
+      }
+    },
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "dataset": "数据集",
+      "traceCount": "Trace 数量",
+      "totalEstimatedCost": "总预估成本",
+      "costPerTrace": "每个 Trace 成本（平均）",
+      "feedbackScores": "反馈分数（平均）",
+      "comments": "评论",
+      "createdAt": "创建时间",
+      "createdBy": "创建者",
+      "lastUpdatedAt": "最后更新"
+    },
+    "charts": {
+      "noChartsTitle": "无图表可显示",
+      "noChartsMessage": "请展开一个分组以查看其图表。您最多可以同时展开 {count} 个最深层级的分组。"
+    },
+    "sortingMessage": {
+      "lastExperimentCreated": "按最后创建的实验排序"
+    },
+    "explainer": {
+      "description": "实验帮助您使用数据集评估和比较不同的 LLM 配置和 Prompts。"
+    }
+  },
+  "datasets": {
+    "title": "数据集",
+    "createNew": "创建新数据集",
+    "dialog": {
+      "editTitle": "编辑数据集",
+      "createTitle": "创建新数据集",
+      "explainerDescription": "创建不同的数据集以在不同的上下文、场景或环境中评估您的 LLM 应用。",
+      "noSamplesFound": "未找到数据集样本",
+      "updateDataset": "更新数据集",
+      "createDataset": "创建数据集",
+      "nameLabel": "名称",
+      "namePlaceholder": "数据集名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "数据集描述",
+      "uploadCsvLabel": "上传 CSV",
+      "uploadCsvDescription": "您的 CSV 文件最多可包含 1,000 行，对于更大的数据集请使用 SDK。",
+      "learnMore": "了解更多",
+      "uploadPlaceholder": "拖放 CSV 文件上传或",
+      "validCsvFormat": "有效的 CSV 格式",
+      "processingCsv": "正在处理 CSV",
+      "processingMessage": "这应该不到一分钟。您可以安全地关闭此弹窗，我们将在后台处理。",
+      "close": "关闭",
+      "cancel": "取消",
+      "confirmTitle": "文件无法上传",
+      "confirmDescription": "由于未通过验证，此文件无法上传。如果继续，将创建一个空数据集。您可以稍后手动添加项目，或返回并上传有效文件。",
+      "createEmpty": "创建空数据集",
+      "goBack": "返回",
+      "errorUploading": "上传数据集项目时出错",
+      "errorUploadingDescription": "添加数据集项目失败"
+    },
+    "noDatasets": "暂无数据集",
+    "noSearchResults": "无搜索结果",
+    "searchByName": "按名称搜索",
+    "itemCount": "项目数量",
+    "uploadData": "上传数据",
+    "viewItems": "查看项目",
+    "deleteDatasets": "删除数据集",
+    "deleteConfirm": "删除这些数据集将同时删除所有项目。与之关联的实验将被移至\"已删除数据集\"分组。此操作无法撤销。确定要继续吗？",
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "description": "描述",
+      "itemCount": "项目数量",
+      "experimentCount": "实验数量",
+      "mostRecentExperiment": "最近实验",
+      "tags": "标签",
+      "lastUpdated": "最后更新",
+      "createdAt": "创建时间",
+      "createdBy": "创建者",
+      "lastUpdatedAt": "最后更新"
+    },
+    "explainer": {
+      "description": "数据集是用于评估和优化 LLM 应用的输入/输出示例集合。"
+    }
+  },
+  "prompts": {
+    "title": "Prompts",
+    "library": "Prompt 库",
+    "createNew": "创建新 Prompt",
+    "noPrompts": "暂无 Prompt",
+    "editPrompt": "编辑 Prompt",
+    "deletePrompt": "删除 Prompt",
+    "version": "版本",
+    "commit": "提交",
+    "variables": "变量",
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "description": "描述",
+      "versions": "版本",
+      "createdAt": "创建时间",
+      "createdBy": "创建者",
+      "lastUpdatedAt": "最后更新"
+    },
+    "searchPrompts": "搜索 Prompts...",
+    "deleteConfirm": "确定要删除此 Prompt 吗？",
+    "addPrompt": "添加 Prompt",
+    "viewPrompt": "查看 Prompt"
+  },
+  "playground": {
+    "title": "Playground",
+    "newChat": "新对话",
+    "selectModel": "选择模型",
+    "temperature": "温度",
+    "maxTokens": "最大 Token 数",
+    "systemPrompt": "系统提示词",
+    "userMessage": "用户消息",
+    "send": "发送",
+    "stop": "停止",
+    "clear": "清空",
+    "saveAsPrompt": "保存为 Prompt"
+  },
+  "traces": {
+    "title": "追踪",
+    "viewTrace": "查看 Trace",
+    "traceId": "Trace ID",
+    "spanId": "Span ID",
+    "duration": "持续时间",
+    "startTime": "开始时间",
+    "endTime": "结束时间",
+    "status": "状态",
+    "input": "输入",
+    "output": "输出",
+    "metadata": "元数据",
+    "tags": "标签",
+    "feedbackScores": "反馈分数",
+    "noTraces": "暂无追踪记录",
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "type": "类型",
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "duration": "持续时间",
+      "tokens": "Tokens",
+      "estimatedCost": "预估成本",
+      "input": "输入",
+      "output": "输出",
+      "tags": "标签",
+      "feedbackScores": "反馈分数"
+    },
+    "searchTraces": "搜索 Traces...",
+    "spans": "Spans",
+    "viewDetails": "查看详情"
+  },
+  "configuration": {
+    "title": "配置",
+    "general": "常规",
+    "apiKeys": "API 密钥",
+    "providerKeys": "Provider 密钥",
+    "alerts": "告警",
+    "integrations": "集成",
+    "teamSettings": "团队设置",
+    "workspace": "工作空间",
+    "members": "成员",
+    "billing": "账单"
+  },
+  "alerts": {
+    "title": "告警",
+    "createNew": "创建新告警",
+    "noAlerts": "暂无告警",
+    "editAlert": "编辑告警",
+    "deleteAlert": "删除告警",
+    "alertName": "告警名称",
+    "condition": "条件",
+    "notification": "通知",
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "optimization": {
+    "title": "优化运行",
+    "bestScore": "最佳分数",
+    "trials": "试验",
+    "compareTrials": "对比试验",
+    "viewDetails": "查看详情",
+    "createNew": "创建新优化",
+    "noOptimizations": "暂无优化运行\n优化运行帮助您改善 LLM 应用的性能、准确性和整体用户体验",
+    "noSearchResults": "无搜索结果",
+    "searchByName": "按名称搜索",
+    "refreshList": "刷新优化列表",
+    "deleteOptimizations": "删除优化",
+    "deleteConfirm": "删除这些优化运行将删除所有试验及其相关数据。相关的追踪不会受影响。此操作无法撤销。确定要继续吗？",
+    "dialog": {
+      "title": "开始优化运行",
+      "description": "选择一个数据集，选择您想要使用的优化器，我们将为您改进 Prompt",
+      "optimizationAlgorithms": "优化算法",
+      "step1": "1. 选择数据集",
+      "step2": "2. 安装 SDK",
+      "step3": "3. 创建优化运行",
+      "selectDatasetPlaceholder": "选择一个数据集",
+      "algorithms": {
+        "metaPromptOptimizer": {
+          "label": "元优化器",
+          "description": "使用元学习优化 Prompt。"
+        },
+        "fewShotOptimizer": {
+          "label": "少样本贝叶斯优化器",
+          "description": "使用少样本学习和贝叶斯优化来优化 Prompt。"
+        },
+        "evolutionaryOptimizer": {
+          "label": "进化优化器",
+          "description": "使用进化算法优化 Prompt。"
+        },
+        "gepaOptimizer": {
+          "label": "GEPA 优化器",
+          "description": "应用遗传-帕累托搜索和反思指导。"
+        }
+      }
+    },
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "dataset": "数据集",
+      "created": "创建时间",
+      "createdBy": "创建者",
+      "trialCount": "试验数量",
+      "optimizer": "优化器",
+      "bestScore": "最佳分数",
+      "status": "状态"
+    },
+    "explainer": {
+      "description": "优化运行帮助您使用自动化算法系统地改进 LLM Prompts 和配置。"
+    }
+  },
+  "annotationQueues": {
+    "title": "标注队列",
+    "createNew": "创建新队列",
+    "noQueues": "暂无标注队列",
+    "noSearchResults": "无搜索结果",
+    "searchByName": "按名称搜索",
+    "deleteQueues": "删除标注队列",
+    "deleteConfirm": "删除这些标注队列将永久删除所有相关的标注和审核。此操作无法撤销。确定要继续吗？",
+    "itemsToAnnotate": "待标注项目",
+    "completed": "已完成",
+    "pending": "待处理",
+    "scope": {
+      "trace": "Trace",
+      "traces": "Traces",
+      "thread": "Thread",
+      "threads": "Threads",
+      "selectScope": "选择范围"
+    },
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "project": "项目",
+      "instructions": "说明",
+      "scope": "范围",
+      "feedbackScores": "反馈分数（平均）",
+      "itemCount": "项目数量",
+      "reviewedBy": "审核者",
+      "progress": "进度",
+      "createdAt": "创建时间",
+      "createdBy": "创建者",
+      "lastUpdated": "最后更新"
+    },
+    "dialog": {
+      "createTitle": "创建新的标注队列",
+      "editTitle": "编辑标注队列",
+      "createButton": "创建标注队列",
+      "updateButton": "更新标注队列",
+      "name": "名称",
+      "namePlaceholder": "标注队列名称",
+      "project": "项目",
+      "scope": "范围",
+      "instructions": "说明",
+      "instructionsPlaceholder": "标注者说明",
+      "availableFeedbackScores": "可用的反馈分数",
+      "annotationGuidelines": "标注指南",
+      "annotationGuidelinesDesc": "设置如何对项目进行评分和标记，并提供说明以便标注者提供一致的反馈。",
+      "shareQueue": "共享标注队列",
+      "shareQueueDesc": "您必须邀请标注者加入您的工作区，以便他们审核项目。创建队列后，您将获得一个可与他们共享的直接链接。",
+      "selectProject": "选择项目",
+      "selectProjects": "选择项目",
+      "allProjects": "所有项目",
+      "selectFeedbackDefinition": "选择反馈定义",
+      "selectFeedbackDefinitions": "选择反馈定义",
+      "addNewFeedbackDefinition": "添加新反馈定义",
+      "validation": {
+        "nameRequired": "名称为必填项",
+        "nameMaxLength": "名称不能超过 255 个字符",
+        "projectRequired": "项目为必填项",
+        "feedbackRequired": "至少需要一个反馈定义"
+      }
+    },
+    "emptyState": {
+      "title": "组织您的标注",
+      "description": "标注队列让您可以组织 Traces 以进行审核和标记，使收集反馈和改进 LLM 输出变得容易。",
+      "readDocumentation": "阅读文档",
+      "createFirstQueue": "创建您的第一个队列"
+    }
+  },
+  "onlineEvaluation": {
+    "title": "在线评估",
+    "createNewRule": "创建新规则",
+    "searchById": "按 ID 搜索",
+    "noRules": "暂无规则",
+    "noSearchResults": "无搜索结果",
+    "deleteRules": "删除评估规则",
+    "deleteRulesConfirm": "删除在线评估规则将停止对所有新 Traces 的评分。已评分的现有 Traces 不会受到影响。此操作无法撤销。确定要继续吗？\n\n提示：要暂停评分而不删除，请禁用规则。",
+    "emptyState": {
+      "title": "自动化您的评分",
+      "description": "自动化规则是一种预定义的逻辑，根据设定的标准实时评分 LLM 输出，确保高效且一致的性能评估。",
+      "readDocumentation": "阅读文档",
+      "createFirstRule": "创建您的第一个规则"
+    },
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "project": "项目",
+      "lastUpdated": "最后更新",
+      "createdBy": "创建者",
+      "created": "创建时间",
+      "samplingRate": "采样率",
+      "scope": "范围",
+      "status": "状态"
+    },
+    "dialog": {
+      "createTitle": "创建新规则",
+      "editTitle": "编辑规则",
+      "createButton": "创建规则",
+      "updateButton": "更新规则",
+      "name": "名称",
+      "namePlaceholder": "规则名称",
+      "project": "项目",
+      "scope": "范围",
+      "scopeTooltip": "选择评估规则是对整个 Thread 评分还是对每个单独的 Trace 评分。Thread 级规则评估完整的对话，而 Trace 级规则一次评估一个模型响应。",
+      "selectScope": "选择范围",
+      "trace": "Trace",
+      "thread": "Thread",
+      "enableRule": "启用规则",
+      "enableRuleDesc": "启用或禁用此评估规则",
+      "type": "类型",
+      "llmAsJudge": "LLM 评判",
+      "codeMetric": "代码指标",
+      "codeMetricDisabled": "此功能在当前环境中不可用",
+      "codeMetricCannotUpdate": "代码指标无法更新。此功能在当前环境中不可用",
+      "model": "模型",
+      "selectModel": "选择模型",
+      "template": "模板",
+      "customTemplate": "自定义",
+      "messages": "消息",
+      "addMessage": "添加消息",
+      "variables": "变量",
+      "variablesDesc": "定义自定义变量，在 Prompt 中使用 mustache 语法引用",
+      "scores": "分数",
+      "scoresDesc": "定义模型可以输出的分数并将其映射到数值",
+      "filtering": "筛选",
+      "filteringDesc": "应用筛选器以控制此规则何时运行",
+      "samplingRate": "采样率",
+      "samplingRateDesc": "设置此规则将评估的 Traces 百分比",
+      "addFilter": "添加筛选器",
+      "scopeChangeWarning": "您将要丢失更改",
+      "scopeChangeDesc": "如果您更改评估范围，当前的规则设置（包括 Prompt、模型和变量映射）将被重置。\n确定要继续吗？",
+      "resetAndContinue": "重置并继续",
+      "llmAsJudgeDesc": "LLM 评判使用语言模型根据自定义的自然语言标准（如相关性、清晰度或事实准确性）对输出进行评分。",
+      "codeMetricDesc": "代码指标使用实现特定评分逻辑并返回数值结果的自定义 Python 函数以编程方式评估输出。",
+      "noConfiguredProviders": "未配置提供商",
+      "configureProvider": "在设置中配置提供商以启用模型选择",
+      "variableMapping": "变量映射",
+      "variableMappingDesc": "在您的 Prompt 中检测到的变量（例如 {{variable1}}）将显示在下方。对于每个变量，选择最近 Trace 中的一个字段进行映射 — 包括图片字段，如 input.image_url 或 output.image_base64。这些映射在规则执行期间自动填充变量。",
+      "noVariablesDetected": "未检测到变量",
+      "noVariablesDesc": "使用 mustache 语法（例如 {{variable_name}}）向 Prompt 添加变量",
+      "selectField": "选择字段",
+      "searchFields": "搜索字段...",
+      "goToSettings": "前往设置",
+      "templates": {
+        "custom": "自定义 LLM 评判",
+        "customDesc": "使用我们的模板编辑器编写您自己的 LLM 评判指标",
+        "hallucination": "幻觉检测",
+        "hallucinationDesc": "检查输出是否包含任何幻觉",
+        "moderation": "内容审核",
+        "moderationDesc": "检查输出是否包含任何有害内容",
+        "context_recall": "上下文召回",
+        "context_recallDesc": "衡量预期输出是否可归因于提供的上下文",
+        "context_precision": "上下文精确度",
+        "context_precisionDesc": "评估真实答案是否存在于提供的上下文中",
+        "answer_relevance": "答案相关性",
+        "answer_relevanceDesc": "衡量输出对给定问题的解答程度"
+      },
+      "imageHelper": "您可以添加 base64 字符串、图片 URL 或模板变量 {{image}}",
+      "selectFieldPlaceholder": "从最近的 Trace 中选择一个键",
+      "templateParsingError": "模板解析错误。无法提取变量。",
+      "addScore": "添加分数",
+      "scoreName": "分数名称",
+      "scoreType": "分数类型",
+      "scoreDescription": "分数描述",
+      "scoreNamePlaceholder": "例如：正确性",
+      "scoreDescPlaceholder": "例如：输出是否正确",
+      "scoreTypeBoolean": "布尔值（true/false）",
+      "scoreTypeNumber": "数值（0.0 到 1.0）",
+      "scoreTypeCategory": "类别",
+      "categoryOptions": "类别选项",
+      "categoryName": "类别名称",
+      "categoryValue": "类别值",
+      "addCategory": "添加类别",
+      "categoryNamePlaceholder": "例如：良好",
+      "categoryValuePlaceholder": "例如：1.0",
+      "filteringSampling": "筛选与采样",
+      "filteringSamplingDesc": "使用采样率控制此规则的应用频率。您还可以添加筛选器以根据属性选择特定的 {scope}。如果未定义任何内容，该规则将评估所有 {scope}。",
+      "filteringSamplingDescTrace": "应用筛选器和采样以选择此规则将评估的 Traces",
+      "filteringSamplingDescThread": "使用采样率控制此规则应用于 Threads 的频率",
+      "filters": "筛选器",
+      "addFilterButton": "添加筛选器",
+      "filterError": "筛选器 {index}",
+      "samplingRateLabel": "采样率",
+      "samplingRateTooltip": "要评估的 Traces 百分比",
+      "traces": "Traces",
+      "threads": "Threads",
+      "selectScore": "选择分数",
+      "selectStatus": "选择状态",
+      "active": "活跃",
+      "inactive": "不活跃",
+      "editScore": "编辑分数",
+      "doneEditing": "完成编辑",
+      "deleteScore": "删除分数",
+      "filterColumns": {
+        "id": "ID",
+        "name": "名称",
+        "input": "输入",
+        "output": "输出",
+        "duration": "持续时间",
+        "metadata": "元数据",
+        "tags": "标签",
+        "threadId": "Thread ID",
+        "feedbackScores": "反馈分数",
+        "customFilter": "自定义筛选器",
+        "status": "状态",
+        "createdAt": "创建时间",
+        "lastUpdatedAt": "最后更新时间",
+        "startTime": "开始时间",
+        "endTime": "结束时间"
+      },
+      "defaultScores": {
+        "correctness": "正确性",
+        "correctnessDesc": "助手的输出是否有效地回答了用户的输入",
+        "relevance": "相关性",
+        "relevanceDesc": "LLM 响应是否与对话上下文相关"
+      }
+    }
+  },
+  "configuration": {
+    "title": "配置",
+    "tabs": {
+      "feedbackDefinitions": "反馈定义",
+      "aiProviders": "AI 提供商",
+      "alerts": "告警",
+      "workspacePreferences": "工作区偏好设置"
+    },
+    "feedbackDefinitions": {
+      "searchPlaceholder": "按名称搜索",
+      "createNew": "创建新的反馈定义",
+      "noDefinitions": "暂无反馈定义",
+      "deleteFeedbackDefinitions": "删除反馈定义",
+      "deleteConfirm": "确定要删除这些反馈定义吗？",
+      "explainer": "创建自定义字段来手动评估 LLM 输出。使用它们来收集结构化反馈并跟踪质量变化",
+      "columns": {
+        "id": "ID",
+        "feedbackScore": "反馈分数",
+        "description": "描述",
+        "type": "类型",
+        "values": "值",
+        "created": "创建时间",
+        "createdBy": "创建者"
+      },
+      "dialog": {
+        "titleCreate": "创建新的反馈定义",
+        "titleEdit": "编辑反馈定义",
+        "submitCreate": "创建反馈定义",
+        "submitUpdate": "更新反馈定义",
+        "name": "名称",
+        "namePlaceholder": "反馈定义名称",
+        "description": "描述",
+        "descriptionPlaceholder": "反馈定义描述",
+        "type": "类型",
+        "typeCategorical": "分类型",
+        "typeCategoricalDesc": "使用标签（例如 \"好\"、\"差\"）对输出进行定性分类",
+        "typeNumerical": "数值型",
+        "typeNumericalDesc": "使用数值范围（例如 1-5）对输出进行定量评分",
+        "categories": "分类",
+        "categoryName": "名称",
+        "categoryValue": "0.0",
+        "addCategory": "添加分类",
+        "min": "最小值",
+        "minPlaceholder": "最小值",
+        "max": "最大值",
+        "maxPlaceholder": "最大值"
+      }
+    },
+    "aiProviders": {
+      "searchPlaceholder": "按名称搜索",
+      "addProvider": "添加提供商",
+      "noProviders": "暂无 AI 提供商",
+      "deleteProviders": "删除 AI 提供商",
+      "deleteConfirm": "确定要删除这些 AI 提供商吗？",
+      "columns": {
+        "provider": "提供商",
+        "name": "名称",
+        "created": "创建时间"
+      },
+      "rowActions": {
+        "edit": "编辑",
+        "delete": "删除",
+        "deleteTitle": "删除配置",
+        "deleteDescription": "此配置在整个工作区共享。删除它将移除所有人的访问权限。此操作无法撤销。确定要继续吗？",
+        "deleteConfirm": "删除配置"
+      },
+      "dialog": {
+        "titleAdd": "添加提供商配置",
+        "titleEdit": "编辑提供商配置",
+        "provider": "提供商",
+        "addConfiguration": "添加配置",
+        "updateConfiguration": "更新配置",
+        "done": "完成",
+        "deleteConfiguration": "删除配置",
+        "apiKey": "API 密钥",
+        "apiKeyPlaceholder": "API 密钥",
+        "location": "位置",
+        "locationPlaceholder": "位置",
+        "providerName": "提供商名称",
+        "providerNamePlaceholder": "ollama",
+        "url": "URL",
+        "urlPlaceholder": "https://vllm.example.com/v1",
+        "modelsList": "模型列表",
+        "modelsListPlaceholder": "模型列表",
+        "providerNameDescription": "此提供商实例的唯一标识符（例如 \"ollama\"、\"vLLM\"、\"LM-Studio\"）。",
+        "apiKeyDescription": "自定义提供商可能不需要 API 密钥，具体取决于您的服务器设置。在",
+        "documentation": "文档",
+        "modelsListDescription": "可用模型的逗号分隔列表。示例：",
+        "modelsListExample": "\"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B\""
+      },
+      "explainers": {
+        "whyDoINeedAnAIProvider": "连接 AI 提供商以在 Playground 中测试提示词、预览模型响应并使用在线评估规则为追踪评分。",
+        "editingExistingKeyTitle": "编辑现有密钥",
+        "editingExistingKeyDescription": "此提供商已设置密钥。由于 AI 提供商配置是工作区范围的，添加新密钥将覆盖所有用户的现有密钥。"
+      },
+      "providerSelect": {
+        "selectProvider": "选择提供商",
+        "customProvider": "自定义提供商",
+        "configured": "已配置",
+        "addCustomProvider": "添加自定义提供商"
+      }
+    },
+    "workspacePreferences": {
+      "columns": {
+        "parameter": "参数",
+        "value": "值"
+      },
+      "threadTimeout": "Thread 超时",
+      "threadTimeoutDesc": "设置 Thread 在自动关闭前保持活跃的最长时间",
+      "selectTimeout": "选择超时时长",
+      "truncation": "截断",
+      "truncationDesc": "启用或禁用长文本内容的自动截断",
+      "edit": "编辑"
+    },
+    "alerts": {
+      "searchPlaceholder": "按名称搜索",
+      "createNew": "创建新告警",
+      "noAlerts": "暂无告警",
+      "deleteAlerts": "删除告警",
+      "deleteConfirm": "确定要删除这些告警吗？",
+      "edit": "编辑告警",
+      "test": "测试 Webhook",
+      "columns": {
+        "name": "名称",
+        "id": "ID",
+        "alertType": "目标",
+        "endpoint": "端点",
+        "events": "事件",
+        "createdBy": "创建者",
+        "status": "状态",
+        "created": "创建时间",
+        "updated": "更新时间",
+        "enabled": "已启用",
+        "eventTriggers": "事件触发器",
+        "destination": "目标"
+      },
+      "selectType": "选择类型"
+    },
+    "common": {
+      "searchByName": "按名称搜索"
+    }
+  },
+  "playground": {
+    "title": "Playground",
+    "resetPlayground": "重置 Playground",
+    "datasetEmptyState": {
+      "title": "无可用数据集",
+      "description": "创建一个包含示例的数据集来评估您的 Prompt。"
+    },
+    "addPrompt": "添加 Prompt",
+    "resetConfirmTitle": "重置 Playground",
+    "resetConfirmDescription": "重置 Playground 将丢弃所有未保存的 Prompts。此操作无法撤销。确定要继续吗？",
+    "resetConfirmButton": "重置 Playground",
+    "duplicate": "复制",
+    "deletePrompt": "删除 Prompt",
+    "stopPrompt": "停止正在运行的 Prompt",
+    "stopPrompts": "停止正在运行的 Prompts",
+    "stopAll": "全部停止",
+    "runPrompt": "运行您的 Prompt",
+    "runPrompts": "运行您的 Prompts",
+    "run": "运行",
+    "runAll": "全部运行",
+    "selectDataset": "选择数据集",
+    "createNewDataset": "创建新数据集",
+    "exploreExperiment": "探索实验",
+    "compareExperiments": "对比实验",
+    "experimentStoredSingle": "您的运行已存储在此实验中。浏览结果以发现洞察。",
+    "experimentStoredMultiple": "您的运行已存储在多个实验中。浏览对比结果以获得洞察。",
+    "referenceDatasetVariables": "使用 mustache 语法引用数据集变量：{variables}",
+    "tooltips": {
+      "imageCompatibility": "某些 Prompts 包含图片，但所选模型不支持图片输入。请更换模型或从消息中移除图片",
+      "datasetRemoved": "您的数据集已被删除。请选择其他数据集",
+      "datasetEmpty": "所选数据集为空",
+      "selectModel": "请为您的 Prompt 选择 LLM 模型",
+      "selectModels": "请为您的 Prompts 选择 LLM 模型",
+      "emptyMessages": "某些消息为空。请添加一些文本以继续",
+      "actionDisabled": "操作已禁用"
+    }
+  },
+  "promptPage": {
+    "tabs": {
+      "prompt": "Prompt",
+      "experiments": "实验",
+      "commits": "提交"
+    }
+  },
+  "compareExperimentsPage": {
+    "tabs": {
+      "experimentItems": "实验项目",
+      "configuration": "配置",
+      "feedbackScores": "反馈分数"
+    }
+  },
+  "compareTrialsPage": {
+    "tabs": {
+      "prompt": "Prompt",
+      "trialItems": "试验项目",
+      "configuration": "配置"
+    }
+  },
+  "compareOptimizationsPage": {
+    "title": "优化进度",
+    "reloadData": "重新加载数据",
+    "searchByName": "按名称搜索",
+    "noExperiments": "没有要对比的实验",
+    "noSearchResults": "无搜索结果"
+  },
+  "prompts": {
+    "title": "Prompt 库",
+    "createNew": "创建新 Prompt",
+    "noPrompts": "暂无 Prompt",
+    "noSearchResults": "无搜索结果",
+    "searchByName": "按名称搜索",
+    "deletePrompts": "删除 Prompts",
+    "deletePromptsConfirm": "删除这些 Prompts 将同时删除所有相关的提交记录。此操作无法撤销。确定要继续吗？",
+    "deletePrompt": "删除 Prompt",
+    "deletePromptConfirm": "删除此 Prompt 将同时删除所有相关的提交记录。此操作无法撤销。确定要继续吗？",
+    "actionsMenu": "操作菜单",
+    "explainers": {
+      "whatsThePromptLibrary": "存储和版本化 Prompts 以保持一致性并简化跨项目的实验",
+      "howDoIWriteMyPrompt": "编写 LLM 将接收到的 Prompts，包括任何动态占位符或格式。",
+      "whatFormatShouldThePromptBe": "使用 mustache 语法引用数据集变量。示例：{{question}}。",
+      "whatFormatShouldTheMetadataBe": "使用有效的 JSON 对象，包含键值对。示例：{\"key\": \"value\"}"
+    },
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "description": "描述",
+      "versions": "版本",
+      "tags": "标签",
+      "lastUpdated": "最后更新",
+      "created": "创建时间",
+      "createdBy": "创建者"
+    },
+    "dialog": {
+      "createTitle": "创建新 Prompt",
+      "editTitle": "编辑 Prompt",
+      "createButton": "创建 Prompt",
+      "updateButton": "更新 Prompt",
+      "name": "名称",
+      "namePlaceholder": "Prompt 名称",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Prompt",
+      "description": "描述",
+      "descriptionPlaceholder": "Prompt 描述",
+      "images": "图片",
+      "metadata": "元数据",
+      "metadataInvalid": "元数据字段无效"
+    }
+  },
+  "onboarding": {
+    "quickstart": {
+      "title": "快速开始",
+      "installSDK": "安装 SDK",
+      "configureAPI": "配置 API",
+      "firstTrace": "创建您的第一个 Trace",
+      "explore": "探索平台"
+    },
+    "integrations": {
+      "title": "集成",
+      "explorer": "集成浏览器",
+      "quickInstall": "快速安装",
+      "configure": "配置",
+      "test": "测试连接"
+    }
+  },
+  "feedback": {
+    "title": "提供反馈",
+    "message": "您的反馈有助于我们改进 Opik",
+    "submit": "提交反馈",
+    "thankYou": "感谢您的反馈！"
+  },
+  "errors": {
+    "general": "发生错误，请重试。",
+    "notFound": "未找到请求的资源。",
+    "unauthorized": "您无权访问此资源。",
+    "networkError": "网络错误，请检查您的连接。",
+    "validationError": "请检查您的输入并重试。"
+  },
+  "validation": {
+    "required": "此字段为必填项",
+    "invalidEmail": "请输入有效的电子邮件地址",
+    "invalidURL": "请输入有效的 URL",
+    "minLength": "最小长度为 {{min}} 个字符",
+    "maxLength": "最大长度为 {{max}} 个字符"
+  },
+  "table": {
+    "noData": "暂无数据",
+    "noResults": "未找到结果",
+    "rowsPerPage": "每页行数",
+    "of": "共",
+    "page": "页",
+    "sortBy": "排序方式",
+    "filterBy": "筛选条件",
+    "selectAll": "全选",
+    "clearSelection": "清除选择",
+    "selectedItems": "已选择 {{count}} 项"
+  },
+  "sorting": {
+    "direction": "排序方向",
+    "ascending": "升序",
+    "descending": "降序"
+  },
+  "filters": {
+    "apply": "应用筛选",
+    "clear": "清除筛选",
+    "addFilter": "添加筛选",
+    "removeFilter": "移除筛选",
+    "key": "键",
+    "value": "值",
+    "selectValue": "选择值",
+    "column": "列",
+    "operator": "操作符",
+    "operators": {
+      "equals": "等于",
+      "contains": "包含",
+      "notContains": "不包含",
+      "startsWith": "以...开头",
+      "endsWith": "以...结尾",
+      "greaterThan": "大于",
+      "greaterThanOrEqual": "大于等于",
+      "lessThan": "小于",
+      "lessThanOrEqual": "小于等于",
+      "isEmpty": "为空",
+      "isNotEmpty": "不为空"
+    }
+  },
+  "charts": {
+    "noData": "无数据显示",
+    "loading": "正在加载图表数据..."
+  },
+  "dateTime": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "last7Days": "过去 7 天",
+    "last30Days": "过去 30 天",
+    "lastMonth": "上个月",
+    "custom": "自定义范围",
+    "selectDate": "选择日期",
+    "selectTime": "选择时间",
+    "startDate": "开始日期",
+    "endDate": "结束日期"
+  },
+  "models": {
+    "selectModel": "选择模型",
+    "customModel": "自定义模型",
+    "provider": "Provider",
+    "modelName": "模型名称",
+    "contextWindow": "上下文窗口",
+    "pricing": "定价"
+  },
+  "llm": {
+    "temperature": "温度",
+    "maxTokens": "最大 Token 数",
+    "topP": "Top P",
+    "frequencyPenalty": "频率惩罚",
+    "presencePenalty": "存在惩罚",
+    "stopSequences": "停止序列",
+    "totalTokens": "总 Token 数",
+    "inputTokens": "输入 Tokens",
+    "outputTokens": "输出 Tokens"
+  }
+}
+

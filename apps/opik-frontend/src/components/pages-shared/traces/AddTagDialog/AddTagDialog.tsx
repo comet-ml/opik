@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Trace, Span } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import {
@@ -32,6 +33,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   type,
   onSuccess,
 }) => {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [newTag, setNewTag] = useState<string>("");
@@ -91,10 +93,10 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
     Promise.all(promises)
       .then(() => {
         toast({
-          title: "Success",
-          description: `Tag "${newTag}" added to ${rows.length} selected ${
-            type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
-          }`,
+          title: t("traces.addTagDialog.successTitle"),
+          description: type === TRACE_DATA_TYPE.traces 
+            ? t("traces.addTagDialog.successDescriptionTraces", { tag: newTag, count: rows.length })
+            : t("traces.addTagDialog.successDescriptionSpans", { tag: newTag, count: rows.length }),
         });
 
         if (onSuccess) {
@@ -113,20 +115,20 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            Add tag to {rows.length}{" "}
-            {type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+            {type === TRACE_DATA_TYPE.traces 
+              ? t("traces.addTagDialog.titleTraces", { count: rows.length })
+              : t("traces.addTagDialog.titleSpans", { count: rows.length })}
           </DialogTitle>
         </DialogHeader>
         {rows.length > MAX_ENTITIES && (
           <div className="mb-2 text-sm text-destructive">
-            You can only add tags to up to {MAX_ENTITIES} entities at a time.
-            Please select fewer entities.
+            {t("traces.addTagDialog.maxEntitiesWarning", { max: MAX_ENTITIES })}
           </div>
         )}
         <div className="grid gap-4 py-4">
           <div className="flex items-center gap-4">
             <Input
-              placeholder="New tag"
+              placeholder={t("traces.addTagDialog.newTagPlaceholder")}
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
               className="col-span-3"
@@ -136,13 +138,13 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleAddTag}
             disabled={!newTag || rows.length > MAX_ENTITIES}
           >
-            Add tag
+            {t("traces.addTagDialog.addTag")}
           </Button>
         </DialogFooter>
       </DialogContent>

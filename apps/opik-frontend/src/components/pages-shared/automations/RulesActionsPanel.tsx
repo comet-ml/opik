@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
@@ -14,6 +15,7 @@ type RulesActionsPanelsProps = {
 const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
   rules,
 }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !rules?.length;
@@ -33,14 +35,12 @@ const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
         open={open}
         setOpen={setOpen}
         onConfirm={deleteRulesHandler}
-        title="Delete evaluation rules"
-        description={`Deleting online evaluation rules will stop scoring for all new traces. Existing traces that have already been scores won’t be affected. This action can’t be undone. Are you sure you want to continue?
-
-Tip: To pause scoring without deleting, disable the rules.`}
-        confirmText="Delete evaluation rules"
+        title={t("onlineEvaluation.deleteRules")}
+        description={t("onlineEvaluation.deleteRulesConfirm")}
+        confirmText={t("onlineEvaluation.deleteRules")}
         confirmButtonVariant="destructive"
       />
-      <TooltipWrapper content="Delete">
+      <TooltipWrapper content={t("common.delete")}>
         <Button
           variant="outline"
           size="icon-sm"

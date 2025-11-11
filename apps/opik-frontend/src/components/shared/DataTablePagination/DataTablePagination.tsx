@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronFirst,
   ChevronLast,
@@ -38,6 +39,7 @@ const DataTablePagination = ({
   supportsTruncation = false,
   truncationEnabled = true,
 }: DataTableProps) => {
+  const { t } = useTranslation();
   const maxSize =
     supportsTruncation && !truncationEnabled
       ? TRUNCATION_DISABLED_MAX_PAGE_SIZE
@@ -93,7 +95,7 @@ const DataTablePagination = ({
                 className="min-w-4 px-4"
                 disabled={disabledSizeChange}
               >
-                {`Showing ${from}-${to} of ${total}`}
+                {t("common.showingRange", { from, to, total })}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

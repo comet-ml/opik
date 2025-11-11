@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
@@ -40,6 +41,7 @@ type FeedbackDefinitionsSelectBoxProps =
 const FeedbackDefinitionsSelectBox: React.FC<
   FeedbackDefinitionsSelectBoxProps
 > = (props) => {
+  const { t } = useTranslation();
   const { className, disabled, valueField = "id" } = props;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -71,14 +73,14 @@ const FeedbackDefinitionsSelectBox: React.FC<
     ? {
         options,
         value: props.value,
-        placeholder: "Select feedback definitions",
+        placeholder: t("annotationQueues.dialog.selectFeedbackDefinitions"),
         onChange: props.onChange,
         multiselect: true as const,
       }
     : {
         options,
         value: props.value,
-        placeholder: "Select a feedback definition",
+        placeholder: t("annotationQueues.dialog.selectFeedbackDefinition"),
         onChange: props.onChange,
         multiselect: false as const,
       };
@@ -100,13 +102,13 @@ const FeedbackDefinitionsSelectBox: React.FC<
             rel="noopener noreferrer"
             className="flex items-center gap-1"
           >
-            <span>Add new feedback definition</span>
+            <span>{t("annotationQueues.dialog.addNewFeedbackDefinition")}</span>
             <ExternalLink className="size-3" />
           </Link>
         </Button>
       </div>
     ),
-    [workspaceName],
+    [workspaceName, t],
   );
 
   return (

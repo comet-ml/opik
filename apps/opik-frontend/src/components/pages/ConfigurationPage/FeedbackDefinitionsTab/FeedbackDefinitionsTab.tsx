@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import capitalize from "lodash/capitalize";
@@ -44,42 +45,57 @@ const COLUMNS_WIDTH_KEY = "feedback-definitions-columns-width";
 const COLUMNS_ORDER_KEY = "feedback-definitions-columns-order";
 const PAGINATION_SIZE_KEY = "feedback-definitions-pagination-size";
 
+// Hook to get translated columns
+const useFeedbackDefinitionsColumns = (): ColumnData<FeedbackDefinition>[] => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => [
+    {
+      id: "id",
+      label: t("configuration.feedbackDefinitions.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
+    },
+    {
+      id: "description",
+      label: t("configuration.feedbackDefinitions.columns.description"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "type",
+      label: t("configuration.feedbackDefinitions.columns.type"),
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) => capitalize(row.type),
+      cell: TagCell as never,
+    },
+    {
+      id: "values",
+      label: t("configuration.feedbackDefinitions.columns.values"),
+      type: COLUMN_TYPE.string,
+      cell: FeedbackDefinitionsValueCell as never,
+    },
+    {
+      id: "created_at",
+      label: t("configuration.feedbackDefinitions.columns.created"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "created_by",
+      label: t("configuration.feedbackDefinitions.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+  ], [t, i18n.language]);
+};
+
+// Legacy export for backward compatibility
 export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "type",
-    label: "Type",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => capitalize(row.type),
-    cell: TagCell as never,
-  },
-  {
-    id: "values",
-    label: "Values",
-    type: COLUMN_TYPE.string,
-    cell: FeedbackDefinitionsValueCell as never,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
+  { id: "id", label: "ID", type: COLUMN_TYPE.string, cell: IdCell as never },
+  { id: "description", label: "Description", type: COLUMN_TYPE.string },
+  { id: "type", label: "Type", type: COLUMN_TYPE.string, accessorFn: (row) => capitalize(row.type), cell: TagCell as never },
+  { id: "values", label: "Values", type: COLUMN_TYPE.string, cell: FeedbackDefinitionsValueCell as never },
+  { id: "created_at", label: "Created", type: COLUMN_TYPE.time, accessorFn: (row) => formatDate(row.created_at) },
+  { id: "created_by", label: "Created by", type: COLUMN_TYPE.string },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -90,7 +106,11 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = ["type", "values"];
 
 const FeedbackDefinitionsTab: React.FunctionComponent = () => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  
+  // Use translated columns
+  const DEFAULT_COLUMNS = useFeedbackDefinitionsColumns();
 
   const newFeedbackDefinitionDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -123,8 +143,8 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const total = data?.total ?? 0;
   const noData = !search;
   const noDataText = noData
-    ? "There are no feedback definitions yet"
-    : "No search results";
+    ? t("configuration.feedbackDefinitions.noDefinitions")
+    : t("common.noSearchResults");
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -155,7 +175,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
       generateSelectColumDef<FeedbackDefinition>(),
       mapColumnDataFields<FeedbackDefinition, FeedbackDefinition>({
         id: "name",
-        label: "Feedback score",
+        label: t("configuration.feedbackDefinitions.columns.feedbackScore"),
         type: COLUMN_TYPE.numberDictionary,
         cell: FeedbackScoreNameCell as never,
       }),
@@ -170,7 +190,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         cell: FeedbackDefinitionsRowActionsCell,
       }),
     ];
-  }, [columnsOrder, selectedColumns]);
+  }, [columnsOrder, selectedColumns, t]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -196,12 +216,13 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
       <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_definitions]}
+        description={t("configuration.feedbackDefinitions.explainer")}
       />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
           setSearchText={setSearch}
-          placeholder="Search by name"
+          placeholder={t("configuration.feedbackDefinitions.searchPlaceholder")}
           className="w-[320px]"
           dimension="sm"
         ></SearchInput>
@@ -221,7 +242,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
             size="sm"
             onClick={handleNewFeedbackDefinitionClick}
           >
-            Create new feedback definition
+            {t("configuration.feedbackDefinitions.createNew")}
           </Button>
         </div>
       </div>
@@ -239,7 +260,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewFeedbackDefinitionClick}>
-                Create new feedback definition
+                {t("configuration.feedbackDefinitions.createNew")}
               </Button>
             )}
           </DataTableNoData>

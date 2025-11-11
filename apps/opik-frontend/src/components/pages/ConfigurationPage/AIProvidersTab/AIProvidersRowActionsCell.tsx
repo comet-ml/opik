@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CellContext } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 
@@ -18,6 +19,7 @@ import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDe
 const AIProvidersRowActionsCell: React.FunctionComponent<
   CellContext<ProviderObject, unknown>
 > = (context) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -48,9 +50,9 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteProviderKeyHandler}
-        title="Delete configuration"
-        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
-        confirmText="Delete configuration"
+        title={t("configuration.aiProviders.rowActions.deleteTitle")}
+        description={t("configuration.aiProviders.rowActions.deleteDescription")}
+        confirmText={t("configuration.aiProviders.rowActions.deleteConfirm")}
         confirmButtonVariant="destructive"
       />
       <DropdownMenu>
@@ -68,7 +70,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
             }}
           >
             <Pencil className="mr-2 size-4" />
-            Edit
+            {t("configuration.aiProviders.rowActions.edit")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
@@ -77,7 +79,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
             }}
           >
             <Trash className="mr-2 size-4" />
-            Delete
+            {t("configuration.aiProviders.rowActions.delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
@@ -17,6 +18,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 const CompareTrialsPage: React.FunctionComponent = () => {
+  const { t } = useTranslation();
   const [tab = "prompt", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
@@ -75,13 +77,13 @@ const CompareTrialsPage: React.FunctionComponent = () => {
         <PageBodyStickyContainer direction="horizontal" limitWidth>
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="prompt">
-              Prompt
+              {t("compareTrialsPage.tabs.prompt")}
             </TabsTrigger>
             <TabsTrigger variant="underline" value="items">
-              Trial items
+              {t("compareTrialsPage.tabs.trialItems")}
             </TabsTrigger>
             <TabsTrigger variant="underline" value="config">
-              Configuration
+              {t("compareTrialsPage.tabs.configuration")}
             </TabsTrigger>
           </TabsList>
         </PageBodyStickyContainer>

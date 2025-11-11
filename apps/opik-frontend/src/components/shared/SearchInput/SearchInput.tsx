@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
 
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
@@ -22,13 +23,16 @@ export type SearchInputProps = {
 export const SearchInput = ({
   searchText = "",
   setSearchText,
-  placeholder = "Search",
+  placeholder,
   disabled = false,
   className,
   dimension,
   variant = "default",
   size = "md",
 }: SearchInputProps) => {
+  const { t } = useTranslation();
+  const defaultPlaceholder = placeholder || t("common.search");
+  
   return (
     <div className={cn("relative w-full", className)}>
       <div className="absolute left-2.5 top-1/2 -translate-y-1/2">
@@ -38,7 +42,7 @@ export const SearchInput = ({
         className={cn("px-8", size === "sm" && "h-8")}
         delay={SEARCH_TEXT_DELAY}
         onValueChange={setSearchText as (value: unknown) => void}
-        placeholder={placeholder}
+        placeholder={defaultPlaceholder}
         disabled={disabled}
         value={searchText}
         variant={variant}

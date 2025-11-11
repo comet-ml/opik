@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { CopyPlus, Trash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import last from "lodash/last";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
@@ -58,6 +59,7 @@ const PlaygroundPrompt = ({
   modelResolver,
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
+  const { t } = useTranslation();
   const checkedIfModelIsValidRef = useRef(false);
 
   const prompt = usePromptById(promptId);
@@ -78,9 +80,9 @@ const PlaygroundPrompt = ({
   const provider = providerResolver(model);
 
   const hintMessage = datasetVariables?.length
-    ? `Reference dataset variables using mustache syntax: ${datasetVariables
-        .map((dv) => `{{${dv}}}`)
-        .join(", ")}`
+    ? t("playground.referenceDatasetVariables", {
+        variables: datasetVariables.map((dv) => `{{${dv}}}`).join(", "),
+      })
     : "";
 
   const handleAddMessage = useCallback(() => {
@@ -249,7 +251,7 @@ const PlaygroundPrompt = ({
             onChange={handleUpdateConfig}
           />
           <Separator orientation="vertical" className="h-6" />
-          <TooltipWrapper content="Duplicate a prompt">
+          <TooltipWrapper content={t("playground.duplicate")}>
             <Button
               variant="outline"
               size="icon-sm"
@@ -259,7 +261,7 @@ const PlaygroundPrompt = ({
             </Button>
           </TooltipWrapper>
 
-          <TooltipWrapper content="Delete a prompt">
+          <TooltipWrapper content={t("playground.deletePrompt")}>
             <Button
               variant="outline"
               size="icon-sm"

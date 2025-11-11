@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { ColumnData, DropdownOption } from "@/types/shared";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import find from "lodash/find";
@@ -16,6 +17,8 @@ const ColumnSelector = <TColumnData,>({
   onSelect,
   disabledColumns,
 }: ColumnSelectorProps<TColumnData>) => {
+  const { t } = useTranslation();
+  
   const options = useMemo(() => {
     return columns.map<DropdownOption<string>>((c) => ({
       value: c.id,
@@ -35,7 +38,7 @@ const ColumnSelector = <TColumnData,>({
     <SelectBox
       value={field}
       options={options}
-      placeholder="Column"
+      placeholder={t("filters.column")}
       onChange={handleChange}
       testId="filter-column"
     />

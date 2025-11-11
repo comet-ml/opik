@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import isNumber from "lodash/isNumber";
+import { useTranslation } from "react-i18next";
 
 import noDataCostsImageUrl from "/images/no-data-workspace-costs.png";
 import { Card } from "@/components/ui/card";
@@ -34,6 +35,7 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
   intervalStart,
   intervalEnd,
 }) => {
+  const { t } = useTranslation();
   const projectIds = useMemo(() => {
     return projects.map((p) => p.id);
   }, [projects]);
@@ -96,11 +98,11 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
                   data?.current,
                 )}
                 trend="inverted"
-                tooltip="Compares the total cost between the current and previous periods."
+                tooltip={t("home.costOverview.comparePeriods")}
               />
             </div>
             <div className="comet-body-s text-muted-foreground">
-              Total estimated spend
+              {t("home.overallPerformance.totalEstimatedSpend")}
             </div>
           </div>
           {!noChartData && <ViewDetailsButton projectsIds={projectIds} />}
@@ -109,7 +111,7 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
         <ExplainerCallout
           {...EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated]}
           id="cost-overview-explainer"
-          description={`Check our documentation to learn more about the cost.`}
+          description={t("home.costOverview.documentationText")}
         ></ExplainerCallout>
       </>
     );
@@ -142,11 +144,9 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
           alt="no data image"
         ></img>
         <div className="absolute inset-0 flex flex-col items-center justify-center p-10">
-          <h1 className="comet-title-m">No costs available</h1>
+          <h1 className="comet-title-m">{t("home.costOverview.noCostsAvailable")}</h1>
           <div className="comet-body mt-2 max-w-[60%] text-center text-muted-slate">
-            No data found for your current filters. This may happen if there are
-            no LLM calls in the selected time range. Try adjusting your filters
-            to explore available data
+            {t("home.costOverview.noDataMessage")}
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
   return (
     <div className="pt-6">
       <h2 className="comet-title-s truncate break-words pb-3 pt-2 text-base">
-        Cost overview
+        {t("home.costOverview.title")}
       </h2>
       <Card className="flex h-[426px]">
         {isPendingCostsChartData ? (

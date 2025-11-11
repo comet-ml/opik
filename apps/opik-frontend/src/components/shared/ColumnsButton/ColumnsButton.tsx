@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Columns3 } from "lucide-react";
 import toLower from "lodash/toLower";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -40,6 +41,7 @@ const ColumnsButton = <TColumnData,>({
   onOrderChange,
   sections,
 }: ColumnsButtonProps<TColumnData>) => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
 
   const allColumnsIds = useMemo(
@@ -90,7 +92,7 @@ const ColumnsButton = <TColumnData,>({
     if (noData) {
       return (
         <div className="comet-body-s flex h-32 w-56 items-center justify-center text-muted-slate">
-          No search results
+          {t("common.noSearchResults")}
         </div>
       );
     }
@@ -139,7 +141,7 @@ const ColumnsButton = <TColumnData,>({
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
           <Columns3 className="mr-1.5 size-3.5" />
-          Columns
+          {t("common.columns")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
@@ -150,7 +152,7 @@ const ColumnsButton = <TColumnData,>({
           <SearchInput
             searchText={search}
             setSearchText={setSearch}
-            placeholder="Search"
+            placeholder={t("common.search")}
             variant="ghost"
           ></SearchInput>
           <Separator className="mt-1" />
@@ -167,7 +169,7 @@ const ColumnsButton = <TColumnData,>({
                 onCheckedChange={toggleColumns}
                 onSelect={(event) => event.preventDefault()}
               >
-                <div className="w-full break-words py-2">Select all</div>
+                <div className="w-full break-words py-2">{t("common.selectAll")}</div>
               </DropdownMenuCustomCheckboxItem>
             </div>
           </>

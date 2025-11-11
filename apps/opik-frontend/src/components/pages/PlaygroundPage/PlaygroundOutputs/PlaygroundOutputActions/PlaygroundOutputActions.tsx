@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ const PlaygroundOutputActions = ({
   datasetColumns,
   loadingDatasetItems,
 }: PlaygroundOutputActionsProps) => {
+  const { t } = useTranslation();
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [isDatasetDialogOpen, setIsDatasetDialogOpen] = useState(false);
@@ -247,7 +249,7 @@ const PlaygroundOutputActions = ({
   const renderActionButton = () => {
     if (isRunning) {
       const stopRunningPromptMessage =
-        promptCount === 1 ? "Stop a running prompt" : "Stop running prompts";
+        promptCount === 1 ? t("playground.stopPrompt") : t("playground.stopPrompts");
 
       return (
         <TooltipWrapper
@@ -261,7 +263,7 @@ const PlaygroundOutputActions = ({
             onClick={stopAll}
           >
             <Pause className="mr-1 size-4" />
-            Stop all
+            {t("playground.stopAll")}
           </Button>
         </TooltipWrapper>
       );
@@ -302,32 +304,32 @@ const PlaygroundOutputActions = ({
 
     const getTooltipMessage = () => {
       if (!isDisabledButton) {
-        return promptCount === 1 ? "Run your prompt" : "Run your prompts";
+        return promptCount === 1 ? t("playground.runPrompt") : t("playground.runPrompts");
       }
 
       if (hasImageCompatibilityIssues) {
-        return "Some prompts contain images but the selected model doesn't support image input. Please change the model or remove images from the messages";
+        return t("playground.tooltips.imageCompatibility");
       }
 
       if (isDatasetRemoved) {
-        return "Your dataset has been removed. Select another one";
+        return t("playground.tooltips.datasetRemoved");
       }
 
       if (isDatasetEmpty) {
-        return "Selected dataset is empty";
+        return t("playground.tooltips.datasetEmpty");
       }
 
       if (!allPromptsHaveModels) {
         return promptCount === 1
-          ? "Please select an LLM model for your prompt"
-          : "Please select an LLM model for your prompts";
+          ? t("playground.tooltips.selectModel")
+          : t("playground.tooltips.selectModels");
       }
 
       if (!allMessagesNotEmpty) {
-        return "Some messages are empty. Please add some text to proceed";
+        return t("playground.tooltips.emptyMessages");
       }
 
-      return "Action is disabled";
+      return t("playground.tooltips.actionDisabled");
     };
 
     const tooltipKey = shouldTooltipAppear
@@ -336,8 +338,8 @@ const PlaygroundOutputActions = ({
 
     const runLabel =
       promptCount > 1 || (datasetId && datasetItems.length > 1)
-        ? "Run all"
-        : "Run";
+        ? t("playground.runAll")
+        : t("playground.run");
 
     return (
       <TooltipWrapper
@@ -404,8 +406,8 @@ const PlaygroundOutputActions = ({
           <TooltipWrapper
             content={
               createdExperiments.length === 1
-                ? "Your run was stored in this experiment. Explore your results to find insights."
-                : "Your run was stored in experiments. Explore comparison results to get insights."
+                ? t("playground.experimentStoredSingle")
+                : t("playground.experimentStoredMultiple")
             }
           >
             <Button
@@ -416,8 +418,8 @@ const PlaygroundOutputActions = ({
             >
               <FlaskConical className="mr-2 size-4" />
               {createdExperiments.length === 1
-                ? "Explore experiment"
-                : "Compare experiments"}
+                ? t("playground.exploreExperiment")
+                : t("playground.compareExperiments")}
             </Button>
           </TooltipWrapper>
         )}
@@ -428,7 +430,7 @@ const PlaygroundOutputActions = ({
             placeholder={
               <div className="flex w-full items-center text-light-slate">
                 <Database className="mr-2 size-4" />
-                <span className="truncate font-normal">Select a dataset</span>
+                <span className="truncate font-normal">{t("playground.selectDataset")}</span>
               </div>
             }
             onChange={handleChangeDatasetId}
@@ -466,7 +468,7 @@ const PlaygroundOutputActions = ({
                 >
                   <div className="comet-body-s flex items-center gap-2 text-primary">
                     <Plus className="size-3.5 shrink-0" />
-                    <span>Create a new dataset</span>
+                    <span>{t("playground.createNewDataset")}</span>
                   </div>
                 </div>
               </div>

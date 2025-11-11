@@ -1,5 +1,6 @@
 import React from "react";
 import { Book, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import noDataQueuesImageUrl from "/images/no-data-annotation-queues.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
@@ -26,10 +27,12 @@ const NoAnnotationQueuesPage: React.FC<NoAnnotationQueuesPageProps> = ({
   height,
   className,
 }) => {
+  const { t } = useTranslation();
+  
   return (
     <Wrapper
-      title="Organize your annotations"
-      description="Annotation queues let you organize traces for review and labeling, making it easy to collect feedback and improve LLM outputs."
+      title={t("annotationQueues.emptyState.title")}
+      description={t("annotationQueues.emptyState.description")}
       imageUrl={noDataQueuesImageUrl}
       height={height}
       className={className}
@@ -42,12 +45,12 @@ const NoAnnotationQueuesPage: React.FC<NoAnnotationQueuesPageProps> = ({
               rel="noreferrer"
             >
               <Book className="mr-2 size-4"></Book>
-              Read documentation
+              {t("annotationQueues.emptyState.readDocumentation")}
             </a>
           </Button>
           <Button onClick={openModal}>
             <Plus className="mr-2 size-4" />
-            Create your first queue
+            {t("annotationQueues.emptyState.createFirstQueue")}
           </Button>
         </>
       }

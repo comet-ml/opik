@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +49,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   setOpen,
   prompt: defaultPrompt,
 }) => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const [name, setName] = useState(defaultPrompt?.name || "");
@@ -73,8 +75,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
 
   const isEdit = !!defaultPrompt;
   const isValid = Boolean(name.length && (isEdit || template.length));
-  const title = isEdit ? "Edit prompt" : "Create a new prompt";
-  const submitText = isEdit ? "Update prompt" : "Create prompt";
+  const title = isEdit ? t("prompts.dialog.editTitle") : t("prompts.dialog.createTitle");
+  const submitText = isEdit ? t("prompts.dialog.updateButton") : t("prompts.dialog.createButton");
 
   const onPromptCreated = useCallback(
     (prompt: Prompt) => {
@@ -143,38 +145,36 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
             <ExplainerDescription
               className="mb-4"
               {...EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_write_my_prompt]}
+              description={t("prompts.explainers.howDoIWriteMyPrompt")}
             />
           )}
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="promptName">Name</Label>
+            <Label htmlFor="promptName">{t("prompts.dialog.name")}</Label>
             <Input
               id="promptName"
-              placeholder="Prompt name"
+              placeholder={t("prompts.dialog.namePlaceholder")}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label htmlFor="template">Prompt</Label>
+              <Label htmlFor="template">{t("prompts.dialog.prompt")}</Label>
               <Textarea
                 id="template"
                 className="comet-code"
-                placeholder="Prompt"
+                placeholder={t("prompts.dialog.promptPlaceholder")}
                 value={localText}
                 onChange={(event) => handleContentChange(event.target.value)}
               />
               <Description>
-                {
-                  EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_prompt_be]
-                    .description
-                }
+                {t("prompts.explainers.whatFormatShouldThePromptBe")}
               </Description>
             </div>
           )}
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Images</Label>
+              <Label>{t("prompts.dialog.images")}</Label>
               <PromptMessageImageTags
                 images={images}
                 setImages={setImages}
@@ -191,7 +191,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
             >
               {!isEdit && (
                 <AccordionItem value="metadata">
-                  <AccordionTrigger>Metadata</AccordionTrigger>
+                  <AccordionTrigger>{t("prompts.dialog.metadata")}</AccordionTrigger>
                   <AccordionContent>
                     <div className="max-h-40 overflow-y-auto rounded-md">
                       <CodeMirror
@@ -202,26 +202,22 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                       />
                     </div>
                     <Description className="mt-2 block">
-                      {
-                        EXPLAINERS_MAP[
-                          EXPLAINER_ID.what_format_should_the_metadata_be
-                        ].description
-                      }
+                      {t("prompts.explainers.whatFormatShouldTheMetadataBe")}
                     </Description>
                   </AccordionContent>
                 </AccordionItem>
               )}
               {showInvalidJSON && (
                 <Alert variant="destructive">
-                  <AlertTitle>Metadata field is not valid</AlertTitle>
+                  <AlertTitle>{t("prompts.dialog.metadataInvalid")}</AlertTitle>
                 </Alert>
               )}
               <AccordionItem value="description">
-                <AccordionTrigger>Description</AccordionTrigger>
+                <AccordionTrigger>{t("prompts.dialog.description")}</AccordionTrigger>
                 <AccordionContent>
                   <Textarea
                     id="promptDescription"
-                    placeholder="Prompt description"
+                    placeholder={t("prompts.dialog.descriptionPlaceholder")}
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                     maxLength={255}
@@ -233,7 +229,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="outline">{t("common.cancel")}</Button>
           </DialogClose>
           <Button
             type="submit"

@@ -10,6 +10,9 @@ import { APP_VERSION } from "@/constants/app";
 import "./main.scss";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 
+// i18n configuration
+import "@/i18n/config";
+
 // other styles
 import "react18-json-view/src/style.css";
 import "react18-json-view/src/dark.css";

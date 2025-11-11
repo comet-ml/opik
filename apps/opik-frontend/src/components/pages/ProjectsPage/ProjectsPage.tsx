@@ -9,6 +9,7 @@ import {
 } from "use-query-params";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import { useTranslation } from "react-i18next";
 
 import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -83,6 +84,7 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
 ];
 
 const ProjectsPage: React.FunctionComponent = () => {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const isGuardrailsEnabled = useIsFeatureEnabled(
@@ -93,46 +95,46 @@ const ProjectsPage: React.FunctionComponent = () => {
     return [
       {
         id: "id",
-        label: "ID",
+        label: t("projects.columns.id"),
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
         sortable: true,
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: t("projects.columns.duration"),
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
       },
       {
         id: "duration.p90",
-        label: "Duration (p90)",
+        label: t("projects.columns.durationP90"),
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
         cell: DurationCell as never,
       },
       {
         id: "duration.p99",
-        label: "Duration (p99)",
+        label: t("projects.columns.durationP99"),
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
         cell: DurationCell as never,
       },
       {
         id: "total_estimated_cost_sum",
-        label: "Total cost",
+        label: t("projects.columns.totalCost"),
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
       },
       {
         id: "trace_count",
-        label: "Trace count",
+        label: t("projects.traceCount"),
         type: COLUMN_TYPE.number,
       },
       {
         id: "error_count",
-        label: "Errors",
+        label: t("projects.columns.errors"),
         type: COLUMN_TYPE.errors,
         cell: ErrorsCountCell as never,
         customMeta: {
@@ -159,7 +161,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.total_tokens",
-        label: "Total tokens (avg.)",
+        label: t("llm.totalTokens") + " (" + t("common.average") + ")",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.total_tokens)
@@ -168,7 +170,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.prompt_tokens",
-        label: "Input tokens (avg.)",
+        label: t("llm.inputTokens") + " (" + t("common.average") + ")",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.prompt_tokens)
@@ -177,7 +179,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.completion_tokens",
-        label: "Output tokens (avg.)",
+        label: t("llm.outputTokens") + " (" + t("common.average") + ")",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.completion_tokens)
@@ -186,7 +188,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "feedback_scores",
-        label: "Feedback scores (avg.)",
+        label: t("projects.feedbackScores") + " (" + t("common.average") + ")",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) =>
           get(row, "feedback_scores", []).map((score) => ({
@@ -204,13 +206,13 @@ const ProjectsPage: React.FunctionComponent = () => {
         ? [
             {
               id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
+              label: t("projects.columns.guardrails"),
               type: COLUMN_TYPE.category,
               iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: ProjectWithStatistic) =>
                 row.guardrails_failed_count &&
                 isNumber(row.guardrails_failed_count)
-                  ? `${row.guardrails_failed_count} failed`
+                  ? t("projects.columns.guardrailsFailed", { count: row.guardrails_failed_count })
                   : "-",
             },
           ]
@@ -218,7 +220,7 @@ const ProjectsPage: React.FunctionComponent = () => {
 
       {
         id: "last_updated_at",
-        label: "Last updated",
+        label: t("projects.columns.lastUpdatedAt"),
         type: COLUMN_TYPE.time,
         accessorFn: (row) =>
           formatDate(row.last_updated_trace_at ?? row.last_updated_at),
@@ -226,23 +228,23 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "created_at",
-        label: "Created",
+        label: t("projects.columns.createdAt"),
         type: COLUMN_TYPE.time,
         accessorFn: (row) => formatDate(row.created_at),
         sortable: true,
       },
       {
         id: "created_by",
-        label: "Created by",
+        label: t("projects.columns.createdBy"),
         type: COLUMN_TYPE.string,
       },
       {
         id: "description",
-        label: "Description",
+        label: t("projects.columns.description"),
         type: COLUMN_TYPE.string,
       },
     ];
-  }, [isGuardrailsEnabled, navigate, workspaceName]);
+  }, [t, i18n.language, isGuardrailsEnabled, navigate, workspaceName]);
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -302,7 +304,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   const projects = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noData = !search;
-  const noDataText = noData ? "There are no projects yet" : "No search results";
+  const noDataText = noData ? t("projects.noProjects") : t("projects.noSearchResults");
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -333,7 +335,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       generateSelectColumDef<ProjectWithStatistic>(),
       mapColumnDataFields<ProjectWithStatistic, ProjectWithStatistic>({
         id: COLUMN_NAME_ID,
-        label: "Name",
+        label: t("projects.columns.name"),
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         sortable: true,
@@ -354,7 +356,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: ProjectRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef]);
+  }, [t, selectedColumns, columnsOrder, columnsDef]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -390,17 +392,18 @@ const ProjectsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Projects</h1>
+        <h1 className="comet-title-l truncate break-words">{t("projects.title")}</h1>
       </div>
       <ExplainerDescription
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
+        description={t("projects.explainer.description")}
       />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search!}
           setSearchText={setSearch}
-          placeholder="Search by name"
+          placeholder={t("projects.searchByName")}
           className="w-[320px]"
           dimension="sm"
         ></SearchInput>
@@ -415,7 +418,7 @@ const ProjectsPage: React.FunctionComponent = () => {
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewProjectClick}>
-            Create new project
+            {t("projects.createNew")}
           </Button>
         </div>
       </div>
@@ -439,7 +442,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewProjectClick}>
-                Create new project
+                {t("projects.createNew")}
               </Button>
             )}
           </DataTableNoData>

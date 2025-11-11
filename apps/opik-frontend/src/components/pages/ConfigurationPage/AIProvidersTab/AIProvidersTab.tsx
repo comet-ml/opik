@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ColumnPinningState } from "@tanstack/react-table";
 
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -20,6 +21,42 @@ import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
+// Hook to get translated columns
+const useAIProvidersColumns = (): ColumnData<ProviderObject>[] => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("configuration.aiProviders.columns.name"),
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) =>
+        row.provider === PROVIDER_TYPE.CUSTOM
+          ? row.provider_name || LEGACY_CUSTOM_PROVIDER_NAME
+          : PROVIDERS[row.provider]?.apiKeyName,
+    },
+    {
+      id: "base_url",
+      label: "URL",
+      type: COLUMN_TYPE.string,
+      accessorFn: (row) => row.base_url || "-",
+    },
+    {
+      id: "created_at",
+      label: t("configuration.aiProviders.columns.created"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "provider",
+      label: t("configuration.aiProviders.columns.provider"),
+      type: COLUMN_TYPE.string,
+      cell: AIProviderCell as never,
+    },
+  ], [t, i18n.language]);
+};
+
+// Legacy export for backward compatibility
 export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [
   {
     id: COLUMN_NAME_ID,
@@ -56,7 +93,11 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const AIProvidersTab = () => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  
+  // Use translated columns
+  const DEFAULT_COLUMNS = useAIProvidersColumns();
 
   const [search, setSearch] = useState("");
   const resetDialogKeyRef = useRef(0);
@@ -103,7 +144,7 @@ const AIProvidersTab = () => {
         cell: AIProvidersRowActionsCell,
       }),
     ];
-  }, []);
+  }, [DEFAULT_COLUMNS]);
 
   const handleAddConfigurationClick = () => {
     resetDialogKeyRef.current += 1;
@@ -112,8 +153,8 @@ const AIProvidersTab = () => {
 
   const noDataLabel =
     search === ""
-      ? "Configure AI providers to use the playground and online scoring."
-      : "No search results";
+      ? t("configuration.aiProviders.noProviders")
+      : t("common.noSearchResults");
 
   if (isPending) {
     return <Loader />;
@@ -130,11 +171,11 @@ const AIProvidersTab = () => {
           searchText={search}
           setSearchText={setSearch}
           className="w-[320px]"
-          placeholder="Search by name"
+          placeholder={t("configuration.aiProviders.searchPlaceholder")}
           dimension="sm"
         />
         <Button onClick={handleAddConfigurationClick} size="sm">
-          Add configuration
+          {t("configuration.aiProviders.addProvider")}
         </Button>
       </div>
 
@@ -146,7 +187,7 @@ const AIProvidersTab = () => {
           <DataTableNoData title={noDataLabel}>
             {search === "" && (
               <Button variant="link" onClick={handleAddConfigurationClick}>
-                Add configuration
+                {t("configuration.aiProviders.addProvider")}
               </Button>
             )}
           </DataTableNoData>

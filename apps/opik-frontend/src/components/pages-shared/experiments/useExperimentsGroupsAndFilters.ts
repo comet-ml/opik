@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { JsonParam } from "use-query-params";
 import { ColumnSort } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
 
 import { Groups } from "@/types/groups";
 import {
@@ -16,19 +17,23 @@ import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import { SORT_DIRECTION } from "@/types/sorting";
 
-export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
-  {
-    id: COLUMN_DATASET_ID,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    disposable: true,
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Configuration",
-    type: COLUMN_TYPE.dictionary,
-  },
-];
+export const useFilterAndGroupColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<GroupedExperiment>[]>(() => [
+    {
+      id: COLUMN_DATASET_ID,
+      label: t("experiments.columns.dataset"),
+      type: COLUMN_TYPE.string,
+      disposable: true,
+    },
+    {
+      id: COLUMN_METADATA_ID,
+      label: t("configuration.title"),
+      type: COLUMN_TYPE.dictionary,
+    },
+  ], [t, i18n.language]);
+};
 
 const DEFAULT_GROUPS: Groups = [
   {
@@ -53,6 +58,8 @@ export const useExperimentsGroupsAndFilters = ({
   filters,
   promptId,
 }: UseExperimentsGroupsAndFiltersProps) => {
+  const { t } = useTranslation();
+  
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
     queryKey: `groups`,
@@ -69,13 +76,13 @@ export const useExperimentsGroupsAndFilters = ({
             className: "w-full min-w-72",
           },
           defaultOperator: "=",
-          operators: [{ label: "=", value: "=" }],
-          sortingMessage: "Last experiment created",
+          operators: [{ label: t("filters.operators.equals"), value: "=" }],
+          sortingMessage: t("experiments.sortingMessage.lastExperimentCreated"),
         },
         [COLUMN_METADATA_ID]: {
           keyComponent: ExperimentsPathsAutocomplete,
           keyComponentProps: {
-            placeholder: "key",
+            placeholder: t("filters.key"),
             excludeRoot: true,
             ...(promptId && { promptId }),
             sorting: sortedColumns,
@@ -84,7 +91,7 @@ export const useExperimentsGroupsAndFilters = ({
         },
       },
     }),
-    [filters, sortedColumns, promptId],
+    [filters, sortedColumns, promptId, t],
   );
 
   return {

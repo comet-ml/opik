@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Tag, Trash, Brain } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
@@ -35,6 +36,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   projectId,
   onClearSelection,
 }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
@@ -91,9 +93,9 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         open={open === 2}
         setOpen={setOpen}
         onConfirm={deleteTracesHandler}
-        title="Delete traces"
-        description="Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete traces"
+        title={t("traces.actions.deleteTraces")}
+        description={t("traces.actions.deleteConfirm")}
+        confirmText={t("traces.actions.deleteTraces")}
         confirmButtonVariant="destructive"
       />
       <AddTagDialog
@@ -121,7 +123,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
-      <TooltipWrapper content="Add tags">
+      <TooltipWrapper content={t("traces.actions.addTagsTooltip")}>
         <Button
           variant="outline"
           size="sm"
@@ -132,11 +134,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           disabled={disabled}
         >
           <Tag className="mr-2 size-4" />
-          Add tags
+          {t("traces.actions.addTags")}
         </Button>
       </TooltipWrapper>
       {type === TRACE_DATA_TYPE.traces && (
-        <TooltipWrapper content="Evaluate">
+        <TooltipWrapper content={t("traces.actions.evaluateTooltip")}>
           <Button
             variant="outline"
             size="sm"
@@ -147,7 +149,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             disabled={disabled}
           >
             <Brain className="mr-2 size-4" />
-            Evaluate
+            {t("traces.actions.evaluate")}
           </Button>
         </TooltipWrapper>
       )}
@@ -157,7 +159,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         generateFileName={generateFileName}
       />
       {type === TRACE_DATA_TYPE.traces && (
-        <TooltipWrapper content="Delete">
+        <TooltipWrapper content={t("traces.actions.deleteTooltip")}>
           <Button
             variant="outline"
             size="icon-sm"

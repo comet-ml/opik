@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Optimization } from "@/types/optimizations";
@@ -14,6 +15,7 @@ type OptimizationsActionsPanelsProps = {
 const OptimizationsActionsPanel: React.FunctionComponent<
   OptimizationsActionsPanelsProps
 > = ({ optimizations }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !optimizations?.length;
@@ -33,12 +35,12 @@ const OptimizationsActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={deleteOptimizationsHandler}
-        title="Delete optimizations"
-        description="Deleting these optimization runs will remove all their trials and associated data. Related traces won’t be affected. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete optimizations"
+        title={t("optimization.deleteOptimizations")}
+        description={t("optimization.deleteConfirm")}
+        confirmText={t("optimization.deleteOptimizations")}
         confirmButtonVariant="destructive"
       />
-      <TooltipWrapper content="Delete">
+      <TooltipWrapper content={t("common.delete")}>
         <Button
           variant="outline"
           size="icon-sm"

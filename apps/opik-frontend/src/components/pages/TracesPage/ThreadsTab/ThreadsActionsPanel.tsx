@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Trash, Brain } from "lucide-react";
 import get from "lodash/get";
 import first from "lodash/first";
@@ -31,6 +32,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
   projectName,
   projectId,
 }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
@@ -85,9 +87,9 @@ const ThreadsActionsPanel: React.FunctionComponent<
         open={open === 2}
         setOpen={setOpen}
         onConfirm={deleteThreadsHandler}
-        title="Delete threads"
-        description="Deleting threads will also remove all linked traces and their data. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete threads"
+        title={t("threads.actions.deleteThreads")}
+        description={t("threads.actions.deleteConfirm")}
+        confirmText={t("threads.actions.deleteThreads")}
         confirmButtonVariant="destructive"
       />
       <RunEvaluationDialog
@@ -104,7 +106,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         disabled={disabled}
         dataType="threads"
       />
-      <TooltipWrapper content="Evaluate">
+      <TooltipWrapper content={t("traces.actions.evaluateTooltip")}>
         <Button
           variant="outline"
           size="sm"
@@ -115,7 +117,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
           disabled={disabled}
         >
           <Brain className="mr-2 size-4" />
-          Evaluate
+          {t("traces.actions.evaluate")}
         </Button>
       </TooltipWrapper>
       <ExportToButton
@@ -123,7 +125,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         getData={mapRowData}
         generateFileName={generateFileName}
       />
-      <TooltipWrapper content="Delete">
+      <TooltipWrapper content={t("traces.actions.deleteTooltip")}>
         <Button
           variant="outline"
           size="icon-sm"

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { UseFormReturn } from "react-hook-form";
 import { Label } from "@/components/ui/label";
 import EyeInput from "@/components/shared/EyeInput/EyeInput";
@@ -24,6 +25,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   form,
   isEdit = false,
 }) => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4 pb-4">
       {!isEdit && (
@@ -35,11 +37,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
             return (
               <FormItem>
-                <Label htmlFor="providerName">Provider name</Label>
+                <Label htmlFor="providerName">{t("configuration.aiProviders.dialog.providerName")}</Label>
                 <FormControl>
                   <Input
                     id="providerName"
-                    placeholder="ollama"
+                    placeholder={t("configuration.aiProviders.dialog.providerNamePlaceholder")}
                     value={field.value}
                     onChange={(e) => field.onChange(e.target.value)}
                     disabled={isEdit}
@@ -50,9 +52,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                 </FormControl>
                 <FormMessage />
                 <Description>
-                  {
-                    'A unique identifier for this provider instance (e.g., "ollama", "vLLM", "LM-Studio").'
-                  }
+                  {t("configuration.aiProviders.dialog.providerNameDescription")}
                 </Description>
               </FormItem>
             );
@@ -67,11 +67,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="url">URL</Label>
+              <Label htmlFor="url">{t("configuration.aiProviders.dialog.url")}</Label>
               <FormControl>
                 <Input
                   id="url"
-                  placeholder={"https://vllm.example.com/v1"}
+                  placeholder={t("configuration.aiProviders.dialog.urlPlaceholder")}
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -93,11 +93,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="apiKey">API key</Label>
+              <Label htmlFor="apiKey">{t("configuration.aiProviders.dialog.apiKey")}</Label>
               <FormControl>
                 <EyeInput
                   id="apiKey"
-                  placeholder="API key"
+                  placeholder={t("configuration.aiProviders.dialog.apiKeyPlaceholder")}
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -107,8 +107,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Custom providers may not require an API key, depending on your
-                server setup. Learn more in the{" "}
+                {t("configuration.aiProviders.dialog.apiKeyDescription")}{" "}
                 <Button
                   variant="link"
                   size="sm"
@@ -120,7 +119,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    documentation
+                    {t("configuration.aiProviders.dialog.documentation")}
                   </a>
                 </Button>
                 .
@@ -137,11 +136,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="models">Models list</Label>
+              <Label htmlFor="models">{t("configuration.aiProviders.dialog.modelsList")}</Label>
               <FormControl>
                 <Input
                   id="models"
-                  placeholder="Models list"
+                  placeholder={t("configuration.aiProviders.dialog.modelsListPlaceholder")}
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -151,8 +150,8 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Comma separated list of available models. Example:
-                {`"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B"`}
+                {t("configuration.aiProviders.dialog.modelsListDescription")}{" "}
+                {t("configuration.aiProviders.dialog.modelsListExample")}
               </Description>
             </FormItem>
           );

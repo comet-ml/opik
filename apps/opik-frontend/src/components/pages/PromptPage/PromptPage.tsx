@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +18,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const PromptPage: React.FunctionComponent = () => {
+  const { t } = useTranslation();
   const [tab, setTab] = useQueryParam("tab", StringParam);
 
   const promptId = usePromptIdFromURL();
@@ -81,10 +83,10 @@ const PromptPage: React.FunctionComponent = () => {
         <PageBodyStickyContainer direction="horizontal" limitWidth>
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="prompt">
-              Prompt
+              {t("promptPage.tabs.prompt")}
             </TabsTrigger>
             <TabsTrigger variant="underline" value="experiments">
-              Experiments
+              {t("promptPage.tabs.experiments")}
               <ExplainerIcon
                 className="ml-1"
                 {...EXPLAINERS_MAP[
@@ -93,7 +95,7 @@ const PromptPage: React.FunctionComponent = () => {
               />
             </TabsTrigger>
             <TabsTrigger variant="underline" value="commits">
-              Commits
+              {t("promptPage.tabs.commits")}
               <ExplainerIcon
                 className="ml-1"
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}

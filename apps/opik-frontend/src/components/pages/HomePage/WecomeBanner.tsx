@@ -2,6 +2,7 @@ import welcomeBannerUrl from "/images/welcome-banner.png";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, X } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
 type WelcomeBannerProps = {
@@ -9,6 +10,7 @@ type WelcomeBannerProps = {
 };
 
 const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
+  const { t } = useTranslation();
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   return (
@@ -27,13 +29,15 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
         <X />
       </Button>
       <div className="p-7">
-        <div className="comet-title-xl text-white">Welcome to Opik 👋</div>
+        <div className="comet-title-xl text-white">
+          {t("home.welcomeBanner.title")}
+        </div>
         <div className="comet-body text-white/80 mt-4">
-          Opik helps you build safer, more reliable AI systems through advanced
-          tracing, experiment management, evaluation, and real-time monitoring
+          {t("home.welcomeBanner.subtitle")}
         </div>
         <Button variant="secondary" className="mt-6" onClick={openQuickstart}>
-          Get started <ChevronRight className="ml-2 size-4 shrink-0" />
+          {t("home.sections.getStarted")}{" "}
+          <ChevronRight className="ml-2 size-4 shrink-0" />
         </Button>
       </div>
     </div>

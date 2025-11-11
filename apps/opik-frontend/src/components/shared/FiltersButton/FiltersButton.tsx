@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Filter as FilterIcon, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   Popover,
   PopoverContent,
@@ -39,6 +40,7 @@ const FiltersButton = <TColumnData,>({
   align = "start",
   disabled,
 }: FiltersButtonProps<TColumnData>) => {
+  const { t } = useTranslation();
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
   const isIconLayout = layout === "icon";
@@ -87,21 +89,21 @@ const FiltersButton = <TColumnData,>({
               <span className="ml-1.5">{validFilters.length}</span>
             ) : null
           ) : (
-            <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
+            <span className="ml-1.5">{t("common.filters")} ({validFilters.length})</span>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="min-w-[540px] px-8 py-6" align={align}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
-            <span className="comet-title-s">Filters</span>
+            <span className="comet-title-s">{t("common.filters")}</span>
             <Button
               variant="ghost"
               size="sm"
               className="-mr-2.5"
               onClick={onClearAll}
             >
-              Clear all
+              {t("common.clearAll")}
             </Button>
           </div>
           <Separator />
@@ -115,7 +117,7 @@ const FiltersButton = <TColumnData,>({
           <div className="flex items-center">
             <Button variant="secondary" onClick={onAddFilter}>
               <Plus className="mr-2 size-4" />
-              Add filter
+              {t("common.addFilter")}
             </Button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MessageCircleWarning } from "lucide-react";
 
 import useFeedbackDefinitionCreateMutation from "@/api/feedback-definitions/useFeedbackDefinitionCreateMutation";
@@ -26,21 +27,6 @@ import FeedbackDefinitionDetails from "./FeedbackDefinitionDetails";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
-const TYPE_OPTIONS = [
-  {
-    value: FEEDBACK_DEFINITION_TYPE.categorical,
-    label: "Categorical",
-    description:
-      'Use labels (e.g. "Good", "Bad") to classify outputs qualitatively.',
-  },
-  {
-    value: FEEDBACK_DEFINITION_TYPE.numerical,
-    label: "Numerical",
-    description:
-      "Use a numerical range (e.g. 1–5) to rate outputs quantitatively.",
-  },
-];
-
 function isValidFeedbackDefinition(
   feedbackDefinition: CreateFeedbackDefinition | null,
 ) {
@@ -66,6 +52,7 @@ type AddEditFeedbackDefinitionDialogProps = {
 const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   AddEditFeedbackDefinitionDialogProps
 > = ({ open, setOpen, feedbackDefinition }) => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const feedbackDefinitionCreateMutation =
     useFeedbackDefinitionCreateMutation();
@@ -86,11 +73,24 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
 
   const isEdit = Boolean(feedbackDefinition);
   const title = isEdit
-    ? "Edit feedback definition"
-    : "Create a new feedback definition";
+    ? t("configuration.feedbackDefinitions.dialog.titleEdit")
+    : t("configuration.feedbackDefinitions.dialog.titleCreate");
   const submitText = isEdit
-    ? "Update feedback definition"
-    : "Create feedback definition";
+    ? t("configuration.feedbackDefinitions.dialog.submitUpdate")
+    : t("configuration.feedbackDefinitions.dialog.submitCreate");
+  
+  const TYPE_OPTIONS = useMemo(() => [
+    {
+      value: FEEDBACK_DEFINITION_TYPE.categorical,
+      label: t("configuration.feedbackDefinitions.dialog.typeCategorical"),
+      description: t("configuration.feedbackDefinitions.dialog.typeCategoricalDesc"),
+    },
+    {
+      value: FEEDBACK_DEFINITION_TYPE.numerical,
+      label: t("configuration.feedbackDefinitions.dialog.typeNumerical"),
+      description: t("configuration.feedbackDefinitions.dialog.typeNumericalDesc"),
+    },
+  ], [t]);
 
   const composedFeedbackDefinition = useMemo(() => {
     if (!details) return null;
@@ -139,19 +139,19 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
           />
         )}
         <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionName">Name</Label>
+          <Label htmlFor="feedbackDefinitionName">{t("configuration.feedbackDefinitions.dialog.name")}</Label>
           <Input
             id="feedbackDefinitionName"
-            placeholder="Feedback definition name"
+            placeholder={t("configuration.feedbackDefinitions.dialog.namePlaceholder")}
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
         </div>
         <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionDescription">Description</Label>
+          <Label htmlFor="feedbackDefinitionDescription">{t("configuration.feedbackDefinitions.dialog.description")}</Label>
           <Textarea
             id="feedbackDefinitionDescription"
-            placeholder="Feedback definition description"
+            placeholder={t("configuration.feedbackDefinitions.dialog.descriptionPlaceholder")}
             className="min-h-20"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
@@ -159,7 +159,7 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
           />
         </div>
         <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionType">Type</Label>
+          <Label htmlFor="feedbackDefinitionType">{t("configuration.feedbackDefinitions.dialog.type")}</Label>
           <SelectBox
             id="feedbackDefinitionType"
             value={type}
@@ -179,7 +179,7 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="outline">{t("common.cancel")}</Button>
           </DialogClose>
           <DialogClose asChild>
             <Button

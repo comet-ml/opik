@@ -250,6 +250,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_do_i_need_multiple_datasets,
     description:
       "Create different datasets to evaluate your LLM application in different contexts, scenarios, or environments.",
+    translationKey: "datasets.dialog.explainerDescription",
   },
   [EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item]: {
     id: EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item,
@@ -385,6 +386,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_would_i_want_to_create_a_new_project,
     description:
       "Organize your work by app, integration, or environment. Projects keep traces, metrics, and evaluations separate, making it easier to manage, monitor, and collaborate.",
+    translationKey: "projects.explainerDescription",
   },
   [EXPLAINER_ID.whats_the_commit_history]: {
     id: EXPLAINER_ID.whats_the_commit_history,

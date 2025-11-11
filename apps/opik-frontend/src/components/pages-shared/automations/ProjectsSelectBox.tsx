@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useProjectsList from "@/api/projects/useProjectsList";
@@ -113,6 +114,7 @@ type ProjectsSelectBoxProps =
   | MultiSelectProjectsProps;
 
 const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
+  const { t } = useTranslation();
   const { className, disabled, minWidth } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
@@ -133,16 +135,16 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
     ? {
         options,
         value: props.value,
-        placeholder: "Select projects",
+        placeholder: t("annotationQueues.dialog.selectProjects"),
         onChange: props.onValueChange,
         multiselect: true as const,
         showSelectAll: props.showSelectAll,
-        selectAllLabel: props.selectAllLabel || "All projects",
+        selectAllLabel: props.selectAllLabel || t("annotationQueues.dialog.allProjects"),
       }
     : {
         options,
         value: props.value,
-        placeholder: "Select a project",
+        placeholder: t("annotationQueues.dialog.selectProject"),
         onChange: props.onValueChange,
         multiselect: false as const,
       };

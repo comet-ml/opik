@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Book, GraduationCap } from "lucide-react";
 import { useQueryParam } from "use-query-params";
 import noDataTracesImageUrl from "/images/no-data-traces.png";
@@ -11,6 +12,7 @@ import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const NoTracesPage = () => {
+  const { t } = useTranslation();
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const [type = TRACE_DATA_TYPE.traces] = useQueryParam("type");
 
@@ -29,8 +31,8 @@ const NoTracesPage = () => {
 
   return (
     <NoDataPage
-      title="Log your first trace"
-      description="Logging traces helps you understand the flow of your application and identify specific points in your application that may be causing issues."
+      title={t("traces.emptyState.title")}
+      description={t("traces.emptyState.description")}
       imageUrl={imageUrl}
       height={188}
       className="px-6"
@@ -43,12 +45,12 @@ const NoTracesPage = () => {
               rel="noreferrer"
             >
               <Book className="mr-2 size-4"></Book>
-              Read documentation
+              {t("traces.emptyState.readDocumentation")}
             </a>
           </Button>
           <Button onClick={openQuickstart}>
             <GraduationCap className="mr-2 size-4" />
-            Explore Quickstart guide
+            {t("traces.emptyState.exploreQuickstart")}
           </Button>
         </>
       }

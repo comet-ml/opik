@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { LOADED_PROJECTS_COUNT } from "@/components/pages/HomePage/ProjectSelector";
 import OverallPerformanceActionsPanel from "@/components/pages/HomePage/OverallPerformanceActionsPanel";
@@ -17,6 +18,7 @@ const TIME_PERIOD_KEY = "home-time-period";
 const SELECTED_PROJECTS_KEY = "home-selected-projects";
 
 const OverallPerformanceSection = () => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const {
@@ -68,7 +70,7 @@ const OverallPerformanceSection = () => {
     <div className="pt-6">
       <div className="sticky top-0 z-10 bg-soft-background pb-3 pt-2">
         <h2 className="comet-title-s truncate break-words">
-          Overall performance
+          {t("home.sections.overallPerformance")}
         </h2>
         <OverallPerformanceActionsPanel
           rightSection={

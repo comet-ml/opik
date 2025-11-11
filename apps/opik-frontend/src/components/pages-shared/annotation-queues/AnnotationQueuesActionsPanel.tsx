@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { AnnotationQueue } from "@/types/annotation-queues";
@@ -14,6 +15,7 @@ type AnnotationQueuesActionsPanelProps = {
 const AnnotationQueuesActionsPanel: React.FunctionComponent<
   AnnotationQueuesActionsPanelProps
 > = ({ queues }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !queues?.length;
@@ -40,12 +42,12 @@ const AnnotationQueuesActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={deleteQueuesHandler}
-        title="Delete annotation queues"
-        description="Deleting these annotation queues will permanently remove all associated annotations and reviews. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete annotation queues"
+        title={t("annotationQueues.deleteQueues")}
+        description={t("annotationQueues.deleteConfirm")}
+        confirmText={t("annotationQueues.deleteQueues")}
         confirmButtonVariant="destructive"
       />
-      <TooltipWrapper content="Delete">
+      <TooltipWrapper content={t("common.delete")}>
         <Button
           variant="outline"
           size="icon-sm"

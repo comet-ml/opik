@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import uniq from "lodash/uniq";
 import isEmpty from "lodash/isEmpty";
+import { useTranslation } from "react-i18next";
 
 import { GroupIcon, Plus } from "lucide-react";
 import {
@@ -65,6 +66,7 @@ const GroupsButton = <TColumnData,>({
   align = "start",
   disabled,
 }: GroupsButtonProps<TColumnData>) => {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState<Groups>(initialGroups);
   const [open, setOpen] = useState(false);
   const isIconLayout = layout === "icon";
@@ -153,10 +155,10 @@ const GroupsButton = <TColumnData,>({
 
   const renderGroups = () => {
     return groups.map((group, index) => {
-      const prefix = index === 0 ? "By" : "And";
+      const prefix = index === 0 ? t("common.by") : t("common.and");
 
       const error = hasDuplication(groups, group, index)
-        ? "Duplicate group with same field and key"
+        ? t("common.duplicateGroup")
         : undefined;
 
       return (
@@ -194,21 +196,21 @@ const GroupsButton = <TColumnData,>({
               <span className="ml-1.5">{validGroups.length}</span>
             ) : null
           ) : (
-            <span className="ml-1.5">{`Groups (${validGroups.length})`}</span>
+            <span className="ml-1.5">{t("common.groups")} ({validGroups.length})</span>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="min-w-[340px] px-8 py-6" align={align}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
-            <span className="comet-title-s">Groups</span>
+            <span className="comet-title-s">{t("common.groups")}</span>
             <Button
               variant="ghost"
               size="sm"
               className="-mr-2.5"
               onClick={clearHandler}
             >
-              Clear all
+              {t("common.clearAll")}
             </Button>
           </div>
           <Separator />
@@ -235,11 +237,11 @@ const GroupsButton = <TColumnData,>({
               disabled={groups.length >= MAX_GROUP_LEVELS}
             >
               <Plus className="mr-2 size-4" />
-              Add group
+              {t("common.addGroup")}
             </Button>
             {groups.length >= MAX_GROUP_LEVELS && (
               <span className="ml-2 text-xs text-gray-500">
-                Maximum {MAX_GROUP_LEVELS} levels reached
+                {t("common.maxLevelsReached", { count: MAX_GROUP_LEVELS })}
               </span>
             )}
           </div>

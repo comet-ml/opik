@@ -14,6 +14,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -74,100 +75,106 @@ import {
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { capitalizeFirstLetter } from "@/lib/utils";
 
-const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: COLUMN_PROJECT_ID,
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    accessorFn: (row) => row.project_id,
-    customMeta: {
-      nameKey: "project_name",
-      idKey: "project_id",
-      resource: RESOURCE_TYPE.project,
+const useAnnotationQueuesColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = useMemo(() => [
+    {
+      id: COLUMN_ID_ID,
+      label: t("annotationQueues.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
     },
-  },
-  {
-    id: "instructions",
-    label: "Instructions",
-    type: COLUMN_TYPE.string,
-    size: 400,
-  },
-  {
-    id: "scope",
-    label: "Scope",
-    type: COLUMN_TYPE.category,
-    cell: TagCell as never,
-    accessorFn: (row) => capitalizeFirstLetter(row.scope),
-  },
-  {
-    id: "created_at",
-    label: "Created at",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-    sortable: true,
-  },
-];
-
-const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
-  ...SHARED_COLUMNS,
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) => row.feedback_scores ?? [],
-    cell: FeedbackScoreListCell as never,
-    customMeta: {
-      getHoverCardName: (row: AnnotationQueue) => row.name,
-      isAverageScores: true,
+    {
+      id: COLUMN_PROJECT_ID,
+      label: t("annotationQueues.columns.project"),
+      type: COLUMN_TYPE.string,
+      cell: ResourceCell as never,
+      accessorFn: (row) => row.project_id,
+      customMeta: {
+        nameKey: "project_name",
+        idKey: "project_id",
+        resource: RESOURCE_TYPE.project,
+      },
     },
-  },
-  {
-    id: "items_count",
-    label: "Item count",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) => (row.items_count ? `${row.items_count}` : "-"),
-  },
-  {
-    id: "reviewers",
-    label: "Reviewed by",
-    type: COLUMN_TYPE.list,
-    cell: ListCell as never,
-    accessorFn: (row) => row.reviewers?.map((r) => r.username) ?? [],
-  },
-  {
-    id: "progress",
-    label: "Progress",
-    type: COLUMN_TYPE.string,
-    cell: AnnotationQueueProgressCell as never,
-  },
-];
+    {
+      id: "instructions",
+      label: t("annotationQueues.columns.instructions"),
+      type: COLUMN_TYPE.string,
+      size: 400,
+    },
+    {
+      id: "scope",
+      label: t("annotationQueues.columns.scope"),
+      type: COLUMN_TYPE.category,
+      cell: TagCell as never,
+      accessorFn: (row) => capitalizeFirstLetter(row.scope),
+    },
+    {
+      id: "created_at",
+      label: t("annotationQueues.columns.createdAt"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "created_by",
+      label: t("annotationQueues.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "last_updated_at",
+      label: t("annotationQueues.columns.lastUpdated"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.last_updated_at),
+      sortable: true,
+    },
+  ], [t, i18n.language]);
 
-const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  ...SHARED_COLUMNS,
-];
+  const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = useMemo(() => [
+    ...SHARED_COLUMNS,
+    {
+      id: COLUMN_FEEDBACK_SCORES_ID,
+      label: t("annotationQueues.columns.feedbackScores"),
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row) => row.feedback_scores ?? [],
+      cell: FeedbackScoreListCell as never,
+      customMeta: {
+        getHoverCardName: (row: AnnotationQueue) => row.name,
+        isAverageScores: true,
+      },
+    },
+    {
+      id: "items_count",
+      label: t("annotationQueues.columns.itemCount"),
+      type: COLUMN_TYPE.number,
+      accessorFn: (row) => (row.items_count ? `${row.items_count}` : "-"),
+    },
+    {
+      id: "reviewers",
+      label: t("annotationQueues.columns.reviewedBy"),
+      type: COLUMN_TYPE.list,
+      cell: ListCell as never,
+      accessorFn: (row) => row.reviewers?.map((r) => r.username) ?? [],
+    },
+    {
+      id: "progress",
+      label: t("annotationQueues.columns.progress"),
+      type: COLUMN_TYPE.string,
+      cell: AnnotationQueueProgressCell as never,
+    },
+  ], [t, i18n.language, SHARED_COLUMNS]);
+
+  const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = useMemo(() => [
+    {
+      id: COLUMN_NAME_ID,
+      label: t("annotationQueues.columns.name"),
+      type: COLUMN_TYPE.string,
+    },
+    ...SHARED_COLUMNS,
+  ], [t, i18n.language, SHARED_COLUMNS]);
+
+  return { SHARED_COLUMNS, DEFAULT_COLUMNS, FILTER_COLUMNS };
+};
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -200,29 +207,36 @@ const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-annotation-queues-pagination-size";
 const ROW_HEIGHT_KEY = "workspace-annotation-queues-row-height";
 
-const FILTERS_CONFIG = {
-  rowsMap: {
-    scope: {
-      keyComponentProps: {
-        options: [
-          { value: ANNOTATION_QUEUE_SCOPE.TRACE, label: "Trace" },
-          { value: ANNOTATION_QUEUE_SCOPE.THREAD, label: "Thread" },
-        ],
-        placeholder: "Select scope",
+const useFiltersConfig = () => {
+  const { t } = useTranslation();
+  
+  return useMemo(() => ({
+    rowsMap: {
+      scope: {
+        keyComponentProps: {
+          options: [
+            { value: ANNOTATION_QUEUE_SCOPE.TRACE, label: t("annotationQueues.scope.trace") },
+            { value: ANNOTATION_QUEUE_SCOPE.THREAD, label: t("annotationQueues.scope.thread") },
+          ],
+          placeholder: t("annotationQueues.scope.selectScope"),
+        },
+      },
+      [COLUMN_PROJECT_ID]: {
+        keyComponent: ProjectsSelectBox,
+        keyComponentProps: {
+          className: "w-full min-w-72",
+        },
+        defaultOperator: "=",
+        operators: [{ label: t("filters.operators.equals"), value: "=" }],
       },
     },
-    [COLUMN_PROJECT_ID]: {
-      keyComponent: ProjectsSelectBox,
-      keyComponentProps: {
-        className: "w-full min-w-72",
-      },
-      defaultOperator: "=",
-      operators: [{ label: "=", value: "=" }],
-    },
-  },
+  }), [t]);
 };
 
 export const AnnotationQueuesPage: React.FC = () => {
+  const { t } = useTranslation();
+  const { DEFAULT_COLUMNS, FILTER_COLUMNS } = useAnnotationQueuesColumns();
+  const FILTERS_CONFIG = useFiltersConfig();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
@@ -310,8 +324,8 @@ export const AnnotationQueuesPage: React.FC = () => {
 
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? "There are no annotation queues yet"
-    : "No search results";
+    ? t("annotationQueues.noQueues")
+    : t("annotationQueues.noSearchResults");
 
   const handleNewQueue = useCallback(() => {
     setOpenDialog(true);
@@ -336,7 +350,7 @@ export const AnnotationQueuesPage: React.FC = () => {
       generateSelectColumDef<AnnotationQueue>(),
       mapColumnDataFields<AnnotationQueue, AnnotationQueue>({
         id: COLUMN_NAME_ID,
-        label: "Name",
+        label: t("annotationQueues.columns.name"),
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
@@ -367,7 +381,7 @@ export const AnnotationQueuesPage: React.FC = () => {
         cell: AnnotationQueueRowActionsCell,
       }),
     ];
-  }, [sortableBy, columnsOrder, selectedColumns]);
+  }, [t, sortableBy, columnsOrder, selectedColumns, DEFAULT_COLUMNS]);
 
   const sortConfig = useMemo(
     () => ({
@@ -411,7 +425,7 @@ export const AnnotationQueuesPage: React.FC = () => {
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
-          Annotation queues
+          {t("annotationQueues.title")}
         </h1>
       </div>
       <ExplainerDescription
@@ -423,7 +437,7 @@ export const AnnotationQueuesPage: React.FC = () => {
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by name"
+            placeholder={t("annotationQueues.searchByName")}
             className="w-[320px]"
             dimension="sm"
           />
@@ -449,7 +463,7 @@ export const AnnotationQueuesPage: React.FC = () => {
             onOrderChange={setColumnsOrder}
           />
           <Button size="sm" onClick={handleNewQueue}>
-            Create new queue
+            {t("annotationQueues.createNew")}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SquareArrowOutUpRight } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
@@ -53,6 +54,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   hideUpload,
   csvRequired = false,
 }) => {
+  const { t } = useTranslation();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
 
@@ -101,8 +103,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const isValid =
     Boolean(name.length) &&
     (isEdit || hideUpload || !csvRequired || hasValidCsvData);
-  const title = isEdit ? "Edit dataset" : "Create a new dataset";
-  const buttonText = isEdit ? "Update dataset" : "Create dataset";
+  const title = isEdit ? t("datasets.dialog.editTitle") : t("datasets.dialog.createTitle");
+  const buttonText = isEdit ? t("datasets.dialog.updateDataset") : t("datasets.dialog.createDataset");
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
@@ -127,13 +129,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
             onError: (error) => {
               console.error("Error uploading dataset items:", error);
               toast({
-                title: "Error uploading dataset items",
+                title: t("datasets.dialog.errorUploading"),
                 description:
                   (
                     error as { response?: { data?: { errors?: string[] } } }
                   ).response?.data?.errors?.join(", ") ||
                   error.message ||
-                  "Failed to add dataset items",
+                  t("datasets.dialog.errorUploadingDescription"),
                 variant: "destructive",
               });
             },
@@ -235,14 +237,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
                   message={
                     <div>
                       <div className="comet-body-s-accented text-center">
-                        Processing the CSV
+                        {t("datasets.dialog.processingCsv")}
                       </div>
                       <div className="comet-body-s mt-2 text-center text-light-slate">
-                        This should take less than a minute. <br /> You can
-                        safely close this popup while we work.
+                        {t("datasets.dialog.processingMessage")}
                       </div>
                       <div className="mt-4 flex items-center justify-center">
-                        <Button onClick={() => setOpen(false)}>Close</Button>
+                        <Button onClick={() => setOpen(false)}>{t("datasets.dialog.close")}</Button>
                       </div>
                     </div>
                   }
@@ -257,20 +258,20 @@ const AddEditDatasetDialog: React.FunctionComponent<
             />
           )}
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="datasetName">Name</Label>
+            <Label htmlFor="datasetName">{t("datasets.dialog.nameLabel")}</Label>
             <Input
               id="datasetName"
-              placeholder="Dataset name"
+              placeholder={t("datasets.dialog.namePlaceholder")}
               disabled={isEdit}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="datasetDescription">Description</Label>
+            <Label htmlFor="datasetDescription">{t("datasets.dialog.descriptionLabel")}</Label>
             <Textarea
               id="datasetDescription"
-              placeholder="Dataset description"
+              placeholder={t("datasets.dialog.descriptionPlaceholder")}
               className="min-h-20"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
@@ -279,29 +280,28 @@ const AddEditDatasetDialog: React.FunctionComponent<
           </div>
           {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label>Upload a CSV</Label>
+              <Label>{t("datasets.dialog.uploadCsvLabel")}</Label>
               <Description className="tracking-normal">
-                Your CSV file can contain up to 1,000 rows, for larger datasets
-                use the SDK instead.
+                {t("datasets.dialog.uploadCsvDescription")}
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Learn more
+                    {t("datasets.dialog.learnMore")}
                     <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
                   </a>
                 </Button>
               </Description>
               <UploadField
                 disabled={isEdit}
-                description="Drop a CSV file to upload or"
+                description={t("datasets.dialog.uploadPlaceholder")}
                 accept={ACCEPTED_TYPE}
                 onFileSelect={handleFileSelect}
                 errorText={csvError}
                 successText={
-                  csvData && !csvError ? "Valid CSV format" : undefined
+                  csvData && !csvError ? t("datasets.dialog.validCsvFormat") : undefined
                 }
               />
             </div>
@@ -310,7 +310,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">
-              {isOverlayShown ? "Close" : "Cancel"}
+              {isOverlayShown ? t("datasets.dialog.close") : t("datasets.dialog.cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -326,10 +326,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
         open={confirmOpen}
         setOpen={setConfirmOpen}
         onCancel={submitHandler}
-        title="File can’t be uploaded"
-        description="This file cannot be uploaded because it does not pass validation. If you continue, the dataset will be created without any items. You can add items manually later, or go back and upload a valid file."
-        cancelText="Create empty dataset"
-        confirmText="Go back"
+        title={t("datasets.dialog.confirmTitle")}
+        description={t("datasets.dialog.confirmDescription")}
+        cancelText={t("datasets.dialog.createEmpty")}
+        confirmText={t("datasets.dialog.goBack")}
       />
     </Dialog>
   );

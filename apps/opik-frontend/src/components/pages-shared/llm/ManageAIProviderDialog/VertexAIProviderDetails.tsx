@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,8 +24,9 @@ type VertexAIProviderDetailsProps = {
 const VertexAIProviderDetails: React.FC<VertexAIProviderDetailsProps> = ({
   form,
 }) => {
+  const { t } = useTranslation();
   const providerName = PROVIDERS[PROVIDER_TYPE.VERTEX_AI].label;
-  const apiKeyLabel = `${providerName} API Key`;
+  const apiKeyLabel = `${providerName} ${t("configuration.aiProviders.dialog.apiKey")}`;
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -36,11 +38,11 @@ const VertexAIProviderDetails: React.FC<VertexAIProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="location">{t("configuration.aiProviders.dialog.location")}</Label>
               <FormControl>
                 <Input
                   id="location"
-                  placeholder="Location"
+                  placeholder={t("configuration.aiProviders.dialog.locationPlaceholder")}
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({

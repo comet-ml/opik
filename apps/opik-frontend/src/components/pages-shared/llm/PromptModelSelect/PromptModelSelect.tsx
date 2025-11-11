@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import isNull from "lodash/isNull";
 import pick from "lodash/pick";
 
@@ -56,6 +57,7 @@ const PromptModelSelect = ({
   onAddProvider,
   onDeleteProvider,
 }: PromptModelSelectProps) => {
+  const { t } = useTranslation();
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
@@ -179,7 +181,7 @@ const PromptModelSelect = ({
     if (configuredProvidersList?.length === 0) {
       return (
         <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
-          No configured providers
+          {t("onlineEvaluation.dialog.noConfiguredProviders")}
         </div>
       );
     }
@@ -187,7 +189,7 @@ const PromptModelSelect = ({
     if (filteredOptions.length === 0 && filterValue !== "") {
       return (
         <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
-          No search results
+          {t("common.noSearchResults")}
         </div>
       );
     }
@@ -289,7 +291,7 @@ const PromptModelSelect = ({
         })}
       >
         <SelectValue
-          placeholder="Select an LLM model"
+          placeholder={t("onlineEvaluation.dialog.selectModel")}
           data-testid="select-a-llm-model"
         >
           <div className="flex items-center gap-2">
@@ -316,7 +318,7 @@ const PromptModelSelect = ({
               <Input
                 ref={inputRef}
                 className="outline-0"
-                placeholder="Search model"
+                placeholder={t("common.search")}
                 value={filterValue}
                 variant="ghost"
                 onChange={(e) => setFilterValue(e.target.value)}
@@ -333,7 +335,7 @@ const PromptModelSelect = ({
                 setOpenConfigDialog(true);
               }}
             >
-              Manage AI providers
+              {t("common.manageAIProviders")}
             </Button>
           </div>
         </SelectContent>

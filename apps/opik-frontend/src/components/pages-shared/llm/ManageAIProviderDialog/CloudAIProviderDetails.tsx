@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,8 +25,9 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
   provider,
   form,
 }) => {
+  const { t } = useTranslation();
   const providerName = (provider && PROVIDERS[provider]?.label + " ") || "";
-  const apiKeyLabel = `${providerName}API Key`;
+  const apiKeyLabel = `${providerName}${t("configuration.aiProviders.dialog.apiKey")}`;
 
   return (
     <div className="flex flex-col gap-2 pb-4">

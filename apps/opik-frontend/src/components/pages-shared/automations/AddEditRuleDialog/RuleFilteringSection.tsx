@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { UseFormReturn } from "react-hook-form";
 import { Plus } from "lucide-react";
 import uniqid from "uniqid";
@@ -34,107 +35,117 @@ import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
 
-// Trace-specific columns for automation rule filtering
+// Hook to get translated trace filter columns
+export const useTraceFilterColumns = (): ColumnData<TRACE_DATA_TYPE>[] => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => [
+    {
+      id: "id",
+      label: t("onlineEvaluation.dialog.filterColumns.id"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "name",
+      label: t("onlineEvaluation.dialog.filterColumns.name"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "input",
+      label: t("onlineEvaluation.dialog.filterColumns.input"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "output",
+      label: t("onlineEvaluation.dialog.filterColumns.output"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "duration",
+      label: t("onlineEvaluation.dialog.filterColumns.duration"),
+      type: COLUMN_TYPE.duration,
+    },
+    {
+      id: COLUMN_METADATA_ID,
+      label: t("onlineEvaluation.dialog.filterColumns.metadata"),
+      type: COLUMN_TYPE.dictionary,
+    },
+    {
+      id: "tags",
+      label: t("onlineEvaluation.dialog.filterColumns.tags"),
+      type: COLUMN_TYPE.list,
+    },
+    {
+      id: "thread_id",
+      label: t("onlineEvaluation.dialog.filterColumns.threadId"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: COLUMN_FEEDBACK_SCORES_ID,
+      label: t("onlineEvaluation.dialog.filterColumns.feedbackScores"),
+      type: COLUMN_TYPE.numberDictionary,
+    },
+  ], [t, i18n.language]);
+};
+
+// Hook to get translated thread filter columns
+export const useThreadFilterColumns = (): ColumnData<TRACE_DATA_TYPE>[] => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo(() => [
+    {
+      id: "status",
+      label: t("onlineEvaluation.dialog.filterColumns.status"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "created_at",
+      label: t("onlineEvaluation.dialog.filterColumns.createdAt"),
+      type: COLUMN_TYPE.time,
+    },
+    {
+      id: "last_updated_at",
+      label: t("onlineEvaluation.dialog.filterColumns.lastUpdatedAt"),
+      type: COLUMN_TYPE.time,
+    },
+    {
+      id: "duration",
+      label: t("onlineEvaluation.dialog.filterColumns.duration"),
+      type: COLUMN_TYPE.duration,
+    },
+    {
+      id: "tags",
+      label: t("onlineEvaluation.dialog.filterColumns.tags"),
+      type: COLUMN_TYPE.list,
+    },
+    {
+      id: COLUMN_FEEDBACK_SCORES_ID,
+      label: t("onlineEvaluation.dialog.filterColumns.feedbackScores"),
+      type: COLUMN_TYPE.numberDictionary,
+    },
+  ], [t, i18n.language]);
+};
+
+// Legacy exports (non-translated, for backward compatibility)
 export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "name",
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "input",
-    label: "Input",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "output",
-    label: "Output",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "duration",
-    label: "Duration",
-    type: COLUMN_TYPE.duration,
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Metadata",
-    type: COLUMN_TYPE.dictionary,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-  },
-  {
-    id: "thread_id",
-    label: "Thread ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
-  // {
-  //   id: COLUMN_CUSTOM_ID,
-  //   label: "Custom filter",
-  //   type: COLUMN_TYPE.dictionary,
-  // },
+  { id: "id", label: "ID", type: COLUMN_TYPE.string },
+  { id: "name", label: "Name", type: COLUMN_TYPE.string },
+  { id: "input", label: "Input", type: COLUMN_TYPE.string },
+  { id: "output", label: "Output", type: COLUMN_TYPE.string },
+  { id: "duration", label: "Duration", type: COLUMN_TYPE.duration },
+  { id: COLUMN_METADATA_ID, label: "Metadata", type: COLUMN_TYPE.dictionary },
+  { id: "tags", label: "Tags", type: COLUMN_TYPE.list },
+  { id: "thread_id", label: "Thread ID", type: COLUMN_TYPE.string },
+  { id: COLUMN_FEEDBACK_SCORES_ID, label: "Feedback scores", type: COLUMN_TYPE.numberDictionary },
 ];
 
-// Thread-specific columns for automation rule filtering
 export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
-  // {
-  //   id: "id",
-  //   label: "ID",
-  //   type: COLUMN_TYPE.string,
-  // },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "created_at",
-    label: "Created at",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated at",
-    type: COLUMN_TYPE.time,
-  },
-  // {
-  //   id: "start_time",
-  //   label: "Start time",
-  //   type: COLUMN_TYPE.time,
-  // },
-  // {
-  //   id: "end_time",
-  //   label: "End time",
-  //   type: COLUMN_TYPE.time,
-  // },
-  {
-    id: "duration",
-    label: "Duration",
-    type: COLUMN_TYPE.duration,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
+  { id: "status", label: "Status", type: COLUMN_TYPE.string },
+  { id: "created_at", label: "Created at", type: COLUMN_TYPE.time },
+  { id: "last_updated_at", label: "Last updated at", type: COLUMN_TYPE.time },
+  { id: "duration", label: "Duration", type: COLUMN_TYPE.duration },
+  { id: "tags", label: "Tags", type: COLUMN_TYPE.list },
+  { id: COLUMN_FEEDBACK_SCORES_ID, label: "Feedback scores", type: COLUMN_TYPE.numberDictionary },
 ];
 
 // Exported for backward compatibility
@@ -151,14 +162,19 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
   form,
   projectId,
 }) => {
+  const { t } = useTranslation();
   const scope = form.watch("scope");
   const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const filters = form.watch("filters");
 
+  // Use translated column hooks
+  const traceFilterColumns = useTraceFilterColumns();
+  const threadFilterColumns = useThreadFilterColumns();
+
   const currentFilterColumns = useMemo(() => {
-    return isThreadScope ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS;
-  }, [isThreadScope]);
+    return isThreadScope ? threadFilterColumns : traceFilterColumns;
+  }, [isThreadScope, threadFilterColumns, traceFilterColumns]);
 
   useEffect(() => {
     if (form.formState.errors.filters) {
@@ -216,7 +232,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             projectId,
             type: TRACE_DATA_TYPE.traces,
-            placeholder: "Select score",
+            placeholder: t("onlineEvaluation.dialog.selectScore"),
           },
         },
         ...(isThreadScope
@@ -224,17 +240,17 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
               status: {
                 keyComponentProps: {
                   options: [
-                    { value: ThreadStatus.ACTIVE, label: "Active" },
-                    { value: ThreadStatus.INACTIVE, label: "Inactive" },
+                    { value: ThreadStatus.ACTIVE, label: t("onlineEvaluation.dialog.active") },
+                    { value: ThreadStatus.INACTIVE, label: t("onlineEvaluation.dialog.inactive") },
                   ],
-                  placeholder: "Select status",
+                  placeholder: t("onlineEvaluation.dialog.selectStatus"),
                 },
               },
             }
           : {}),
       },
     }),
-    [projectId, isThreadScope],
+    [projectId, isThreadScope, t, currentFilterColumns],
   );
 
   const handleAddFilter = useCallback(() => {
@@ -268,13 +284,13 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
       <AccordionItem value="filtering-sampling" className="border-none">
         <AccordionTrigger className="px-3 py-2 hover:no-underline">
           <div className="flex items-center gap-1">
-            <Label className="text-sm font-medium">Filtering & Sampling</Label>
+            <Label className="text-sm font-medium">{t("onlineEvaluation.dialog.filteringSampling")}</Label>
             <ExplainerIcon
               className="mt-0.5"
               description={
                 isTraceScope
-                  ? "Apply filters and sampling to select which traces will be evaluated by this rule"
-                  : "Use sampling rate to control how frequently this rule is applied to threads"
+                  ? t("onlineEvaluation.dialog.filteringSamplingDescTrace")
+                  : t("onlineEvaluation.dialog.filteringSamplingDescThread")
               }
             />
           </div>
@@ -282,12 +298,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
         <AccordionContent className="px-3 pb-3">
           <div className="mb-8 space-y-4">
             <Description>
-              Use sampling rate to control how frequently this rule is applied.
-              You can also add filters to select specific{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}{" "}
-              based on their properties. If nothing is defined, the rule will
-              evaluate all{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}.
+              {t("onlineEvaluation.dialog.filteringSamplingDesc", {
+                scope: scope === EVALUATORS_RULE_SCOPE.trace ? t("onlineEvaluation.dialog.traces") : t("onlineEvaluation.dialog.threads")
+              })}
             </Description>
 
             <FormField
@@ -300,7 +313,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                 return (
                   <FormItem>
                     <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filters</Label>
+                      <Label className="text-sm font-medium">{t("onlineEvaluation.dialog.filters")}</Label>
 
                       {field.value.length > 0 && (
                         <FiltersContent
@@ -338,7 +351,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
 
                             return (
                               <FormErrorSkeleton key={index}>
-                                Filter {index + 1}: {errors.join(", ")}
+                                {t("onlineEvaluation.dialog.filterError", { index: index + 1 })}: {errors.join(", ")}
                               </FormErrorSkeleton>
                             );
                           })}
@@ -354,7 +367,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                           className="w-fit"
                         >
                           <Plus className="mr-1 size-3.5" />
-                          Add filter
+                          {t("onlineEvaluation.dialog.addFilterButton")}
                         </Button>
                       </div>
                     </div>
@@ -378,8 +391,8 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                     field.onChange(round(displayValue, 1) / 100)
                   }
                   id="sampling_rate"
-                  label="Sampling rate"
-                  tooltip="Percentage of traces to evaluate"
+                  label={t("onlineEvaluation.dialog.samplingRateLabel")}
+                  tooltip={t("onlineEvaluation.dialog.samplingRateTooltip")}
                   suffix="%"
                 />
               )}

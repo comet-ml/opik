@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Project } from "@/types/projects";
@@ -14,6 +15,7 @@ type ProjectsActionsPanelsProps = {
 const ProjectsActionsPanel: React.FunctionComponent<
   ProjectsActionsPanelsProps
 > = ({ projects }) => {
+  const { t } = useTranslation();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !projects?.length;
@@ -33,12 +35,12 @@ const ProjectsActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={deleteProjectsHandler}
-        title="Delete projects"
-        description="Deleting projects will also remove all the traces and their data. This action can’t be undone. Are you sure you want to continue?"
-        confirmText="Delete projects"
+        title={t("projects.deleteProjects")}
+        description={t("projects.deleteProjectsConfirm")}
+        confirmText={t("projects.actions.delete")}
         confirmButtonVariant="destructive"
       />
-      <TooltipWrapper content="Delete">
+      <TooltipWrapper content={t("projects.actions.deleteTooltip")}>
         <Button
           variant="outline"
           size="icon-sm"

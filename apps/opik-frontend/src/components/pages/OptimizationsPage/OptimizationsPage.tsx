@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { Info, RotateCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
@@ -90,66 +91,74 @@ export const GROUPING_CONFIG = {
   grouping: [GROUPING_COLUMN] as GroupingState,
 };
 
-export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "num_trials",
-    label: "Trial count",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "optimizer",
-    label: "Optimizer",
-    type: COLUMN_TYPE.string,
-    size: 200,
-    accessorFn: (row) => {
-      const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
-
-      return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+const useOptimizationColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<GroupedOptimization>[]>(() => [
+    {
+      id: COLUMN_ID_ID,
+      label: t("optimization.columns.id"),
+      type: COLUMN_TYPE.string,
+      cell: IdCell as never,
     },
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
-  },
-  {
-    id: "objective_name",
-    label: "Best score",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
-    cell: FeedbackScoreTagCell as never,
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-    cell: OptimizationStatusCell as never,
-  },
-];
+    {
+      id: "created_at",
+      label: t("optimization.columns.created"),
+      type: COLUMN_TYPE.time,
+      accessorFn: (row) => formatDate(row.created_at),
+    },
+    {
+      id: "created_by",
+      label: t("optimization.columns.createdBy"),
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "num_trials",
+      label: t("optimization.columns.trialCount"),
+      type: COLUMN_TYPE.number,
+    },
+    {
+      id: "optimizer",
+      label: t("optimization.columns.optimizer"),
+      type: COLUMN_TYPE.string,
+      size: 200,
+      accessorFn: (row) => {
+        const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
 
-export const FILTER_COLUMNS: ColumnData<GroupedOptimization>[] = [
-  {
-    id: COLUMN_DATASET_ID,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    disposable: true,
-  },
-];
+        return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+      },
+      explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
+    },
+    {
+      id: "objective_name",
+      label: t("optimization.columns.bestScore"),
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row) =>
+        getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+      cell: FeedbackScoreTagCell as never,
+      explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
+    },
+    {
+      id: "status",
+      label: t("optimization.columns.status"),
+      type: COLUMN_TYPE.string,
+      cell: OptimizationStatusCell as never,
+    },
+  ], [t, i18n.language]);
+};
+
+const useFilterColumns = () => {
+  const { t, i18n } = useTranslation();
+  
+  return useMemo<ColumnData<GroupedOptimization>[]>(() => [
+    {
+      id: COLUMN_DATASET_ID,
+      label: t("optimization.columns.dataset"),
+      type: COLUMN_TYPE.string,
+      disposable: true,
+    },
+  ], [t, i18n.language]);
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_NAME_ID, GROUPING_COLUMN],
@@ -165,6 +174,9 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const OptimizationsPage: React.FunctionComponent = () => {
+  const { t } = useTranslation();
+  const DEFAULT_COLUMNS = useOptimizationColumns();
+  const FILTER_COLUMNS = useFilterColumns();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
@@ -236,9 +248,8 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? "There are no optimizations yet\n" +
-      "Optimizations help improve your LLM application's performance, accuracy, and overall user experience"
-    : "No search results";
+    ? t("optimization.noOptimizations")
+    : t("optimization.noSearchResults");
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -271,7 +282,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       generateDataRowCellDef<GroupedOptimization>(
         {
           id: COLUMN_NAME_ID,
-          label: "Name",
+          label: t("optimization.columns.name"),
           type: COLUMN_TYPE.string,
           cell: ResourceCell as never,
           customMeta: {
@@ -290,7 +301,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       generateGroupedRowCellDef<GroupedOptimization, unknown>(
         {
           id: GROUPING_COLUMN,
-          label: "Dataset",
+          label: t("optimization.columns.dataset"),
           type: COLUMN_TYPE.string,
           cell: ResourceCell as never,
           customMeta: {
@@ -312,7 +323,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         cell: OptimizationRowActionsCell,
       }),
     ];
-  }, [checkboxClickHandler, columnsOrder, selectedColumns]);
+  }, [t, DEFAULT_COLUMNS, checkboxClickHandler, columnsOrder, selectedColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -429,19 +440,20 @@ const OptimizationsPage: React.FunctionComponent = () => {
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
-          Optimization runs
+          {t("optimization.title")}
         </h1>
       </div>
       <ExplainerDescription
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
+        description={t("optimization.explainer.description")}
       />
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search by name"
+            placeholder={t("optimization.searchByName")}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
@@ -455,7 +467,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         <div className="flex items-center gap-2">
           <OptimizationsActionsPanel optimizations={selectedRows} />
           <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh optimizations list">
+          <TooltipWrapper content={t("optimization.refreshList")}>
             <Button
               variant="outline"
               size="icon-sm"
@@ -478,7 +490,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
             onClick={handleNewOptimizationClick}
           >
             <Info className="mr-1.5 size-3.5" />
-            Create new optimization
+            {t("optimization.createNew")}
           </Button>
         </div>
       </div>
@@ -504,7 +516,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           <DataTableNoData title={noDataText}>
             {noData && (
               <Button variant="link" onClick={handleNewOptimizationClick}>
-                Create new optimization
+                {t("optimization.createNew")}
               </Button>
             )}
           </DataTableNoData>

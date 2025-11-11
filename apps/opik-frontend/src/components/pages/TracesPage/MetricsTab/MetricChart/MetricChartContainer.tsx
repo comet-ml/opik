@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Card,
   CardContent,
@@ -75,6 +76,7 @@ const MetricContainerChart = ({
   traceFilters,
   threadFilters,
 }: MetricContainerChartProps) => {
+  const { t } = useTranslation();
   const { data: traces, isPending } = useProjectMetric(
     {
       projectId,
@@ -144,7 +146,7 @@ const MetricContainerChart = ({
         {noData ? (
           <NoData
             className="h-[var(--chart-height)] min-h-32 text-light-slate"
-            message="No data to show"
+            message={t("common.noDataToShow")}
           />
         ) : (
           <CHART
