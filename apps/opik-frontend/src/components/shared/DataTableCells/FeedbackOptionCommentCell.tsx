@@ -1,7 +1,7 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
-const FeedbackScoreCommentsCell = (context: CellContext<unknown, string>) => {
+const FeedbackOptionCommentCell = (context: CellContext<unknown, string>) => {
   const value = context.getValue();
 
   return (
@@ -10,10 +10,9 @@ const FeedbackScoreCommentsCell = (context: CellContext<unknown, string>) => {
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <span className="comet-body-s">{value}</span>
+      <span className="comet-body-s-accented text-muted-slate">{value}</span>
     </CellWrapper>
   );
 };
 
-export default FeedbackScoreCommentsCell;
-
+export default FeedbackOptionCommentCell;

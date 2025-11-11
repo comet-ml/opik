@@ -8,8 +8,7 @@ import { COLUMN_TYPE, ColumnData, ROW_HEIGHT } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import FeedbackDefinitionsValueCell from "@/components/shared/DataTableCells/FeedbackDefinitionsValueCell";
-import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
-import FeedbackScoreCommentsCell from "@/components/shared/DataTableCells/FeedbackScoreCommentsCell";
+import FeedbackOptionCell from "@/components/shared/DataTableCells/FeedbackOptionCell";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
 
@@ -22,7 +21,7 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     id: "name",
     label: "Feedback option",
     type: COLUMN_TYPE.numberDictionary,
-    cell: FeedbackScoreNameCell as never,
+    cell: FeedbackOptionCell as never,
   },
   {
     id: "description",
@@ -89,25 +88,13 @@ const ScoresContent: React.FunctionComponent<ScoresContentProps> = ({
   }, [data?.content, hasFeedbackDefinitions, hasComments, annotationQueue]);
 
   const columns = useMemo(() => {
-    // If only Comments row is shown, use dedicated cell and hide "Available values" column
-    const columnsConfig: ColumnData<FeedbackDefinition>[] = hasOnlyComments
-      ? [
-          {
-            id: "name",
-            label: "Feedback option",
-            type: COLUMN_TYPE.numberDictionary,
-            cell: FeedbackScoreCommentsCell as never,
-          },
-          {
-            id: "description",
-            label: "Description",
-            type: COLUMN_TYPE.string,
-          },
-        ]
+    // If only Comments row is shown, hide "Available values" column
+    const columnsToShow = hasOnlyComments
+      ? DEFAULT_COLUMNS.filter((col) => col.id !== "values")
       : DEFAULT_COLUMNS;
 
     return convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
-      columnsConfig,
+      columnsToShow,
       {},
     );
   }, [hasOnlyComments]);
