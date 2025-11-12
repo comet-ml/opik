@@ -209,7 +209,6 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    // Find the first human message
     const humanMessages = message.messages.filter(
       (m) =>
         isObject(m) &&
@@ -221,7 +220,7 @@ const prettifyLangGraphLogic = (
     );
 
     if (humanMessages.length > 0) {
-      return humanMessages[0].content;
+      return last(humanMessages).content;
     }
   } else if (
     config.type === "output" &&
@@ -283,7 +282,6 @@ const prettifyLangChainLogic = (
     message.messages.length == 1 &&
     isArray(message.messages[0])
   ) {
-    // Find the first human message
     const humanMessages = message.messages[0].filter(
       (m) =>
         isObject(m) &&
@@ -295,7 +293,7 @@ const prettifyLangChainLogic = (
     );
 
     if (humanMessages.length > 0) {
-      return humanMessages[0].content;
+      return last(humanMessages).content;
     }
   } else if (
     config.type === "output" &&
