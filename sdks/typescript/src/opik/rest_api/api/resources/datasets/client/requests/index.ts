@@ -1,6 +1,7 @@
 export { type FindDatasetsRequest } from "./FindDatasetsRequest";
 export { type DatasetWrite } from "./DatasetWrite";
 export { type DatasetItemBatchWrite } from "./DatasetItemBatchWrite";
+export { type CreateDatasetItemsFromSpansRequest } from "./CreateDatasetItemsFromSpansRequest";
 export { type CreateDatasetItemsFromTracesRequest } from "./CreateDatasetItemsFromTracesRequest";
 export { type DatasetUpdate } from "./DatasetUpdate";
 export { type DatasetIdentifier } from "./DatasetIdentifier";

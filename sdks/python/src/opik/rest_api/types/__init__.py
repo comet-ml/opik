@@ -349,6 +349,7 @@ from .score_name import ScoreName
 from .service_toggles_config import ServiceTogglesConfig
 from .span import Span
 from .span_batch import SpanBatch
+from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter_public import SpanFilterPublic
@@ -744,6 +745,7 @@ __all__ = [
     "ServiceTogglesConfig",
     "Span",
     "SpanBatch",
+    "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
     "SpanExperimentItemBulkWriteViewType",
     "SpanFilterPublic",

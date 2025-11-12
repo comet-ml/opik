@@ -1227,6 +1227,28 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/{dataset_id}/items/from-spans:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from spans
+      description: Create dataset items from spans with enriched metadata
+      operationId: createDatasetItemsFromSpans
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetItemsFromSpansRequest"
+      responses:
+        "204":
+          description: No content
   /v1/private/datasets/{dataset_id}/items/from-traces:
     post:
       tags:
@@ -7404,6 +7426,37 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+    CreateDatasetItemsFromSpansRequest:
+      required:
+      - enrichment_options
+      - span_ids
+      type: object
+      properties:
+        span_ids:
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: Set of span IDs to add to the dataset
+          items:
+            type: string
+            description: Set of span IDs to add to the dataset
+            format: uuid
+        enrichment_options:
+          $ref: "#/components/schemas/SpanEnrichmentOptions"
+    SpanEnrichmentOptions:
+      type: object
+      properties:
+        includeTags:
+          type: boolean
+        includeFeedbackScores:
+          type: boolean
+        includeComments:
+          type: boolean
+        includeUsage:
+          type: boolean
+        includeMetadata:
+          type: boolean
+      description: Options for enriching span data
     CreateDatasetItemsFromTracesRequest:
       required:
       - enrichment_options

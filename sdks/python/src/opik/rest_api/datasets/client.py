@@ -13,6 +13,7 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
+from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
@@ -179,6 +180,45 @@ class DatasetsClient:
         """
         _response = self._raw_client.create_or_update_dataset_items(
             items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    def create_dataset_items_from_spans(
+        self,
+        dataset_id: str,
+        *,
+        span_ids: typing.Sequence[str],
+        enrichment_options: SpanEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from spans with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        span_ids : typing.Sequence[str]
+            Set of span IDs to add to the dataset
+
+        enrichment_options : SpanEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import SpanEnrichmentOptions
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.create_dataset_items_from_spans(dataset_id='dataset_id', span_ids=['span_ids'], enrichment_options=SpanEnrichmentOptions(), )
+        """
+        _response = self._raw_client.create_dataset_items_from_spans(
+            dataset_id, span_ids=span_ids, enrichment_options=enrichment_options, request_options=request_options
         )
         return _response.data
 
@@ -885,6 +925,48 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.create_or_update_dataset_items(
             items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    async def create_dataset_items_from_spans(
+        self,
+        dataset_id: str,
+        *,
+        span_ids: typing.Sequence[str],
+        enrichment_options: SpanEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from spans with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        span_ids : typing.Sequence[str]
+            Set of span IDs to add to the dataset
+
+        enrichment_options : SpanEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import SpanEnrichmentOptions
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.create_dataset_items_from_spans(dataset_id='dataset_id', span_ids=['span_ids'], enrichment_options=SpanEnrichmentOptions(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_dataset_items_from_spans(
+            dataset_id, span_ids=span_ids, enrichment_options=enrichment_options, request_options=request_options
         )
         return _response.data
 
