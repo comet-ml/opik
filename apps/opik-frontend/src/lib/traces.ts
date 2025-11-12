@@ -459,6 +459,7 @@ const prettifyGenericLogic = (
       "user_payload",
       "user_query",
       "input",
+      "text",
       // some customer specific formats
       "query.body.question",
       "content",
