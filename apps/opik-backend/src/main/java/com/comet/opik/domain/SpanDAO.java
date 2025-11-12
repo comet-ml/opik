@@ -1375,7 +1375,7 @@ class SpanDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = new ST(BULK_INSERT)
+            var template = TemplateUtils.newST(BULK_INSERT)
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -1511,7 +1511,7 @@ class SpanDAO {
     }
 
     private ST newInsertTemplate(Span span) {
-        var template = new ST(INSERT);
+        var template = TemplateUtils.newST(INSERT);
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
@@ -1631,7 +1631,7 @@ class SpanDAO {
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
-        var template = new ST(sql);
+        var template = TemplateUtils.newST(sql);
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -1759,7 +1759,7 @@ class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(DELETE_BY_TRACE_IDS);
+                    var template = TemplateUtils.newST(DELETE_BY_TRACE_IDS);
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
 
@@ -2034,7 +2034,7 @@ class SpanDAO {
     }
 
     private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
         Optional.ofNullable(spanSearchCriteria.traceId())
                 .ifPresent(traceId -> template.add("trace_id", traceId));
         Optional.ofNullable(spanSearchCriteria.type())
@@ -2161,7 +2161,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(SPAN_COUNT_BY_WORKSPACE_ID);
+        ST template = TemplateUtils.newST(SPAN_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2197,7 +2197,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(SPAN_DAILY_BI_INFORMATION);
+        ST template = TemplateUtils.newST(SPAN_DAILY_BI_INFORMATION);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));

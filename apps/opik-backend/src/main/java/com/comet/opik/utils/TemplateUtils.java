@@ -2,6 +2,8 @@ package com.comet.opik.utils;
 
 import lombok.RequiredArgsConstructor;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroup;
+import org.stringtemplate.v4.STGroupString;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -32,5 +34,19 @@ public class TemplateUtils {
         template.add("items", queryItems);
 
         return template;
+    }
+
+    /**
+     * Creates a new ephemeral StringTemplate instance with a dedicated STGroup.
+     * This prevents memory leaks by ensuring templates are not cached in the default STGroup.
+     * Each ST instance created by this method can be garbage collected after use.
+     *
+     * @param template the template string to compile
+     * @return a new ST instance with its own isolated STGroup
+     */
+    public static ST newST(String template) {
+        // Create a dedicated STGroup for this template to avoid caching in the default group
+        STGroup group = new STGroupString(template);
+        return new ST(group, template);
     }
 }
