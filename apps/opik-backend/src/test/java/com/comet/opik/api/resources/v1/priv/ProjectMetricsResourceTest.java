@@ -45,8 +45,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
@@ -1444,10 +1442,6 @@ class ProjectMetricsResourceTest {
             return traces;
         }
 
-        private UUID generateUUIDForTimestamp(Instant timestamp) {
-            return generator.construct(timestamp.toEpochMilli());
-        }
-
         private List<BigDecimal> calculateQuantiles(List<Trace> traces) {
             return StatsUtils.calculateQuantiles(
                     traces.stream()
@@ -1795,10 +1789,6 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
         }
-    }
-
-    private UUID generateUUIDForTimestamp(Instant traceStartTime) {
-        return generator.construct(traceStartTime.toEpochMilli());
     }
 
     @Nested
