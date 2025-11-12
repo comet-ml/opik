@@ -17,7 +17,7 @@ import java.math.BigDecimal;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record MetricsAlertPayload(
         String eventType,
-        @NonNull String metricName,
+        String metricName,
         @NonNull BigDecimal metricValue,
         @NonNull BigDecimal threshold,
         long windowSeconds,
