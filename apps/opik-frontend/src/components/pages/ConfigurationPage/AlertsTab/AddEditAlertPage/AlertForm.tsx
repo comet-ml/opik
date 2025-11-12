@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback } from "react";
 import get from "lodash/get";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
-import { useBlocker, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 
 import { buildFullBaseUrl, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import Loader from "@/components/shared/Loader/Loader";
 
 import { Alert, ALERT_TYPE } from "@/types/alerts";
 import useAlertCreateMutation from "@/api/alerts/useAlertCreateMutation";
 import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
 import useAppStore from "@/store/AppStore";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 
 import { AlertFormType, AlertFormSchema } from "./schema";
 import WebhookSettings from "./WebhookSettings";
@@ -48,7 +48,6 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const alertCreateMutation = useAlertCreateMutation();
   const alertUpdateMutation = useAlertUpdateMutation();
-  const [showNavigationDialog, setShowNavigationDialog] = useState(false);
 
   const isEdit = Boolean(alert);
   const title = isEdit ? "Edit alert" : "Create a new alert";
@@ -119,15 +118,14 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
   const canLeavePage = form.formState.isSubmitted || !form.formState.isDirty;
 
-  const { proceed, reset, status } = useBlocker({
+  const { DialogComponent } = useNavigationBlocker({
     condition: !canLeavePage,
+    title: "You have unsaved changes",
+    description:
+      "If you leave now, your changes will be lost. Are you sure you want to continue?",
+    confirmText: "Leave without saving",
+    cancelText: "Stay on page",
   });
-
-  useEffect(() => {
-    if (status === "blocked") {
-      setShowNavigationDialog(true);
-    }
-  }, [status]);
 
   const onSubmit = useCallback(() => {
     const alertData = getAlert();
@@ -164,45 +162,6 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
     alertCreateMutation,
     handleNavigateBack,
   ]);
-
-  const handleConfirmNavigation = useCallback(() => {
-    setShowNavigationDialog(false);
-
-    if (status === "blocked") {
-      proceed();
-    }
-  }, [status, proceed]);
-
-  const handleCancelNavigation = useCallback(() => {
-    if (status === "blocked") {
-      reset();
-    }
-    setShowNavigationDialog(false);
-  }, [status, reset]);
-
-  const handleDialogOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        handleCancelNavigation();
-      }
-    },
-    [handleCancelNavigation],
-  );
-
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!canLeavePage) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [canLeavePage]);
 
   return (
     <div className="py-6">
@@ -329,17 +288,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
         </div>
       </div>
 
-      <ConfirmDialog
-        open={showNavigationDialog}
-        setOpen={handleDialogOpenChange}
-        onConfirm={handleConfirmNavigation}
-        onCancel={handleCancelNavigation}
-        title="You have unsaved changes"
-        description="If you leave now, your changes will be lost. Are you sure you want to continue?"
-        confirmText="Leave without saving"
-        cancelText="Stay on page"
-        confirmButtonVariant="destructive"
-      />
+      {DialogComponent}
     </div>
   );
 };

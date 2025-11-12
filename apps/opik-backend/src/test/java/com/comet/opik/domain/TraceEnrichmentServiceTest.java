@@ -58,7 +58,7 @@ class TraceEnrichmentServiceTest {
         void enrichTraces__whenTraceIdsAreEmpty__thenReturnEmptyMap() {
             // given
             Set<UUID> traceIds = Set.of();
-            var options = TraceEnrichmentService.TraceEnrichmentOptions.builder().build();
+            var options = TraceEnrichmentOptions.builder().build();
 
             // when
             Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(traceIds, options).block();
@@ -83,7 +83,7 @@ class TraceEnrichmentServiceTest {
             when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace));
             lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
 
-            var options = TraceEnrichmentService.TraceEnrichmentOptions.builder().build();
+            var options = TraceEnrichmentOptions.builder().build();
 
             // when
             Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(Set.of(traceId), options)
@@ -140,7 +140,7 @@ class TraceEnrichmentServiceTest {
             when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace));
             when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.just(span1, span2));
 
-            var options = TraceEnrichmentService.TraceEnrichmentOptions.builder()
+            var options = TraceEnrichmentOptions.builder()
                     .includeSpans(true)
                     .build();
 
@@ -182,7 +182,7 @@ class TraceEnrichmentServiceTest {
             when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace));
             when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
 
-            var options = TraceEnrichmentService.TraceEnrichmentOptions.builder()
+            var options = TraceEnrichmentOptions.builder()
                     .includeSpans(true)
                     .includeTags(true)
                     .includeFeedbackScores(true)
@@ -230,7 +230,7 @@ class TraceEnrichmentServiceTest {
             when(traceService.getByIds(any())).thenReturn(Flux.just(trace1, trace2));
             lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
 
-            var options = TraceEnrichmentService.TraceEnrichmentOptions.builder().build();
+            var options = TraceEnrichmentOptions.builder().build();
 
             // when
             Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService
@@ -266,7 +266,7 @@ class TraceEnrichmentServiceTest {
             when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.just(span));
 
             // Note: includeSpans is true, but includeFeedbackScores and includeComments are false for trace
-            var options = TraceEnrichmentService.TraceEnrichmentOptions.builder()
+            var options = TraceEnrichmentOptions.builder()
                     .includeSpans(true)
                     .build();
 
