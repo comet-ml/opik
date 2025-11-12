@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from opik.api_objects import experiment, opik_client
+from opik.api_objects import dataset, experiment, opik_client
 from opik.types import FeedbackScoreDict
 from . import test_case
 from .metrics import arguments_helpers, score_result
@@ -34,16 +34,14 @@ def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
 
 
 def get_experiment_test_cases(
-    client: opik_client.Opik,
-    experiment_id: str,
+    experiment_: experiment.Experiment,
+    dataset_: dataset.Dataset,
     scoring_key_mapping: Optional[ScoringKeyMappingType],
 ) -> List[test_case.TestCase]:
-    experiment_ = client.get_experiment_by_id(id=experiment_id)
     experiment_items = experiment_.get_items()
 
     # Fetch dataset items to get input data for bulk-uploaded experiment items
-    dataset = client.get_dataset(name=experiment_.dataset_name)
-    dataset_items_by_id = {item["id"]: item for item in dataset.get_items()}
+    dataset_items_by_id = {item["id"]: item for item in dataset_.get_items()}
 
     test_cases = []
     for item in experiment_items:
@@ -55,10 +53,10 @@ def get_experiment_test_cases(
             test_case.TestCase(
                 trace_id=item.trace_id,
                 dataset_item_id=item.dataset_item_id,
-                task_output=item.evaluation_task_output,
+                task_output=item.evaluation_task_output,  # type: ignore
                 scoring_inputs=arguments_helpers.create_scoring_inputs(
-                    dataset_item=dataset_item_data,
-                    task_output=item.evaluation_task_output,
+                    dataset_item=dataset_item_data,  # type: ignore
+                    task_output=item.evaluation_task_output,  # type: ignore
                     scoring_key_mapping=scoring_key_mapping,
                 ),
             )
