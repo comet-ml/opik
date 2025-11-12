@@ -27,7 +27,7 @@ const labelVariants = cva("min-w-0 flex-1 truncate text-muted-slate", {
 });
 
 const containerVariants = cva(
-  "flex items-center gap-1.5 rounded-md border border-border max-w-full",
+  "flex max-w-full items-center gap-1.5 rounded-md border border-border",
   {
     variants: {
       size: {
@@ -59,7 +59,7 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
       className={cn(containerVariants({ size }), className)}
     >
       <div
-        className="shrink-0 size-2 rounded-[0.15rem]"
+        className="size-2 shrink-0 rounded-[0.15rem]"
         style={{ backgroundColor: color }}
       />
       <TooltipWrapper content={label} stopClickPropagation>

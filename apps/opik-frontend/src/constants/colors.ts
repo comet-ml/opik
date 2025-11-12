@@ -26,4 +26,3 @@ export const RESOURCE_COLORS: Record<RESOURCE_TYPE, string> = {
   [RESOURCE_TYPE.trial]: "var(--color-yellow)",
   [RESOURCE_TYPE.annotationQueue]: "var(--color-pink)",
 };
-

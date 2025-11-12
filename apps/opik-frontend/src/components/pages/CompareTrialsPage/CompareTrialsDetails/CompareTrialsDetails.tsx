@@ -6,7 +6,6 @@ import { Optimization } from "@/types/optimizations";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import DateTag from "@/components/shared/DateTag/DateTag";
-import { Tag } from "@/components/ui/tag";
 import {
   RESOURCE_MAP,
   RESOURCE_TYPE,
@@ -80,7 +79,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
 
     const tag =
       experimentsIds.length === 2 ? (
-        <div className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2 max-w-full">
+        <div className="flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border px-2">
           <FlaskConical
             className="size-4 shrink-0"
             style={{ color: experimentColor }}
@@ -100,7 +99,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
     return (
       <div className="flex h-11 items-center gap-2">
         <span className="text-nowrap">Baseline of</span>
-        <div className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2 max-w-full">
+        <div className="flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border px-2">
           <FlaskConical
             className="size-4 shrink-0"
             style={{ color: experimentColor }}

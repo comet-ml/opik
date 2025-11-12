@@ -6,7 +6,6 @@ import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
-import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import {
   RESOURCE_MAP,
@@ -88,7 +87,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
       const tag =
         experimentsIds.length === 2 ? (
-          <div className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2 max-w-full">
+          <div className="flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border px-2">
             <FlaskConical
               className="size-4 shrink-0"
               style={{ color: experimentColor }}
@@ -108,7 +107,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
       return (
         <div className="flex h-11 items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
-          <div className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2 max-w-full">
+          <div className="flex h-6 max-w-full items-center gap-1.5 rounded-md border border-border px-2">
             <FlaskConical
               className="size-4 shrink-0"
               style={{ color: experimentColor }}
