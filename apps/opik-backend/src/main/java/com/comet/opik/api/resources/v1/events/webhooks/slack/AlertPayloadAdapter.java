@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.MetricsAlertPayload;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.NonNull;
@@ -50,7 +51,7 @@ public class AlertPayloadAdapter {
     private static final TypeReference<String> STRING_TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    private static final TypeReference<Map<String, String>> MAP_STRING_TYPE_REFERENCE = new TypeReference<>() {
+    private static final TypeReference<MetricsAlertPayload> METRICS_ALERT_PAYLOAD_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     public static WebhookEvent<Map<String, Object>> prepareWebhookPayload(
@@ -105,7 +106,7 @@ public class AlertPayloadAdapter {
             case TRACE_THREAD_FEEDBACK_SCORE -> LIST_THREAD_SCORE_TYPE_REFERENCE;
             case TRACE_GUARDRAILS_TRIGGERED -> LIST_GUARDRAIL_TYPE_REFERENCE;
             case EXPERIMENT_FINISHED -> EXPERIMENT_TYPE_REFERENCE;
-            case TRACE_COST, TRACE_LATENCY -> MAP_STRING_TYPE_REFERENCE;
+            case TRACE_COST, TRACE_LATENCY -> METRICS_ALERT_PAYLOAD_TYPE_REFERENCE;
         };
     }
 }

@@ -2810,6 +2810,9 @@ class AlertResourceTest {
                                     .createdAt(null)
                                     .build())
                             .toList();
+                    // Replace TRACE_COST and TRACE_LATENCY with TRACE_ERRORS for test assertion purposes
+                    // This is needed because metrics-based alerts (cost/latency) are processed by MetricsAlertJob
+                    // rather than AlertJob, so we normalize them to TRACE_ERRORS for consistent test validation
                     return trigger.toBuilder()
                             .triggerConfigs(configs)
                             .eventType(trigger.eventType() == AlertEventType.TRACE_COST

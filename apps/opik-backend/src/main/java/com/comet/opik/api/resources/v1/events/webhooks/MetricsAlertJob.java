@@ -5,6 +5,7 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.MetricsAlertPayload;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
@@ -12,7 +13,8 @@ import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
-import io.dropwizard.lifecycle.Managed;
+import io.dropwizard.jobs.Job;
+import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -20,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.quartz.DisallowConcurrentExecution;
+import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -34,9 +38,6 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
@@ -46,14 +47,16 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 /**
  * Scheduled job for processing metrics-based alerts.
  *
- * This job runs with configurable delay after each execution completes.
- * Uses fixed-delay scheduling: waits a configured duration AFTER the previous execution completes
- * before starting the next execution, preventing overlapping executions.
+ * This job runs every 5 minutes to evaluate cost and latency thresholds for configured alerts.
+ * Uses Quartz scheduling with @DisallowConcurrentExecution to prevent overlapping executions
+ * across multiple backend instances and within a single instance.
  */
 @Slf4j
 @Singleton
+@DisallowConcurrentExecution
+@Every("5m")
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class MetricsAlertJob implements Managed {
+public class MetricsAlertJob extends Job {
 
     private static final LockService.Lock METRICS_ALERT_LOCK_KEY = new LockService.Lock("metrics_alert_job:scan_lock");
     private static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
@@ -67,49 +70,8 @@ public class MetricsAlertJob implements Managed {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull AlertWebhookSender alertWebhookSender;
 
-    private ScheduledExecutorService scheduler;
-
     @Override
-    public void start() {
-        long initialDelaySeconds = webhookConfig.getMetrics().getInitialDelay().toSeconds();
-        long fixedDelaySeconds = webhookConfig.getMetrics().getFixedDelay().toSeconds();
-
-        log.info("Starting MetricsAlertJob with initial delay of '{}' seconds and fixed delay of '{}' seconds",
-                initialDelaySeconds, fixedDelaySeconds);
-
-        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread thread = new Thread(r, "metrics-alert-job-scheduler");
-            thread.setDaemon(true);
-            return thread;
-        });
-
-        scheduler.scheduleWithFixedDelay(
-                this::doJob,
-                initialDelaySeconds,
-                fixedDelaySeconds,
-                TimeUnit.SECONDS);
-    }
-
-    @Override
-    public void stop() {
-        log.info("Stopping MetricsAlertJob scheduler");
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdown();
-            try {
-                if (!scheduler.awaitTermination(30, TimeUnit.SECONDS)) {
-                    log.warn("MetricsAlertJob scheduler did not terminate in time, forcing shutdown");
-                    scheduler.shutdownNow();
-                }
-                log.info("MetricsAlertJob scheduler stopped successfully");
-            } catch (InterruptedException e) {
-                log.error("Interrupted while waiting for MetricsAlertJob scheduler to stop", e);
-                scheduler.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    private void doJob() {
+    public void doJob(JobExecutionContext context) {
         log.debug("Starting metrics alert job");
 
         // Use distributed lock to prevent overlapping runs between different instances
@@ -138,10 +100,9 @@ public class MetricsAlertJob implements Managed {
         // Create a unique lock key for this alert to prevent duplicate firing across instances
         LockService.Lock alertLock = new LockService.Lock("metrics_alert:fired:" + alert.id());
 
-        // Calculate lock duration: fixedDelay - 1 minute to ensure it expires before the next job run
+        // Calculate lock duration: 5 minutes - 1 minute to ensure it expires before the next job run
         // This allows alerts to fire on every job run instead of every other run
-        Duration jobDuration = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
-        Duration lockDuration = jobDuration.toMinutes() > 0 ? jobDuration.minusMinutes(1) : jobDuration.minusSeconds(1);
+        Duration lockDuration = Duration.ofMinutes(4);
 
         // Try to acquire the lock - if successful, this instance will process the alert
         // If lock already exists, another instance recently fired this alert, so skip it
@@ -150,8 +111,8 @@ public class MetricsAlertJob implements Managed {
                     if (Boolean.FALSE.equals(lockAcquired)) {
                         // Lock already exists - alert was recently fired by another instance
                         log.debug(
-                                "Skipping alert '{}' (id: '{}') - already fired by another instance within the last '{}' seconds",
-                                alert.name(), alert.id(), webhookConfig.getMetrics().getFixedDelay().toSeconds());
+                                "Skipping alert '{}' (id: '{}') - already fired by another instance within the last 4 minutes",
+                                alert.name(), alert.id());
                         return Mono.<Void>empty();
                     }
 
@@ -216,16 +177,19 @@ public class MetricsAlertJob implements Managed {
                         // Wrap blocking JSON serialization in Mono.fromCallable
                         return Mono.fromCallable(() -> {
                             String eventId = idGenerator.generateId().toString();
-                            String payloadJson = JsonUtils.writeValueAsString(Map.of(
-                                    "event_type", trigger.eventType().name(),
-                                    "metric_value", metricValueFinal.toString(),
-                                    "threshold", config.threshold().toString(),
-                                    "window_seconds", config.windowSeconds(),
-                                    "project_ids",
-                                    config.projectIds() != null
+                            
+                            // Create MetricsAlertPayload DTO
+                            MetricsAlertPayload metricsPayload = MetricsAlertPayload.builder()
+                                    .metricValue(metricValueFinal)
+                                    .threshold(config.threshold())
+                                    .windowSeconds(config.windowSeconds())
+                                    .projectIds(config.projectIds() != null
                                             ? config.projectIds().stream().map(UUID::toString)
                                                     .collect(Collectors.joining(","))
-                                            : ""));
+                                            : "")
+                                    .build();
+                            
+                            String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
                             return Tuples.of(eventId, payloadJson);
                         })
                                 .flatMap(payload -> alertWebhookSender.createAndSendWebhook(
