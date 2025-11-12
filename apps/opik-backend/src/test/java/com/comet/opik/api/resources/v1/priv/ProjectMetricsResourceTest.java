@@ -75,6 +75,8 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple4;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -94,6 +96,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -401,8 +404,9 @@ class ProjectMetricsResourceTest {
             createTraces(projectName, marker, expected.getLast());
 
             // create feedback scores for the first bucket traces
-            traces.forEach(trace -> trace.feedbackScores()
-                    .forEach(score -> traceResourceClient.feedbackScore(trace.id(), score, WORKSPACE_NAME, API_KEY)));
+            List<FeedbackScoreBatchItem> scores = getScoreBatchItems(traces);
+
+            traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
@@ -545,6 +549,14 @@ class ProjectMetricsResourceTest {
         }
     }
 
+    private static List<FeedbackScoreBatchItem> getScoreBatchItems(List<Trace> traces) {
+        return traces.stream()
+                .flatMap(trace -> trace.feedbackScores()
+                        .stream()
+                        .map(score -> mapFeedbackScore(score, trace)))
+                .toList();
+    }
+
     @Nested
     @DisplayName("Feedback scores")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -585,21 +597,29 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
             Instant traceStartTime = subtract(marker, TIME_BUCKET_3, interval).plus(6, ChronoUnit.SECONDS);
-            var traceForFilter = factory.manufacturePojo(Trace.class).toBuilder()
+            final Trace traceForFilterInit = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .startTime(traceStartTime)
                     .id(idGenerator.generateId(traceStartTime))
                     .build();
 
-            var scoresMinus3ForFilter = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval),
-                    names, 1, traceForFilter);
-            var scoresMinus3 = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_3, interval), names, 5,
-                    null);
-            var scoresMinus1 = createFeedbackScores(projectName, subtract(marker, TIME_BUCKET_1, interval), names, 5,
-                    null);
-            var scores = createFeedbackScores(projectName, marker, names, 5, null);
+            Tuple4<List<FeedbackScoreBatchItem>, List<FeedbackScoreBatchItem>, List<FeedbackScoreBatchItem>, List<FeedbackScoreBatchItem>> pair = Mono
+                    .zip(
+                            Mono.fromCallable(() -> createFeedbackScores(projectName,
+                                    subtract(marker, TIME_BUCKET_3, interval), names, 1, traceForFilterInit)),
+                            Mono.fromCallable(() -> createFeedbackScores(projectName,
+                                    subtract(marker, TIME_BUCKET_3, interval), names, 5, null)),
+                            Mono.fromCallable(() -> createFeedbackScores(projectName,
+                                    subtract(marker, TIME_BUCKET_1, interval), names, 5, null)),
+                            Mono.fromCallable(() -> createFeedbackScores(projectName, marker, names, 5, null)))
+                    .block();
 
-            traceForFilter = traceForFilter.toBuilder()
+            var scoresMinus3ForFilter = pair.getT1();
+            var scoresMinus3 = pair.getT2();
+            var scoresMinus1 = pair.getT3();
+            var scores = pair.getT4();
+
+            final Trace traceForFilter = traceForFilterInit.toBuilder()
                     .feedbackScores(feedbackScoresMapper(scoresMinus3ForFilter))
                     .build();
 
@@ -978,8 +998,9 @@ class ProjectMetricsResourceTest {
                     null);
 
             // create feedback scores for the first trace
-            tracesWithSpans.getLeft().forEach(trace -> trace.feedbackScores()
-                    .forEach(score -> traceResourceClient.feedbackScore(trace.id(), score, WORKSPACE_NAME, API_KEY)));
+            List<FeedbackScoreBatchItem> scores = getScoreBatchItems(tracesWithSpans);
+
+            traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
@@ -1101,6 +1122,10 @@ class ProjectMetricsResourceTest {
         }
     }
 
+    private static List<FeedbackScoreBatchItem> getScoreBatchItems(Pair<List<Trace>, List<Span>> tracesWithSpans) {
+        return getScoreBatchItems(tracesWithSpans.getLeft());
+    }
+
     @Nested
     @DisplayName("Cost")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1156,9 +1181,10 @@ class ProjectMetricsResourceTest {
                     Map.of(ProjectMetricsDAO.NAME_COST, costMinus3Total.subtract(filteredCostMinus3)),
                     Map.of(ProjectMetricsDAO.NAME_COST, costMinus3Total), costMinus1, costCurrent, null);
 
+            List<FeedbackScoreBatchItem> scores = getScoreBatchItems(tracesWithSpans);
+
             // create feedback scores for the first trace
-            tracesWithSpans.getLeft().forEach(trace -> trace.feedbackScores()
-                    .forEach(score -> traceResourceClient.feedbackScore(trace.id(), score, WORKSPACE_NAME, API_KEY)));
+            traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
@@ -1347,8 +1373,10 @@ class ProjectMetricsResourceTest {
                     durationMinus1, durationCurrent, null);
 
             // create feedback scores for the first trace
-            traceForFilter.forEach(trace -> trace.feedbackScores()
-                    .forEach(score -> traceResourceClient.feedbackScore(trace.id(), score, WORKSPACE_NAME, API_KEY)));
+
+            List<FeedbackScoreBatchItem> scores = getScoreBatchItems(traceForFilter);
+
+            traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
@@ -1516,8 +1544,9 @@ class ProjectMetricsResourceTest {
                     null);
 
             // create feedback scores for the first trace
-            traceForFilter.feedbackScores().forEach(
-                    score -> traceResourceClient.feedbackScore(traceForFilter.id(), score, WORKSPACE_NAME, API_KEY));
+            List<FeedbackScoreBatchItem> feedbackScores = getScoreBatchItems(List.of(traceForFilter));
+
+            traceResourceClient.feedbackScores(feedbackScores, API_KEY, WORKSPACE_NAME);
 
             var filter = getFilter.apply(traceForFilter);
 
@@ -1628,6 +1657,17 @@ class ProjectMetricsResourceTest {
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class, empty, empty,
                     empty);
         }
+    }
+
+    private static FeedbackScoreBatchItem mapFeedbackScore(FeedbackScore score, Trace trace) {
+        return FeedbackScoreBatchItem.builder()
+                .reason(score.reason())
+                .name(score.name())
+                .value(score.value())
+                .source(score.source())
+                .projectName(trace.projectName())
+                .id(trace.id())
+                .build();
     }
 
     @Nested
@@ -1753,6 +1793,8 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
                     .toList();
 
+            List<Trace> allTraces = new ArrayList<>();
+
             // Create multiple traces per thread to test that threads are counted, not traces
             var tracesForThreads = IntStream.range(0, threadIds.size()).mapToObj(threadIdIdx -> {
                 List<Trace> traces = IntStream
@@ -1767,14 +1809,17 @@ class ProjectMetricsResourceTest {
                                     .build();
                         })
                         .toList();
-                traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
+                allTraces.addAll(traces);
                 return traces;
             }).toList();
 
+            traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
+
+            Mono.delay(Duration.ofMillis(100)).block();
+
             // Close threads to ensure they are written to the trace_threads table
-            threadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
-                    WORKSPACE_NAME));
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             return tracesForThreads;
         }
@@ -1958,7 +2003,8 @@ class ProjectMetricsResourceTest {
                     .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
                     .toList();
 
-            List<Double> threadDurations = new java.util.ArrayList<>();
+            List<Double> threadDurations = new ArrayList<>();
+            List<Trace> allTraces = new ArrayList<>();
 
             // Create traces with specific durations for each thread
             for (int i = 0; i < threadIds.size(); i++) {
@@ -1989,15 +2035,18 @@ class ProjectMetricsResourceTest {
                         })
                         .toList();
 
-                traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+                allTraces.addAll(traces);
 
                 // Calculate actual thread duration: (last trace end time) - (first trace start time)
                 threadDurations.add(threadStartTime.until(threadEndTime, ChronoUnit.MICROS) / 1000.0);
             }
 
+            traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
+
+            Mono.delay(Duration.ofMillis(100)).block(); // wait for threads to be indexed
+
             // Close threads to ensure they are written to the trace_threads table
-            threadIds.forEach(threadId -> traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY,
-                    WORKSPACE_NAME));
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             return Pair.of(threadIds, threadDurations);
         }
@@ -2104,6 +2153,9 @@ class ProjectMetricsResourceTest {
                 .map(item -> factory.manufacturePojo(FeedbackScore.class).toBuilder()
                         .name(item.name())
                         .value(item.value())
+                        .reason(item.reason())
+                        .categoryName(item.categoryName())
+                        .source(item.source())
                         .build())
                 .toList();
     }
