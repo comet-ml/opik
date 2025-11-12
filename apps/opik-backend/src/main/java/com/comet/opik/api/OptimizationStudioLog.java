@@ -10,7 +10,7 @@ import java.time.Instant;
 @Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record OptimizationStudioLogs(
+public record OptimizationStudioLog(
         String url,
         Instant lastModified,
         Instant expiresAt) {
