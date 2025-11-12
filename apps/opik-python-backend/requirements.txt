@@ -6,7 +6,7 @@ docker==7.1.0
 Flask==3.1.0
 gunicorn==23.0.0
 uuid6==2024.7.10
-opik==1.8.57
+opik==1.9.7
 idna==3.10
 itsdangerous==2.2.0
 Jinja2==3.1.6
@@ -27,5 +27,5 @@ schedule==1.2.1
 tiktoken==0.9.0
 redis==6.4.0
 rq==2.6.0
-opik-optimizer==2.1.2
+opik-optimizer==2.2.2
 gepa==0.0.17
