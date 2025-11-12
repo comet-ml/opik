@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -18,7 +17,6 @@ import java.util.List;
  */
 @Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record OptimizationStudioConfig(
         @NotBlank String datasetName,
         @NotNull @Valid StudioPrompt prompt,
@@ -28,14 +26,12 @@ public record OptimizationStudioConfig(
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record StudioPrompt(
             @NotEmpty @Valid List<StudioMessage> messages) {
     }
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record StudioMessage(
             @NotBlank String role,
             @NotBlank String content) {
@@ -43,7 +39,6 @@ public record OptimizationStudioConfig(
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record StudioLlmModel(
             @NotBlank String provider,
             @NotBlank String name,
@@ -52,14 +47,12 @@ public record OptimizationStudioConfig(
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record StudioEvaluation(
             @NotEmpty @Valid List<StudioMetric> metrics) {
     }
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record StudioMetric(
             @NotBlank String type,
             JsonNode parameters) {
@@ -67,7 +60,6 @@ public record OptimizationStudioConfig(
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record StudioOptimizer(
             @NotBlank String type,
             JsonNode parameters) {
