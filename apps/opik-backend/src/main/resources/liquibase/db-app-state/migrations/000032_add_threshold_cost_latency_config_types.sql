@@ -10,6 +10,6 @@ ALTER TABLE alert_trigger_configs
     'threshold:latency'
     ) NOT NULL;
 
---rollback
+--rollback empty
 
 
