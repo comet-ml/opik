@@ -17,7 +17,10 @@ class ChatContentRendererRegistry:
         ] = {}
         self._modality_placeholders: MutableMapping[
             prompt_types.ModalityName, Tuple[str, str]
-        ] = {"vision": ("<<<image>>>", "<<</image>>>")}
+        ] = {
+            "vision": ("<<<image>>>", "<<</image>>>"),
+            "video": ("<<<video>>>", "<<</video>>>"),
+        }
         self._default_placeholder: Tuple[str, str] = ("<<<media>>>", "<<</media>>>")
         self._placeholder_value_limit = 500
 
@@ -163,6 +166,10 @@ class ChatContentRendererRegistry:
             image_dict = part.get("image_url", {})
             if isinstance(image_dict, dict):
                 return str(image_dict.get("url", "")).strip()
+        if part_type == "video_url":
+            video_dict = part.get("video_url", {})
+            if isinstance(video_dict, dict):
+                return str(video_dict.get("url", "")).strip()
         return str(part)
 
     def _truncate_placeholder_value(self, value: str) -> str:

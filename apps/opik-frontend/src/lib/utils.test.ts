@@ -149,4 +149,75 @@ For more info, see [this link](https://example.com).`;
     // The following test might pass (true) due to the URL detection logic in the function
     // expect(isStringMarkdown('The URL example.com is not formatted as a markdown link')).toBe(false);
   });
+
+  // Test JSON detection
+  it("should not identify valid JSON objects as markdown", () => {
+    expect(isStringMarkdown('{"key": "value"}')).toBe(false);
+    expect(isStringMarkdown('{"name": "John", "age": 30}')).toBe(false);
+    expect(isStringMarkdown('{"nested": {"key": "value"}, "count": 42}')).toBe(
+      false,
+    );
+    expect(isStringMarkdown("{}")).toBe(false);
+  });
+
+  it("should not identify valid JSON arrays as markdown", () => {
+    expect(isStringMarkdown('["item1", "item2"]')).toBe(false);
+    expect(isStringMarkdown("[1, 2, 3, 4, 5]")).toBe(false);
+    expect(isStringMarkdown('[{"id": 1}, {"id": 2}]')).toBe(false);
+    expect(isStringMarkdown("[]")).toBe(false);
+  });
+
+  it("should not identify pretty-printed JSON as markdown", () => {
+    const prettyJson = `{
+  "name": "John",
+  "age": 30,
+  "city": "New York"
+}`;
+    expect(isStringMarkdown(prettyJson)).toBe(false);
+
+    const prettyArray = `[
+  {
+    "id": 1,
+    "name": "Item 1"
+  },
+  {
+    "id": 2,
+    "name": "Item 2"
+  }
+]`;
+    expect(isStringMarkdown(prettyArray)).toBe(false);
+  });
+
+  it("should not identify JSON with markdown-like characters as markdown", () => {
+    expect(isStringMarkdown('{"message": "This is **bold** text"}')).toBe(
+      false,
+    );
+    expect(isStringMarkdown('{"content": "# Header text"}')).toBe(false);
+    expect(isStringMarkdown('{"text": "This is *italic* text"}')).toBe(false);
+    expect(
+      isStringMarkdown('{"link": "[Click here](https://example.com)"}'),
+    ).toBe(false);
+    expect(isStringMarkdown('{"code": "`inline code`"}')).toBe(false);
+  });
+
+  it("should not identify JSON with whitespace as markdown", () => {
+    expect(isStringMarkdown('  {"key": "value"}  ')).toBe(false);
+    expect(isStringMarkdown('\n{"key": "value"}\n')).toBe(false);
+    expect(isStringMarkdown('\t["item1", "item2"]\t')).toBe(false);
+  });
+
+  it("should still evaluate invalid JSON-like strings for markdown", () => {
+    expect(isStringMarkdown("{invalid json}")).toBe(false);
+    expect(isStringMarkdown("[not valid, json]")).toBe(false);
+    expect(isStringMarkdown('{"unclosed": ')).toBe(false);
+    expect(isStringMarkdown("{ this has **bold** markdown inside }")).toBe(
+      true,
+    );
+    expect(isStringMarkdown("[this has `code` markdown inside]")).toBe(true);
+  });
+
+  it("should evaluate strings starting with { or [ but not JSON", () => {
+    expect(isStringMarkdown("[Link](https://example.com)")).toBe(true);
+    expect(isStringMarkdown("{ code block }")).toBe(false);
+  });
 });

@@ -28,10 +28,12 @@ export const getRangePreset = (
   range: DateRangeValue,
 ): DateRangePreset | null => {
   const presets: DateRangePreset[] = [
-    "today",
-    "last3days",
-    "lastWeek",
-    "lastMonth",
+    "past24hours",
+    "past3days",
+    "past7days",
+    "past30days",
+    "past60days",
+    "alltime",
   ];
 
   for (const preset of presets) {
@@ -70,7 +72,7 @@ export const customDayClick = (
   if (newRange?.from && newRange?.to) {
     onSuccess({
       from: newRange.from,
-      to: newRange.to,
+      to: dayjs(newRange.to).endOf("day").toDate(),
     });
   }
 

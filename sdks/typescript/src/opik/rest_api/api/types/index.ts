@@ -145,6 +145,7 @@ export * from "./ValueEntrySource";
 export * from "./ValueEntry";
 export * from "./DatasetItemWriteSource";
 export * from "./DatasetItemWrite";
+export * from "./SpanEnrichmentOptions";
 export * from "./TraceEnrichmentOptions";
 export * from "./DatasetExpansionResponse";
 export * from "./DatasetExpansion";

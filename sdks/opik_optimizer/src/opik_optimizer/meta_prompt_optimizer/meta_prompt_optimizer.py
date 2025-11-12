@@ -355,6 +355,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
@@ -385,6 +386,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             agent_class: Custom agent class for prompt execution. If None, uses default
                 LiteLLM-based agent. Must inherit from OptimizableAgent.
             project_name: Opik project name for logging traces and experiments. Default: "Optimization"
+            optimization_id: Optional ID to use when creating the Opik optimization run; when
+                provided it must be a valid UUIDv7 string.
             max_trials: Maximum total number of prompts to evaluate across all rounds.
                 Optimizer stops when this limit is reached.
             mcp_config: Optional MCP (Model Context Protocol) execution configuration for
@@ -445,6 +448,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
             logger.debug(f"Created optimization with ID: {optimization.id}")

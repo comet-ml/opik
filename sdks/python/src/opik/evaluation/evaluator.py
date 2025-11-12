@@ -355,7 +355,10 @@ def _build_prompt_evaluation_task(
         {
             "vision": ModelCapabilities.supports_vision(
                 getattr(model, "model_name", None)
-            )
+            ),
+            "video": ModelCapabilities.supports_video(
+                getattr(model, "model_name", None)
+            ),
         },
     )
     # Disable placeholder validation since we pass all dataset item fields to format()
