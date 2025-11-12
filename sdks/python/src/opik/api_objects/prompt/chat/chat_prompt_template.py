@@ -33,7 +33,7 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
         registry: Optional[
             content_renderer_registry.ChatContentRendererRegistry
         ] = None,
-        validate_placeholders: bool = True,
+        validate_placeholders: bool = False,
     ) -> None:
         self._messages = messages
         self._template_type = template_type
@@ -198,6 +198,38 @@ def render_image_url_part(
     return {"type": "image_url", "image_url": rendered_image}
 
 
+def render_video_url_part(
+    part: prompt_types.ContentPart,
+    variables: Dict[str, Any],
+    template_type: prompt_types.PromptType,
+) -> Optional[prompt_types.ContentPart]:
+    """
+    Render a ``video_url`` part and preserve optional metadata.
+
+    In addition to the rendered ``url`` we keep:
+
+    - ``detail``: free-form provider hints (mirrors the image renderer semantics).
+    - ``mime_type``: the content type callers expect the downstream model to load.
+    - ``duration``: client-supplied duration in seconds to give hosts extra context.
+    - ``format``: a short format label (``mp4``, ``webm``, etc.) when known.
+    """
+    video_dict = part.get("video_url", {})
+    if not isinstance(video_dict, dict):
+        return None
+
+    url_template = video_dict.get("url", "")
+    rendered_url = _render_template_string(url_template, variables, template_type)
+    if not rendered_url:
+        return None
+
+    rendered_video: Dict[str, Any] = {"url": rendered_url}
+    for key in ("detail", "mime_type", "duration", "format"):
+        if key in video_dict:
+            rendered_video[key] = video_dict[key]
+
+    return {"type": "video_url", "video_url": rendered_video}
+
+
 def _extract_placeholders_from_string(
     text: str, template_type: prompt_types.PromptType
 ) -> Set[str]:
@@ -217,4 +249,10 @@ content_renderer_registry.register_default_chat_part_renderer(
     render_image_url_part,
     modality="vision",
     placeholder=("<<<image>>>", "<<</image>>>"),
+)
+content_renderer_registry.register_default_chat_part_renderer(
+    "video_url",
+    render_video_url_part,
+    modality="video",
+    placeholder=("<<<video>>>", "<<</video>>>"),
 )
