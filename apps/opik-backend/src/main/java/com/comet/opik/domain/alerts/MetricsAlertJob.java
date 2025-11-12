@@ -1,4 +1,4 @@
-package com.comet.opik.api.resources.v1.jobs;
+package com.comet.opik.domain.alerts;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;

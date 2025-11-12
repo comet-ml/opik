@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.bi;
 
-import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
+import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.google.inject.Injector;
