@@ -18,6 +18,8 @@ type UseTracesListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  fromTime?: string;
+  toTime?: string;
 };
 
 export type UseTracesListResponse = {
@@ -36,6 +38,8 @@ const getTracesList = async (
     size,
     page,
     truncate,
+    fromTime,
+    toTime,
   }: UseTracesListParams,
 ) => {
   const searchByIDFilters = generateSearchByIDFilters(search);
@@ -52,6 +56,8 @@ const getTracesList = async (
       size,
       page,
       truncate,
+      ...(fromTime && { from_time: fromTime }),
+      ...(toTime && { to_time: toTime }),
     },
   });
 

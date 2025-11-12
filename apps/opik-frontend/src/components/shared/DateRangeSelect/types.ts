@@ -1,4 +1,10 @@
-export type DateRangePreset = "today" | "last3days" | "lastWeek" | "lastMonth";
+export type DateRangePreset =
+  | "past24hours"
+  | "past3days"
+  | "past7days"
+  | "past30days"
+  | "past60days"
+  | "alltime";
 
 export type DateRangeValue = {
   from: Date;

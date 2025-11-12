@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import dayjs from "dayjs";
 import { customDayClick } from "./utils";
 import { DateRange } from "react-day-picker";
 
@@ -58,7 +59,7 @@ describe("customDayClick", () => {
 
       expect(mockOnSuccess).toHaveBeenCalledWith({
         from: startDate,
-        to: endDate,
+        to: dayjs(endDate).endOf("day").toDate(),
       });
       expect(mockOnSuccess).toHaveBeenCalledTimes(1);
     });
@@ -79,7 +80,7 @@ describe("customDayClick", () => {
 
       expect(mockOnSuccess).toHaveBeenCalledWith({
         from: date,
-        to: date,
+        to: dayjs(date).endOf("day").toDate(),
       });
       expect(mockOnSuccess).toHaveBeenCalledTimes(1);
     });
@@ -121,7 +122,7 @@ describe("customDayClick", () => {
       });
       expect(mockOnSuccess).toHaveBeenCalledWith({
         from: startDate,
-        to: endDate,
+        to: dayjs(endDate).endOf("day").toDate(),
       });
     });
 

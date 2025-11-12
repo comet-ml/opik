@@ -27,6 +27,8 @@ type UseTracesOrSpansListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  fromTime?: string;
+  toTime?: string;
 };
 
 export type TracesOrSpansListData = {
