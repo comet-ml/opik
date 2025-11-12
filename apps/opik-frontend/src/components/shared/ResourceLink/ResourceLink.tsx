@@ -84,6 +84,8 @@ type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
+  iconsSize?: number;
+  gapSize?: number;
   tooltipContent?: string;
   asTag?: boolean;
   isDeleted?: boolean;
@@ -95,6 +97,8 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   id,
   search,
   params,
+  iconsSize = 4,
+  gapSize = 2,
   tooltipContent = "",
   asTag = false,
   isDeleted = false,
@@ -123,19 +127,26 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
         <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <div
             className={cn(
-              "flex h-6 items-center gap-1.5 rounded-md border border-border px-2 max-w-full",
+              `gap-${gapSize}`,
+              "flex h-6 items-center rounded-md border border-border px-2 max-w-full",
               deleted && "opacity-50 cursor-default",
             )}
           >
             <props.icon
-              className="size-4 shrink-0"
+              className={cn("size-shrink-0", `size-${iconsSize}`)}
               style={{ color: props.color }}
             />
             <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
               {text}
             </div>
             {!deleted && (
-              <ArrowUpRight className="size-4 shrink-0 text-muted-slate" />
+              <ArrowUpRight
+                className={cn(
+                  `size-${iconsSize}`,
+                  "size-shrink-0",
+                  "text-muted-slate",
+                )}
+              />
             )}
           </div>
         </TooltipWrapper>
