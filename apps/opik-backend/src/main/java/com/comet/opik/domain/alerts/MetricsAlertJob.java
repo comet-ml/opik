@@ -183,6 +183,8 @@ public class MetricsAlertJob extends Job {
 
                             // Create MetricsAlertPayload DTO
                             var metricsPayload = MetricsAlertPayload.builder()
+                                    .eventType(trigger.eventType().getValue())
+                                    .metricName(trigger.eventType().getValue())
                                     .metricValue(metricValueFinal)
                                     .threshold(config.threshold())
                                     .windowSeconds(config.windowSeconds())
