@@ -69,7 +69,7 @@ class OptimizationContextManager:
         self.optimization: Optimization | None = None
 
     def __enter__(self) -> Optimization | None:
-        """Create and return the optimization."""
+        """Create optimization and return it."""
         try:
             self.optimization = self.client.create_optimization(
                 dataset_name=self.dataset_name,
@@ -83,9 +83,10 @@ class OptimizationContextManager:
                 return self.optimization
             else:
                 return None
-        except Exception:
+        except Exception as e:
             logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
+                f"Failed to get/create optimization: {e}. "
+                "Opik server may not support optimizations. Please upgrade opik."
             )
             logger.warning("Continuing without Opik optimization tracking.")
             return None
