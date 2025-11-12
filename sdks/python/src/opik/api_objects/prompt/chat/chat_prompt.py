@@ -123,7 +123,9 @@ class ChatPrompt(base_prompt.BasePrompt):
             A list of rendered message dictionaries with variables substituted and multimodal
             content either preserved or replaced with placeholders based on supported_modalities.
         """
-        return self._chat_template.format(variables=variables, supported_modalities=supported_modalities)
+        return self._chat_template.format(
+            variables=variables, supported_modalities=supported_modalities
+        )
 
     @override
     def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
