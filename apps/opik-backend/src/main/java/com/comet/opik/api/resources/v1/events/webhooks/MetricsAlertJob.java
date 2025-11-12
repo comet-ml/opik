@@ -14,7 +14,6 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.jobs.Job;
-import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -47,14 +46,16 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 /**
  * Scheduled job for processing metrics-based alerts.
  *
- * This job runs every 5 minutes to evaluate cost and latency thresholds for configured alerts.
+ * This job evaluates cost and latency thresholds for configured alerts at a configurable interval.
  * Uses Quartz scheduling with @DisallowConcurrentExecution to prevent overlapping executions
  * across multiple backend instances and within a single instance.
+ * 
+ * The job interval is configured via webhookConfig.metrics.fixedDelay and scheduled
+ * programmatically in OpikGuiceyLifecycleEventListener.
  */
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@Every("5m")
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class MetricsAlertJob extends Job {
 
@@ -100,9 +101,12 @@ public class MetricsAlertJob extends Job {
         // Create a unique lock key for this alert to prevent duplicate firing across instances
         LockService.Lock alertLock = new LockService.Lock("metrics_alert:fired:" + alert.id());
 
-        // Calculate lock duration: 5 minutes - 1 minute to ensure it expires before the next job run
+        // Calculate lock duration: job interval - 1 minute to ensure it expires before the next job run
         // This allows alerts to fire on every job run instead of every other run
-        Duration lockDuration = Duration.ofMinutes(4);
+        Duration jobInterval = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
+        Duration lockDuration = jobInterval.toMinutes() > 1 
+                ? jobInterval.minusMinutes(1) 
+                : jobInterval.minusSeconds(jobInterval.getSeconds() / 2);
 
         // Try to acquire the lock - if successful, this instance will process the alert
         // If lock already exists, another instance recently fired this alert, so skip it
@@ -111,7 +115,7 @@ public class MetricsAlertJob extends Job {
                     if (Boolean.FALSE.equals(lockAcquired)) {
                         // Lock already exists - alert was recently fired by another instance
                         log.debug(
-                                "Skipping alert '{}' (id: '{}') - already fired by another instance within the last 4 minutes",
+                                "Skipping alert '{}' (id: '{}') - already fired by another instance recently",
                                 alert.name(), alert.id());
                         return Mono.<Void>empty();
                     }
