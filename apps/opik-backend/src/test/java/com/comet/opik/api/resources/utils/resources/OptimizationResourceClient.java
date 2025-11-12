@@ -63,17 +63,14 @@ public class OptimizationResourceClient {
     }
 
     public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus) {
-        return get(id, apiKey, workspaceName, expectedStatus, null);
+        return get(id, apiKey, workspaceName, expectedStatus, false);
     }
 
     public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus,
-            Boolean includeStudioConfig) {
+            boolean includeStudioConfig) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(id.toString());
-
-        if (includeStudioConfig != null) {
-            webTarget = webTarget.queryParam("include_studio_config", includeStudioConfig);
-        }
+                .path(id.toString())
+                .queryParam("include_studio_config", includeStudioConfig);
 
         try (var response = webTarget
                 .request()
@@ -152,7 +149,7 @@ public class OptimizationResourceClient {
         }
     }
 
-    public com.comet.opik.api.OptimizationStudioLogs getStudioLogs(UUID id, String apiKey, String workspaceName,
+    public com.comet.opik.api.OptimizationStudioLog getStudioLogs(UUID id, String apiKey, String workspaceName,
             int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("studio")
@@ -166,7 +163,7 @@ public class OptimizationResourceClient {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
             if (expectedStatus == HttpStatus.SC_OK) {
-                return response.readEntity(com.comet.opik.api.OptimizationStudioLogs.class);
+                return response.readEntity(com.comet.opik.api.OptimizationStudioLog.class);
             }
 
             return null;
