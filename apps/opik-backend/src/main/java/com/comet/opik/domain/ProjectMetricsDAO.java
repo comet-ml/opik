@@ -82,7 +82,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
-    private static final String UNIX_EPOCH_TIMESTAMP = "1970-01-01 00:00:00.000";
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
             TimeInterval.DAILY, "toIntervalDay(1)",
@@ -190,7 +189,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         id,
                         start_time,
                         if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('""" + UNIX_EPOCH_TIMESTAMP + """', 9)),
+                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                     FROM traces FINAL
@@ -353,7 +352,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         min(t.start_time) as start_time,
                         max(t.end_time) as end_time,
                         if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('""" + UNIX_EPOCH_TIMESTAMP + """', 9)),
+                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
                         <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
@@ -557,7 +556,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SELECT
                 avg(
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
-                       AND notEquals(start_time, toDateTime64('""" + UNIX_EPOCH_TIMESTAMP + """', 9)),
+                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL)
                 ) AS avg_duration
