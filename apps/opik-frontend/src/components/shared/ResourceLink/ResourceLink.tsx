@@ -14,8 +14,10 @@ import isUndefined from "lodash/isUndefined";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
+import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { RESOURCE_TYPE, RESOURCE_COLORS } from "@/constants/colors";
+import { TagProps } from "@/components/ui/tag";
 
 export { RESOURCE_TYPE } from "@/constants/colors";
 
@@ -84,6 +86,7 @@ type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
+  variant?: TagProps["variant"];
   iconsSize?: number;
   gapSize?: number;
   tooltipContent?: string;
@@ -97,6 +100,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   id,
   search,
   params,
+  variant = "gray",
   iconsSize = 4,
   gapSize = 2,
   tooltipContent = "",
@@ -125,10 +129,12 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
     >
       {asTag ? (
         <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
-          <div
+          <Tag
+            size="md"
+            variant={variant}
             className={cn(
               `gap-${gapSize}`,
-              "flex h-6 items-center rounded-md border border-border px-2 max-w-full",
+              "flex items-center",
               deleted && "opacity-50 cursor-default",
             )}
           >
@@ -136,7 +142,15 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               className={cn("size-shrink-0", `size-${iconsSize}`)}
               style={{ color: props.color }}
             />
-            <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
+            <div
+              className={cn(
+                "truncate",
+                variant === "transparent" && [
+                  "text-muted-slate",
+                  "comet-body-s-accented",
+                ],
+              )}
+            >
               {text}
             </div>
             {!deleted && (
@@ -148,7 +162,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
                 )}
               />
             )}
-          </div>
+          </Tag>
         </TooltipWrapper>
       ) : (
         <Button
