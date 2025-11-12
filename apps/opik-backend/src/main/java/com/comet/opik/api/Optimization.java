@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -29,7 +30,7 @@ public record Optimization(
         @Schema(implementation = JsonListString.class) @JsonView({Optimization.View.Public.class,
                 Optimization.View.Write.class}) JsonNode metadata,
         @JsonView({Optimization.View.Public.class,
-                Optimization.View.Write.class}) OptimizationStudioConfig studioConfig,
+                Optimization.View.Write.class}) @Valid OptimizationStudioConfig studioConfig,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long numTrials,
         @JsonView({

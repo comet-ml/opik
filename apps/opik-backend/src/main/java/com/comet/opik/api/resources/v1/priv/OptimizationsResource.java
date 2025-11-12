@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
-import com.comet.opik.api.OptimizationStudioLogs;
+import com.comet.opik.api.OptimizationStudioLog;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
@@ -186,7 +186,7 @@ public class OptimizationsResource {
     @GET
     @Path("/studio/{id}/logs")
     @Operation(operationId = "getStudioOptimizationLogs", summary = "Get Studio optimization logs", description = "Get presigned S3 URL for downloading optimization logs", responses = {
-            @ApiResponse(responseCode = "200", description = "Logs response", content = @Content(schema = @Schema(implementation = OptimizationStudioLogs.class))),
+            @ApiResponse(responseCode = "200", description = "Logs response", content = @Content(schema = @Schema(implementation = OptimizationStudioLog.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response studioGetLogs(@PathParam("id") UUID id) {

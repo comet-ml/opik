@@ -5,7 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
-import com.comet.opik.api.OptimizationStudioLogs;
+import com.comet.opik.api.OptimizationStudioLog;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
@@ -61,7 +61,7 @@ public interface OptimizationService {
     Mono<Long> updateDatasetDeleted(Set<UUID> datasetIds);
 
     // Studio methods
-    Mono<OptimizationStudioLogs> generateStudioLogsResponse(UUID optimizationId);
+    Mono<OptimizationStudioLog> generateStudioLogsResponse(UUID optimizationId);
 }
 
 @Singleton
@@ -144,7 +144,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
                     return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
                         String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
-                        String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
+                        String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
 
                         return optimizationDAO.upsert(newOptimization)
                                 .thenReturn(newOptimization.id())
@@ -236,6 +236,14 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private void enqueueStudioOptimizationJob(Optimization optimization, String workspaceId, String workspaceName,
             String opikApiKey) {
+        if (workspaceName == null) {
+            log.error(
+                    "Cannot enqueue Studio optimization job for id: '{}' - workspaceName is null, marking as CANCELLED",
+                    optimization.id());
+            cancelOptimization(optimization.id(), workspaceId);
+            return;
+        }
+
         log.info("Enqueuing Optimization Studio job for id: '{}', workspace: '{}' (name: '{}')",
                 optimization.id(), workspaceId, workspaceName);
 
@@ -291,7 +299,7 @@ class OptimizationServiceImpl implements OptimizationService {
     // ==================== Studio Methods ====================
 
     @Override
-    public Mono<OptimizationStudioLogs> generateStudioLogsResponse(@NonNull UUID optimizationId) {
+    public Mono<OptimizationStudioLog> generateStudioLogsResponse(@NonNull UUID optimizationId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             log.debug("Generating logs response for Studio optimization: '{}' in workspace: '{}'", optimizationId,
@@ -309,7 +317,7 @@ class OptimizationServiceImpl implements OptimizationService {
             long expirationSeconds = preSignerService.getPresignedUrlExpirationSeconds();
             Instant expiresAt = Instant.now().plus(Duration.ofSeconds(expirationSeconds));
 
-            return Mono.just(OptimizationStudioLogs.builder()
+            return Mono.just(OptimizationStudioLog.builder()
                     .url(presignedUrl)
                     .lastModified(lastModified)
                     .expiresAt(expiresAt)
