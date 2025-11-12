@@ -110,7 +110,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
     // This method sets up a job that periodically evaluates metrics-based alerts for cost and latency thresholds.
     private void setMetricsAlertJob() {
-        var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhookConfig();
+        var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhook();
 
         Duration initialDelay = webhookConfig.getMetrics().getInitialDelay().toJavaDuration();
         Duration fixedDelay = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
