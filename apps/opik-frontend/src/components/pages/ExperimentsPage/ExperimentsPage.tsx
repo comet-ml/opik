@@ -401,6 +401,15 @@ const ExperimentsPage: React.FC = () => {
     [setGroupLimit],
   );
 
+  // Filter out dataset column when grouping by dataset
+  const availableColumns = useMemo(() => {
+    const isGroupingByDataset = groups.some((g) => g.field === COLUMN_DATASET_ID);
+    if (isGroupingByDataset) {
+      return DEFAULT_COLUMNS.filter((col) => col.id !== COLUMN_DATASET_ID);
+    }
+    return DEFAULT_COLUMNS;
+  }, [groups]);
+
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
 
@@ -599,7 +608,7 @@ const ExperimentsPage: React.FC = () => {
             </Button>
           </TooltipWrapper>
           <ColumnsButton
-            columns={DEFAULT_COLUMNS}
+            columns={availableColumns}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

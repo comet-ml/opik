@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import {
   ColumnSort,
   RowSelectionState,
@@ -154,34 +154,6 @@ export const useExperimentsTableConfig = <
     () => groups.map((group) => buildGroupFieldName(group)),
     [groups],
   );
-
-  // Check if grouping by dataset
-  const isGroupingByDataset = useMemo(
-    () => groups.some((g) => g.field === COLUMN_DATASET_ID),
-    [groups],
-  );
-
-  // Automatically deselect Dataset column when grouping by dataset
-  // and add it back when ungrouping
-  useEffect(() => {
-    if (isGroupingByDataset) {
-      // Remove dataset column from selection when grouping by dataset
-      if (selectedColumns.includes(COLUMN_DATASET_ID)) {
-        setSelectedColumns(
-          selectedColumns.filter((col) => col !== COLUMN_DATASET_ID),
-        );
-      }
-    } else {
-      // Add dataset column back to selection when not grouping by dataset
-      // only if it's not already there
-      if (
-        !selectedColumns.includes(COLUMN_DATASET_ID) &&
-        defaultSelectedColumns.includes(COLUMN_DATASET_ID)
-      ) {
-        setSelectedColumns([...selectedColumns, COLUMN_DATASET_ID]);
-      }
-    }
-  }, [isGroupingByDataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns = useMemo(() => {
     const groupColumns = groups.map((group) => {
