@@ -167,7 +167,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             String modelName = message.code().model().name();
             var llmProvider = llmProviderFactory.getLlmProvider(modelName);
             var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
-            scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy);
+            scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy, llmProvider);
         } catch (Exception exception) {
             userFacingLogger.error("Error preparing LLM request for threadId: '{}': \n\n{}",
                     threadId, exception.getMessage());

@@ -5,8 +5,8 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
-import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -15,10 +15,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.VideoContent;
+import dev.langchain4j.data.video.Video;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.validation.constraints.NotNull;
@@ -60,9 +63,8 @@ public class OnlineScoringEngine {
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
-    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile(
-            Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_START) + "(.*?)"
-                    + Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_END),
+    private static final Pattern MEDIA_PLACEHOLDER_PATTERN = Pattern.compile(
+            "<<<(image|video)>>>(.*?)<<</(image|video)>>>",
             Pattern.DOTALL);
 
     /**
@@ -71,11 +73,16 @@ public class OnlineScoringEngine {
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
      * @param trace         the sampled Trace to be scored
+     * @param structuredOutputStrategy the strategy for structured output
+     * @param llmProvider   the LLM provider type
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
-        var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider) {
+        var modelName = evaluatorCode.model().name();
+        var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace, llmProvider,
+                modelName);
         var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
 
         return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
@@ -87,20 +94,25 @@ public class OnlineScoringEngine {
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
      * @param traces        the sampled traces from the trace threads to be scored
+     * @param structuredOutputStrategy the strategy for structured output
+     * @param llmProvider   the LLM provider type
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
             @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
-            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NotNull StructuredOutputStrategy structuredOutputStrategy,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider) {
+        var modelName = evaluatorCode.model().name();
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
-                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces, llmProvider, modelName);
         var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
 
         return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
     }
 
     static List<ChatMessage> renderThreadMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider, @NotNull String modelName) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = variablesMap.keySet().stream()
                 .map(variableName -> switch (variableName) {
@@ -125,7 +137,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> buildUserMessage(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage, llmProvider, modelName);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -146,10 +158,13 @@ public class OnlineScoringEngine {
      * @param templateMessages a list of messages with variables to fill with a Trace value
      * @param variablesMap     a map of template variable to a path to a value into a Trace
      * @param trace            the trace with value to use to replace template variables
+     * @param llmProvider      the LLM provider type
+     * @param modelName        the model name
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace,
+            @NotNull com.comet.opik.api.LlmProvider llmProvider, @NotNull String modelName) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = toReplacements(variablesMap, trace);
         // render the message templates from evaluator rule
@@ -159,7 +174,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> buildUserMessage(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage, llmProvider, modelName);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -220,35 +235,57 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    private UserMessage buildUserMessage(String content) {
-        var matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
-        var foundAny = false;
+    private UserMessage buildUserMessage(String content, @NotNull com.comet.opik.api.LlmProvider llmProvider,
+            @NotNull String modelName) {
+        // Custom LLM providers (vLLM, Ollama, etc.) don't support multi-content messages with VideoContent/ImageContent
+        // EXCEPT for specific multimodal models:
+        // - vLLM/Ollama Qwen-VL/VI models: Match patterns like qwen-vl, qwen2-vl, qwen2.5vi, etc.
+        // - vLLM/Ollama LLaVA models: Match patterns like llava, llava-v1.6, etc.
+        // - Any model with "vision" or "multimodal" in the name
+        String lowerModelName = modelName.toLowerCase();
+        boolean supportsMultimodal = lowerModelName.matches(".*qwen.*(vl|vi).*")
+                || lowerModelName.contains("llava")
+                || lowerModelName.contains("vision")
+                || lowerModelName.contains("multimodal");
+
+        if (llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM && !supportsMultimodal) {
+            return UserMessage.from(content);
+        }
+
+        var matcher = MEDIA_PLACEHOLDER_PATTERN.matcher(content);
+
+        if (!matcher.find()) {
+            return UserMessage.from(content);
+        }
+
+        matcher.reset();
 
         var builder = UserMessage.builder();
         var lastIndex = 0;
 
         while (matcher.find()) {
-            foundAny = true;
-
             if (matcher.start() > lastIndex) {
                 var textSegment = content.substring(lastIndex, matcher.start());
                 appendTextContent(builder, textSegment);
             }
 
-            var url = matcher.group(1).trim();
-            if (!url.isEmpty()) {
-                // Unescape HTML entities for backward compatibility with templates using {{variable}}
-                // RECOMMENDED: Use {{{variable}}} (triple braces) or {{&variable}} in Mustache templates
-                // to prevent HTML escaping of URLs in the first place
-                var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
-                builder.addContent(ImageContent.from(unescapedUrl));
+            var mediaType = matcher.group(1);
+            var rawValue = matcher.group(2).trim();
+            var placeholderText = matcher.group(0);
+
+            if (!rawValue.isEmpty()) {
+                // Mustache templates can HTML-escape URLs; unescape before building structured content
+                // so providers receive the exact user-specified payload.
+                var unescapedValue = StringEscapeUtils.unescapeHtml4(rawValue);
+                var mediaContent = createMediaContent(mediaType, unescapedValue);
+                if (mediaContent != null) {
+                    builder.addContent(mediaContent);
+                } else {
+                    appendTextContent(builder, placeholderText);
+                }
             }
 
             lastIndex = matcher.end();
-        }
-
-        if (!foundAny) {
-            return UserMessage.from(content);
         }
 
         if (lastIndex < content.length()) {
@@ -259,10 +296,205 @@ public class OnlineScoringEngine {
         return builder.build();
     }
 
+    private Content createMediaContent(String mediaType, String rawValue) {
+        if ("image".equalsIgnoreCase(mediaType)) {
+            return createImageContent(rawValue);
+        }
+
+        if ("video".equalsIgnoreCase(mediaType)) {
+            return createVideoContent(rawValue);
+        }
+
+        log.warn("Unsupported media type placeholder encountered: '{}'", mediaType);
+        return null;
+    }
+
     private void appendTextContent(UserMessage.Builder builder, String textSegment) {
         if (StringUtils.isNotBlank(textSegment)) {
             builder.addContent(TextContent.from(textSegment));
         }
+    }
+
+    private Content createImageContent(String rawValue) {
+        if (StringUtils.isBlank(rawValue)) {
+            return null;
+        }
+
+        try {
+            return ImageContent.from(rawValue);
+        } catch (IllegalArgumentException exception) {
+            log.warn("Failed to build image content for placeholder: {}", rawValue, exception);
+            return null;
+        }
+    }
+
+    private Content createVideoContent(String rawValue) {
+        var trimmed = StringUtils.trimToEmpty(rawValue);
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+
+        if (looksLikeJson(trimmed)) {
+            Object parsed = tryParseJson(trimmed);
+            var fromJson = convertVideoPayload(parsed);
+            if (fromJson != null) {
+                return fromJson;
+            }
+        }
+
+        return buildVideoFromValue(trimmed, null);
+    }
+
+    private Content convertVideoPayload(Object payload) {
+        if (payload instanceof Map<?, ?> mapPayload) {
+            return convertVideoObject(mapPayload);
+        }
+
+        if (payload instanceof List<?> listPayload) {
+            for (var entry : listPayload) {
+                var converted = convertVideoPayload(entry);
+                if (converted != null) {
+                    return converted;
+                }
+            }
+        }
+
+        if (payload instanceof String stringPayload) {
+            return buildVideoFromValue(stringPayload, null);
+        }
+
+        return null;
+    }
+
+    private Content convertVideoObject(Map<?, ?> payload) {
+        var type = stringValue(payload.get("type"));
+
+        if ("video_url".equalsIgnoreCase(type) || payload.containsKey("video_url")) {
+            return buildVideoFromVideoUrl(payload.get("video_url"));
+        }
+
+        if ("file".equalsIgnoreCase(type) || payload.containsKey("file")) {
+            return buildVideoFromFile(payload.get("file"));
+        }
+
+        if (type == null) {
+            return buildVideoFromVideoUrl(payload.get("url"));
+        }
+
+        return null;
+    }
+
+    private Content buildVideoFromVideoUrl(Object videoNode) {
+        if (videoNode instanceof String url) {
+            return buildVideoFromValue(url, null);
+        }
+
+        if (videoNode instanceof Map<?, ?> videoMap) {
+            var url = stringValue(videoMap.get("url"));
+            var mimeType = firstNonBlank(
+                    stringValue(videoMap.get("mime_type")),
+                    stringValue(videoMap.get("format")));
+            return buildVideoFromValue(url, mimeType);
+        }
+
+        return null;
+    }
+
+    private Content buildVideoFromFile(Object fileNode) {
+        if (!(fileNode instanceof Map<?, ?> fileMap)) {
+            return null;
+        }
+
+        var fileId = stringValue(fileMap.get("file_id"));
+        if (StringUtils.isNotBlank(fileId)) {
+            return buildVideoFromValue(fileId, stringValue(fileMap.get("format")));
+        }
+
+        var fileData = stringValue(fileMap.get("file_data"));
+        if (StringUtils.isNotBlank(fileData)) {
+            return buildVideoFromBase64(fileData, stringValue(fileMap.get("format")));
+        }
+
+        return null;
+    }
+
+    private Content buildVideoFromValue(String value, String mimeType) {
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+
+        if (value.startsWith("data:video/")) {
+            return buildVideoFromUrl(value, mimeType);
+        }
+
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            return buildVideoFromUrl(value, mimeType);
+        }
+
+        return buildVideoFromBase64(value, mimeType);
+    }
+
+    private Content buildVideoFromUrl(String url, String mimeType) {
+        if (StringUtils.isBlank(url)) {
+            return null;
+        }
+
+        try {
+            if (StringUtils.isBlank(mimeType)) {
+                return VideoContent.from(url);
+            }
+
+            var video = Video.builder()
+                    .url(url)
+                    .mimeType(mimeType)
+                    .build();
+            return VideoContent.from(video);
+        } catch (IllegalArgumentException exception) {
+            log.warn("Failed to build video content for url placeholder: {}", url, exception);
+            return null;
+        }
+    }
+
+    private Content buildVideoFromBase64(String base64Data, String mimeType) {
+        if (StringUtils.isBlank(base64Data)) {
+            return null;
+        }
+
+        var safeMimeType = StringUtils.defaultIfBlank(mimeType, "video/mp4");
+        try {
+            return VideoContent.from(base64Data, safeMimeType);
+        } catch (IllegalArgumentException exception) {
+            log.warn("Failed to build video content from base64 payload", exception);
+            return null;
+        }
+    }
+
+    private boolean looksLikeJson(String value) {
+        var trimmed = StringUtils.trimToEmpty(value);
+        return trimmed.startsWith("{") || trimmed.startsWith("[");
+    }
+
+    private Object tryParseJson(String rawValue) {
+        try {
+            return JsonUtils.readValue(rawValue, Object.class);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to parse media placeholder as JSON: {}", rawValue, exception);
+            return null;
+        }
+    }
+
+    private String stringValue(Object value) {
+        return value instanceof String str ? str : null;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (StringUtils.isNotBlank(first)) {
+            return first;
+        }
+        if (StringUtils.isNotBlank(second)) {
+            return second;
+        }
+        return null;
     }
 
     private static String extractFromJson(JsonNode json, String path) {

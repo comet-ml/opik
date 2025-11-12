@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -12,6 +12,8 @@ import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
 import useTraceById from "@/api/traces/useTraceById";
+import { processInputData } from "@/lib/images";
+import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
@@ -48,6 +50,12 @@ const TraceDataViewer: React.FC = () => {
 
   const displayTrace = fullTrace || trace;
 
+  // Process input data to extract media
+  const { media } = useMemo(
+    () => processInputData(displayTrace?.input),
+    [displayTrace?.input],
+  );
+
   // Handlers for scroll position changes
   const handleInputScrollChange = useCallback(
     (updaterOrValue: number | ((old: number) => number)) => {
@@ -81,8 +89,9 @@ const TraceDataViewer: React.FC = () => {
       <Accordion
         type="multiple"
         className="w-full"
-        defaultValue={["input", "output"]}
+        defaultValue={["attachments", "input", "output"]}
       >
+        {displayTrace && <AttachmentsList data={displayTrace} media={media} />}
         <AccordionItem className="group" value="input" disabled>
           <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
             Input
