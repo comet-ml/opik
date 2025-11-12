@@ -15,10 +15,7 @@ import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
-import {
-  RESOURCE_TYPE,
-  RESOURCE_COLORS,
-} from "@/constants/colors";
+import { RESOURCE_TYPE, RESOURCE_COLORS } from "@/constants/colors";
 
 export { RESOURCE_TYPE } from "@/constants/colors";
 

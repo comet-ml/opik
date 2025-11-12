@@ -1,9 +1,9 @@
 import { Clock } from "lucide-react";
 import { formatDate } from "@/lib/date";
+import { Tag } from "@/components/ui/tag";
 import TooltipWrapper from "../TooltipWrapper/TooltipWrapper";
 import capitalize from "lodash/capitalize";
 import { RESOURCE_MAP, RESOURCE_TYPE } from "../ResourceLink/ResourceLink";
-import { cn } from "@/lib/utils";
 
 interface DateTagProps {
   date: string;
@@ -20,20 +20,14 @@ const DateTag = ({ date, resource }: DateTagProps) => {
 
   return (
     <TooltipWrapper content={`${capitalize(label)} creation time`}>
-      <div
-        className={cn(
-          "flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-border px-2",
-        )}
+      <Tag
+        size="md"
+        variant="gray"
+        className="flex shrink-0 items-center gap-2"
       >
-        <div
-          className="shrink-0 size-2 rounded-[0.15rem]"
-          style={{ backgroundColor: blueColor }}
-        />
         <Clock className="size-4 shrink-0" style={{ color: blueColor }} />
-        <div className="comet-body-s truncate text-muted-slate">
-          {formatDate(date)}
-        </div>
-      </div>
+        <div className="truncate">{formatDate(date)}</div>
+      </Tag>
     </TooltipWrapper>
   );
 };
