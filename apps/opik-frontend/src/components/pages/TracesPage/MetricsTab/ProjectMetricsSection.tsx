@@ -104,8 +104,8 @@ const PROJECT_METRICS_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
 interface ProjectMetricsSectionProps {
   projectId: string;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   hasTraces: boolean;
 }
 

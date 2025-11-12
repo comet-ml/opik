@@ -90,8 +90,8 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
 interface ThreadMetricsSectionProps {
   projectId: string;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   hasThreads: boolean;
 }
 

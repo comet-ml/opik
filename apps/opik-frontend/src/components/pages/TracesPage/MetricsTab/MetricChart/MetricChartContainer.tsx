@@ -31,8 +31,8 @@ interface MetricContainerChartProps {
   chartType: "bar" | "line";
   projectId: string;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   metricName: METRIC_NAME_TYPE;
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;

@@ -1,5 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect";
+import {
+  DateRangeValue,
+  getRangePreset,
+} from "@/components/shared/DateRangeSelect";
 import {
   calculateIntervalType,
   calculateIntervalStartAndEnd,
@@ -41,22 +44,28 @@ export const useMetricDateRangeCore = ({
     [setValue],
   );
 
+  const isAllTime = useMemo(() => {
+    return getRangePreset(dateRange) === "alltime";
+  }, [dateRange]);
+
   const interval: INTERVAL_TYPE = useMemo(
     () => calculateIntervalType(dateRange),
     [dateRange],
   );
 
-  const { intervalStart, intervalEnd } = useMemo(
-    () => calculateIntervalStartAndEnd(dateRange),
-    [dateRange],
-  );
+  const { intervalStart, intervalEnd } = useMemo(() => {
+    if (isAllTime) {
+      return { intervalStart: undefined, intervalEnd: undefined };
+    }
+    return calculateIntervalStartAndEnd(dateRange);
+  }, [dateRange, isAllTime]);
 
   return {
     dateRange,
     handleDateRangeChange,
     interval,
-    intervalStart,
-    intervalEnd,
+    intervalStart: intervalStart as string | undefined,
+    intervalEnd: intervalEnd as string | undefined,
     minDate,
     maxDate,
   };
