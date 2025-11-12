@@ -1704,7 +1704,7 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             Map<String, String> costPayload = JsonUtils.readValue(payload, Map.class);
 
-            verifyMetricsPayload(costPayload, "trace:cost", "60.00", "50.00", "60", projectId);
+            verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1752,7 +1752,7 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             Map<String, String> latencyPayload = JsonUtils.readValue(payload, Map.class);
 
-            verifyMetricsPayload(latencyPayload, "trace:latency", "3.0", "2", "60", projectId);
+            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3.0", "2", "60", projectId);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
