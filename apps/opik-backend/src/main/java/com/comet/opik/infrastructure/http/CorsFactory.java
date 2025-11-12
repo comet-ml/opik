@@ -13,7 +13,7 @@ import java.util.Set;
 @Slf4j
 public class CorsFactory {
 
-    // Using handler-based CORS. Filter-based approach is deprecated in Jetty 12.
+    // Using handler-based CORS. Filter-based approach is deprecated in newer Jetty versions.
     public static final String COMET_SDK_API_HEADER = "Comet-Sdk-Api";
     public static final String COMET_USERNAME_HEADER = "comet-username";
     public static final String COMET_REACT_VER_HEADER = "comet-react-ver";
@@ -27,8 +27,7 @@ public class CorsFactory {
             COMET_SDK_API_HEADER,
             COMET_USERNAME_HEADER,
             COMET_REACT_VER_HEADER,
-            RequestContext.WORKSPACE_HEADER
-    );
+            RequestContext.WORKSPACE_HEADER);
 
     private static final Set<String> ALLOWED_METHODS = Set.of(
             HttpMethod.OPTIONS.toString(),
@@ -37,8 +36,7 @@ public class CorsFactory {
             HttpMethod.POST.toString(),
             HttpMethod.DELETE.toString(),
             HttpMethod.HEAD.toString(),
-            HttpMethod.PATCH.toString()
-    );
+            HttpMethod.PATCH.toString());
 
     public static void registerHandlerIfEnabled(OpikConfiguration config, Environment environment) {
         if (!config.getCors().isEnabled()) {
@@ -53,7 +51,7 @@ public class CorsFactory {
 
         // Configure CORS parameters
         corsHandler.setAllowedOriginPatterns(Set.of("*"));
-        // Allow all request headers to satisfy browser preflights while keeping our explicit list
+        // Only allow explicitly listed request headers defined in ALLOWED_HEADERS
         corsHandler.setAllowedHeaders(ALLOWED_HEADERS);
         corsHandler.setExposedHeaders(Set.of(HttpHeaders.LOCATION));
         corsHandler.setAllowedMethods(ALLOWED_METHODS);
