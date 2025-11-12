@@ -25,6 +25,8 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
       name={name}
       resource={resource}
       tooltipContent={tooltipContent}
+      iconsSize={3}
+      gapSize={1}
       asTag
     />
   );
