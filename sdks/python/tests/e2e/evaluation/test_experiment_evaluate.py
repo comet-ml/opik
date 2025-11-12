@@ -1,10 +1,12 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import opik
 
 from opik import Prompt, synchronization, exceptions, id_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
+from opik.evaluation import test_result
+from opik.evaluation.metrics import score_result
 from opik.api_objects.experiment import experiment_item
 from .. import verifiers
 from ..conftest import random_chars
@@ -79,11 +81,16 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         prompts=[prompt],
     )
 
-    assert evaluation_result.dataset_id == dataset.id
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 3
+    assert len(experiment_items_contents) == 3, (
+        f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
+        f"Experiment items: {experiment_items_contents}"
+    )
 
     EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
         experiment_item.ExperimentItemContent(
@@ -228,11 +235,16 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         prompts=[prompt],
     )
 
-    assert evaluation_result.dataset_id == dataset.id
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 2
+    assert len(experiment_items_contents) == 2, (
+        f"Expected 2 experiment items, but got {len(experiment_items_contents)}. "
+        f"Experiment items: {experiment_items_contents}"
+    )
 
     EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
         experiment_item.ExperimentItemContent(
@@ -353,11 +365,16 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         prompts=[prompt1, prompt2],
     )
 
-    assert evaluation_result.dataset_id == dataset.id
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 3
+    assert len(experiment_items_contents) == 3, (
+        f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
+        f"Experiment items: {experiment_items_contents}"
+    )
 
     EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
         experiment_item.ExperimentItemContent(
@@ -521,7 +538,10 @@ def test_experiment_creation__name_can_be_omitted(
         experiment_id
     )
 
-    assert experiment_content.name is not None
+    assert experiment_content.name is not None, (
+        f"Expected experiment name to be set by backend, but got None. "
+        f"Experiment ID: {experiment_id}, Experiment content: {experiment_content}"
+    )
 
 
 def test_experiment_creation__scoring_metrics_not_set(
@@ -658,7 +678,9 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         prompts=[prompt],
     )
 
-    assert evaluation_result.dataset_id == dataset.id
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
 
 def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
@@ -751,9 +773,18 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     retrieved_experiments = opik_client.get_experiments_by_name(experiment_name)
-    assert len(retrieved_experiments) == 2
-    assert retrieved_experiment is not None
-    assert retrieved_experiment.id in [e.id for e in retrieved_experiments]
+    assert len(retrieved_experiments) == 2, (
+        f"Expected 2 experiments with name '{experiment_name}', but got {len(retrieved_experiments)}. "
+        f"Retrieved experiments: {[e.id for e in retrieved_experiments]}"
+    )
+    assert retrieved_experiment is not None, (
+        f"Expected get_experiment_by_name to return an experiment, but got None. "
+        f"Experiment name: {experiment_name}"
+    )
+    assert retrieved_experiment.id in [e.id for e in retrieved_experiments], (
+        f"Expected retrieved experiment ID '{retrieved_experiment.id}' to be in the list of experiments. "
+        f"Experiment IDs: {[e.id for e in retrieved_experiments]}"
+    )
 
 
 def test_experiment__get_experiments_by_name(
@@ -831,10 +862,16 @@ def test_experiment__get_experiments_by_name(
 
     # check getting experiment by name
     experiments = opik_client.get_experiments_by_name(experiment_name)
-    assert len(experiments) == 2
+    assert len(experiments) == 2, (
+        f"Expected 2 experiments with name '{experiment_name}', but got {len(experiments)}. "
+        f"Experiment IDs: {[e.id for e in experiments]}"
+    )
 
     experiments = opik_client.get_experiments_by_name(experiments_names[2])
-    assert len(experiments) == 1
+    assert len(experiments) == 1, (
+        f"Expected 1 experiment with name '{experiments_names[2]}', but got {len(experiments)}. "
+        f"Experiment IDs: {[e.id for e in experiments]}"
+    )
 
 
 def test_experiment__get_experiment_by_id__experiment_not_found__ExperimentNotFound_error_is_raised(
@@ -882,5 +919,132 @@ def test_experiment__get_experiment_items__no_feedback_scores(
     experiment = opik_client.get_experiment_by_name(experiment_name)
     items = experiment.get_items()
 
-    assert len(items) == 1
-    assert items[0].feedback_scores == []
+    assert len(items) == 1, (
+        f"Expected 1 experiment item, but got {len(items)}. "
+        f"Items: {items}"
+    )
+    assert items[0].feedback_scores == [], (
+        f"Expected empty feedback scores, but got {items[0].feedback_scores}. "
+        f"Item: {items[0]}"
+    )
+
+
+def test_experiment_creation_via_evaluate_function__with_experiment_scoring_functions__scores_computed_and_logged(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """Test that experiment scoring functions compute and log experiment-level scores."""
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+            {
+                "input": {"question": "What is the capital of Germany?"},
+                "expected_model_output": {"output": "Berlin"},
+            },
+            {
+                "input": {"question": "What is the capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]):
+        if item["input"] == {"question": "What is the capital of France?"}:
+            return {"output": "Paris"}
+        if item["input"] == {"question": "What is the capital of Germany?"}:
+            return {"output": "Berlin"}
+        if item["input"] == {"question": "What is the capital of Poland?"}:
+            return {"output": "Krakow"}  # Wrong answer
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    def constant_score(
+        test_results: List[test_result.TestResult],
+    ) -> List[score_result.ScoreResult]:
+        """Compute a random number based on the number of test results."""
+        return [
+            score_result.ScoreResult(
+                name="fixed_number",
+                value=0.8,
+                reason=f"Fixed score of 0.8",
+            )
+        ]
+
+    equals_metric = metrics.Equals()
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[equals_metric],
+        experiment_name=experiment_name,
+        experiment_config={
+            "model_name": "gpt-3.5",
+        },
+        scoring_key_mapping={
+            "reference": lambda x: x["expected_model_output"]["output"],
+        },
+        experiment_scoring_functions=[constant_score],
+    )
+
+    opik.flush_tracker()
+
+    # Verify experiment scores are in the result
+    assert len(evaluation_result.experiment_scores) == 1, (
+        f"Expected 1 experiment score in evaluation result, but got {len(evaluation_result.experiment_scores)}. "
+        f"Experiment scores: {evaluation_result.experiment_scores}"
+    )
+    assert evaluation_result.experiment_scores[0].name == "fixed_number", (
+        f"Expected experiment score name 'fixed_number', but got '{evaluation_result.experiment_scores[0].name}'. "
+        f"Full score object: {evaluation_result.experiment_scores[0]}"
+    )
+    assert evaluation_result.experiment_scores[0].value == 0.8, (
+        f"Expected experiment score value 0.8, but got {evaluation_result.experiment_scores[0].value}. "
+        f"Full score object: {evaluation_result.experiment_scores[0]}"
+    )
+    assert evaluation_result.experiment_scores[0].reason is not None, (
+        f"Expected experiment score reason to be set, but got None. "
+        f"Score: {evaluation_result.experiment_scores[0]}"
+    )
+    assert "Fixed score of 0.8" in evaluation_result.experiment_scores[0].reason, (
+        f"Expected reason to contain 'Fixed score of 0.8', but got: '{evaluation_result.experiment_scores[0].reason}'"
+    )
+
+    # Verify experiment was created
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata={"model_name": "gpt-3.5"},
+        traces_amount=3,  # one trace per dataset item
+        feedback_scores_amount=1,
+    )
+
+    # Verify experiment scores are logged to backend by retrieving the experiment
+    retrieved_experiment = opik_client.get_experiment_by_id(evaluation_result.experiment_id)
+    experiment_data = retrieved_experiment.get_experiment_data()
+    
+    # Check that experiment scores are present in the experiment data
+    assert experiment_data.experiment_scores is not None, (
+        f"Expected experiment_scores to be set in experiment data, but got None. "
+        f"Experiment ID: {evaluation_result.experiment_id}, "
+        f"Experiment name: {evaluation_result.experiment_name}, "
+        f"Experiment data fields: {dir(experiment_data)}, "
+        f"Experiment data: {experiment_data}"
+    )
+    assert len(experiment_data.experiment_scores) == 1, (
+        f"Expected 1 experiment score in backend, but got {len(experiment_data.experiment_scores) if experiment_data.experiment_scores else 0}. "
+        f"Experiment scores: {experiment_data.experiment_scores}"
+    )
+    assert experiment_data.experiment_scores[0].name == "fixed_number", (
+        f"Expected experiment score name 'fixed_number' in backend, but got '{experiment_data.experiment_scores[0].name}'. "
+        f"Full score object: {experiment_data.experiment_scores[0]}"
+    )
+    assert experiment_data.experiment_scores[0].value == 0.8, (
+        f"Expected experiment score value 0.8 in backend, but got {experiment_data.experiment_scores[0].value}. "
+        f"Full score object: {experiment_data.experiment_scores[0]}"
+    )

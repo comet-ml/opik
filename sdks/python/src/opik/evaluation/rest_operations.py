@@ -1,7 +1,6 @@
 from typing import List, Optional
 
 from opik.api_objects import experiment, opik_client
-from opik.rest_api.types import ExperimentScore
 from opik.types import FeedbackScoreDict
 from . import test_case
 from .metrics import arguments_helpers, score_result
@@ -96,28 +95,3 @@ def log_test_result_feedback_scores(
     client.log_traces_feedback_scores(
         scores=all_trace_scores, project_name=project_name
     )
-
-
-def log_experiment_scores(
-    client: opik_client.Opik,
-    score_results: List[score_result.ScoreResult],
-    experiment_id: str,
-) -> None:
-    """Log experiment-level scores to the backend."""
-    experiment_scores: List[ExperimentScore] = []
-
-    for score_result_ in score_results:
-        if score_result_.scoring_failed:
-            continue
-
-        experiment_score = ExperimentScore(
-            name=score_result_.name,
-            value=score_result_.value,
-        )
-        experiment_scores.append(experiment_score)
-
-    if experiment_scores:
-        client.rest_client.experiments.update_experiment(
-            id=experiment_id,
-            experiment_scores=experiment_scores,
-        )

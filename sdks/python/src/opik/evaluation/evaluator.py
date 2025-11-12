@@ -43,15 +43,15 @@ def _try_notifying_about_experiment_completion(
 
 
 def _compute_experiment_scores(
-    experiment_scores: Optional[List[ExperimentScoreFunction]],
+    experiment_scoring_functions: List[ExperimentScoreFunction],
     test_results: List[test_result.TestResult],
 ) -> List[score_result.ScoreResult]:
     """Compute experiment-level scores from test results."""
-    if not experiment_scores or not test_results:
+    if not experiment_scoring_functions or not test_results:
         return []
 
     all_scores: List[score_result.ScoreResult] = []
-    for score_function in experiment_scores:
+    for score_function in experiment_scoring_functions:
         try:
             scores = score_function(test_results)
             all_scores.extend(scores)
@@ -82,7 +82,7 @@ def evaluate(
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
-    experiment_scores: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -143,11 +143,13 @@ def evaluate(
 
         trial_count: number of times to run the task and evaluate the task output for every dataset item.
 
-        experiment_scores: List of callable functions that compute experiment-level scores.
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
+    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
+
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
@@ -183,7 +185,7 @@ def evaluate(
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
-        experiment_scores=experiment_scores,
+        experiment_scoring_functions=experiment_scoring_functions,
     )
 
 
@@ -202,7 +204,7 @@ def _evaluate_task(
     dataset_item_ids: Optional[List[str]],
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
-    experiment_scores: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_scoring_functions: List[ExperimentScoreFunction],
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -229,7 +231,7 @@ def _evaluate_task(
 
     # Compute experiment scores
     computed_experiment_scores = _compute_experiment_scores(
-        experiment_scores=experiment_scores,
+        experiment_scoring_functions=experiment_scoring_functions,
         test_results=test_results,
     )
 
@@ -252,11 +254,7 @@ def _evaluate_task(
 
     # Log experiment scores to backend
     if computed_experiment_scores:
-        rest_operations.log_experiment_scores(
-            client=client,
-            score_results=computed_experiment_scores,
-            experiment_id=experiment.id,
-        )
+        experiment.log_experiment_scores(score_results=computed_experiment_scores)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
@@ -285,7 +283,7 @@ def evaluate_experiment(
     verbose: int = 1,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
-    experiment_scores: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
     evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
@@ -318,11 +316,12 @@ def evaluate_experiment(
 
         experiment_id: The ID of the experiment to evaluate. If not provided, the experiment will be evaluated based on the experiment name.
 
-        experiment_scores: List of callable functions that compute experiment-level scores.
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
+    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
     start_time = time.time()
 
     client = opik_client.get_client_cached()
@@ -371,7 +370,7 @@ def evaluate_experiment(
 
     # Compute experiment scores
     computed_experiment_scores = _compute_experiment_scores(
-        experiment_scores=experiment_scores,
+        experiment_scoring_functions=experiment_scoring_functions,
         test_results=test_results,
     )
 
@@ -395,11 +394,7 @@ def evaluate_experiment(
 
     # Log experiment scores to backend
     if computed_experiment_scores:
-        rest_operations.log_experiment_scores(
-            client=client,
-            score_results=computed_experiment_scores,
-            experiment_id=experiment.id,
-        )
+        experiment.log_experiment_scores(score_results=computed_experiment_scores)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=experiment.dataset_id,
@@ -485,7 +480,7 @@ def evaluate_prompt(
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
-    experiment_scores: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -528,11 +523,12 @@ def evaluate_prompt(
 
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
 
-        experiment_scores: List of callable functions that compute experiment-level scores.
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
+    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
     if isinstance(model, str):
         opik_model = models_factory.get(model_name=model)
     elif not isinstance(model, base_model.OpikBaseModel):
@@ -595,7 +591,7 @@ def evaluate_prompt(
 
     # Compute experiment scores
     computed_experiment_scores = _compute_experiment_scores(
-        experiment_scores=experiment_scores,
+        experiment_scoring_functions=experiment_scoring_functions,
         test_results=test_results,
     )
 
@@ -618,11 +614,7 @@ def evaluate_prompt(
 
     # Log experiment scores to backend
     if computed_experiment_scores:
-        rest_operations.log_experiment_scores(
-            client=client,
-            score_results=computed_experiment_scores,
-            experiment_id=experiment.id,
-        )
+        experiment.log_experiment_scores(score_results=computed_experiment_scores)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,
@@ -660,7 +652,7 @@ def evaluate_optimization_trial(
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
-    experiment_scores: Optional[List[ExperimentScoreFunction]] = None,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -713,11 +705,13 @@ def evaluate_optimization_trial(
 
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
 
-        experiment_scores: List of callable functions that compute experiment-level scores.
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
             Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
+    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
+
     if scoring_metrics is None:
         scoring_metrics = []
 
@@ -751,7 +745,7 @@ def evaluate_optimization_trial(
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
-        experiment_scores=experiment_scores,
+        experiment_scoring_functions=experiment_scoring_functions,
     )
 
 
