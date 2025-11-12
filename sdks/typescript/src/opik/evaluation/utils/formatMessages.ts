@@ -11,10 +11,6 @@ import type {
 } from "ai";
 import type { ReasoningPart } from "@ai-sdk/provider-utils";
 
-// Image placeholder constants for human-readable format
-const IMAGE_PLACEHOLDER_PREFIX = "<<<image>>>";
-const IMAGE_PLACEHOLDER_SUFFIX = "<<</image>>>";
-
 /**
  * Formats an array of OpikMessage objects into a human-readable string.
  *
@@ -67,16 +63,6 @@ function formatStructuredContentAsString(
     .map((part) => {
       if (part.type === "text") {
         return part.text;
-      }
-
-      if (part.type === "image") {
-        const image = part.image;
-        // Handle URL strings
-        if (typeof image === "string") {
-          return `${IMAGE_PLACEHOLDER_PREFIX}${image}${IMAGE_PLACEHOLDER_SUFFIX}`;
-        }
-        // For DataContent (Uint8Array, ArrayBuffer, etc.), show placeholder
-        return `${IMAGE_PLACEHOLDER_PREFIX}[binary data]${IMAGE_PLACEHOLDER_SUFFIX}`;
       }
 
       if (part.type === "file") {
