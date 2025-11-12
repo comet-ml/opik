@@ -323,6 +323,94 @@ export class Datasets {
     }
 
     /**
+     * Create dataset items from spans with enriched metadata
+     *
+     * @param {string} datasetId
+     * @param {OpikApi.CreateDatasetItemsFromSpansRequest} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.createDatasetItemsFromSpans("dataset_id", {
+     *         spanIds: ["span_ids"],
+     *         enrichmentOptions: {}
+     *     })
+     */
+    public createDatasetItemsFromSpans(
+        datasetId: string,
+        request: OpikApi.CreateDatasetItemsFromSpansRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__createDatasetItemsFromSpans(datasetId, request, requestOptions),
+        );
+    }
+
+    private async __createDatasetItemsFromSpans(
+        datasetId: string,
+        request: OpikApi.CreateDatasetItemsFromSpansRequest,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(datasetId)}/items/from-spans`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.CreateDatasetItemsFromSpansRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+            }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/datasets/{dataset_id}/items/from-spans.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Create dataset items from traces with enriched metadata
      *
      * @param {string} datasetId
