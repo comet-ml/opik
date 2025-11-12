@@ -1,5 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { DateRangeValue, getRangePreset } from "@/components/shared/DateRangeSelect";
+import {
+  DateRangeValue,
+  getRangePreset,
+} from "@/components/shared/DateRangeSelect";
 import {
   calculateIntervalType,
   calculateIntervalStartAndEnd,

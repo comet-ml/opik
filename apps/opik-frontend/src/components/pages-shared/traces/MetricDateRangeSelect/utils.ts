@@ -1,5 +1,8 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import { DateRangeValue, getRangePreset } from "@/components/shared/DateRangeSelect";
+import {
+  DateRangeValue,
+  getRangePreset,
+} from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
 
 export const serializeDateForURL = (date: Date): string => {
@@ -34,7 +37,7 @@ export const parseDateRangeFromState = (
     }
 
     const parsedRange = { from, to };
-    
+
     // Note: "alltime" is allowed during parsing here, but at the UI level (e.g., MetricsTab.tsx),
     // it is immediately replaced with DEFAULT_METRICS_DATE_RANGE. Thus, "alltime" is never actually used for filtering.
     const preset = getRangePreset(parsedRange);

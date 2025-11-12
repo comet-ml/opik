@@ -42,7 +42,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     if (preset === "alltime") {
       handleDateRangeChange(DEFAULT_METRICS_DATE_RANGE);
     }
-  }, [dateRange]);
+  }, [dateRange, handleDateRangeChange]);
 
   const { data: traces } = useTracesList(
     {
