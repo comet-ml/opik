@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ColumnSort,
   RowSelectionState,
@@ -161,13 +161,27 @@ export const useExperimentsTableConfig = <
     [groups],
   );
 
-  // Filter out dataset column when grouping by dataset
-  const effectiveSelectedColumns = useMemo(() => {
+  // Automatically deselect Dataset column when grouping by dataset
+  // and add it back when ungrouping
+  useEffect(() => {
     if (isGroupingByDataset) {
-      return selectedColumns.filter((col) => col !== COLUMN_DATASET_ID);
+      // Remove dataset column from selection when grouping by dataset
+      if (selectedColumns.includes(COLUMN_DATASET_ID)) {
+        setSelectedColumns(
+          selectedColumns.filter((col) => col !== COLUMN_DATASET_ID),
+        );
+      }
+    } else {
+      // Add dataset column back to selection when not grouping by dataset
+      // only if it's not already there
+      if (
+        !selectedColumns.includes(COLUMN_DATASET_ID) &&
+        defaultSelectedColumns.includes(COLUMN_DATASET_ID)
+      ) {
+        setSelectedColumns([...selectedColumns, COLUMN_DATASET_ID]);
+      }
     }
-    return selectedColumns;
-  }, [selectedColumns, isGroupingByDataset]);
+  }, [isGroupingByDataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns = useMemo(() => {
     const groupColumns = groups.map((group) => {
@@ -249,12 +263,12 @@ export const useExperimentsTableConfig = <
       ...groupColumns,
       ...convertColumnDataToColumn<T, T>(defaultColumns, {
         columnsOrder,
-        selectedColumns: effectiveSelectedColumns,
+        selectedColumns,
         sortableColumns: sortableBy,
       }),
       ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
-        selectedColumns: effectiveSelectedColumns,
+        selectedColumns,
         sortableColumns: sortableBy,
       }),
     ];
@@ -273,7 +287,7 @@ export const useExperimentsTableConfig = <
     sortableBy,
     groups,
     columnsOrder,
-    effectiveSelectedColumns,
+    selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
     defaultColumns,
