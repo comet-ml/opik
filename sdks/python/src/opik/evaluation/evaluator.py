@@ -148,7 +148,9 @@ def evaluate(
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
-    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
 
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
@@ -321,7 +323,9 @@ def evaluate_experiment(
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
-    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
     start_time = time.time()
 
     client = opik_client.get_client_cached()
@@ -528,7 +532,9 @@ def evaluate_prompt(
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
-    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
     if isinstance(model, str):
         opik_model = models_factory.get(model_name=model)
     elif not isinstance(model, base_model.OpikBaseModel):
@@ -710,7 +716,9 @@ def evaluate_optimization_trial(
             These scores are computed after all test results are collected and represent aggregate
             metrics across the entire experiment.
     """
-    experiment_scoring_functions = [] if experiment_scoring_functions is None else experiment_scoring_functions
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
 
     if scoring_metrics is None:
         scoring_metrics = []
