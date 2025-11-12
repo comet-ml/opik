@@ -22,7 +22,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         messages: List[Dict[str, prompt_types.MessageContent]],
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
-        validate_placeholders: bool = True,
+        validate_placeholders: bool = False,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
