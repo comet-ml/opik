@@ -213,7 +213,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["prompt", "created_at"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "prompt",
+  COLUMN_DATASET_ID,
+  "created_at",
+];
 
 interface ExperimentsTabProps {
   promptId: string;
@@ -354,6 +358,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [setGroupLimit],
   );
 
+  // Filter out dataset column when grouping by dataset
+  const availableColumns = useMemo(() => {
+    const isGroupingByDataset = groups.some(
+      (g) => g.field === COLUMN_DATASET_ID,
+    );
+    if (isGroupingByDataset) {
+      return DEFAULT_COLUMNS.filter((col) => col.id !== COLUMN_DATASET_ID);
+    }
+    return DEFAULT_COLUMNS;
+  }, [groups]);
+
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
@@ -390,7 +405,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           <ExperimentsActionsPanel experiments={selectedRows} />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
-            columns={DEFAULT_COLUMNS}
+            columns={availableColumns}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

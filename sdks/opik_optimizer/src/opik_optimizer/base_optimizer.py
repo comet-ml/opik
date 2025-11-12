@@ -654,6 +654,7 @@ class BaseOptimizer(ABC):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -669,6 +670,8 @@ class BaseOptimizer(ABC):
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            project_name: Opik project name for logging traces (default: "Optimization")
+           optimization_id: Optional ID to use when creating the Opik optimization run;
+               when provided it must be a valid UUIDv7 string.
            **kwargs: Additional arguments for optimization
         """
         pass

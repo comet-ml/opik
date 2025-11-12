@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
@@ -411,6 +412,32 @@ public class DatasetsResource {
 
         log.info("Created dataset items from traces for dataset '{}', trace count '{}' on workspaceId '{}'",
                 datasetId, request.traceIds().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/{dataset_id}/items/from-spans")
+    @Operation(operationId = "createDatasetItemsFromSpans", summary = "Create dataset items from spans", description = "Create dataset items from spans with enriched metadata", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromSpans(
+            @PathParam("dataset_id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = CreateDatasetItemsFromSpansRequest.class))) @NotNull @Valid CreateDatasetItemsFromSpansRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
+                datasetId, request.spanIds().size(), workspaceId);
+
+        itemService.createFromSpans(datasetId, request.spanIds(), request.enrichmentOptions())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+
+        log.info("Created dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
+                datasetId, request.spanIds().size(), workspaceId);
 
         return Response.noContent().build();
     }

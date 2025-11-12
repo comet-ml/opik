@@ -20,6 +20,7 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
+from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -196,6 +197,56 @@ class RawDatasetsClient:
                 "dataset_id": dataset_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_dataset_items_from_spans(
+        self,
+        dataset_id: str,
+        *,
+        span_ids: typing.Sequence[str],
+        enrichment_options: SpanEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Create dataset items from spans with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        span_ids : typing.Sequence[str]
+            Set of span IDs to add to the dataset
+
+        enrichment_options : SpanEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/from-spans",
+            method="POST",
+            json={
+                "span_ids": span_ids,
+                "enrichment_options": convert_and_respect_annotation_metadata(
+                    object_=enrichment_options, annotation=SpanEnrichmentOptions, direction="write"
                 ),
             },
             headers={
@@ -1106,6 +1157,56 @@ class AsyncRawDatasetsClient:
                 "dataset_id": dataset_id,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def create_dataset_items_from_spans(
+        self,
+        dataset_id: str,
+        *,
+        span_ids: typing.Sequence[str],
+        enrichment_options: SpanEnrichmentOptions,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create dataset items from spans with enriched metadata
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        span_ids : typing.Sequence[str]
+            Set of span IDs to add to the dataset
+
+        enrichment_options : SpanEnrichmentOptions
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/from-spans",
+            method="POST",
+            json={
+                "span_ids": span_ids,
+                "enrichment_options": convert_and_respect_annotation_metadata(
+                    object_=enrichment_options, annotation=SpanEnrichmentOptions, direction="write"
                 ),
             },
             headers={

@@ -14,7 +14,7 @@ class PromptType(str, enum.Enum):
 MessageContent = Union[str, List[Dict[str, Any]]]
 ContentPart = Dict[str, Any]
 RendererFn = Callable[[ContentPart, Dict[str, Any], PromptType], Optional[ContentPart]]
-ModalityName = Literal["vision"]
+ModalityName = Literal["vision", "video"]
 SupportedModalities = Mapping[ModalityName, bool]
 ModalitySet = Set[ModalityName]
 
