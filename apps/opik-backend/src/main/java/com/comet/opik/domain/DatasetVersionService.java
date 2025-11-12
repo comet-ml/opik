@@ -25,6 +25,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -382,11 +383,13 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
      */
     private DiffStatistics calculateDiffStatistics(List<DatasetItem> previousItems, List<DatasetItem> currentItems) {
         // Build maps for efficient lookup
+        // For versioned items, use draftItemId (which links to original draft item)
+        // For draft items, use id
         var previousMap = previousItems.stream()
-                .collect(java.util.stream.Collectors.toMap(DatasetItem::id, item -> item));
+                .collect(Collectors.toMap(DatasetVersionServiceImpl::getIdForComparison, item -> item));
 
         var currentMap = currentItems.stream()
-                .collect(java.util.stream.Collectors.toMap(DatasetItem::id, item -> item));
+                .collect(Collectors.toMap(DatasetVersionServiceImpl::getIdForComparison, item -> item));
 
         // Calculate added items (in current but not in previous)
         var addedIds = new java.util.HashSet<>(currentMap.keySet());
@@ -416,6 +419,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 addedIds.size(),
                 modifiedCount,
                 deletedIds.size());
+    }
+
+    private static UUID getIdForComparison(DatasetItem item) {
+        return item.draftItemId() != null ? item.draftItemId() : item.id();
     }
 
     /**
