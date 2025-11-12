@@ -1,11 +1,20 @@
 from typing import Any, Dict, List, Optional, Tuple
 import json
-
+import dataclasses
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
-from opik.rest_api.types import prompt_version_detail, PromptVersionDetailType
+from opik.rest_api.types import prompt_version_detail
 
-from .prompt import PromptType
+from . import types as prompt_types
+
+
+@dataclasses.dataclass
+class PromptSearchResult:
+    """Result from searching prompts, containing name, template structure, and latest version details."""
+
+    name: str
+    template_structure: str
+    prompt_version_detail: prompt_version_detail.PromptVersionDetail
 
 
 class PromptClient:
@@ -17,7 +26,8 @@ class PromptClient:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]],
-        type: PromptType = PromptType.MUSTACHE,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
+        template_structure: str = "string",
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -25,20 +35,49 @@ class PromptClient:
         Parameters:
         - name: The name of the prompt.
         - prompt: The template content for the prompt.
+        - metadata: Optional metadata for the prompt.
+        - type: The template type (MUSTACHE or JINJA2).
+        - template_structure: Either "string" (default) or "chat".
 
         Returns:
         - A Prompt object for the provided prompt name and template.
         """
-        prompt_version = self._get_latest_version(name)
+        prompt_version = self._get_latest_version(
+            name, template_structure=template_structure
+        )
 
+        # For chat prompts, compare parsed JSON to avoid formatting differences
+        templates_equal = False
+
+        if prompt_version is not None:
+            if template_structure == "chat":
+                try:
+                    existing_messages = json.loads(prompt_version.template)
+                    new_messages = json.loads(prompt)
+                    templates_equal = existing_messages == new_messages
+                except (json.JSONDecodeError, TypeError):
+                    templates_equal = prompt_version.template == prompt
+            else:
+                templates_equal = prompt_version.template == prompt
+
+        # Create a new version if:
+        # - No version exists yet (new prompt)
+        # - Template content has changed
+        # - Metadata has changed
+        # - Type has changed
+        # Note: template_structure is immutable and enforced by the backend
         if (
             prompt_version is None
-            or prompt_version.template != prompt
+            or not templates_equal
             or prompt_version.metadata != metadata
             or prompt_version.type != type.value
         ):
             prompt_version = self._create_new_version(
-                name=name, prompt=prompt, type=type, metadata=metadata
+                name=name,
+                prompt=prompt,
+                type=type,
+                metadata=metadata,
+                template_structure=template_structure,
             )
 
         return prompt_version
@@ -47,8 +86,9 @@ class PromptClient:
         self,
         name: str,
         prompt: str,
-        type: PromptVersionDetailType,
+        type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
+        template_structure: str = "string",
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
             template=prompt,
@@ -59,27 +99,31 @@ class PromptClient:
             self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=new_prompt_version_detail_data,
+                template_structure=template_structure,
             )
         )
         return new_prompt_version_detail
 
     def _get_latest_version(
-        self, name: str
+        self, name: str, template_structure: Optional[str] = None
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         try:
             prompt_latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                name=name
+                name=name,
+                template_structure=template_structure,
             )
             return prompt_latest_version
         except rest_api_core.ApiError as e:
-            if e.status_code != 404:
-                raise e
-            return None
+            if e.status_code == 400 or e.status_code == 404:
+                # 400: template_structure mismatch, 404: prompt not found
+                return None
+            raise e
 
     def get_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
+        template_structure: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
@@ -87,6 +131,7 @@ class PromptClient:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            template_structure: Optional template structure filter ("string" or "chat"). Defaults to "string" if not specified.
 
         Returns:
             Prompt: The details of the specified prompt.
@@ -95,10 +140,14 @@ class PromptClient:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
+                template_structure=template_structure,
             )
             return prompt_version
 
         except rest_api_core.ApiError as e:
+            if e.status_code == 400:
+                # Backend returns 400 when template_structure doesn't match
+                return None
             if e.status_code != 404:
                 raise e
 
@@ -184,7 +233,7 @@ class PromptClient:
         *,
         name: Optional[str] = None,
         parsed_filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Tuple[str, prompt_version_detail.PromptVersionDetail]]:
+    ) -> List[PromptSearchResult]:
         """
         Search prompt containers by optional name substring and filters, then
         return the latest version detail for each matched prompt container.
@@ -194,17 +243,17 @@ class PromptClient:
             parsed_filters: List of parsed filters (OQL) that will be stringified for the backend.
 
         Returns:
-            List[Tuple[str, PromptVersionDetail]]: (prompt name, latest version) for each matched prompt container.
+            List[PromptSearchResult]: Each result contains name, template_structure, and prompt_version_detail.
         """
         try:
             filters_str = (
                 json.dumps(parsed_filters) if parsed_filters is not None else None
             )
 
-            # Page through all prompt containers
+            # Page through all prompt containers and collect name + template_structure
             page = 1
-            size = 100
-            all_prompt_names: List[str] = []
+            size = 1000
+            prompt_info: List[Tuple[str, str]] = []  # (name, template_structure)
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
                     page=page,
@@ -215,21 +264,35 @@ class PromptClient:
                 content = prompts_page.content or []
                 if len(content) == 0:
                     break
-                all_prompt_names.extend([p.name for p in content])
+                prompt_info.extend(
+                    [(p.name, p.template_structure or "string") for p in content]
+                )
                 if len(content) < size:
                     break
                 page += 1
 
-            if len(all_prompt_names) == 0:
+            if len(prompt_info) == 0:
                 return []
 
             # Retrieve latest version for each container name
-            results: List[Tuple[str, prompt_version_detail.PromptVersionDetail]] = []
-            for prompt_name in all_prompt_names:
-                latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                    name=prompt_name
-                )
-                results.append((prompt_name, latest_version))
+            results: List[PromptSearchResult] = []
+            for prompt_name, template_structure in prompt_info:
+                try:
+                    latest_version = self._rest_client.prompts.retrieve_prompt_version(
+                        name=prompt_name,
+                    )
+                    results.append(
+                        PromptSearchResult(
+                            name=prompt_name,
+                            template_structure=template_structure,
+                            prompt_version_detail=latest_version,
+                        )
+                    )
+                except rest_api_core.ApiError as e:
+                    # Skip prompts that can't be retrieved (e.g., deleted between search and retrieval)
+                    if e.status_code == 404:
+                        continue
+                    raise e
 
             return results
 

@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from .. import Prompt
+from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
@@ -19,8 +19,8 @@ from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
-from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
-from opik.api_objects.prompt.types import SupportedModalities
+from opik.api_objects.prompt.chat import chat_prompt_template
+from opik.api_objects.prompt import types as prompt_types
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
@@ -52,8 +52,8 @@ def evaluate(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
-    prompts: Optional[List[Prompt]] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
@@ -351,7 +351,7 @@ def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     supported_modalities = cast(
-        SupportedModalities,
+        prompt_types.SupportedModalities,
         {
             "vision": ModelCapabilities.supports_vision(
                 getattr(model, "model_name", None)
@@ -361,9 +361,12 @@ def _build_prompt_evaluation_task(
             ),
         },
     )
-    chat_prompt_template = ChatPromptTemplate(messages=messages)
+    # Disable placeholder validation since we pass all dataset item fields to format()
+    chat_prompt_template_ = chat_prompt_template.ChatPromptTemplate(
+        messages=messages, validate_placeholders=False
+    )
 
-    required_modalities = chat_prompt_template.required_modalities()
+    required_modalities = chat_prompt_template_.required_modalities()
     unsupported_modalities = {
         modality
         for modality in required_modalities
@@ -382,7 +385,7 @@ def _build_prompt_evaluation_task(
 
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         template_type_override = prompt_variables.get("type")
-        processed_messages = chat_prompt_template.format(
+        processed_messages = chat_prompt_template_.format(
             variables=prompt_variables,
             supported_modalities=supported_modalities,
             template_type=template_type_override,
@@ -411,7 +414,7 @@ def evaluate_prompt(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
@@ -561,8 +564,8 @@ def evaluate_optimization_trial(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
-    prompts: Optional[List[Prompt]] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,

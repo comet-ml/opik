@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node import JsonNode
+from .prompt_template_structure import PromptTemplateStructure
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 
@@ -18,6 +19,11 @@ class Prompt(UniversalBaseModel):
     metadata: typing.Optional[JsonNode] = None
     change_description: typing.Optional[str] = None
     type: typing.Optional[PromptType] = None
+    template_structure: typing.Optional[PromptTemplateStructure] = pydantic.Field(default=None)
+    """
+    Template structure type: 'string' or 'chat'. Immutable after creation.
+    """
+
     tags: typing.Optional[typing.List[str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

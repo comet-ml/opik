@@ -48,6 +48,8 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
+  templateStructure?: "string" | "chat";
+  defaultName?: string;
   onSave: (version: PromptVersion) => void;
 };
 
@@ -56,6 +58,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   setOpen,
   prompt,
   template,
+  templateStructure = "string",
+  defaultName = "",
   onSave,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -64,7 +68,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   const [metadata, setMetadata] = useState(extractMetadata(prompt));
   const [description, setDescription] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName);
   const [changeDescription, setChangeDescription] = useState("");
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
@@ -83,6 +87,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   useEffect(() => {
     setPromptId(prompt?.id);
   }, [prompt?.id]);
+
+  useEffect(() => {
+    // Reset name to defaultName when dialog opens
+    if (open) {
+      setName(defaultName);
+    }
+  }, [open, defaultName]);
 
   const selectedPrompt = useMemo(() => {
     return !promptId
@@ -114,6 +125,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           template,
           changeDescription,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
+          ...(templateStructure && { templateStructure }),
           onSuccess: (data) => onSave(data),
         });
 
@@ -125,6 +137,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           prompt: {
             name,
             template,
+            template_structure: templateStructure,
             ...(metadata && { metadata: safelyParseJSON(metadata) }),
             ...(description && { description }),
           },
@@ -155,6 +168,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
               clearable={false}
               refetchOnMount={true}
               asNewOption={true}
+              filterByTemplateStructure={templateStructure}
             />
             {isEdit ? (
               <Description>

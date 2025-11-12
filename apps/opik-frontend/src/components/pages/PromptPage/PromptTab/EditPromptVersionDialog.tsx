@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
+import { Code2, MessageSquare } from "lucide-react";
 
 import {
   Dialog,
@@ -33,7 +34,12 @@ import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
-import { parseContentWithImages } from "@/lib/llm";
+import {
+  parseContentWithImages,
+  generateDefaultLLMPromptMessage,
+} from "@/lib/llm";
+import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import { LLMMessage } from "@/types/llm";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -46,6 +52,7 @@ type EditPromptVersionDialogProps = {
   template: string;
   metadata?: object;
   promptName: string;
+  templateStructure?: string;
   onSetActiveVersionId: (versionId: string) => void;
 };
 
@@ -57,8 +64,11 @@ const EditPromptVersionDialog: React.FunctionComponent<
   template: promptTemplate,
   metadata: promptMetadata,
   promptName,
+  templateStructure,
   onSetActiveVersionId,
 }) => {
+  const isChatPrompt = templateStructure === "chat";
+
   const [previewMode, setPreviewMode] = useState<PROMPT_PREVIEW_MODE>(
     PROMPT_PREVIEW_MODE.write,
   );
@@ -68,6 +78,30 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const [template, setTemplate] = useState(promptTemplate);
   const [metadata, setMetadata] = useState(metadataString);
   const [changeDescription, setChangeDescription] = useState("");
+
+  // Parse messages from template if it's a chat prompt
+  const initialMessages = useMemo<LLMMessage[]>(() => {
+    if (!isChatPrompt) return [];
+    try {
+      const parsed = JSON.parse(promptTemplate);
+      if (Array.isArray(parsed)) {
+        return parsed.map((msg, index) => ({
+          id: `msg-${index}`,
+          role: msg.role,
+          content:
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content),
+        }));
+      }
+    } catch {
+      // If parsing fails, return empty array
+    }
+    return [generateDefaultLLMPromptMessage()];
+  }, [isChatPrompt, promptTemplate]);
+
+  const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);
+  const [showRawView, setShowRawView] = useState(false);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -82,6 +116,10 @@ const EditPromptVersionDialog: React.FunctionComponent<
 
   const { mutate } = useCreatePromptVersionMutation();
 
+  const handleAddMessage = useCallback(() => {
+    setMessages((prev) => [...prev, generateDefaultLLMPromptMessage()]);
+  }, []);
+
   const handleClickEditPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
@@ -89,11 +127,22 @@ const EditPromptVersionDialog: React.FunctionComponent<
       return setShowInvalidJSON(true);
     }
 
+    // For chat prompts, serialize messages to JSON
+    const finalTemplate = isChatPrompt
+      ? JSON.stringify(
+          messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        )
+      : template;
+
     mutate({
       name: promptName,
-      template,
+      template: finalTemplate,
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
+      ...(templateStructure && { templateStructure }),
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
       },
@@ -102,10 +151,15 @@ const EditPromptVersionDialog: React.FunctionComponent<
     setOpen(false);
   };
 
-  const templateHasChanges = template !== promptTemplate;
+  const templateHasChanges = isChatPrompt
+    ? JSON.stringify(
+        messages.map((m) => ({ role: m.role, content: m.content })),
+      ) !== promptTemplate
+    : template !== promptTemplate;
   const metadataHasChanges = metadata !== metadataString;
-  const isValid =
-    template?.length && (templateHasChanges || metadataHasChanges);
+  const isValid = isChatPrompt
+    ? messages.length > 0 && (templateHasChanges || metadataHasChanges)
+    : template?.length && (templateHasChanges || metadataHasChanges);
 
   const { text: originalText, images: originalImages } =
     parseContentWithImages(promptTemplate);
@@ -128,85 +182,162 @@ const EditPromptVersionDialog: React.FunctionComponent<
           />
           <div className="flex flex-col gap-2 pb-4">
             <div className="mt-3 flex items-center justify-between">
-              <Label htmlFor="promptTemplate">Prompt</Label>
-              <ToggleGroup
-                type="single"
-                value={previewMode}
-                onValueChange={(value) =>
-                  value && setPreviewMode(value as PROMPT_PREVIEW_MODE)
-                }
-                size="sm"
-              >
-                <ToggleGroupItem
-                  value={PROMPT_PREVIEW_MODE.write}
-                  aria-label="Write"
+              <Label htmlFor="promptTemplate">
+                {isChatPrompt ? "Chat Messages" : "Prompt"}
+              </Label>
+              {isChatPrompt ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRawView(!showRawView)}
                 >
-                  Write
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value={PROMPT_PREVIEW_MODE.diff}
-                  aria-label="Preview changes"
-                  disabled={!templateHasChanges}
-                >
-                  Preview changes
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
-            {previewMode === PROMPT_PREVIEW_MODE.write ? (
-              <>
-                <Textarea
-                  id="template"
-                  className="comet-code"
-                  placeholder="Prompt"
-                  value={localText}
-                  onChange={(event) => handleContentChange(event.target.value)}
-                />
-                <Description>
-                  {
-                    EXPLAINERS_MAP[
-                      EXPLAINER_ID.what_format_should_the_prompt_be
-                    ].description
+                  {showRawView ? (
+                    <>
+                      <MessageSquare className="mr-1.5 size-3.5" />
+                      Message View
+                    </>
+                  ) : (
+                    <>
+                      <Code2 className="mr-1.5 size-3.5" />
+                      Raw View
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <ToggleGroup
+                  type="single"
+                  value={previewMode}
+                  onValueChange={(value) =>
+                    value && setPreviewMode(value as PROMPT_PREVIEW_MODE)
                   }
-                </Description>
-              </>
+                  size="sm"
+                >
+                  <ToggleGroupItem
+                    value={PROMPT_PREVIEW_MODE.write}
+                    aria-label="Write"
+                  >
+                    Write
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value={PROMPT_PREVIEW_MODE.diff}
+                    aria-label="Preview changes"
+                    disabled={!templateHasChanges}
+                  >
+                    Preview changes
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              )}
+            </div>
+            {isChatPrompt ? (
+              showRawView ? (
+                <>
+                  <Textarea
+                    id="template"
+                    className="comet-code min-h-[400px]"
+                    placeholder="Chat messages JSON"
+                    value={JSON.stringify(
+                      messages.map((m) => ({
+                        role: m.role,
+                        content: m.content,
+                      })),
+                      null,
+                      2,
+                    )}
+                    onChange={(event) => {
+                      try {
+                        const parsed = JSON.parse(event.target.value);
+                        if (Array.isArray(parsed)) {
+                          setMessages(
+                            parsed.map((msg, index) => ({
+                              id: `msg-${index}`,
+                              role: msg.role,
+                              content: msg.content,
+                            })),
+                          );
+                        }
+                      } catch {
+                        // Invalid JSON, don't update
+                      }
+                    }}
+                  />
+                  <Description>
+                    Edit the raw JSON representation of chat messages. Must be a
+                    valid JSON array.
+                  </Description>
+                </>
+              ) : (
+                <LLMPromptMessages
+                  messages={messages}
+                  onChange={setMessages}
+                  onAddMessage={handleAddMessage}
+                  hint="Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}."
+                  hidePromptActions={true}
+                />
+              )
             ) : (
-              <div className="flex flex-col gap-4">
-                <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
-                  <TextDiff content1={originalText} content2={currentText} />
-                </div>
-                {imagesHaveChanges && (
-                  <div className="flex flex-col gap-3 rounded-md border p-4">
-                    <div className="comet-body-s-accented text-muted-foreground">
-                      Images comparison
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="comet-body-xs text-muted-foreground">
-                        Before:
-                      </div>
-                      <PromptMessageImageTags
-                        images={originalImages}
-                        setImages={() => {}}
-                        align="start"
-                        editable={false}
+              <>
+                {previewMode === PROMPT_PREVIEW_MODE.write ? (
+                  <>
+                    <Textarea
+                      id="template"
+                      className="comet-code"
+                      placeholder="Prompt"
+                      value={localText}
+                      onChange={(event) =>
+                        handleContentChange(event.target.value)
+                      }
+                    />
+                    <Description>
+                      {
+                        EXPLAINERS_MAP[
+                          EXPLAINER_ID.what_format_should_the_prompt_be
+                        ].description
+                      }
+                    </Description>
+                  </>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
+                      <TextDiff
+                        content1={originalText}
+                        content2={currentText}
                       />
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="comet-body-xs text-muted-foreground">
-                        After:
+                    {imagesHaveChanges && (
+                      <div className="flex flex-col gap-3 rounded-md border p-4">
+                        <div className="comet-body-s-accented text-muted-foreground">
+                          Images comparison
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <div className="comet-body-xs text-muted-foreground">
+                            Before:
+                          </div>
+                          <PromptMessageImageTags
+                            images={originalImages}
+                            setImages={() => {}}
+                            align="start"
+                            editable={false}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <div className="comet-body-xs text-muted-foreground">
+                            After:
+                          </div>
+                          <PromptMessageImageTags
+                            images={currentImages}
+                            setImages={() => {}}
+                            align="start"
+                            editable={false}
+                          />
+                        </div>
                       </div>
-                      <PromptMessageImageTags
-                        images={currentImages}
-                        setImages={() => {}}
-                        align="start"
-                        editable={false}
-                      />
-                    </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
-          {previewMode === PROMPT_PREVIEW_MODE.write && (
+          {!isChatPrompt && previewMode === PROMPT_PREVIEW_MODE.write && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
               <PromptMessageImageTags

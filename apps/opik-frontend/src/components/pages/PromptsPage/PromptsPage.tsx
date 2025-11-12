@@ -69,6 +69,15 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "template_structure",
+    label: "Type",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => {
+      const structure = row.template_structure || "string";
+      return structure === "chat" ? "Chat" : "String";
+    },
+  },
+  {
     id: "version_count",
     label: "Versions",
     type: COLUMN_TYPE.number,
@@ -115,6 +124,11 @@ export const FILTER_COLUMNS: ColumnData<Prompt>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "template_structure",
+    label: "Type",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "version_count",
     label: "Versions",
     type: COLUMN_TYPE.number,
@@ -147,6 +161,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "template_structure",
   "version_count",
   "last_updated_at",
   "description",

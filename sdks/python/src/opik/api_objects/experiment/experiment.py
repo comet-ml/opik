@@ -9,7 +9,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_public
 from . import experiment_item
 from .. import constants, helpers, rest_stream_parser
-from ...api_objects.prompt import Prompt
+from ...api_objects.prompt import base_prompt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class Experiment:
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
         streamer: streamer.Streamer,
-        prompts: Optional[List[Prompt]] = None,
+        prompts: Optional[List[base_prompt.BasePrompt]] = None,
     ) -> None:
         self._id = id
         self._name = name
