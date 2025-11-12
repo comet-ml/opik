@@ -51,7 +51,7 @@ public class DatasetExpansionService {
                 .truncate(false)
                 .build();
 
-        var existingItems = datasetItemService.getItems(1, 10, searchCriteria)
+        var existingItems = datasetItemService.getItems(1, 10, searchCriteria, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
