@@ -13,11 +13,14 @@ import java.util.UUID;
  * <p>
  * This message is enqueued to the Python backend worker and contains all necessary
  * information to execute an optimization job using the Opik SDK.
+ * <p>
+ * Note: The Python SDK requires workspace NAME (not ID) for authentication.
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Builder(toBuilder = true)
 public record OptimizationStudioJobMessage(
         @NonNull UUID optimizationId,
-        @NonNull String workspaceId,
-        @NonNull OptimizationStudioConfig config) {
+        @NonNull String workspaceName,
+        @NonNull OptimizationStudioConfig config,
+        String opikApiKey) {
 }

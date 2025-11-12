@@ -12,6 +12,7 @@ import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.queues.Queue;
+import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
@@ -74,7 +75,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
     private final @NonNull PreSignerService preSignerService;
-    private final @NonNull com.comet.opik.infrastructure.queues.QueueProducer queueProducer;
+    private final @NonNull QueueProducer queueProducer;
 
     @Override
     @WithSpan
@@ -141,17 +142,23 @@ class OptimizationServiceImpl implements OptimizationService {
                             .datasetId(datasetId)
                             .build();
 
-                    return makeMonoContextAware((userName, workspaceId) -> optimizationDAO.upsert(newOptimization)
-                            .thenReturn(newOptimization.id())
-                            // The event is posted only when the experiment is successfully created.
-                            .doOnSuccess(experimentId -> {
-                                postOptimizationCreatedEvent(newOptimization, workspaceId, userName);
+                    return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
+                        String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
+                        String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
 
-                                // If Studio optimization, enqueue job to Redis RQ
-                                if (isStudioOptimization) {
-                                    enqueueStudioOptimizationJob(newOptimization, workspaceId);
-                                }
-                            }))
+                        return optimizationDAO.upsert(newOptimization)
+                                .thenReturn(newOptimization.id())
+                                // The event is posted only when the experiment is successfully created.
+                                .doOnSuccess(experimentId -> {
+                                    postOptimizationCreatedEvent(newOptimization, workspaceId, userName);
+
+                                    // If Studio optimization, enqueue job to Redis RQ
+                                    if (isStudioOptimization) {
+                                        enqueueStudioOptimizationJob(newOptimization, workspaceId, workspaceName,
+                                                opikApiKey);
+                                    }
+                                });
+                    }))
                             .subscribeOn(Schedulers.boundedElastic());
                 })
                 // If a conflict occurs, we just return the id of the existing experiment.
@@ -227,14 +234,17 @@ class OptimizationServiceImpl implements OptimizationService {
                 newOptimization.id(), newOptimization.datasetId(), workspaceId);
     }
 
-    private void enqueueStudioOptimizationJob(Optimization optimization, String workspaceId) {
-        log.info("Enqueuing Optimization Studio job for id: '{}', workspace: '{}'", optimization.id(), workspaceId);
+    private void enqueueStudioOptimizationJob(Optimization optimization, String workspaceId, String workspaceName,
+            String opikApiKey) {
+        log.info("Enqueuing Optimization Studio job for id: '{}', workspace: '{}' (name: '{}')",
+                optimization.id(), workspaceId, workspaceName);
 
-        // Build job message
+        // Build job message (use workspace name for SDK)
         var jobMessage = OptimizationStudioJobMessage.builder()
                 .optimizationId(optimization.id())
-                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
                 .config(optimization.studioConfig())
+                .opikApiKey(opikApiKey)
                 .build();
 
         // Enqueue to Redis RQ

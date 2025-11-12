@@ -783,19 +783,19 @@ class OptimizationsResourceTest {
             // Find the job containing our optimization ID in its data
             boolean foundJob = allJobIds.stream()
                     .anyMatch(jobId -> {
-                        // RQ job key format: "rq:job:{jobId}" (from RqPublisher.RQ_JOB)
                         String jobKey = "rq:job:" + jobId;
                         RMapReactive<String, Object> jobMap = redisClient.getMap(jobKey, StringCodec.INSTANCE);
                         String jobData = (String) jobMap.get("data").block();
 
-                        // Verify job data contains our optimization ID and workspace ID
+                        // Verify job data contains our optimization ID and workspace name
                         return jobData != null
                                 && jobData.contains(id.toString())
-                                && jobData.contains(WORKSPACE_ID);
+                                && jobData.contains(TEST_WORKSPACE_NAME);
                     });
 
             assertThat(foundJob)
-                    .as("Expected to find RQ job with optimization ID: %s and workspace ID: %s", id, WORKSPACE_ID)
+                    .as("Expected to find RQ job with optimization ID: %s and workspace name: %s", id,
+                            TEST_WORKSPACE_NAME)
                     .isTrue();
 
             // Verify event was posted
@@ -837,19 +837,26 @@ class OptimizationsResourceTest {
         @Test
         @DisplayName("Find Optimization Studio runs")
         void findOptimizations__withStudioOnlyFlag() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
             // Create a regular optimization
             var regularOptimization = optimizationResourceClient.createPartialOptimization().build();
-            optimizationResourceClient.create(regularOptimization, API_KEY, TEST_WORKSPACE_NAME);
+            optimizationResourceClient.create(regularOptimization, apiKey, workspaceName);
 
             // Create a Studio optimization
             var studioConfig = createStudioConfig();
             var studioOptimization = optimizationResourceClient.createPartialOptimization()
                     .studioConfig(studioConfig)
                     .build();
-            optimizationResourceClient.create(studioOptimization, API_KEY, TEST_WORKSPACE_NAME);
+            optimizationResourceClient.create(studioOptimization, apiKey, workspaceName);
 
             // Find with studioOnly=true
-            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE_NAME, 1, 10, null, null, null, true,
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10, null, null, null, true,
                     200);
 
             // Should only return Studio optimizations
