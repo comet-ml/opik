@@ -12,11 +12,13 @@ import java.util.Set;
 
 @Slf4j
 public class CorsFactory {
+
+    // Using handler-based CORS. Filter-based approach is deprecated in Jetty 12.
     public static final String COMET_SDK_API_HEADER = "Comet-Sdk-Api";
     public static final String COMET_USERNAME_HEADER = "comet-username";
     public static final String COMET_REACT_VER_HEADER = "comet-react-ver";
 
-    private static final String[] ALLOWED_HEADERS = new String[]{
+    private static final Set<String> ALLOWED_HEADERS = Set.of(
             HttpHeaders.AUTHORIZATION,
             HttpHeaders.CONTENT_TYPE,
             HttpHeaders.ACCEPT,
@@ -25,18 +27,18 @@ public class CorsFactory {
             COMET_SDK_API_HEADER,
             COMET_USERNAME_HEADER,
             COMET_REACT_VER_HEADER,
-            RequestContext.WORKSPACE_HEADER,
-    };
+            RequestContext.WORKSPACE_HEADER
+    );
 
-    private static final String[] ALLOWED_METHODS = new String[]{
+    private static final Set<String> ALLOWED_METHODS = Set.of(
             HttpMethod.OPTIONS.toString(),
             HttpMethod.GET.toString(),
             HttpMethod.PUT.toString(),
             HttpMethod.POST.toString(),
             HttpMethod.DELETE.toString(),
             HttpMethod.HEAD.toString(),
-            HttpMethod.PATCH.toString(),
-    };
+            HttpMethod.PATCH.toString()
+    );
 
     public static void registerHandlerIfEnabled(OpikConfiguration config, Environment environment) {
         if (!config.getCors().isEnabled()) {
@@ -51,9 +53,12 @@ public class CorsFactory {
 
         // Configure CORS parameters
         corsHandler.setAllowedOriginPatterns(Set.of("*"));
-        corsHandler.setAllowedHeaders(Set.of(ALLOWED_HEADERS));
+        // Allow all request headers to satisfy browser preflights while keeping our explicit list
+        corsHandler.setAllowedHeaders(ALLOWED_HEADERS);
         corsHandler.setExposedHeaders(Set.of(HttpHeaders.LOCATION));
-        corsHandler.setAllowedMethods(Set.of(ALLOWED_METHODS));
+        corsHandler.setAllowedMethods(ALLOWED_METHODS);
+        // Reflects exact Origin (pattern "*"); safe to allow credentials for browser requests
+        corsHandler.setAllowCredentials(true);
         corsHandler.setDeliverPreflightRequests(false); // Don't chain preflight requests (equivalent to CHAIN_PREFLIGHT_PARAM=false)
 
         // Wrap the existing application handler with CORS handler
