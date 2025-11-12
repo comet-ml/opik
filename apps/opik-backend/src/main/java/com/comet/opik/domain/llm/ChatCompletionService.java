@@ -102,9 +102,9 @@ public class ChatCompletionService {
                                         || content instanceof dev.langchain4j.data.message.VideoContent));
 
         // For custom LLMs, always use direct ChatCompletionRequest API
-        // This is needed because:
-        // 1. OpenAiChatModel doesn't support VideoContent serialization
-        // 2. vLLM has a bug where it returns SSE format even when stream:false is requested
+        // This is required because OpenAiChatModel doesn't support VideoContent serialization.
+        // As a bonus, this path also handles legacy vLLM versions (<0.6.0) via automatic
+        // SSE fallback in CustomLlmProvider.
         var llmProvider = llmProviderFactory.getLlmProvider(modelParameters.name());
         if (llmProvider == com.comet.opik.api.LlmProvider.CUSTOM_LLM) {
             log.info(

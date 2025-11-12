@@ -70,7 +70,9 @@ public class CustomLlmProvider implements LlmProviderService {
         try {
             return openAiClient.chatCompletion(cleanedRequest).execute();
         } catch (Exception e) {
-            // Check if this is the SSE format error (vLLM bug where it ignores stream:false)
+            // Fallback for legacy vLLM versions (<0.6.0) that had a bug where they returned SSE format
+            // even when stream:false was explicitly requested. This fallback ensures compatibility
+            // with older deployments while working seamlessly with fixed versions.
             // Walk the entire exception chain to find JsonProcessingException
             Throwable current = e;
             JsonProcessingException jsonException = null;
@@ -85,7 +87,8 @@ public class CustomLlmProvider implements LlmProviderService {
 
             if (jsonException != null && jsonException.getMessage() != null
                     && jsonException.getMessage().contains("Unrecognized token 'data'")) {
-                log.warn("SSE format detected despite stream:false. Falling back to SSE parsing for model '{}'",
+                log.info(
+                        "Legacy vLLM streaming format detected (likely vLLM <0.6.0). Falling back to SSE parsing for model '{}'",
                         cleanedRequest.model());
                 return generateViaStreaming(cleanedRequest, workspaceId);
             }
@@ -95,8 +98,12 @@ public class CustomLlmProvider implements LlmProviderService {
     }
 
     /**
-     * Fallback for vLLM bug where it returns SSE format even when stream:false.
-     * Collects all streaming chunks and returns the final complete response.
+     * Fallback for legacy vLLM versions (<0.6.0) that incorrectly returned SSE format
+     * even when stream:false was requested. This method explicitly requests streaming,
+     * collects all chunks, and returns a complete non-streaming response.
+     * 
+     * This maintains compatibility with older vLLM deployments while working seamlessly
+     * with fixed versions (the method is only called when the SSE error is detected).
      */
     private ChatCompletionResponse generateViaStreaming(ChatCompletionRequest request, String workspaceId) {
         StringBuilder accumulatedContent = new StringBuilder();
@@ -142,7 +149,7 @@ public class CustomLlmProvider implements LlmProviderService {
                         if (delta != null && delta.content() != null && !delta.content().isEmpty()) {
                             String chunk = delta.content();
                             accumulatedContent.append(chunk);
-                            log.info("Accumulated chunk of {} chars, total now: {} chars for model '{}'",
+                            log.debug("Accumulated chunk of {} chars, total now: {} chars for model '{}'",
                                     chunk.length(), accumulatedContent.length(), request.model());
                         }
                     }
