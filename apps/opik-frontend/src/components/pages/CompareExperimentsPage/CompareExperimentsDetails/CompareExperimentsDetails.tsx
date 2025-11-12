@@ -189,7 +189,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         <h1 className="comet-title-l truncate break-words">{title}</h1>
         {renderCompareFeedbackScoresButton()}
       </div>
-      <div className="mb-1 flex gap-4 overflow-x-auto">
+      <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (
           <DateTag
             date={experiment?.created_at}
