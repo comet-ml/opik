@@ -403,7 +403,9 @@ const ExperimentsPage: React.FC = () => {
 
   // Filter out dataset column when grouping by dataset
   const availableColumns = useMemo(() => {
-    const isGroupingByDataset = groups.some((g) => g.field === COLUMN_DATASET_ID);
+    const isGroupingByDataset = groups.some(
+      (g) => g.field === COLUMN_DATASET_ID,
+    );
     if (isGroupingByDataset) {
       return DEFAULT_COLUMNS.filter((col) => col.id !== COLUMN_DATASET_ID);
     }
