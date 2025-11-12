@@ -34,11 +34,13 @@ import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
 @JsonSubTypes({
         @JsonSubTypes.Type(value = FeedbackDefinition.NumericalFeedbackDefinition.class, name = "numerical"),
-        @JsonSubTypes.Type(value = FeedbackDefinition.CategoricalFeedbackDefinition.class, name = "categorical")
+        @JsonSubTypes.Type(value = FeedbackDefinition.CategoricalFeedbackDefinition.class, name = "categorical"),
+        @JsonSubTypes.Type(value = FeedbackDefinition.BooleanFeedbackDefinition.class, name = "boolean")
 })
 @Schema(name = "Feedback", discriminatorProperty = "type", discriminatorMapping = {
         @DiscriminatorMapping(value = "numerical", schema = FeedbackDefinition.NumericalFeedbackDefinition.class),
-        @DiscriminatorMapping(value = "categorical", schema = FeedbackDefinition.CategoricalFeedbackDefinition.class)
+        @DiscriminatorMapping(value = "categorical", schema = FeedbackDefinition.CategoricalFeedbackDefinition.class),
+        @DiscriminatorMapping(value = "boolean", schema = FeedbackDefinition.BooleanFeedbackDefinition.class)
 })
 @RequiredArgsConstructor
 @FeedbackValidation
@@ -123,6 +125,51 @@ public abstract sealed class FeedbackDefinition<T> {
         @Override
         public FeedbackType getType() {
             return FeedbackType.CATEGORICAL;
+        }
+    }
+
+    @Getter
+    @SuperBuilder(toBuilder = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static final class BooleanFeedbackDefinition
+            extends
+                FeedbackDefinition<BooleanFeedbackDefinition.BooleanFeedbackDetail> {
+
+        @Data
+        @Builder(toBuilder = true)
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class BooleanFeedbackDetail {
+
+            @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
+            @Schema(description = "Label for true/1 value", example = "Pass")
+            private final String trueLabel;
+
+            @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
+            @Schema(description = "Label for false/0 value", example = "Fail")
+            private final String falseLabel;
+
+            @ConstructorProperties({"trueLabel", "falseLabel"})
+            public BooleanFeedbackDetail(@NotBlank String trueLabel, @NotBlank String falseLabel) {
+                this.trueLabel = trueLabel;
+                this.falseLabel = falseLabel;
+            }
+        }
+
+        @NotNull @JsonView({View.Public.class, View.Create.class, View.Update.class})
+        private final BooleanFeedbackDetail details;
+
+        @ConstructorProperties({"id", "name", "description", "details", "createdAt", "createdBy", "lastUpdatedAt",
+                "lastUpdatedBy"})
+        public BooleanFeedbackDefinition(UUID id, @NotBlank String name, String description,
+                @NotNull BooleanFeedbackDetail details, Instant createdAt, String createdBy,
+                Instant lastUpdatedAt, String lastUpdatedBy) {
+            super(id, name, description, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+            this.details = details;
+        }
+
+        @Override
+        public FeedbackType getType() {
+            return FeedbackType.BOOLEAN;
         }
     }
 

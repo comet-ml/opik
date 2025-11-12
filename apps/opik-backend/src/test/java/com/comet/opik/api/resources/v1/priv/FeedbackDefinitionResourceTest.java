@@ -815,6 +815,50 @@ class FeedbackDefinitionResourceTest {
         }
 
         @Test
+        @DisplayName("Success - Boolean Feedback Definition")
+        void getBooleanFeedbackDefinitionById() {
+
+            final var feedback = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("Pass")
+                            .falseLabel("Fail")
+                            .build())
+                    .build();
+
+            var id = create(feedback, API_KEY, TEST_WORKSPACE);
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            var actualEntity = actualResponse.readEntity(FeedbackDefinition.BooleanFeedbackDefinition.class);
+
+            assertThat(actualEntity)
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withIgnoredFields(IGNORED_FIELDS)
+                            .build())
+                    .isEqualTo(feedback);
+
+            assertThat(actualEntity.getType()).isEqualTo(FeedbackType.BOOLEAN);
+            assertThat(actualEntity.getDetails().getTrueLabel()).isEqualTo("Pass");
+            assertThat(actualEntity.getDetails().getFalseLabel()).isEqualTo("Fail");
+            assertThat(actualEntity.getLastUpdatedBy()).isEqualTo(USER);
+            assertThat(actualEntity.getCreatedBy()).isEqualTo(USER);
+            assertThat(actualEntity.getCreatedAt()).isNotNull();
+            assertThat(actualEntity.getCreatedAt()).isInstanceOf(Instant.class);
+            assertThat(actualEntity.getLastUpdatedAt()).isNotNull();
+            assertThat(actualEntity.getLastUpdatedAt()).isInstanceOf(Instant.class);
+
+            assertThat(actualEntity.getCreatedAt()).isAfter(feedback.getCreatedAt());
+            assertThat(actualEntity.getLastUpdatedAt()).isAfter(feedback.getLastUpdatedAt());
+        }
+
+        @Test
         @DisplayName("when feedback does not exist, then return not found")
         void getById__whenFeedbackDoesNotExist__thenReturnNotFound() {
 
@@ -873,6 +917,50 @@ class FeedbackDefinitionResourceTest {
             var actualEntity = actualResponse.readEntity(FeedbackDefinition.NumericalFeedbackDefinition.class);
 
             assertThat(actualEntity.getId()).isEqualTo(id);
+        }
+
+        @Test
+        @DisplayName("Success - Boolean Feedback Definition")
+        void createBooleanFeedbackDefinition() {
+            UUID id;
+
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("Pass")
+                            .falseLabel("Fail")
+                            .build())
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(feedbackDefinition))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                assertThat(actualResponse.hasEntity()).isFalse();
+                assertThat(actualResponse.getHeaderString("Location")).matches(Pattern.compile(URL_PATTERN));
+
+                id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+            }
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            var actualEntity = actualResponse.readEntity(FeedbackDefinition.BooleanFeedbackDefinition.class);
+
+            assertThat(actualEntity.getId()).isEqualTo(id);
+            assertThat(actualEntity.getType()).isEqualTo(FeedbackType.BOOLEAN);
+            assertThat(actualEntity.getDetails().getTrueLabel()).isEqualTo("Pass");
+            assertThat(actualEntity.getDetails().getFalseLabel()).isEqualTo("Fail");
         }
 
         @Test
@@ -1074,6 +1162,58 @@ class FeedbackDefinitionResourceTest {
         }
 
         @Test
+        @DisplayName("when boolean true label is blank, then return bad request")
+        void create__whenBooleanTrueLabelIsBlank__thenReturnBadRequest() {
+
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("")
+                            .falseLabel("Fail")
+                            .build())
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(feedbackDefinition))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .containsExactly("details.trueLabel must not be blank");
+            }
+        }
+
+        @Test
+        @DisplayName("when boolean false label is blank, then return bad request")
+        void create__whenBooleanFalseLabelIsBlank__thenReturnBadRequest() {
+
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("Pass")
+                            .falseLabel("")
+                            .build())
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(feedbackDefinition))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .containsExactly("details.falseLabel must not be blank");
+            }
+        }
+
+        @Test
         @DisplayName("when numerical max is smaller than min, then return bad request")
         void create__whenNumericalMaxIsSmallerThanMin__thenReturnBadRequest() {
 
@@ -1175,6 +1315,60 @@ class FeedbackDefinitionResourceTest {
             assertThat(actualEntity.getDescription()).isEqualTo(descriptionUpdated);
             assertThat(actualEntity.getDetails().getCategories())
                     .isEqualTo(feedbackDefinition.getDetails().getCategories());
+        }
+
+        @Test
+        @DisplayName("update boolean feedback definition")
+        void updateBooleanFeedbackDefinition() {
+
+            String nameUpdated = UUID.randomUUID().toString();
+            String descriptionUpdated = UUID.randomUUID().toString();
+
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("Pass")
+                            .falseLabel("Fail")
+                            .build())
+                    .build();
+
+            UUID id = create(feedbackDefinition, API_KEY, TEST_WORKSPACE);
+
+            var feedbackDefinition1 = feedbackDefinition.toBuilder()
+                    .name(nameUpdated)
+                    .description(descriptionUpdated)
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("Good")
+                            .falseLabel("Bad")
+                            .build())
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .put(Entity.json(feedbackDefinition1))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            var actualEntity = actualResponse.readEntity(FeedbackDefinition.BooleanFeedbackDefinition.class);
+
+            assertThat(actualEntity.getName()).isEqualTo(nameUpdated);
+            assertThat(actualEntity.getDescription()).isEqualTo(descriptionUpdated);
+            assertThat(actualEntity.getDetails().getTrueLabel()).isEqualTo("Good");
+            assertThat(actualEntity.getDetails().getFalseLabel()).isEqualTo("Bad");
         }
 
     }
