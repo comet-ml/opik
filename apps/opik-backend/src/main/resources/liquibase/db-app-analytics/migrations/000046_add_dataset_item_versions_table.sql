@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
 (
     id                  FixedString(36),
+    draft_item_id       FixedString(36),
     dataset_id          FixedString(36),
     version_id          FixedString(36),
     data                Map(String, String) DEFAULT map(),

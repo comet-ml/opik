@@ -134,6 +134,15 @@ class DatasetItemResultMapper {
 
             Map<String, JsonNode> data = getData(row);
 
+            // Check if draft_item_id column exists in the result (only present for versioned items)
+            UUID draftItemId = null;
+            if (rowMetadata.contains("draft_item_id")) {
+                draftItemId = Optional.ofNullable(row.get("draft_item_id", String.class))
+                        .filter(s -> !s.isBlank())
+                        .map(UUID::fromString)
+                        .orElse(null);
+            }
+
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .data(data)
@@ -152,6 +161,7 @@ class DatasetItemResultMapper {
                             .filter(s -> !s.isBlank())
                             .map(UUID::fromString)
                             .orElse(null))
+                    .draftItemId(draftItemId)
                     .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdAt(row.get("created_at", Instant.class))

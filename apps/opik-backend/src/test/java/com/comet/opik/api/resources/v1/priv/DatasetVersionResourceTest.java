@@ -785,5 +785,78 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
+
+        @Test
+        @DisplayName("Success: Same item in multiple versions should have different IDs")
+        void commitVersion__whenSameItemInMultipleVersions__thenGenerateNewIdsPerVersion() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(2);
+
+            var batch = DatasetItemBatch.builder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get the draft item IDs
+            var draftItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            var draftItems = draftItemsPage.content();
+            var draftItemIds = draftItems.stream().map(DatasetItem::id).toList();
+
+            // When - Commit version 1 (snapshot the current items)
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get items from version 1
+            var v1ItemsPage = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
+            var v1Items = v1ItemsPage.content();
+            var v1ItemIds = v1Items.stream().map(DatasetItem::id).toList();
+            var v1DraftItemIds = v1Items.stream().map(DatasetItem::draftItemId).toList();
+
+            // When - Commit version 2 (snapshot the same items without any changes)
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get items from version 2
+            var v2ItemsPage = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
+            var v2Items = v2ItemsPage.content();
+            var v2ItemIds = v2Items.stream().map(DatasetItem::id).toList();
+            var v2DraftItemIds = v2Items.stream().map(DatasetItem::draftItemId).toList();
+
+            // Then - Verify that:
+            // 1. Each version has the correct number of items
+            assertThat(v1Items).hasSize(2);
+            assertThat(v2Items).hasSize(2);
+
+            // 2. Each version snapshot gets unique IDs (immutable snapshots have their own identifiers)
+            assertThat(v1ItemIds).doesNotContainAnyElementsOf(v2ItemIds)
+                    .as("Version 1 and version 2 should have different item IDs (unique per snapshot)");
+
+            // 3. The draftItemId field maintains the link to the original draft items
+            assertThat(v1DraftItemIds).containsExactlyInAnyOrderElementsOf(draftItemIds)
+                    .as("Version 1 draftItemIds should match original draft item IDs");
+
+            assertThat(v2DraftItemIds).containsExactlyInAnyOrderElementsOf(draftItemIds)
+                    .as("Version 2 draftItemIds should match original draft item IDs");
+
+            assertThat(v2DraftItemIds).containsExactlyInAnyOrderElementsOf(v1DraftItemIds)
+                    .as("Both versions should reference the same draft items via draftItemId");
+
+            // 4. The data content should be identical across all versions
+            var v1Data = v1Items.stream().map(DatasetItem::data).toList();
+            var v2Data = v2Items.stream().map(DatasetItem::data).toList();
+            assertThat(v1Data).containsExactlyInAnyOrderElementsOf(v2Data)
+                    .as("Data content should be identical across versions");
+        }
     }
 }

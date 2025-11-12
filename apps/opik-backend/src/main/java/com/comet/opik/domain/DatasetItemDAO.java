@@ -161,6 +161,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS = """
             SELECT
                 id,
+                <if(version)>draft_item_id,<endif>
                 dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
                 trace_id,
@@ -171,32 +172,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 created_by,
                 last_updated_by,
                 null AS experiment_items_array
-            FROM dataset_items
+            FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
             WHERE dataset_id = :datasetId
-            AND workspace_id = :workspace_id
-            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            LIMIT :limit OFFSET :offset
-            ;
-            """;
-
-    private static final String SELECT_VERSIONED_DATASET_ITEMS = """
-            SELECT
-                id,
-                dataset_id,
-                <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
-                trace_id,
-                span_id,
-                source,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                null AS experiment_items_array
-            FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
-            AND version_id = :versionId
+            <if(version)>AND version_id = :versionId<endif>
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
@@ -226,43 +204,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 SELECT
                     id,
                     data
-                FROM dataset_items
+                FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
                 WHERE dataset_id = :datasetId
+                <if(version)>AND version_id = :versionId<endif>
                 AND workspace_id = :workspace_id
                 <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS lastRows
-            ;
-            """;
-
-    private static final String SELECT_VERSIONED_DATASET_ITEMS_COUNT = """
-            SELECT
-                count(id) AS count,
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
-                ) AS columns
-            FROM (
-                SELECT
-                    id,
-                    data
-                FROM dataset_item_versions
-                WHERE dataset_id = :datasetId
-                AND version_id = :versionId
-                AND workspace_id = :workspace_id
-                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-                ORDER BY (workspace_id, dataset_id, version_id, id) DESC, last_updated_at DESC
+                ORDER BY <if(version)>(workspace_id, dataset_id, version_id, id)<else>(workspace_id, dataset_id, source, trace_id, span_id, id)<endif> DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS lastRows
             ;
@@ -405,10 +352,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 SELECT
                     id,
                     data
-                FROM dataset_items
+                FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
                 WHERE dataset_id = :datasetId
+                <if(version)>AND version_id = :versionId<endif>
                 AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                ORDER BY <if(version)>(workspace_id, dataset_id, version_id, id)<else>(workspace_id, dataset_id, source, trace_id, span_id, id)<endif> DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS di ON di.id = ei.dataset_item_id
             <if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
@@ -503,9 +451,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), dataset_items_final AS (
-            	SELECT * FROM dataset_items
+            	SELECT * FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
             	WHERE workspace_id = :workspace_id
             	AND id IN (SELECT dataset_item_id FROM experiment_items_scope)
+            	<if(version)>AND version_id = :versionId<endif>
             	ORDER BY id DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), feedback_scores_combined_raw AS (
@@ -681,6 +630,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             )
             SELECT
                 ei.dataset_item_id AS id,
+                <if(version)>di.draft_item_id AS draft_item_id,<endif>
                 :datasetId AS dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                 COALESCE(di.data, map()) AS data,
@@ -823,6 +773,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String INSERT_DATASET_ITEM_VERSION = """
             INSERT INTO dataset_item_versions (
                 id,
+                draft_item_id,
                 dataset_id,
                 version_id,
                 data,
@@ -839,6 +790,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <items:{item |
                     (
                          :id<item.index>,
+                         :draftItemId<item.index>,
                          :datasetId,
                          :versionId,
                          :data<item.index>,
@@ -860,7 +812,18 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String SELECT_ALL_VERSIONED_ITEMS = """
             SELECT
-                *,
+                id,
+                draft_item_id,
+                dataset_id,
+                version_id,
+                data,
+                source,
+                trace_id,
+                span_id,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
                 null AS experiment_items_array
             FROM dataset_item_versions
             WHERE version_id = :versionId
@@ -1105,6 +1068,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     @WithSpan
@@ -1349,20 +1313,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
 
-        // Choose the appropriate query based on experiment IDs
-        String query;
-        String summarySegmentName;
-        String contentSegmentName;
-
-        if (hasExperimentIds) {
-            query = SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS;
-            summarySegmentName = "select_dataset_items_experiments_filters_summary";
-            contentSegmentName = "select_dataset_items_experiments_filters";
-        } else {
-            query = SELECT_DATASET_ITEMS;
-            summarySegmentName = "select_dataset_items_filters_summary";
-            contentSegmentName = "select_dataset_items_filters";
-        }
+        // Choose the appropriate query and segment names based on experiment IDs
+        String query = hasExperimentIds ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS : SELECT_DATASET_ITEMS;
+        String summarySegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters_summary"
+                : "select_dataset_items_filters_summary";
+        String contentSegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters"
+                : "select_dataset_items_filters";
 
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, summarySegmentName);
 
@@ -1379,7 +1337,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize());
+                            configuration.getResponseFormatting().getTruncationSize())
+                            .add("version", false); // TODO: OPIK-3016 - Set version=true and bind versionId when experiments have dataset_version_id
 
                     // Add sorting if present
                     var finalTemplate = selectTemplate;
@@ -1432,21 +1391,22 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        // Choose the appropriate count query based on experiment IDs
+        // Choose the appropriate count query based on whether we have experiment IDs
         boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
-
-        String countQuery;
-        if (hasExperimentIds) {
-            countQuery = SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT;
-        } else {
-            countQuery = SELECT_DATASET_ITEMS_COUNT;
-        }
+        String countQuery = hasExperimentIds
+                ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT
+                : SELECT_DATASET_ITEMS_COUNT;
 
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> {
 
             ST countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
+
+            // TODO: OPIK-3016 - Add version support for experiment queries
+            // When experiments have dataset_version_id field, resolve the version from experimentIds
+            // and set countTemplate.add("version", true).add("versionId", resolvedVersionId)
+            countTemplate.add("version", false);
 
             var statement = connection.createStatement(countTemplate.render())
                     .bind("datasetId", datasetItemSearchCriteria.datasetId());
@@ -1587,11 +1547,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("versionId", versionId);
                 statement.bind("workspace_id", workspaceId);
 
-                int i = 0;
-                for (DatasetItem item : items) {
+                for (int i = 0; i < items.size(); i++) {
+                    DatasetItem item = items.get(i);
                     Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
 
-                    statement.bind("id" + i, item.id());
+                    // Generate new UUID for versioned item (immutable snapshot gets fresh ID)
+                    UUID versionedItemId = idGenerator.generateId();
+
+                    statement.bind("id" + i, versionedItemId);
+                    statement.bind("draftItemId" + i, item.id()); // Store original draft item ID
                     statement.bind("source" + i, item.source().getValue());
                     statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
                     statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
@@ -1599,7 +1563,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     statement.bind("createdAt" + i, item.createdAt().toString());
                     statement.bind("createdBy" + i, Optional.ofNullable(item.createdBy()).orElse(userName));
                     statement.bind("lastUpdatedBy" + i, Optional.ofNullable(item.lastUpdatedBy()).orElse(userName));
-                    i++;
                 }
 
                 Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_item_versions");
@@ -1659,11 +1622,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             "select_versioned_dataset_items_filters");
 
                     // Build the query template
-                    ST selectTemplate = new ST(SELECT_VERSIONED_DATASET_ITEMS);
+                    ST selectTemplate = new ST(SELECT_DATASET_ITEMS);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize());
+                            configuration.getResponseFormatting().getTruncationSize())
+                            .add("version", true); // Versioned items query
 
                     // Add filters if present
                     if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.filters())) {
@@ -1702,7 +1666,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST countTemplate = new ST(SELECT_VERSIONED_DATASET_ITEMS_COUNT);
+            ST countTemplate = new ST(SELECT_DATASET_ITEMS_COUNT);
+            countTemplate = countTemplate.add("version", true); // Versioned items query
 
             // Add filters if present
             if (CollectionUtils.isNotEmpty(filters)) {
