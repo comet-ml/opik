@@ -1463,7 +1463,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     // Bind versionId if present
                     if (hasVersionId) {
-                        selectStatement = selectStatement.bind("versionId", datasetItemSearchCriteria.versionId());
+                        selectStatement = selectStatement.bind("versionId",
+                                datasetItemSearchCriteria.versionId());
                     }
 
                     // Only bind experimentIds and entityType if we have experiment IDs

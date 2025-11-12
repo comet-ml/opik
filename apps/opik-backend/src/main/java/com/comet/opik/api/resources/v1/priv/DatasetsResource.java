@@ -373,17 +373,10 @@ public class DatasetsResource {
 
         var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
 
-        // Resolve version hash/tag to version ID if provided
-        UUID versionId = null;
-        if (version != null && !version.isBlank()) {
-            versionId = versionService.resolveVersionId(id, version);
-            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'", version, versionId, id);
-        }
-
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(id)
                 .experimentIds(Set.of()) // Empty set for regular dataset items
-                .versionId(versionId)
+                .versionHashOrTag(version)
                 .filters(queryFilters)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)

@@ -17,6 +17,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
@@ -76,6 +77,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     private final @NonNull DatasetItemDAO dao;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull Provider<DatasetVersionService> versionServiceProvider;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -377,7 +379,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        return dao.getItems(datasetItemSearchCriteria, page, size)
+        // Resolve version hash/tag to version ID if provided
+        var criteria = datasetItemSearchCriteria;
+        if (datasetItemSearchCriteria.versionHashOrTag() != null
+                && !datasetItemSearchCriteria.versionHashOrTag().isBlank()) {
+            UUID versionId = versionServiceProvider.get().resolveVersionId(
+                    datasetItemSearchCriteria.datasetId(),
+                    datasetItemSearchCriteria.versionHashOrTag());
+            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
+                    datasetItemSearchCriteria.versionHashOrTag(),
+                    versionId,
+                    datasetItemSearchCriteria.datasetId());
+            criteria = datasetItemSearchCriteria.toBuilder()
+                    .versionId(versionId)
+                    .build();
+        }
+
+        return dao.getItems(criteria, page, size)
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
