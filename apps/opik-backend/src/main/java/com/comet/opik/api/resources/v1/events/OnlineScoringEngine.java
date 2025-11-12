@@ -33,8 +33,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.UncheckedIOException;
-import java.net.URI;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
