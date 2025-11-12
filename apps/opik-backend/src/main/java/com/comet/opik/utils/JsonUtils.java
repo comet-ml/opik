@@ -186,7 +186,12 @@ public class JsonUtils {
     }
 
     public static String getStringOrDefault(JsonNode jsonNode) {
-        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
+        if (jsonNode == null || jsonNode.isNull()) {
+            return "";
+        }
+        // For metadata and similar fields, we want to serialize the entire JSON structure
+        // Use Jackson's writeValueAsString for proper JSON serialization
+        return writeValueAsString(jsonNode);
     }
 
     public static JsonNode getJsonNodeOrDefault(String str) {

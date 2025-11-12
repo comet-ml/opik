@@ -185,8 +185,27 @@ class DatasetItemResultMapper {
                 .stream()
                 .map(Map::entrySet)
                 .flatMap(Collection::stream)
-                .map(entry -> Map.entry(entry.getKey(), entry.getValue().toString()))
+                .map(entry -> Map.entry(entry.getKey(), jsonNodeToString(entry.getValue())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /**
+     * Converts a JsonNode to its string representation without double-escaping.
+     * For TextNodes, returns the raw text value. For other node types, serializes to JSON.
+     *
+     * @param node The JsonNode to convert
+     * @return The string representation
+     */
+    private static String jsonNodeToString(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        // For text nodes, extract the raw text value without additional JSON serialization
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        // For other node types (objects, arrays, numbers, booleans), serialize to JSON
+        return JsonUtils.writeValueAsString(node);
     }
 
     static String getOrDefault(UUID value) {

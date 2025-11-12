@@ -5,8 +5,9 @@ import isObject from "lodash/isObject";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import JsonView from "react18-json-view";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
-import { parseImageValue } from "@/lib/images";
+import { parseImageValue, parseVideoValue } from "@/lib/images";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import { ATTACHMENT_TYPE } from "@/types/attachments";
 
 interface CustomMeta {
   showIndex: boolean;
@@ -24,11 +25,24 @@ const PlaygroundVariableCell: React.FunctionComponent<
   const { showIndex } = (custom ?? {}) as CustomMeta;
 
   const getContent = () => {
+    const video = parseVideoValue(value);
+    if (video) {
+      return (
+        <div className="max-h-80 max-w-[320px] overflow-y-auto">
+          <ImagesListWrapper
+            media={[{ ...video, type: ATTACHMENT_TYPE.VIDEO }]}
+          />
+        </div>
+      );
+    }
+
     const image = parseImageValue(value);
     if (image) {
       return (
         <div className="max-h-80 max-w-[320px] overflow-y-auto">
-          <ImagesListWrapper images={[image]} />
+          <ImagesListWrapper
+            media={[{ ...image, type: ATTACHMENT_TYPE.IMAGE }]}
+          />
         </div>
       );
     }

@@ -94,6 +94,7 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
+        // Standard path for non-multimodal or non-custom-LLM providers
         var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
 
         ChatResponse chatResponse;

@@ -6,7 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -16,14 +16,11 @@ import {
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
-import { hasImagesInContent } from "@/lib/llm";
-import { supportsImageInput } from "@/lib/modelCapabilities";
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
-
-const isOpenAIModel = (modelName: string): boolean => {
-  const openAIModels = PROVIDER_MODELS[PROVIDER_TYPE.OPEN_AI] || [];
-  return openAIModels.some((model) => model.value === modelName);
-};
+import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
+import {
+  supportsImageInput,
+  supportsVideoInput,
+} from "@/lib/modelCapabilities";
 
 const RuleNameSchema = z
   .string({
@@ -191,22 +188,39 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
+  const hasVideos = data.messages.some((message) =>
+    hasVideosInContent(message.content),
+  );
 
-  if (hasImages) {
-    if (!isOpenAIModel(data.model)) {
+  if (hasImages || hasVideos) {
+    const modelSupportsImages = supportsImageInput(data.model);
+    const modelSupportsVideos = supportsVideoInput(data.model);
+    const supportsMultimodal = modelSupportsImages || modelSupportsVideos;
+
+    if (!supportsMultimodal) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "Only OpenAI models are currently supported for Online evaluation with images. Please select an OpenAI model or remove images from messages.",
+          "The selected provider does not support multimedia input. Please choose a compatible model or remove images/videos from messages.",
         path: ["model"],
       });
-    } else if (!supportsImageInput(data.model)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
-        path: ["model"],
-      });
+    } else {
+      if (hasImages && !modelSupportsImages) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
+          path: ["model"],
+        });
+      }
+      if (hasVideos && !modelSupportsVideos) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "The selected model does not support video input. Please choose a model with video capabilities or remove videos from messages.",
+          path: ["model"],
+        });
+      }
     }
   }
 });
