@@ -85,13 +85,13 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
     hasScope: false,
   },
   [ALERT_EVENT_TYPE.trace_cost]: {
-    title: "Trace cost threshold",
+    title: "Cost threshold",
     description:
       "Triggered when total trace cost exceeds the specified threshold in the selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_latency]: {
-    title: "Trace latency threshold",
+    title: "Latency threshold",
     description:
       "Triggered when average trace latency exceeds the specified threshold in the selected projects.",
     hasScope: true,
