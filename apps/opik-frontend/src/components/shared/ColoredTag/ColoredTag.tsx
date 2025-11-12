@@ -1,15 +1,46 @@
 import React, { useMemo } from "react";
+import { cva } from "class-variance-authority";
 
-import { Tag, TagProps } from "@/components/ui/tag";
+import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 
 export interface ColoredTagProps {
   label: string;
-  size?: TagProps["size"];
+  size?: "sm" | "default" | "md";
   testId?: string;
   className?: string;
 }
+
+const labelVariants = cva("min-w-0 flex-1 truncate text-muted-slate", {
+  variants: {
+    size: {
+      sm: "comet-body-xs",
+      default: "comet-body-s-accented",
+      md: "comet-body-s-accented",
+    },
+  },
+  defaultVariants: {
+    size: "default",
+  },
+});
+
+const containerVariants = cva(
+  "flex max-w-full items-center gap-1.5 rounded-md border border-border",
+  {
+    variants: {
+      size: {
+        sm: "h-5 px-1.5",
+        default: "h-6 px-2",
+        md: "h-6 px-2",
+      },
+    },
+    defaultVariants: {
+      size: "default",
+    },
+  },
+);
 
 const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
   label,
@@ -17,19 +48,24 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
   testId,
   className,
 }) => {
-  const variant = useMemo(() => generateTagVariant(label), [label]);
+  const color = useMemo(
+    () => TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
+    [label],
+  );
 
   return (
-    <Tag
-      size={size}
-      variant={variant}
+    <div
       data-testid={testId}
-      className={className}
+      className={cn(containerVariants({ size }), className)}
     >
+      <div
+        className="size-2 shrink-0 rounded-[0.15rem]"
+        style={{ backgroundColor: color }}
+      />
       <TooltipWrapper content={label} stopClickPropagation>
-        <span>{label}</span>
+        <div className={cn(labelVariants({ size }))}>{label}</div>
       </TooltipWrapper>
-    </Tag>
+    </div>
   );
 };
 

@@ -92,7 +92,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         direction="horizontal"
         limitWidth
       >
-        <div className="mb-1 flex gap-4 overflow-x-auto">
+        <div className="mb-1 flex gap-2 overflow-x-auto">
           {annotationQueue?.created_at && (
             <DateTag
               date={annotationQueue.created_at}
@@ -121,7 +121,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           <TooltipWrapper content="Feedback scores">
             <PenLine className="size-4 shrink-0" />
           </TooltipWrapper>
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto">
             {allocatedFeedbackScores.map((feedbackScore) => (
               <FeedbackScoreTag
                 key={feedbackScore.name + feedbackScore.value}

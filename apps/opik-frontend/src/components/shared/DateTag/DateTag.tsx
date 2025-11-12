@@ -12,6 +12,7 @@ interface DateTagProps {
 
 const DateTag = ({ date, resource }: DateTagProps) => {
   const { label } = RESOURCE_MAP[resource];
+  const blueColor = "var(--color-blue)";
 
   if (!date) {
     return null;
@@ -24,7 +25,7 @@ const DateTag = ({ date, resource }: DateTagProps) => {
         variant="gray"
         className="flex shrink-0 items-center gap-2"
       >
-        <Clock className="size-4 shrink-0" />
+        <Clock className="size-4 shrink-0" style={{ color: blueColor }} />
         <div className="truncate">{formatDate(date)}</div>
       </Tag>
     </TooltipWrapper>

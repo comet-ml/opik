@@ -14,18 +14,10 @@ import isUndefined from "lodash/isUndefined";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
-import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
+import { RESOURCE_TYPE, RESOURCE_COLORS } from "@/constants/colors";
 
-export enum RESOURCE_TYPE {
-  project,
-  dataset,
-  prompt,
-  experiment,
-  optimization,
-  trial,
-  annotationQueue,
-}
+export { RESOURCE_TYPE } from "@/constants/colors";
 
 export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
@@ -34,6 +26,7 @@ export const RESOURCE_MAP = {
     param: "projectId",
     deleted: "Deleted project",
     label: "project",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.project],
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
@@ -41,6 +34,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted dataset",
     label: "dataset",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.dataset],
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
@@ -48,6 +42,7 @@ export const RESOURCE_MAP = {
     param: "promptId",
     deleted: "Deleted prompt",
     label: "prompt",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.prompt],
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
@@ -55,6 +50,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted experiment",
     label: "experiment",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.experiment],
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
@@ -62,6 +58,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "optimization run",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.optimization],
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
@@ -69,6 +66,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "trial",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.trial],
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
@@ -76,6 +74,7 @@ export const RESOURCE_MAP = {
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
     label: "annotation queue",
+    color: RESOURCE_COLORS[RESOURCE_TYPE.annotationQueue],
   },
 };
 
@@ -122,18 +121,23 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
     >
       {asTag ? (
         <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
-          <Tag
-            size="md"
-            variant="gray"
+          <div
             className={cn(
-              "flex items-center gap-2",
+              "flex h-6 items-center gap-1.5 rounded-md border border-border px-2 max-w-full",
               deleted && "opacity-50 cursor-default",
             )}
           >
-            <props.icon className="size-4 shrink-0" />
-            <div className="truncate">{text}</div>
-            {!deleted && <ArrowUpRight className="size-4 shrink-0" />}
-          </Tag>
+            <props.icon
+              className="size-4 shrink-0"
+              style={{ color: props.color }}
+            />
+            <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
+              {text}
+            </div>
+            {!deleted && (
+              <ArrowUpRight className="size-4 shrink-0 text-muted-slate" />
+            )}
+          </div>
         </TooltipWrapper>
       ) : (
         <Button
