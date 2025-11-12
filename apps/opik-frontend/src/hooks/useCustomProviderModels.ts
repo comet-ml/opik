@@ -1,9 +1,12 @@
 import { useMemo } from "react";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+  ProviderModelsMap,
+} from "@/types/providers";
 import useAppStore from "@/store/AppStore";
-import { DropdownOption } from "@/types/shared";
-import { convertCustomProviderModels } from "@/lib/provider";
+import { convertCustomProviderModel } from "@/lib/provider";
 
 const useCustomProviderModels = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -12,30 +15,31 @@ const useCustomProviderModels = () => {
   });
 
   return useMemo(() => {
-    const retval: Record<
-      PROVIDER_TYPE.CUSTOM,
-      DropdownOption<PROVIDER_MODEL_TYPE>[]
-    > = {
-      [PROVIDER_TYPE.CUSTOM]: [],
-    };
+    const retval: ProviderModelsMap = {};
+
     if (data) {
-      const customConfig = data.content.find(
-        (providerKey) => providerKey.provider === PROVIDER_TYPE.CUSTOM,
-      );
+      data.content
+        .filter((providerKey) => providerKey.provider === PROVIDER_TYPE.CUSTOM)
+        .forEach((customProviderObject) => {
+          if (customProviderObject.configuration?.models) {
+            retval[customProviderObject.ui_composed_provider] =
+              customProviderObject.configuration.models
+                .split(",")
+                .map((model) => {
+                  const trimmedModel = model.trim();
 
-      if (customConfig && customConfig.configuration?.models) {
-        retval[PROVIDER_TYPE.CUSTOM] = customConfig.configuration.models
-          .split(",")
-          .map((model) => {
-            const trimmedModel = model.trim();
-
-            return {
-              value: trimmedModel as PROVIDER_MODEL_TYPE,
-              label: convertCustomProviderModels(trimmedModel),
-            };
-          });
-      }
+                  return {
+                    value: trimmedModel as PROVIDER_MODEL_TYPE,
+                    label: convertCustomProviderModel(
+                      trimmedModel,
+                      customProviderObject.provider_name ?? "",
+                    ),
+                  };
+                });
+          }
+        });
     }
+
     return retval;
   }, [data]);
 };

@@ -9,6 +9,7 @@ type MetricDateRangeSelectProps = {
   onChangeValue: (range: DateRangeValue) => void;
   minDate?: Date;
   maxDate?: Date;
+  hideAlltime?: boolean;
 };
 
 const MetricDateRangeSelect: React.FC<MetricDateRangeSelectProps> = ({
@@ -16,6 +17,7 @@ const MetricDateRangeSelect: React.FC<MetricDateRangeSelectProps> = ({
   onChangeValue,
   minDate,
   maxDate,
+  hideAlltime = false,
 }) => {
   return (
     <DateRangeSelect
@@ -26,10 +28,12 @@ const MetricDateRangeSelect: React.FC<MetricDateRangeSelectProps> = ({
     >
       <DateRangeSelect.Trigger />
       <DateRangeSelect.Content>
-        <DateRangeSelect.PresetOption value="today" />
-        <DateRangeSelect.PresetOption value="last3days" />
-        <DateRangeSelect.PresetOption value="lastWeek" />
-        <DateRangeSelect.PresetOption value="lastMonth" />
+        <DateRangeSelect.PresetOption value="past24hours" />
+        <DateRangeSelect.PresetOption value="past3days" />
+        <DateRangeSelect.PresetOption value="past7days" />
+        <DateRangeSelect.PresetOption value="past30days" />
+        <DateRangeSelect.PresetOption value="past60days" />
+        {!hideAlltime && <DateRangeSelect.PresetOption value="alltime" />}
         <DateRangeSelect.CustomDatesOption />
       </DateRangeSelect.Content>
     </DateRangeSelect>

@@ -50,12 +50,12 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({ message: "Explain recursion.", prettified: true });
   });
 
-  it("returns the original message if it is already a string and marks it as not prettified", () => {
+  it("returns the original message if it is already a string and marks it as prettified", () => {
     const message = "Simple string message";
     const result = prettifyMessage(message, { type: "input" });
     expect(result).toEqual({
       message: "Simple string message",
-      prettified: false,
+      prettified: true,
     });
   });
 
@@ -100,6 +100,20 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({ message: "User message", prettified: true });
   });
 
+  it("handles LangGraph input with multiple human messages and returns the last one", () => {
+    const message = {
+      messages: [
+        { type: "human", content: "First user message" },
+        { type: "ai", content: "AI response" },
+        { type: "human", content: "Second user message" },
+        { type: "ai", content: "Another AI response" },
+        { type: "human", content: "Last user message" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({ message: "Last user message", prettified: true });
+  });
+
   it("handles LangGraph output message format with multiple AI messages", () => {
     const message = {
       messages: [
@@ -114,6 +128,49 @@ describe("prettifyMessage", () => {
       message: "AI response 2",
       prettified: true,
     });
+  });
+
+  it("handles LangChain input with multiple human messages and returns the last one", () => {
+    const message = {
+      messages: [
+        [
+          { type: "human", content: "First user message" },
+          { type: "ai", content: "AI response" },
+          { type: "human", content: "Last user message" },
+        ],
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({ message: "Last user message", prettified: true });
+  });
+
+  it("handles LangChain output with multiple AI messages and returns the last one", () => {
+    const message = {
+      generations: [
+        [
+          {
+            text: "First AI response",
+            message: {
+              kwargs: { type: "ai" },
+            },
+          },
+          {
+            text: "Second AI response",
+            message: {
+              kwargs: { type: "ai" },
+            },
+          },
+          {
+            text: "Last AI response",
+            message: {
+              kwargs: { type: "ai" },
+            },
+          },
+        ],
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({ message: "Last AI response", prettified: true });
   });
 
   it("uses default input type when config is not provided", () => {

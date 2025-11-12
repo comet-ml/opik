@@ -1,7 +1,7 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { BasePage } from './base.page';
 
-export class PlaygroundPage {
-  readonly page: Page;
+export class PlaygroundPage extends BasePage {
   readonly modelSelector: Locator;
   readonly promptInput: Locator;
   readonly runButton: Locator;
@@ -11,7 +11,7 @@ export class PlaygroundPage {
   readonly apiErrorMessages: string[];
 
   constructor(page: Page) {
-    this.page = page;
+    super(page, 'playground');
     this.modelSelector = page.getByRole('combobox').first();
     this.promptInput = page.getByRole('textbox').first();
     this.runButton = page.getByRole('button', { name: 'Run' });
@@ -31,7 +31,7 @@ export class PlaygroundPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/default/playground');
+    await super.goto();
     await this.page.waitForLoadState('networkidle');
   }
 

@@ -1,0 +1,68 @@
+---
+title: "Define datasets"
+description: "Design, version, and validate datasets used for optimization runs."
+---
+
+The optimizer evaluates candidate prompts against datasets stored in Opik. If you are brand new to datasets in Opik, start with [Manage datasets](/evaluation/manage_datasets); this page highlights specific tips to get you started.
+
+Datasets are a crucial component of the optimizer SDK, serving as a key component to run and evaluate (score) each dataset item using optimizers to develop a better outcome. Without datasets, it's not possible to steer the optimizer on what is good and bad.
+
+## Dataset schema
+
+Every item is a JSON object. Required keys depend on your prompt template; optional keys help with analysis. Schemas are optional—define only the fields your prompt or metrics actually consume.
+
+| Field | Purpose |
+| --- | --- |
+| `inputs` (e.g., `question`, `context`) | Values substituted into your `ChatPrompt` placeholders. |
+| `answer` / `label` | Ground truth used by metrics. |
+| `metadata` | Arbitrary dict for tagging scenario, split, or difficulty. |
+
+## Create or load datasets
+
+<Steps>
+  <Step title="Create via SDK">
+    ```python
+    import opik
+
+    client = opik.Opik()
+    dataset = client.get_or_create_dataset(name="agent-opt-support")
+    dataset.insert([
+        {"question": "Summarize Opik.", "answer": "Opik is an LLM observability platform."},
+        {"question": "List two optimizer types.", "answer": "MetaPrompt and Hierarchical Reflective."},
+    ])
+    ```
+  </Step>
+  <Step title="Upload from file">
+    - Prepare a CSV or Parquet file with column headers that match your prompt variables.
+    - Load the file via Python (e.g., pandas) and call `dataset.insert(...)` or related helpers from the [Dataset SDK](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/Dataset.html).
+    - Verify in the UI that rows include `metadata` if you plan to filter by scenario.
+  </Step>
+  <Step title="Use built-in samples">
+    The optimizer SDK provides ready-made datasets for quick experiments:
+    ```python
+    from opik_optimizer import datasets
+    hotpot = datasets.hotpot_300()
+    tiny = datasets.tiny_test()
+    ```
+    These datasets live in `sdks/opik_optimizer/src/opik_optimizer/datasets` and mirror the notebook examples.
+  </Step>
+</Steps>
+
+## Best practices
+
+- **Keep datasets immutable** during an optimization run; create a new dataset version if you need to add rows.
+- **Log context** fields if you run RAG-style prompts so failure analyses can surface missing passages.
+- **Track splits via metadata** (e.g., `metadata["split"] = "eval"`) because dataset tags are not supported yet.
+- **Document ownership** using dataset descriptions so teams know who curates each collection.
+- **Keep schema + prompt in sync** – if your prompt expects `{context}`, ensure every dataset row defines that key or provide defaults in the optimizer.
+
+## Validation checklist
+
+- Confirm row counts in the Opik **Datasets** tab (or by running `len(dataset.get_items())` in Python) before and after uploads.
+- Spot-check rows in the dashboard’s Dataset viewer.
+- If rows include multimodal assets or tool payloads, confirm they appear in the trace tree once you run an optimization.
+- Run an initial small-batch optimization with a few rows of data to validate everything end to end.
+
+## Next steps
+
+Define how you will score results with [Define metrics](/agent_optimization/optimization/define_metrics), then follow [Optimize prompts](/agent_optimization/optimization/optimize_prompts) to launch experiments. For domain-specific scoring, extend the dataset with extra fields and reference them inside [Custom metrics](/agent_optimization/advanced/custom_metrics).
