@@ -1530,7 +1530,7 @@ class SpanDAO {
     public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
+                    var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
 
                     var statement = connection.createStatement(template.render());
 
@@ -2161,7 +2161,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = TemplateUtils.newST(SPAN_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(SPAN_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2197,7 +2197,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = TemplateUtils.newST(SPAN_DAILY_BI_INFORMATION);
+        var template = TemplateUtils.newST(SPAN_DAILY_BI_INFORMATION);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
