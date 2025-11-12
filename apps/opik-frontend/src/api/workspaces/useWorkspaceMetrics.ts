@@ -5,8 +5,8 @@ import { WorkspaceMetric } from "@/types/workspaces";
 type UseWorkspaceMetricsParams = {
   projectIds: string[];
   name: string;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
 };
 
 interface WorkspaceMetricsResponse {
@@ -22,8 +22,8 @@ const getWorkspaceMetrics = async (
     {
       ...(projectIds.length > 0 && { project_ids: projectIds }),
       name,
-      interval_start: intervalStart,
-      interval_end: intervalEnd,
+      ...(intervalStart && { interval_start: intervalStart }),
+      ...(intervalEnd && { interval_end: intervalEnd }),
     },
     {
       signal,
