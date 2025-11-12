@@ -1,7 +1,8 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.domain.AlertService;
+import com.comet.opik.domain.alerts.AlertBucketService;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;

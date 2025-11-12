@@ -7,9 +7,9 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper;
-import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.MetricsAlertPayload;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.NonNull;
@@ -46,9 +46,6 @@ public class AlertPayloadAdapter {
     };
 
     private static final TypeReference<List<Experiment>> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<String> STRING_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     private static final TypeReference<MetricsAlertPayload> METRICS_ALERT_PAYLOAD_TYPE_REFERENCE = new TypeReference<>() {

@@ -1,7 +1,8 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.resources.v1.events.webhooks.WebhookPublisher;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
@@ -24,7 +25,7 @@ import java.util.Map;
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class AlertWebhookSender {
+class AlertWebhookSender {
 
     private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull WorkspaceNameService workspaceNameService;

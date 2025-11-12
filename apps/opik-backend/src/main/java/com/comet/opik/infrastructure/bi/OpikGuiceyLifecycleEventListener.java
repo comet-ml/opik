@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
@@ -112,7 +113,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void setMetricsAlertJob() {
         try {
             var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhook();
-            
+
             if (webhookConfig == null || webhookConfig.getMetrics() == null) {
                 log.warn("Webhook metrics configuration not found, skipping metrics alert job setup");
                 return;
@@ -121,7 +122,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             Duration initialDelay = webhookConfig.getMetrics().getInitialDelay().toJavaDuration();
             Duration fixedDelay = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
 
-            var jobDetail = JobBuilder.newJob(com.comet.opik.api.resources.v1.events.webhooks.MetricsAlertJob.class)
+            var jobDetail = JobBuilder.newJob(MetricsAlertJob.class)
                     .storeDurably()
                     .build();
 

@@ -1,11 +1,11 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
-import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.MetricsAlertPayload;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
@@ -35,7 +35,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -49,7 +48,7 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
  * This job evaluates cost and latency thresholds for configured alerts at a configurable interval.
  * Uses Quartz scheduling with @DisallowConcurrentExecution to prevent overlapping executions
  * across multiple backend instances and within a single instance.
- * 
+ *
  * The job interval is configured via webhookConfig.metrics.fixedDelay and scheduled
  * programmatically in OpikGuiceyLifecycleEventListener.
  */
@@ -104,8 +103,8 @@ public class MetricsAlertJob extends Job {
         // Calculate lock duration: job interval - 1 minute to ensure it expires before the next job run
         // This allows alerts to fire on every job run instead of every other run
         Duration jobInterval = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
-        Duration lockDuration = jobInterval.toMinutes() > 1 
-                ? jobInterval.minusMinutes(1) 
+        Duration lockDuration = jobInterval.toMinutes() > 1
+                ? jobInterval.minusMinutes(1)
                 : jobInterval.minusSeconds(jobInterval.getSeconds() / 2);
 
         // Try to acquire the lock - if successful, this instance will process the alert
@@ -181,9 +180,9 @@ public class MetricsAlertJob extends Job {
                         // Wrap blocking JSON serialization in Mono.fromCallable
                         return Mono.fromCallable(() -> {
                             String eventId = idGenerator.generateId().toString();
-                            
+
                             // Create MetricsAlertPayload DTO
-                            MetricsAlertPayload metricsPayload = MetricsAlertPayload.builder()
+                            var metricsPayload = MetricsAlertPayload.builder()
                                     .metricValue(metricValueFinal)
                                     .threshold(config.threshold())
                                     .windowSeconds(config.windowSeconds())
@@ -192,7 +191,7 @@ public class MetricsAlertJob extends Job {
                                                     .collect(Collectors.joining(","))
                                             : "")
                                     .build();
-                            
+
                             String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
                             return Tuples.of(eventId, payloadJson);
                         })

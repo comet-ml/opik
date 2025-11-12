@@ -7,9 +7,8 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -37,18 +36,6 @@ public class SlackWebhookPayloadMapper {
     private static final int SLACK_TEXT_BLOCK_LIMIT = 3000;
     public static final String BASE_URL_METADATA_KEY = "base_url";
     private static final String DEFAULT_BASE_URL = "http://localhost:5173";
-
-    /**
-     * Data Transfer Object for metrics alert payload.
-     * Contains threshold evaluation results and metadata.
-     */
-    @Builder
-    public record MetricsAlertPayload(
-            @JsonProperty("metric_value") @NonNull BigDecimal metricValue,
-            @JsonProperty("threshold") @NonNull BigDecimal threshold,
-            @JsonProperty("window_seconds") long windowSeconds,
-            @JsonProperty("project_ids") String projectIds) {
-    }
 
     /**
      * Converts a webhook event to Slack webhook payload.

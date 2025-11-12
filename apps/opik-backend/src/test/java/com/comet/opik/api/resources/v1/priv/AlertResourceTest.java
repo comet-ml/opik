@@ -1764,8 +1764,8 @@ class AlertResourceTest {
 
         private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue,
                 String threshold, String windowSeconds, UUID projectId) {
-            // Note: event_type is not in the payload DTO as it's redundant - the event type is already known from context
-            assertThat(new BigDecimal(payload.get("metric_value")).compareTo(new BigDecimal(metricValue))).isEqualTo(0);
+            assertThat(payload).containsEntry("event_type", eventType);
+            assertThat(new BigDecimal(payload.get("metric_value")).compareTo(new BigDecimal(metricValue))).isZero();
             assertThat(payload).containsEntry("threshold", threshold);
             assertThat(payload).containsEntry("window_seconds", windowSeconds);
             assertThat(payload.get("project_ids")).contains(projectId.toString());
