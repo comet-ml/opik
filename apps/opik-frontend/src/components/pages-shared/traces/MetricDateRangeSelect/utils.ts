@@ -1,5 +1,5 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect";
+import { DateRangeValue, getRangePreset } from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
 
 export const serializeDateForURL = (date: Date): string => {
@@ -29,16 +29,25 @@ export const parseDateRangeFromState = (
     const from = parseDateFromState(fromStr);
     const to = parseDateFromState(toStr);
 
-    if (
-      !dayjs(from).isValid() ||
-      !dayjs(to).isValid() ||
-      dayjs(from).isBefore(minDate) ||
-      dayjs(to).isAfter(maxDate)
-    ) {
+    if (!dayjs(from).isValid() || !dayjs(to).isValid()) {
       return defaultRange;
     }
 
-    return { from, to };
+    const parsedRange = { from, to };
+    
+    // Allow "alltime" preset even if it's outside the min/max range
+    // because when "alltime" is selected, we don't actually use the date range for filtering
+    const preset = getRangePreset(parsedRange);
+    if (preset === "alltime") {
+      return parsedRange;
+    }
+
+    // For other ranges, validate against min/max dates
+    if (dayjs(from).isBefore(minDate) || dayjs(to).isAfter(maxDate)) {
+      return defaultRange;
+    }
+
+    return parsedRange;
   } catch {
     return defaultRange;
   }
