@@ -31,6 +31,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -44,12 +45,15 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STErrorListener;
+import org.stringtemplate.v4.misc.STMessage;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -127,6 +131,13 @@ interface TraceDAO {
     Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
 
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
+
+    record TraceIdWithTagsAndMetadata(UUID id, Set<String> tags, UUID projectId) {
+    }
+
+    Flux<TraceIdWithTagsAndMetadata> getIdsTagsAndMetadata(@NonNull Set<UUID> ids);
+
+    Mono<Void> bulkUpdateTags(@NonNull Map<UUID, TraceUpdate> idToUpdateMap);
 }
 
 @Slf4j
@@ -552,6 +563,19 @@ class TraceDAOImpl implements TraceDAO {
                 project_id
             FROM traces
             WHERE id = :id
+            ;
+            """;
+
+    private static final String SELECT_IDS_TAGS_AND_METADATA = """
+            SELECT
+                id,
+                tags,
+                project_id
+            FROM traces
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY last_updated_at DESC
+            LIMIT 1 BY id
             ;
             """;
 
@@ -2407,6 +2431,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
     @WithSpan
@@ -2532,6 +2557,33 @@ class TraceDAOImpl implements TraceDAO {
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
         ST template = new ST(update);
+
+        // Suppress StringTemplate warnings for undefined attributes
+        template.impl.nativeGroup.setListener(new STErrorListener() {
+            @Override
+            public void compileTimeError(STMessage msg) {
+                // Suppress compile-time errors for optional attributes
+            }
+
+            @Override
+            public void runTimeError(STMessage msg) {
+                // Suppress "attribute isn't defined" warnings - these are expected for optional fields
+                String msgStr = msg.toString();
+                if (msgStr != null && !msgStr.contains("attribute") && !msgStr.contains("isn't defined")) {
+                    log.warn("StringTemplate runtime error: {}", msg);
+                }
+            }
+
+            @Override
+            public void IOError(STMessage msg) {
+                log.error("StringTemplate IO error: {}", msg);
+            }
+
+            @Override
+            public void internalError(STMessage msg) {
+                log.error("StringTemplate internal error: {}", msg);
+            }
+        });
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -3519,6 +3571,115 @@ class TraceDAOImpl implements TraceDAO {
                     log.info("Closing trace search stream");
                     endSegment(segment);
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<TraceIdWithTagsAndMetadata> getIdsTagsAndMetadata(@NonNull Set<UUID> ids) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Getting IDs, tags, and metadata for '{}' traces", ids.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_IDS_TAGS_AND_METADATA)
+                            .bind("ids", ids);
+
+                    Segment segment = startSegment("traces", "Clickhouse", "get_ids_tags_and_metadata");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(result -> result.map((row, metadata) -> {
+                    var tags = row.get("tags", String[].class);
+                    return new TraceIdWithTagsAndMetadata(
+                            row.get("id", UUID.class),
+                            tags != null ? Set.of(tags) : Set.of(),
+                            row.get("project_id", UUID.class));
+                }));
+    }
+
+    private static final String BULK_UPDATE_TAGS = """
+            INSERT INTO traces (
+                id,
+                project_id,
+                workspace_id,
+                name,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                tags,
+                error_info,
+                created_at,
+                created_by,
+                last_updated_by,
+                thread_id,
+                visibility_mode,
+                truncation_threshold
+            )
+            SELECT
+                t.id,
+                t.project_id,
+                t.workspace_id,
+                t.name,
+                t.start_time,
+                t.end_time,
+                t.input,
+                t.output,
+                t.metadata,
+                arrayElement(arrayMap(i -> if(t.id = :ids[i], :tags[i], t.tags), range(1, length(:ids) + 1)), indexOf(:ids, t.id)) as tags,
+                t.error_info,
+                t.created_at,
+                t.created_by,
+                t.last_updated_by,
+                t.thread_id,
+                t.visibility_mode,
+                t.truncation_threshold
+            FROM traces t
+            WHERE t.id IN :ids
+            AND t.workspace_id = :workspace_id
+            ORDER BY t.last_updated_at DESC
+            LIMIT 1 BY t.id
+            ;
+            """;
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdateTags(@NonNull Map<UUID, TraceUpdate> idToUpdateMap) {
+        Preconditions.checkArgument(!idToUpdateMap.isEmpty(), "idToUpdateMap must not be empty");
+        log.info("Bulk updating tags for '{}' traces", idToUpdateMap.size());
+
+        // Convert map to arrays for ClickHouse query
+        List<UUID> ids = new ArrayList<>(idToUpdateMap.keySet());
+        List<String[]> tagsArrays = ids.stream()
+                .map(id -> idToUpdateMap.get(id).tags().toArray(new String[0]))
+                .toList();
+
+        int chunkSize = configuration.getBatchOperations().getAnalytics().getBulkUpdateChunkSize();
+        return Flux.range(0, (ids.size() + chunkSize - 1) / chunkSize)
+                .flatMap(chunkIndex -> {
+                    int start = chunkIndex * chunkSize;
+                    int end = Math.min(start + chunkSize, ids.size());
+
+                    List<UUID> chunkIds = ids.subList(start, end);
+                    List<String[]> chunkTags = tagsArrays.subList(start, end);
+
+                    return Mono.from(connectionFactory.create())
+                            .flatMapMany(connection -> {
+                                var statement = connection.createStatement(BULK_UPDATE_TAGS)
+                                        .bind("ids", chunkIds.toArray(new UUID[0]))
+                                        .bind("tags", chunkTags.toArray(new String[0][]));
+
+                                Segment segment = startSegment("traces", "Clickhouse", "bulk_update_tags");
+
+                                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                                        .doFinally(signalType -> endSegment(segment));
+                            })
+                            .then();
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' traces", idToUpdateMap.size()));
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {

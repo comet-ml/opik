@@ -36,6 +36,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STErrorListener;
+import org.stringtemplate.v4.misc.STMessage;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -680,6 +682,21 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
+            ;
+            """;
+
+    private static final String SELECT_IDS_TAGS_AND_METADATA = """
+            SELECT
+                id,
+                tags,
+                project_id,
+                trace_id,
+                parent_span_id
+            FROM spans
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             ;
             """;
 
@@ -1632,6 +1649,34 @@ class SpanDAO {
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
+
+        // Suppress StringTemplate warnings for undefined attributes
+        template.impl.nativeGroup.setListener(new STErrorListener() {
+            @Override
+            public void compileTimeError(STMessage msg) {
+                // Suppress compile-time errors for optional attributes
+            }
+
+            @Override
+            public void runTimeError(STMessage msg) {
+                // Suppress "attribute isn't defined" warnings - these are expected for optional fields
+                String msgStr = msg.toString();
+                if (msgStr != null && !msgStr.contains("attribute") && !msgStr.contains("isn't defined")) {
+                    log.warn("StringTemplate runtime error: {}", msg);
+                }
+            }
+
+            @Override
+            public void IOError(STMessage msg) {
+                log.error("StringTemplate IO error: {}", msg);
+            }
+
+            @Override
+            public void internalError(STMessage msg) {
+                log.error("StringTemplate internal error: {}", msg);
+            }
+        });
+
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -2249,6 +2294,139 @@ class SpanDAO {
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
+    }
+
+    public record SpanIdWithTagsAndMetadata(
+            UUID id,
+            Set<String> tags,
+            UUID projectId,
+            UUID traceId,
+            UUID parentSpanId) {
+    }
+
+    @WithSpan
+    public Flux<SpanIdWithTagsAndMetadata> getIdsTagsAndMetadata(@NonNull Set<UUID> ids) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Getting IDs, tags, and metadata for '{}' spans", ids.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_IDS_TAGS_AND_METADATA)
+                            .bind("ids", ids);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_ids_tags_and_metadata");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .flatMap(result -> result.map((row, metadata) -> {
+                    var tags = row.get("tags", String[].class);
+                    UUID parentSpanId = Optional.ofNullable(row.get("parent_span_id", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(UUID::fromString)
+                            .orElse(null);
+                    return new SpanIdWithTagsAndMetadata(
+                            row.get("id", UUID.class),
+                            tags != null ? Set.of(tags) : Set.of(),
+                            row.get("project_id", UUID.class),
+                            row.get("trace_id", UUID.class),
+                            parentSpanId);
+                }));
+    }
+
+    private static final String BULK_UPDATE_TAGS = """
+            INSERT INTO spans (
+                id,
+                project_id,
+                workspace_id,
+                trace_id,
+                parent_span_id,
+                name,
+                type,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                model,
+                provider,
+                total_estimated_cost,
+                total_estimated_cost_version,
+                tags,
+                usage,
+                error_info,
+                created_at,
+                created_by,
+                last_updated_by,
+                truncation_threshold
+            )
+            SELECT
+                s.id,
+                s.project_id,
+                s.workspace_id,
+                s.trace_id,
+                s.parent_span_id,
+                s.name,
+                s.type,
+                s.start_time,
+                s.end_time,
+                s.input,
+                s.output,
+                s.metadata,
+                s.model,
+                s.provider,
+                s.total_estimated_cost,
+                s.total_estimated_cost_version,
+                arrayElement(arrayMap(i -> if(s.id = :ids[i], :tags[i], s.tags), range(1, length(:ids) + 1)), indexOf(:ids, s.id)) as tags,
+                s.usage,
+                s.error_info,
+                s.created_at,
+                s.created_by,
+                s.last_updated_by,
+                s.truncation_threshold
+            FROM spans s
+            WHERE s.id IN :ids
+            AND s.workspace_id = :workspace_id
+            ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id
+            ;
+            """;
+
+    @WithSpan
+    public Mono<Void> bulkUpdateTags(@NonNull Map<UUID, SpanUpdate> idToUpdateMap) {
+        Preconditions.checkArgument(!idToUpdateMap.isEmpty(), "idToUpdateMap must not be empty");
+        log.info("Bulk updating tags for '{}' spans", idToUpdateMap.size());
+
+        // Convert map to arrays for ClickHouse query
+        List<UUID> ids = new ArrayList<>(idToUpdateMap.keySet());
+        List<String[]> tagsArrays = ids.stream()
+                .map(id -> idToUpdateMap.get(id).tags().toArray(new String[0]))
+                .toList();
+
+        int chunkSize = configuration.getBatchOperations().getAnalytics().getBulkUpdateChunkSize();
+        return Flux.range(0, (ids.size() + chunkSize - 1) / chunkSize)
+                .flatMap(chunkIndex -> {
+                    int start = chunkIndex * chunkSize;
+                    int end = Math.min(start + chunkSize, ids.size());
+
+                    List<UUID> chunkIds = ids.subList(start, end);
+                    List<String[]> chunkTags = tagsArrays.subList(start, end);
+
+                    return Mono.from(connectionFactory.create())
+                            .flatMapMany(connection -> {
+                                var statement = connection.createStatement(BULK_UPDATE_TAGS)
+                                        .bind("ids", chunkIds.toArray(new UUID[0]))
+                                        .bind("tags", chunkTags.toArray(new String[0][]));
+
+                                Segment segment = startSegment("spans", "Clickhouse", "bulk_update_tags");
+
+                                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                                        .doFinally(signalType -> endSegment(segment));
+                            })
+                            .then();
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", idToUpdateMap.size()));
     }
 
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
