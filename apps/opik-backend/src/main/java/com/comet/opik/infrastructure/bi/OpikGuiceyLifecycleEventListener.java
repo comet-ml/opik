@@ -110,32 +110,39 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
     // This method sets up a job that periodically evaluates metrics-based alerts for cost and latency thresholds.
     private void setMetricsAlertJob() {
-        var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhook();
-
-        Duration initialDelay = webhookConfig.getMetrics().getInitialDelay().toJavaDuration();
-        Duration fixedDelay = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
-
-        var jobDetail = JobBuilder.newJob(com.comet.opik.api.resources.v1.events.webhooks.MetricsAlertJob.class)
-                .storeDurably()
-                .build();
-
-        var trigger = TriggerBuilder.newTrigger()
-                .forJob(jobDetail)
-                .startAt(java.util.Date.from(java.time.Instant.now().plus(initialDelay)))
-                .withSchedule(
-                        org.quartz.SimpleScheduleBuilder.simpleSchedule()
-                                .withIntervalInMilliseconds(fixedDelay.toMillis())
-                                .repeatForever())
-                .build();
-
         try {
+            var webhookConfig = injector.get().getInstance(OpikConfiguration.class).getWebhook();
+            
+            if (webhookConfig == null || webhookConfig.getMetrics() == null) {
+                log.warn("Webhook metrics configuration not found, skipping metrics alert job setup");
+                return;
+            }
+
+            Duration initialDelay = webhookConfig.getMetrics().getInitialDelay().toJavaDuration();
+            Duration fixedDelay = webhookConfig.getMetrics().getFixedDelay().toJavaDuration();
+
+            var jobDetail = JobBuilder.newJob(com.comet.opik.api.resources.v1.events.webhooks.MetricsAlertJob.class)
+                    .storeDurably()
+                    .build();
+
+            var trigger = TriggerBuilder.newTrigger()
+                    .forJob(jobDetail)
+                    .startAt(java.util.Date.from(java.time.Instant.now().plus(initialDelay)))
+                    .withSchedule(
+                            org.quartz.SimpleScheduleBuilder.simpleSchedule()
+                                    .withIntervalInMilliseconds(fixedDelay.toMillis())
+                                    .repeatForever())
+                    .build();
+
             var scheduler = getScheduler();
             scheduler.addJob(jobDetail, false);
             scheduler.scheduleJob(trigger);
             log.info("Metrics alert job scheduled successfully with initial delay of '{}' and fixed delay of '{}'",
                     initialDelay, fixedDelay);
         } catch (SchedulerException e) {
-            log.error("Failed to schedule metrics alert job '{}'", jobDetail.getKey(), e);
+            log.error("Failed to schedule metrics alert job", e);
+        } catch (Exception e) {
+            log.error("Unexpected error setting up metrics alert job", e);
         }
     }
 
