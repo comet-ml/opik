@@ -54,6 +54,7 @@ public class CorsFactory {
         corsHandler.setAllowedHeaders(Set.of(ALLOWED_HEADERS));
         corsHandler.setExposedHeaders(Set.of(HttpHeaders.LOCATION));
         corsHandler.setAllowedMethods(Set.of(ALLOWED_METHODS));
+        corsHandler.setAllowCredentials(true); // Allow credentials (cookies, auth headers) to be sent
         corsHandler.setDeliverPreflightRequests(false); // Don't chain preflight requests (equivalent to CHAIN_PREFLIGHT_PARAM=false)
 
         // Wrap the existing application handler with CORS handler

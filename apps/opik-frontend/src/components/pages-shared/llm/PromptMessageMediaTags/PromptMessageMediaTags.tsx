@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Image, Plus, Video } from "lucide-react";
+import { Image, Plus, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -12,7 +12,13 @@ import { Tag } from "@/components/ui/tag";
 import { CircleX } from "lucide-react";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { isImageBase64String, isVideoBase64String } from "@/lib/images";
+import {
+  IMAGE_URL_EXTENSIONS,
+  isImageBase64String,
+  isVideoBase64String,
+  VIDEO_URL_EXTENSIONS,
+} from "@/lib/images";
+import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
 
 type MediaType = "image" | "video";
 
@@ -32,6 +38,16 @@ const DEFAULT_MAX_ITEMS: Record<MediaType, number> = {
 };
 const MAX_DISPLAY_LENGTH = 40;
 
+const ACCEPTED_FILE_TYPES: Record<MediaType, string> = {
+  image: IMAGE_URL_EXTENSIONS.join(",."),
+  video: VIDEO_URL_EXTENSIONS.join(",."),
+};
+
+const MAX_FILE_SIZE_MB: Record<MediaType, number> = {
+  image: 20,
+  video: 1000,
+};
+
 const PromptMessageMediaTags: React.FunctionComponent<
   PromptMessageMediaTagsProps
 > = ({
@@ -48,6 +64,15 @@ const PromptMessageMediaTags: React.FunctionComponent<
   const [newItem, setNewItem] = useState<string>("");
 
   const resolvedMaxItems = maxItems ?? DEFAULT_MAX_ITEMS[type];
+
+  const { fileInputRef, handleFileSelect } = useMediaFileUpload({
+    currentItemsCount: items.length,
+    maxItems: resolvedMaxItems,
+    maxSizeMB: MAX_FILE_SIZE_MB[type],
+    onFilesConverted: (base64Items) => {
+      setItems([...items, ...base64Items]);
+    },
+  });
 
   const truncateMediaString = (value: string) => {
     if (value.length <= MAX_DISPLAY_LENGTH) {
@@ -111,12 +136,24 @@ const PromptMessageMediaTags: React.FunctionComponent<
         <video
           src={value}
           controls
+          preload="metadata"
           className="max-h-24 rounded border object-contain"
           onError={(event) => {
-            event.currentTarget.style.display = "none";
+            console.log("Video preview source", value);
+            console.error("Video preview failed", event);
+            const parent = event.currentTarget.parentElement;
+            if (parent) {
+              parent.innerHTML = `
+                <p class="comet-body-s text-muted-foreground">Video preview failed</p>
+                <p class="comet-body-xs truncate text-muted-foreground">${value.substring(
+                  0,
+                  50,
+                )}...</p>
+              `;
+            }
           }}
         >
-          Your browser does not support embedded videos.
+          Your browser does not support video playback.
         </video>
       </div>
     );
@@ -172,8 +209,8 @@ const PromptMessageMediaTags: React.FunctionComponent<
       : "Enter video URL, base64, or template variable";
   const helperText =
     type === "image"
-      ? "You can add a base64 string, image URL, or template variable "
-      : "You can add a base64 string, video URL, or template variable ";
+      ? `You can add a base64 string, image URL, or template variable. For file uploads, max size is ${MAX_FILE_SIZE_MB[type]}MB. `
+      : `You can add a base64 string, video URL, or template variable. For file uploads, max size is ${MAX_FILE_SIZE_MB[type]}MB. `;
 
   return (
     <div
@@ -216,45 +253,70 @@ const PromptMessageMediaTags: React.FunctionComponent<
         );
       })}
       {editable && canAddMore && (
-        <Popover onOpenChange={setOpen} open={open}>
-          <TooltipWrapper
-            content={`Add ${type}: ${type} URL, base64 data, or template variable {{${type}}}`}
-          >
-            <PopoverTrigger asChild>
-              <Button
-                data-testid={`add-${type}-button`}
-                variant="outline"
-                size="icon-2xs"
-                aria-label={`Add ${type}`}
-              >
-                <Plus />
-              </Button>
-            </PopoverTrigger>
-          </TooltipWrapper>
-          <PopoverContent className="w-[460px] p-6" align={align}>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  placeholder={placeholder}
-                  value={newItem}
-                  onChange={(event) => setNewItem(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      handleAddItem();
-                    }
-                  }}
-                />
-                <Button variant="default" onClick={handleAddItem}>
-                  Add
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_FILE_TYPES[type]}
+            multiple={type === "image"}
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <Popover onOpenChange={setOpen} open={open}>
+            <TooltipWrapper
+              content={`Add ${type}: ${type} URL, base64 data, or template variable {{${type}}}`}
+            >
+              <PopoverTrigger asChild>
+                <Button
+                  data-testid={`add-${type}-button`}
+                  variant="outline"
+                  size="icon-2xs"
+                  aria-label={`Add ${type}`}
+                >
+                  <Plus />
                 </Button>
+              </PopoverTrigger>
+            </TooltipWrapper>
+            <PopoverContent className="w-[460px] p-6" align={align}>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={placeholder}
+                    value={newItem}
+                    onChange={(event) => setNewItem(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        handleAddItem();
+                      }
+                    }}
+                  />
+                  <TooltipWrapper
+                    content={`Upload ${type} file${
+                      type === "image" ? "s" : ""
+                    }`}
+                  >
+                    <Button
+                      data-testid={`upload-${type}-button`}
+                      variant="outline"
+                      size="default"
+                      aria-label={`Upload ${type}`}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="size-3.5 shrink-0" />
+                    </Button>
+                  </TooltipWrapper>
+                  <Button variant="default" onClick={handleAddItem}>
+                    Add
+                  </Button>
+                </div>
+                <p className="comet-body-xs text-muted-foreground">
+                  {helperText}
+                  <code>{`{{${type}}}`}</code>
+                </p>
               </div>
-              <p className="comet-body-xs text-muted-foreground">
-                {helperText}
-                <code>{`{{${type}}}`}</code>
-              </p>
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverContent>
+          </Popover>
+        </>
       )}
     </div>
   );

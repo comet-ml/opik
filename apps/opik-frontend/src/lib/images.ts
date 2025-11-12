@@ -69,7 +69,7 @@ function isValidBase64Image(base64Str: string): boolean {
   }
 }
 
-const IMAGE_URL_EXTENSIONS = [
+export const IMAGE_URL_EXTENSIONS = [
   "apng",
   "avif",
   "bmp",
@@ -103,7 +103,7 @@ const IMAGE_URL_EXTENSIONS = [
   "webp",
 ] as const;
 
-const VIDEO_URL_EXTENSIONS = [
+export const VIDEO_URL_EXTENSIONS = [
   "mp4",
   "webm",
   "mov",
