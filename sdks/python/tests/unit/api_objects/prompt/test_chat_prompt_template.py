@@ -460,7 +460,7 @@ def test_chat_prompt_template__format__passed_arguments_not_in_template__error_r
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
 
-    tested = ChatPromptTemplate(messages)
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
 
     with pytest.raises(
         exceptions.PromptPlaceholdersDontMatchFormatArguments
@@ -478,7 +478,7 @@ def test_chat_prompt_template__format__some_placeholders_missing__error_raised()
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
 
-    tested = ChatPromptTemplate(messages)
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
 
     with pytest.raises(
         exceptions.PromptPlaceholdersDontMatchFormatArguments
@@ -496,7 +496,7 @@ def test_chat_prompt_template__format__placeholders_mismatch_both_ways__error_ra
         {"role": "user", "content": "Hi, my name is {{name}}, I live in {{city}}."}
     ]
 
-    tested = ChatPromptTemplate(messages)
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
 
     with pytest.raises(
         exceptions.PromptPlaceholdersDontMatchFormatArguments
@@ -520,7 +520,7 @@ def test_chat_prompt_template__format__multimodal_placeholders__validates_all():
         }
     ]
 
-    tested = ChatPromptTemplate(messages)
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
 
     # Missing image_url placeholder
     with pytest.raises(
@@ -540,7 +540,7 @@ def test_chat_prompt_template__format__multiple_messages_placeholders__validates
         {"role": "user", "content": "What is the capital of {{country}}?"},
     ]
 
-    tested = ChatPromptTemplate(messages)
+    tested = ChatPromptTemplate(messages, validate_placeholders=True)
 
     # Missing country placeholder
     with pytest.raises(
