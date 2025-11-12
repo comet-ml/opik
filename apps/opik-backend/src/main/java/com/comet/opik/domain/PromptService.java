@@ -514,8 +514,12 @@ class PromptServiceImpl implements PromptService {
             throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
         }
 
+        // Get parent prompt to inherit template structure
+        Prompt prompt = getById(promptVersion.promptId());
+
         return promptVersion.toBuilder()
                 .variables(getVariables(promptVersion.template(), promptVersion.type()))
+                .templateStructure(prompt.templateStructure())
                 .build();
     }
 

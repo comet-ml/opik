@@ -144,7 +144,24 @@ class PromptResourceTest {
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
-    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final PodamFactory factory = createPodamFactory();
+
+    private static PodamFactory createPodamFactory() {
+        PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+        var strategy = (uk.co.jemos.podam.api.RandomDataProviderStrategy) podamFactory.getStrategy();
+        // Default to STRING for TemplateStructure to maintain backward compatibility
+        // CHAT-specific tests will explicitly override this
+        strategy.addOrReplaceTypeManufacturer(TemplateStructure.class,
+                new uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer<>() {
+                    @Override
+                    public TemplateStructure getType(uk.co.jemos.podam.api.DataProviderStrategy dataProviderStrategy,
+                            uk.co.jemos.podam.api.AttributeMetadata attributeMetadata,
+                            uk.co.jemos.podam.common.ManufacturingContext manufacturingContext) {
+                        return TemplateStructure.STRING;
+                    }
+                });
+        return podamFactory;
+    }
 
     private String baseURI;
     private ClientSupport client;
@@ -2477,10 +2494,13 @@ class PromptResourceTest {
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
+            // Valid JSON array template
+            String chatTemplate = "[{\"role\": \"system\", \"content\": \"You are a helpful assistant.\"}, {\"role\": \"user\", \"content\": \"Hello {{name}}!\"}]";
+
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
-                    .template(null)
+                    .template(chatTemplate)
                     .build();
 
             var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.CHAT);
@@ -2644,7 +2664,8 @@ class PromptResourceTest {
                     .changeDescription("First version")
                     .build();
 
-            createPromptVersion(new CreatePromptVersion(prompt1.name(), promptVersion1, null), API_KEY,
+            createPromptVersion(new CreatePromptVersion(prompt1.name(), promptVersion1, null),
+                    API_KEY,
                     TEST_WORKSPACE);
 
             // Create second version
