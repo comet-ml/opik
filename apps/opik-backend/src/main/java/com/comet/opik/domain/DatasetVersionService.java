@@ -188,9 +188,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Calculate diff statistics
             DiffStatistics diffStats;
             if (previousVersion.isPresent()) {
-                var previousItems = datasetItemDAO.getVersionedItemsByIds(
-                        currentItems.stream().map(DatasetItem::id).collect(java.util.stream.Collectors.toSet()),
-                        previousVersion.get().id())
+                var previousItems = datasetItemDAO.getAllVersionedItems(datasetId, previousVersion.get().id())
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.USER_NAME, userName)
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))

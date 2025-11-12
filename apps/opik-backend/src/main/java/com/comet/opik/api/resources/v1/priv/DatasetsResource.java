@@ -372,24 +372,24 @@ public class DatasetsResource {
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info(
+                "Finding dataset items by id '{}', version '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
+                id, version, page, size, filters, workspaceId);
 
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(id)
                 .experimentIds(Set.of()) // Empty set for regular dataset items
-                .versionHashOrTag(version)
                 .filters(queryFilters)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .build();
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info(
-                "Finding dataset items by id '{}', version '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
-                id, version, page, size, filters, workspaceId);
-
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria, version)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,
                 datasetItemPage.content().size(), page, size, workspaceId);
 
@@ -609,7 +609,7 @@ public class DatasetsResource {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}' on workspaceId '{}'",
                 datasetItemSearchCriteria, page, size, workspaceId);
 
-        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria, null)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
                     if (metadata.cannotUseDynamicSorting()) {

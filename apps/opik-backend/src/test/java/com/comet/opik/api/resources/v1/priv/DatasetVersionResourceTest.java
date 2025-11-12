@@ -241,9 +241,8 @@ class DatasetVersionResourceTest {
             assertThat(version.changeDescription()).isEqualTo(versionCreate.changeDescription());
             assertThat(version.createdBy()).isEqualTo(USER);
             assertThat(version.createdAt()).isNotNull();
-            // TODO OPIK-3015: Assert on actual item counts once snapshot creation is implemented
-            assertThat(version.itemsTotal()).isEqualTo(0);
-            assertThat(version.itemsAdded()).isEqualTo(0);
+            assertThat(version.itemsCount()).isEqualTo(3);
+            assertThat(version.itemsAdded()).isEqualTo(3);
             assertThat(version.itemsModified()).isEqualTo(0);
             assertThat(version.itemsDeleted()).isEqualTo(0);
 
@@ -684,6 +683,11 @@ class DatasetVersionResourceTest {
             assertThat(version1.itemsCount()).isEqualTo(3);
             assertThat(version1.itemsAdded()).isEqualTo(3);
 
+            // Get created items to obtain their IDs
+            var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            var createdItems = createdItemsPage.content();
+
             // When - Add 2 new items and delete 1 item
             var newItems = generateDatasetItems(2);
             var batch2 = DatasetItemBatch.builder()
@@ -693,7 +697,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
             // Delete first item
-            var itemToDelete = originalItems.get(0);
+            var itemToDelete = createdItems.get(0);
             deleteDatasetItem(datasetId, itemToDelete.id());
 
             // Commit second version
@@ -720,15 +724,15 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Content-based hash is deterministic")
-        void commitVersion__whenSameContent__thenGenerateSameHash() {
+        @DisplayName("Success: UUID-based hash allows same content in different versions")
+        void commitVersion__whenSameContent__thenGenerateUniqueHash() {
             // Given - Create two datasets with identical items
             var dataset1Id = createDataset(UUID.randomUUID().toString());
             var dataset2Id = createDataset(UUID.randomUUID().toString());
 
             // Create identical items for both datasets
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .id(UUID.randomUUID())
+                    .id(null)
                     .data(Map.of("key", JsonUtils.getJsonNodeFromString("\"value\"")))
                     .build();
 
@@ -761,8 +765,9 @@ class DatasetVersionResourceTest {
                     API_KEY,
                     TEST_WORKSPACE);
 
-            // Then - Verify both have the same hash (deterministic)
-            assertThat(version1.versionHash()).isEqualTo(version2.versionHash());
+            // Then - Verify both have different hashes (UUID-based, not content-based)
+            // This allows restoring versions with identical content
+            assertThat(version1.versionHash()).isNotEqualTo(version2.versionHash());
         }
 
         @Test

@@ -14,8 +14,6 @@ public record DatasetItemSearchCriteria(
         @NonNull UUID datasetId,
         @NonNull Set<UUID> experimentIds,
         @NonNull EntityType entityType,
-        String versionHashOrTag,
-        UUID versionId,
         List<? extends Filter> filters,
         List<SortingField> sortingFields,
         String search,

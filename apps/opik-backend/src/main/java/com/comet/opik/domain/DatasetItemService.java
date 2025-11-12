@@ -25,6 +25,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -60,7 +61,8 @@ public interface DatasetItemService {
 
     Mono<Void> delete(List<UUID> ids);
 
-    Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
+    Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria,
+            String versionHashOrTag);
 
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
@@ -372,31 +374,33 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(
-            int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
-                datasetItemSearchCriteria, page, size);
+            int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria,
+            String versionHashOrTag) {
 
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        // Resolve version hash/tag to version ID if provided
-        var criteria = datasetItemSearchCriteria;
-        if (datasetItemSearchCriteria.versionHashOrTag() != null
-                && !datasetItemSearchCriteria.versionHashOrTag().isBlank()) {
-            UUID versionId = versionServiceProvider.get().resolveVersionId(
-                    datasetItemSearchCriteria.datasetId(),
-                    datasetItemSearchCriteria.versionHashOrTag());
-            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
-                    datasetItemSearchCriteria.versionHashOrTag(),
-                    versionId,
-                    datasetItemSearchCriteria.datasetId());
-            criteria = datasetItemSearchCriteria.toBuilder()
-                    .versionId(versionId)
-                    .build();
-        }
+        if (StringUtils.isNotBlank(versionHashOrTag)) {
+            // Fetch versioned (immutable) items from dataset_item_versions table
+            log.info("Finding versioned dataset items by '{}', version '{}', page '{}', size '{}'",
+                    datasetItemSearchCriteria, versionHashOrTag, page, size);
 
-        return dao.getItems(criteria, page, size)
-                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+            // Resolve version hash/tag to version ID
+            UUID versionId = versionServiceProvider.get().resolveVersionId(datasetItemSearchCriteria.datasetId(),
+                    versionHashOrTag);
+            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
+                    versionHashOrTag, versionId, datasetItemSearchCriteria.datasetId());
+
+            return dao.getVersionedItems(datasetItemSearchCriteria, page, size, versionId)
+                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        } else {
+            // Fetch draft (current) items from dataset_items table
+            log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
+                    datasetItemSearchCriteria, page, size);
+
+            return dao.getItems(datasetItemSearchCriteria, page, size)
+                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        }
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
