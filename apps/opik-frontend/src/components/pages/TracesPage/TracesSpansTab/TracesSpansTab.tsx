@@ -421,10 +421,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
-  const clearRowSelection = useCallback(() => {
-    setRowSelection({});
-  }, []);
-
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -923,7 +919,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
-            onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <MetricDateRangeSelect

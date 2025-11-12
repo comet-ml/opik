@@ -23,7 +23,6 @@ type ThreadsActionsPanelProps = {
   columnsToExport: string[];
   projectName: string;
   projectId: string;
-  onClearSelection?: () => void;
 };
 
 const ThreadsActionsPanel: React.FunctionComponent<
@@ -34,7 +33,6 @@ const ThreadsActionsPanel: React.FunctionComponent<
   columnsToExport,
   projectName,
   projectId,
-  onClearSelection,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
@@ -102,7 +100,6 @@ const ThreadsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         projectId={projectId}
         type={TAG_ENTITY_TYPE.threads}
-        onSuccess={onClearSelection}
       />
       <RunEvaluationDialog
         key={`evaluation-${resetKeyRef.current}`}

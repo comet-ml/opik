@@ -78,7 +78,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         span: {
           workspace_name: workspaceName,
           project_id: projectId,
-          trace_id: (rows[0] as Span).trace_id,
+          trace_id: "00000000-0000-0000-0000-000000000000", // Placeholder - not used by backend batch update, just to bypass validation
           tags: [newTag],
         },
         mergeTags: true,

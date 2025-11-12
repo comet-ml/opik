@@ -629,7 +629,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             getDataForExport={getDataForExport}
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
-            onClearSelection={() => setRowSelection({})}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <MetricDateRangeSelect
