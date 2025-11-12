@@ -33,6 +33,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
@@ -66,6 +67,7 @@ public class OnlineScoringEngine {
     private static final Pattern MEDIA_PLACEHOLDER_PATTERN = Pattern.compile(
             "<<<(image|video)>>>(.*?)<<</(image|video)>>>",
             Pattern.DOTALL);
+    private static final Pattern PROVIDER_FILE_ID_PATTERN = Pattern.compile("^file-[A-Za-z0-9_-]+$");
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -407,7 +409,7 @@ public class OnlineScoringEngine {
 
         var fileId = stringValue(fileMap.get("file_id"));
         if (StringUtils.isNotBlank(fileId)) {
-            return buildVideoFromValue(fileId, stringValue(fileMap.get("format")));
+            return buildVideoFromProviderFile(fileId, stringValue(fileMap.get("format")));
         }
 
         var fileData = stringValue(fileMap.get("file_data"));
@@ -421,6 +423,10 @@ public class OnlineScoringEngine {
     private Content buildVideoFromValue(String value, String mimeType) {
         if (StringUtils.isBlank(value)) {
             return null;
+        }
+
+        if (isProviderFileReference(value)) {
+            return buildVideoFromProviderFile(value, mimeType);
         }
 
         if (value.startsWith("data:video/")) {
@@ -465,6 +471,26 @@ public class OnlineScoringEngine {
             return VideoContent.from(base64Data, safeMimeType);
         } catch (IllegalArgumentException exception) {
             log.warn("Failed to build video content from base64 payload", exception);
+            return null;
+        }
+    }
+
+    private boolean isProviderFileReference(String value) {
+        if (StringUtils.isBlank(value)) {
+            return false;
+        }
+        return PROVIDER_FILE_ID_PATTERN.matcher(value.trim()).matches();
+    }
+
+    private Content buildVideoFromProviderFile(String fileId, String mimeType) {
+        try {
+            var videoBuilder = Video.builder().url(URI.create(fileId));
+            if (StringUtils.isNotBlank(mimeType)) {
+                videoBuilder.mimeType(mimeType);
+            }
+            return VideoContent.from(videoBuilder.build());
+        } catch (IllegalArgumentException exception) {
+            log.warn("Failed to build video content from provider file reference: {}", fileId, exception);
             return null;
         }
     }
