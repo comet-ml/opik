@@ -35,8 +35,8 @@ public interface DatasetVersionService {
     String LATEST_TAG = "latest";
 
     // Error message templates
-    String ERROR_VERSION_HASH_EXISTS = "Version already exists for dataset hash='%s' datasetId='%s'";
-    String ERROR_TAG_EXISTS = "Tag already exists for this dataset, tag='%s'";
+    String ERROR_VERSION_HASH_EXISTS = "Version hash collision detected for dataset '%s' - please retry";
+    String ERROR_TAG_EXISTS = "Tag '%s' already exists for this dataset";
     String ERROR_CANNOT_DELETE_LATEST_TAG = "Cannot delete '%s' tag - it is automatically managed";
     String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash not found hash='%s' datasetId='%s'";
     String ERROR_VERSION_NOT_FOUND = "Version not found for dataset hash='%s' datasetId='%s'";
@@ -46,7 +46,9 @@ public interface DatasetVersionService {
      * <p>
      * This operation:
      * <ul>
-     *   <li>Generates a content-based hash for the version (placeholder until OPIK-3015)</li>
+     *   <li>Generates a UUID-based hash for the version (last 8 chars of UUID)</li>
+     *   <li>Creates immutable snapshot of current dataset items in ClickHouse</li>
+     *   <li>Calculates diff statistics compared to previous version</li>
      *   <li>Stores version metadata including change statistics</li>
      *   <li>Automatically assigns the 'latest' tag to the new version</li>
      *   <li>Removes the 'latest' tag from the previous version if exists</li>
@@ -57,7 +59,6 @@ public interface DatasetVersionService {
      * @param request version creation details including optional tag, change description, and metadata
      * @return the created dataset version with generated hash, statistics, and assigned tags
      * @throws ConflictException if the custom tag already exists for this dataset
-     * @throws ConflictException if the version hash already exists (deduplication)
      */
     DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate request);
 
@@ -153,7 +154,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // Fetch current dataset items from ClickHouse to calculate hash and create snapshot
+        // Generate version ID and hash (UUID-based, like prompt versions)
+        UUID versionId = idGenerator.generateId();
+        String versionHash = CommitUtils.getCommit(versionId);
+        log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
+
+        // Fetch current dataset items from ClickHouse to create snapshot
         var fetchedItems = datasetItemDAO.getItems(datasetId, Integer.MAX_VALUE, null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, userName)
@@ -170,10 +176,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             currentItems = fetchedItems;
         }
 
-        // Calculate content-based hash from current items
-        final String versionHash = calculateContentBasedHash(currentItems);
-        log.info("Calculated content-based hash '{}' for dataset '{}' with '{}' items",
-                versionHash, datasetId, currentItems.size());
+        log.info("Fetched '{}' items for dataset '{}' version '{}'",
+                currentItems.size(), datasetId, versionHash);
 
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
@@ -204,8 +208,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}'",
                     datasetId, diffStats.itemsAdded, diffStats.itemsModified, diffStats.itemsDeleted);
 
-            // Create new version
-            var versionId = idGenerator.generateId();
+            // Create new version (versionId and versionHash already generated above)
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
                     diffStats.itemsCount, diffStats.itemsAdded, diffStats.itemsModified, diffStats.itemsDeleted,
@@ -215,7 +218,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 datasetVersionDAO.insert(version, workspaceId);
                 return version;
             }).withError(() -> new EntityAlreadyExistsException(
-                    new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(versionHash, datasetId)))));
+                    new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
             log.info("Created version with hash '{}' for dataset '{}'", versionHash, datasetId);
 
@@ -374,55 +377,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId));
         });
-    }
-
-    /**
-     * Calculate content-based hash from dataset items for version identification.
-     * Uses SHA-256 hash of sorted item IDs and data to ensure deterministic hashing.
-     */
-    private String calculateContentBasedHash(List<DatasetItem> items) {
-        try {
-            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-
-            // Sort items by ID for deterministic hashing
-            var sortedItems = items.stream()
-                    .sorted(java.util.Comparator.comparing(DatasetItem::id))
-                    .toList();
-
-            // Build content string from sorted items
-            for (var item : sortedItems) {
-                // Add item ID
-                digest.update(item.id().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-
-                // Add data map (sorted by keys for consistency)
-                if (item.data() != null) {
-                    var sortedKeys = item.data().keySet().stream().sorted().toList();
-                    for (String key : sortedKeys) {
-                        digest.update(key.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                        var value = item.data().get(key);
-                        if (value != null) {
-                            digest.update(value.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                        }
-                    }
-                }
-            }
-
-            byte[] hashBytes = digest.digest();
-
-            // Convert to hex string (first 16 chars for display)
-            StringBuilder hexString = new StringBuilder();
-            for (int i = 0; i < 8; i++) {
-                String hex = Integer.toHexString(0xff & hashBytes[i]);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-
-            return hexString.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
-        }
     }
 
     /**
