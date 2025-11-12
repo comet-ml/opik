@@ -35,8 +35,8 @@ export const parseDateRangeFromState = (
 
     const parsedRange = { from, to };
     
-    // Allow "alltime" preset even if it's outside the min/max range
-    // because when "alltime" is selected, we don't actually use the date range for filtering
+    // Note: "alltime" is allowed during parsing here, but at the UI level (e.g., MetricsTab.tsx),
+    // it is immediately replaced with DEFAULT_METRICS_DATE_RANGE. Thus, "alltime" is never actually used for filtering.
     const preset = getRangePreset(parsedRange);
     if (preset === "alltime") {
       return parsedRange;
