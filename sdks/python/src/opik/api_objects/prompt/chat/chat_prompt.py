@@ -104,17 +104,26 @@ class ChatPrompt(base_prompt.BasePrompt):
     def format(
         self,
         variables: Dict[str, Any],
+        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
     ) -> List[Dict[str, prompt_types.MessageContent]]:
         """
         Renders the chat template with provided variables.
 
         Args:
             variables: Dictionary of variables to substitute in the template.
+            supported_modalities: Optional dictionary specifying which modalities are supported
+                by the target model. Keys are modality names ("vision" or "video") and values
+                are booleans indicating support. When a modality is not supported (False or not
+                specified), structured content parts (e.g., images, videos) are replaced with
+                text placeholders like "<<<image>>>" or "<<<video>>>". When supported (True),
+                the structured content is preserved as-is. If None, all modalities default to
+                unsupported. Example: {"vision": True, "video": False}
 
         Returns:
-            A list of rendered message dictionaries.
+            A list of rendered message dictionaries with variables substituted and multimodal
+            content either preserved or replaced with placeholders based on supported_modalities.
         """
-        return self._chat_template.format(variables=variables)
+        return self._chat_template.format(variables=variables, supported_modalities=supported_modalities)
 
     @override
     def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
