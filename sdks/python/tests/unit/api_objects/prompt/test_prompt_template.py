@@ -75,6 +75,7 @@ def test_prompt__format__some_placeholders_dont_have_corresponding_format_argume
     assert exc_info.value.prompt_placeholders == set(["name", "city"])
     assert exc_info.value.symmetric_difference == set(["city", "nemesis_name"])
 
+
 def test_prompt__format__none_values_render_as_empty_strings() -> None:
     PROMPT_TEMPLATE = "Primary: {{primary}} Secondary: {{secondary}}"
 
