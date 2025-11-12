@@ -275,9 +275,6 @@ public class OpenTelemetryMapper {
      * @return the extracted timestamp as a long (milliseconds since Unix epoch)
      */
     private long extractTimestampFromUUIDv7(UUID uuid) {
-        // Get the 64 most significant bits.
-        long msb = uuid.getMostSignificantBits();
-        // The top 48 bits represent the timestamp.
-        return msb >>> 16;
+        return IdGenerator.extractTimestampFromUUIDv7(uuid).toEpochMilli();
     }
 }

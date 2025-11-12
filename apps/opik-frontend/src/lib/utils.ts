@@ -49,9 +49,22 @@ export const isStringMarkdown = (string: unknown): boolean => {
     return false;
   }
 
-  // Return false for very short strings that are unlikely to be markdown
   if (string.length < 3) {
     return false;
+  }
+
+  // Check if it's JSON first - JSON should not be treated as markdown
+  try {
+    const trimmed = string.trim();
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      JSON.parse(trimmed);
+      return false;
+    }
+  } catch {
+    // Not valid JSON, continue to markdown checks
   }
 
   // More comprehensive regex patterns for markdown detection
@@ -97,7 +110,6 @@ export const isStringMarkdown = (string: unknown): boolean => {
     /^\[\^.+?]:/m, // footnote definitions
   ];
 
-  // Check for markdown patterns
   return markdownPatterns.some((pattern) => pattern.test(string));
 };
 
@@ -238,3 +250,9 @@ export const updateTextAreaHeight = (
 
 export const capitalizeFirstLetter = (str?: string | null) =>
   str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
+
+export const isMac =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toUpperCase().includes("MAC");
+
+export const modifierKey = isMac ? "meta" : "ctrl";

@@ -452,6 +452,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         max_trials: int = 10,
+        optimization_id: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -461,11 +462,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
-            max_trials: Number of trials for Bayesian Optimization (default: 10)
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
             project_name: Opik project name for logging traces (default: "Optimization")
+            max_trials: Number of trials for Bayesian Optimization (default: 10)
+            optimization_id: Optional ID for the Opik optimization run; when provided it
+                must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -483,6 +486,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
         except Exception:

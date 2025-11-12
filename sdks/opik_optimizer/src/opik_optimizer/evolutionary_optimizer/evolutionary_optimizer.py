@@ -98,7 +98,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_DIVERSITY_THRESHOLD = 0.7
     DEFAULT_RESTART_THRESHOLD = 0.01
     DEFAULT_RESTART_GENERATIONS = 3
-    DEFAULT_CACHE_SIZE = 1000
     DEFAULT_EARLY_STOPPING_GENERATIONS = 5
     DEFAULT_ENABLE_MOO = True
     DEFAULT_ENABLE_LLM_CROSSOVER = True
@@ -515,6 +514,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         *args: Any,
@@ -522,15 +522,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """
         Args:
-            prompt: The prompt to optimize
-            dataset: The dataset to use for evaluation
-            metric: Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`
-            experiment_config: Optional experiment configuration
-            n_samples: Optional number of samples to use
-            auto_continue: Whether to automatically continue optimization
-            agent_class: Optional agent class to use
-            project_name: Opik project name for logging traces (default: "Optimization")
-            mcp_config: MCP tool calling configuration (default: None)
+            prompt: The prompt to optimize.
+            dataset: Dataset used to evaluate each candidate prompt.
+            metric: Objective function receiving `(dataset_item, llm_output)`.
+            experiment_config: Optional experiment configuration metadata.
+            n_samples: Optional number of dataset items to evaluate per prompt.
+            auto_continue: Whether to continue automatically after each generation.
+            agent_class: Optional agent implementation for executing prompts.
+            project_name: Opik project name for logging traces (default: "Optimization").
+            optimization_id: Optional ID for the Opik optimization run; when provided it
+                must be a valid UUIDv7 string.
+            max_trials: Maximum number of prompt evaluations allowed.
+            mcp_config: MCP tool-calling configuration (default: None).
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
@@ -549,6 +552,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = opik_optimization_run.id
         except Exception as e:

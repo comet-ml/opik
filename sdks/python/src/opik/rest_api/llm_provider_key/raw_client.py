@@ -122,7 +122,7 @@ class RawLlmProviderKeyClient:
         name : typing.Optional[str]
 
         provider_name : typing.Optional[str]
-            Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). Should not be set for standard providers (OpenAI, Anthropic, etc.).
+            Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
@@ -433,7 +433,7 @@ class AsyncRawLlmProviderKeyClient:
         name : typing.Optional[str]
 
         provider_name : typing.Optional[str]
-            Provider name - to uniquely identify custom providers (e.g., 'ollama', 'vllm'). Should not be set for standard providers (OpenAI, Anthropic, etc.).
+            Provider name - required for custom LLM providers to uniquely identify them (e.g., 'ollama', 'vllm'). Must not be blank for custom providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). This requirement is conditional and validation is enforced programmatically.
 
         headers : typing.Optional[typing.Dict[str, str]]
 
