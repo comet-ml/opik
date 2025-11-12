@@ -36,38 +36,33 @@ def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
 def get_experiment_test_cases(
     client: opik_client.Opik,
     experiment_id: str,
-    dataset_id: str,
     scoring_key_mapping: Optional[ScoringKeyMappingType],
 ) -> List[test_case.TestCase]:
-    test_cases = []
-    page = 1
+    experiment_ = client.get_experiment_by_id(id=experiment_id)
+    experiment_items = experiment_.get_items()
 
-    while True:
-        experiment_items_page = (
-            client._rest_client.datasets.find_dataset_items_with_experiment_items(
-                id=dataset_id, experiment_ids=f'["{experiment_id}"]', page=page
+    # Fetch dataset items to get input data for bulk-uploaded experiment items
+    dataset = client.get_dataset(name=experiment_.dataset_name)
+    dataset_items_by_id = {item["id"]: item for item in dataset.get_items()}
+
+    test_cases = []
+    for item in experiment_items:
+        dataset_item_data = item.dataset_item_data
+        if dataset_item_data is None:
+            dataset_item_data = dataset_items_by_id.get(item.dataset_item_id)
+
+        test_cases.append(
+            test_case.TestCase(
+                trace_id=item.trace_id,
+                dataset_item_id=item.dataset_item_id,
+                task_output=item.evaluation_task_output,
+                scoring_inputs=arguments_helpers.create_scoring_inputs(
+                    dataset_item=dataset_item_data,
+                    task_output=item.evaluation_task_output,
+                    scoring_key_mapping=scoring_key_mapping,
+                ),
             )
         )
-        if len(experiment_items_page.content) == 0:
-            break
-
-        for item in experiment_items_page.content:
-            experiment_item = item.experiment_items[0]
-
-            test_cases += [
-                test_case.TestCase(
-                    trace_id=experiment_item.trace_id,
-                    dataset_item_id=experiment_item.dataset_item_id,
-                    task_output=experiment_item.output,
-                    scoring_inputs=arguments_helpers.create_scoring_inputs(
-                        dataset_item=experiment_item.input,
-                        task_output=experiment_item.output,
-                        scoring_key_mapping=scoring_key_mapping,
-                    ),
-                )
-            ]
-
-        page += 1
 
     return test_cases
 

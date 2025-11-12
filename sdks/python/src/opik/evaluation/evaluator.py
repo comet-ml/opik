@@ -283,7 +283,6 @@ def evaluate_experiment(
     test_cases = rest_operations.get_experiment_test_cases(
         client=client,
         experiment_id=experiment.id,
-        dataset_id=experiment.dataset_id,
         scoring_key_mapping=scoring_key_mapping,
     )
     first_trace_id = test_cases[0].trace_id
