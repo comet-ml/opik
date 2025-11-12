@@ -49,7 +49,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.Project.Configuration;
 import static com.comet.opik.api.ProjectStats.ProjectStatItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -105,7 +104,7 @@ public interface ProjectService {
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
 
-    void updateConfiguration(UUID projectId, Configuration configuration);
+    Mono<Project> getOrFail(@NonNull UUID id);
 
     static Map<String, Project> groupByName(List<Project> projects) {
         return projects.stream().collect(Collectors.toMap(
@@ -221,8 +220,21 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return Optional.of(get(id, workspaceId))
-                .flatMap(this::verifyVisibility)
+                .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
                 .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id));
+    }
+
+    @Override
+    public Mono<Project> getOrFail(@NonNull UUID id) {
+        return Mono.deferContextual(contextView -> {
+            String workspaceId = contextView.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = contextView.get(RequestContext.VISIBILITY);
+
+            return Mono.fromCallable(() -> Optional.of(get(id, workspaceId))
+                    .flatMap(project -> verifyVisibility(project, visibility))
+                    .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id)))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
     }
 
     @Override
@@ -264,14 +276,6 @@ class ProjectServiceImpl implements ProjectService {
                                 .map(projectId -> getStats(projectId, projectStats.get(projectId)))
                                 .toList())
                 .build();
-    }
-
-    @Override
-    public void updateConfiguration(@NonNull UUID projectId, @NonNull Configuration configuration) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-
-        Project project = get(projectId);
     }
 
     private ProjectStatsSummaryItem getStats(UUID projectId, Map<String, Object> projectStats) {
@@ -548,15 +552,14 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public Project retrieveByName(@NonNull String projectName) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        var userName = requestContext.get().getUserName();
 
-        return template.inTransaction(READ_ONLY, handle -> {
-
+        Optional<Project> projects = template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(ProjectDAO.class);
-
             return repository.findByNames(workspaceId, List.of(projectName))
-                    .stream();
-        }).findFirst()
+                    .stream().findFirst();
+        });
+
+        return projects
                 .map(project -> {
                     Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                             .nonTransaction(connection -> {
@@ -635,8 +638,8 @@ class ProjectServiceImpl implements ProjectService {
         });
     }
 
-    private Optional<Project> verifyVisibility(@NonNull Project project) {
-        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
+    private Optional<Project> verifyVisibility(@NonNull Project project, Visibility visibility) {
+        boolean publicOnly = Optional.ofNullable(visibility)
                 .map(v -> v == Visibility.PUBLIC)
                 .orElse(false);
 
