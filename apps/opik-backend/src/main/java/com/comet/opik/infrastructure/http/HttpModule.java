@@ -16,6 +16,7 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Override
     protected void configure() {
-        CorsFactory.registerFilterIfEnabled(configuration(), environment());
+        // Use handler-based CORS (CrossOriginHandler). Jetty filter is deprecated.
+        CorsFactory.registerHandlerIfEnabled(configuration(), environment());
     }
 }

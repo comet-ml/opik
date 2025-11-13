@@ -44,11 +44,11 @@ setup(
         "rapidfuzz>=3.0.0,<4.0.0",
         # LiteLLM dependency comments:
         # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
-        # - Cap at 1.77.4: version 1.77.5+ removes trace_id/parent_span_id passthrough
-        #   Can be removed after this PR is released: https://github.com/BerriAI/litellm/pull/15529
-        # - Cap at 1.77.1: version 1.77.2+ introduces C++ compiler dependency. It's already fixed in litellm
-        #   but we can't remove the cap because we still have to cap at 1.77.4.
-        "litellm<=1.77.1,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5",
+        # - Exclude versions 1.77.2-1.77.4: introduce C++ compiler dependency (madoka), fixed in 1.77.5
+        #   See: https://github.com/BerriAI/litellm/issues/14762
+        # - Exclude versions 1.77.5-1.79.1: remove trace_id/parent_span_id passthrough, fixed in 1.79.2+
+        #   See: https://github.com/BerriAI/litellm/pull/15529
+        "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",

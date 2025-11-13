@@ -156,6 +156,7 @@ class GepaOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
@@ -168,6 +169,8 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
+        *args: Any,
+        **kwargs: Any,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
@@ -192,6 +195,8 @@ class GepaOptimizer(BaseOptimizer):
             display_progress_bar: Display progress bar (default: False)
             seed: Random seed for reproducibility (default: 42)
             raise_on_exception: Raise exceptions instead of continuing (default: True)
+            optimization_id: Optional ID for the Opik optimization run; when provided it
+                must be a valid UUIDv7 string.
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -257,6 +262,7 @@ class GepaOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             ) as optimization:
                 try:
                     opt_id = optimization.id if optimization is not None else None

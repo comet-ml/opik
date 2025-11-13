@@ -48,12 +48,28 @@ class TestChatPromptTemplate:
         rendered = _render_content(
             content,
             variables={"image_url": "https://example.com/cat.jpg"},
-            supported_modalities={"vision": True},
+            supported_modalities={"vision": True, "video": True},
         )
 
         assert isinstance(rendered, list)
         assert rendered[0]["text"] == "Describe this image"
         assert rendered[1]["image_url"]["url"] == "https://example.com/cat.jpg"
+
+    def test_preserves_structured_content_for_video_models(self) -> None:
+        content = [
+            {"type": "text", "text": "Watch this video"},
+            {"type": "video_url", "video_url": {"url": "{{video_url}}"}},
+        ]
+
+        rendered = _render_content(
+            content,
+            variables={"video_url": "https://example.com/clip.mp4"},
+            supported_modalities={"vision": True, "video": True},
+        )
+
+        assert isinstance(rendered, list)
+        assert rendered[0]["text"] == "Watch this video"
+        assert rendered[1]["video_url"]["url"] == "https://example.com/clip.mp4"
 
     @pytest.mark.parametrize("detail", ["low", "high"])
     def test_includes_detail_field_when_present(self, detail: str) -> None:
@@ -104,7 +120,7 @@ class TestChatPromptTemplate:
         rendered = _render_content(
             content,
             variables={},
-            supported_modalities={"vision": False},
+            supported_modalities={"vision": False, "video": False},
         )
 
         assert isinstance(rendered, str)
@@ -112,6 +128,22 @@ class TestChatPromptTemplate:
         assert "Second" in rendered
         assert "https://example.com/one.png" in rendered
         assert rendered.count("<<<image>>>") == 1
+
+    def test_flattens_structured_video_when_video_disabled(self) -> None:
+        content = [
+            {"type": "text", "text": "Context"},
+            {"type": "video_url", "video_url": {"url": "https://example.com/clip.mp4"}},
+        ]
+
+        rendered = _render_content(
+            content,
+            variables={},
+            supported_modalities={"vision": True, "video": False},
+        )
+
+        assert isinstance(rendered, str)
+        assert "Context" in rendered
+        assert "<<<video>>>" in rendered
 
     def test_flattened_placeholder_truncates_large_base64(self) -> None:
         random_payload = "".join(
@@ -175,7 +207,7 @@ class TestChatPromptTemplate:
         rendered = _render_content(
             [custom_part],
             variables={"thumb_url": "https://example.com/thumb.png"},
-            supported_modalities={"vision": True},
+            supported_modalities={"vision": True, "video": True},
             registry=registry,
         )
 
@@ -185,7 +217,7 @@ class TestChatPromptTemplate:
         flattened = _render_content(
             [custom_part],
             variables={"thumb_url": "https://example.com/thumb.png"},
-            supported_modalities={"vision": False},
+            supported_modalities={"vision": False, "video": False},
             registry=registry,
         )
 
@@ -206,3 +238,18 @@ class TestChatPromptTemplate:
         )
 
         assert template.required_modalities() == {"vision"}
+
+    def test_required_modalities_detects_video(self) -> None:
+        template = ChatPromptTemplate(
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Summarize the video"},
+                        {"type": "video_url", "video_url": {"url": "{{video_url}}"}},
+                    ],
+                }
+            ]
+        )
+
+        assert template.required_modalities() == {"video"}

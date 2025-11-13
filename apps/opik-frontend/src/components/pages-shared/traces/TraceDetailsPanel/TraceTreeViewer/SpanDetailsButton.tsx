@@ -22,6 +22,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 const OPTIONS: DropdownOption<TREE_DATABLOCK_TYPE>[] = [
   { label: "Duration", value: TREE_DATABLOCK_TYPE.DURATION },
   { label: "Number of tokens", value: TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS },
+  { label: "Tokens breakdown", value: TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN },
   { label: "Estimated cost", value: TREE_DATABLOCK_TYPE.ESTIMATED_COST },
   { label: "Number of scores", value: TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES },
   {

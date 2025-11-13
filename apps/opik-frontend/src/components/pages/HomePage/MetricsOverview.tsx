@@ -97,8 +97,8 @@ type MetricsOverviewProps = {
   projects: Project[];
   totalProjects: number;
   projectsPending: boolean;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
 };
 
 export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
