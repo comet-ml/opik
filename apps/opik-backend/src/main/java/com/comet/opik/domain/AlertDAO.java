@@ -59,6 +59,7 @@ interface AlertDAO {
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
                     a.last_updated_by as last_updated_by,
+                    a.workspace_id as workspace_id,
                     w.id as webhook_id,
                     w.url as webhook_url,
                     w.secret_token as webhook_secret_token,
@@ -164,6 +165,7 @@ interface AlertDAO {
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
                     a.last_updated_by as last_updated_by,
+                    a.workspace_id as workspace_id,
                     w.id as webhook_id,
                     w.url as webhook_url,
                     w.secret_token as webhook_secret_token,
@@ -174,12 +176,12 @@ interface AlertDAO {
                     w.last_updated_by as webhook_last_updated_by
                 FROM alerts a
                 JOIN webhooks w ON a.webhook_id = w.id
-                WHERE a.workspace_id = :workspaceId AND a.enabled = true
+                WHERE <if(workspaceId)> a.workspace_id = :workspaceId AND <endif> a.enabled = true
             ),
             trigger_ids AS (
                 SELECT id
                 FROM alert_triggers
-                WHERE alert_id IN (SELECT id FROM target_alerts) AND event_type = :eventType
+                WHERE alert_id IN (SELECT id FROM target_alerts) AND event_type IN (<eventTypes>)
             ),
             trigger_configs AS (
                 SELECT
@@ -232,8 +234,8 @@ interface AlertDAO {
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    List<Alert> findByWorkspaceAndEventType(@Bind("workspaceId") String workspaceId,
-            @Bind("eventType") String eventType);
+    List<Alert> findByWorkspaceAndEventTypes(@Define("workspaceId") @Bind("workspaceId") String workspaceId,
+            @BindList("eventTypes") Set<String> eventTypes);
 
     @SqlQuery("""
              WITH target_alerts AS (
@@ -330,6 +332,7 @@ interface AlertDAO {
                     .createdBy(rs.getString("created_by"))
                     .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))
+                    .workspaceId(rs.getString("workspace_id"))
                     .build();
         }
 
