@@ -7,11 +7,10 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { Tag } from "@/components/ui/tag";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { formatNumericData } from "@/lib/utils";
 import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
+import NavigationTag from "@/components/shared/NavigationTag";
 
 type CompareTrialsDetailsProps = {
   optimization?: Optimization;
@@ -105,12 +104,16 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
         <h1 className="comet-title-l truncate break-words">{title}</h1>
       </div>
       <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && <DateTag date={experiment?.created_at} />}
-        <ResourceLink
+        {!isCompare && (
+          <DateTag
+            date={experiment?.created_at}
+            resource={RESOURCE_TYPE.trial}
+          />
+        )}
+        <NavigationTag
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
           resource={RESOURCE_TYPE.dataset}
-          asTag
         />
         {scores.map((score) => (
           <FeedbackScoreTag

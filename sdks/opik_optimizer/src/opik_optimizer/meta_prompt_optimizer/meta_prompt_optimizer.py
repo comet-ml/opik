@@ -1,15 +1,11 @@
 import copy
 import json
 import logging
-import os
 import textwrap
 from typing import Any, cast
 from collections.abc import Callable
 
-import litellm
 import opik
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset, opik_context
 from opik.environment import get_tqdm_for_current_environment
 
@@ -32,10 +28,6 @@ from ..mcp_utils.mcp_workflow import (
 from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
 
 tqdm = get_tqdm_for_current_environment()
-
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -363,6 +355,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
@@ -393,6 +386,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             agent_class: Custom agent class for prompt execution. If None, uses default
                 LiteLLM-based agent. Must inherit from OptimizableAgent.
             project_name: Opik project name for logging traces and experiments. Default: "Optimization"
+            optimization_id: Optional ID to use when creating the Opik optimization run; when
+                provided it must be a valid UUIDv7 string.
             max_trials: Maximum total number of prompts to evaluate across all rounds.
                 Optimizer stops when this limit is reached.
             mcp_config: Optional MCP (Model Context Protocol) execution configuration for
@@ -453,6 +448,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata={"optimizer": self.__class__.__name__},
+                optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
             logger.debug(f"Created optimization with ID: {optimization.id}")

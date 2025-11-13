@@ -26,8 +26,8 @@ type UseProjectMetricsParams = {
   projectId: string;
   metricName: METRIC_NAME_TYPE;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
 };
@@ -53,8 +53,8 @@ const getProjectMetric = async (
     {
       metric_type: metricName,
       interval,
-      interval_start: intervalStart,
-      interval_end: intervalEnd,
+      ...(intervalStart && { interval_start: intervalStart }),
+      ...(intervalEnd && { interval_end: intervalEnd }),
       trace_filters: traceFilters
         ? processFiltersArray(traceFilters)
         : undefined,

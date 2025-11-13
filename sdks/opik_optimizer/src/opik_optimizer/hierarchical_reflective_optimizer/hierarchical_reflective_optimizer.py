@@ -1,10 +1,6 @@
-import os
 import logging
 
 import opik
-import litellm
-from litellm.caching import Cache
-from litellm.types.caching import LiteLLMCacheType
 from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
@@ -27,10 +23,6 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
-
-# Using disk cache for LLM calls
-disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -403,11 +395,31 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
+        """
+        Optimize a prompt using hierarchical reflective refinement.
+
+        Args:
+            prompt: The chat prompt to optimize.
+            dataset: Dataset containing evaluation examples.
+            metric: Callable that scores `(dataset_item, llm_output)`.
+
+        Optional Arguments:
+            experiment_config: Additional configuration for experiment logging.
+            n_samples: Number of dataset samples to evaluate per prompt (None for all).
+            auto_continue: Whether to continue optimization automatically after each round.
+            agent_class: Optional agent implementation to execute prompt evaluations.
+            project_name: Opik project name for trace logging (default: "Optimization").
+            optimization_id: Optional ID for the Opik optimization run; when provided it must
+                be a valid UUIDv7 string.
+            max_trials: Maximum number of optimization iterations to run.
+            max_retries: Maximum retries allowed for addressing a failure mode.
+        """
         # Reset counters at the start of optimization
         self._reset_counters()
         self._should_stop_optimization = False  # Reset stop flag
@@ -422,6 +434,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
             metadata={"optimizer": self.__class__.__name__},
+            optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
         logger.debug(f"Created optimization with ID: {optimization.id}")

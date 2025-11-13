@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -12,6 +12,8 @@ import {
   useCreatedExperiments,
   useSetCreatedExperiments,
   useClearCreatedExperiments,
+  useIsRunning,
+  useSetIsRunning,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -46,8 +48,9 @@ const useActionButtonActions = ({
 
   const { toast } = useToast();
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [isToStop, setIsToStop] = useState(false);
+  const isRunning = useIsRunning();
+  const setIsRunning = useSetIsRunning();
+  const isToStopRef = useRef(false);
   const createdExperiments = useCreatedExperiments();
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
@@ -61,8 +64,8 @@ const useActionButtonActions = ({
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
-    clearCreatedExperiments(); // Clear experiments when resetting
-  }, [resetOutputMap, clearCreatedExperiments]);
+    clearCreatedExperiments();
+  }, [resetOutputMap, clearCreatedExperiments, setIsRunning]);
 
   const stopAll = useCallback(() => {
     // nothing to stop
@@ -70,11 +73,11 @@ const useActionButtonActions = ({
       return;
     }
 
-    setIsToStop(true);
+    isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
-
     abortControllersRef.current.clear();
-  }, []);
+    setIsRunning(false);
+  }, [setIsRunning]);
 
   const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
@@ -124,7 +127,7 @@ const useActionButtonActions = ({
   const { createCombinations, processCombination } =
     usePromptDatasetItemCombination({
       workspaceName,
-      isToStop,
+      isToStopRef,
       datasetItems,
       datasetName,
       selectedRuleIds,
@@ -135,7 +138,7 @@ const useActionButtonActions = ({
   const runAll = useCallback(async () => {
     resetState();
     setIsRunning(true);
-    clearCreatedExperiments(); // Clear previous experiments when starting a new run
+    clearCreatedExperiments();
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
@@ -148,12 +151,13 @@ const useActionButtonActions = ({
         processCombination(combination, logProcessor),
       () => {
         setIsRunning(false);
-        setIsToStop(false);
+        isToStopRef.current = false;
         abortControllersRef.current.clear();
       },
     );
   }, [
     resetState,
+    setIsRunning,
     clearCreatedExperiments,
     createCombinations,
     processCombination,

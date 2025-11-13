@@ -4,9 +4,9 @@ import last from "lodash/last";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
+  COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
 } from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -41,7 +41,7 @@ interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
   promptId: string;
-  providerKeys: PROVIDER_TYPE[];
+  providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
@@ -128,7 +128,7 @@ const PlaygroundPrompt = ({
   );
 
   const handleUpdateModel = useCallback(
-    (newModel: PROVIDER_MODEL_TYPE, newProvider: PROVIDER_TYPE) => {
+    (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
       updatePrompt(promptId, {
         model: newModel,
         provider: newProvider,
@@ -142,7 +142,7 @@ const PlaygroundPrompt = ({
   );
 
   const handleAddProvider = useCallback(
-    (provider: PROVIDER_TYPE) => {
+    (provider: COMPOSED_PROVIDER_TYPE) => {
       const newModel = modelResolver(model, providerKeys, provider);
 
       if (newModel !== model) {
