@@ -10,6 +10,7 @@ from typing import Any, Callable, Optional, Set, Tuple, Type
 import pydantic
 
 import opik.rest_api.core.datetime_utils as datetime_utils
+from opik.anonymizer import anonymizer
 
 try:
     import numpy as np
@@ -23,6 +24,50 @@ _ENCODER_EXTENSIONS: Set[Tuple[Type, Callable[[Any], Any]]] = set()
 
 def register_encoder_extension(obj_type: Type, encoder: Callable[[Any], Any]) -> None:
     _ENCODER_EXTENSIONS.add((obj_type, encoder))
+
+
+def encode_and_anonymize(
+    obj: Any,
+    field_anonymizer: Optional[anonymizer.Anonymizer],
+    fields_to_anonymize: Optional[Set[str]],
+) -> Any:
+    """
+    Encodes the given object and applies anonymization to specified fields if a
+    field anonymizer is provided. The function first encodes the object, and if a
+    field anonymizer is specified, it anonymizes the values in the specified fields.
+
+    Raises:
+        ValueError: If `field_anonymizer` is provided but `fields_to_anonymize` is
+        not set.
+
+    Args:
+        obj: The input object to encode and optionally anonymize.
+        field_anonymizer: An anonymizer instance
+            used to anonymize specified fields in the object. If None, no
+            anonymization is applied.
+        fields_to_anonymize: A set of field names whose
+            corresponding values should be anonymized in the encoded object. Must
+            be provided if `field_anonymizer` is set.
+
+    Returns:
+        The encoded version of the input object, with specified fields
+        anonymized if a field anonymizer is provided.
+    """
+    encoded_obj = encode(obj)
+    if field_anonymizer is None:
+        return encoded_obj
+
+    if fields_to_anonymize is None:
+        raise ValueError("fields_to_anonymize must be set if field_anonymizer is set")
+
+    if isinstance(encoded_obj, dict):
+        for field_name in fields_to_anonymize:
+            if field_name in encoded_obj:
+                encoded_obj[field_name] = field_anonymizer.anonymize(
+                    encoded_obj[field_name]
+                )
+
+    return encoded_obj
 
 
 def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
