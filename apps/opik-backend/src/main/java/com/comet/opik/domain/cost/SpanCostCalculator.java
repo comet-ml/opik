@@ -4,18 +4,21 @@ import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Objects;
 
 @UtilityClass
 class SpanCostCalculator {
     private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
 
     public static BigDecimal textGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        validateArgs(modelPrice, usage);
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }
 
     public static BigDecimal textGenerationWithCacheCostOpenAI(ModelPrice modelPrice, Map<String, Integer> usage) {
+        validateArgs(modelPrice, usage);
 
         // In OpenAI usage format, input tokens includes the cached input tokens, so we need to substract them to compute the correct input token count
         // Don't generalize yet as other providers seems to separate the cached tokens from non-cached tokens
@@ -41,12 +44,14 @@ class SpanCostCalculator {
     }
 
     public static BigDecimal textGenerationWithCacheCostAnthropic(ModelPrice modelPrice, Map<String, Integer> usage) {
+        validateArgs(modelPrice, usage);
         return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.input_tokens",
                 "original_usage.output_tokens", "original_usage.cache_read_input_tokens",
                 "original_usage.cache_creation_input_tokens");
     }
 
     public static BigDecimal textGenerationWithCacheCostBedrock(ModelPrice modelPrice, Map<String, Integer> usage) {
+        validateArgs(modelPrice, usage);
         return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.inputTokens",
                 "original_usage.outputTokens", "original_usage.cacheReadInputTokens",
                 "original_usage.cacheWriteInputTokens");
@@ -83,14 +88,22 @@ class SpanCostCalculator {
     }
 
     public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        validateArgs(modelPrice, usage);
         return BigDecimal.ZERO;
     }
 
     public static BigDecimal videoGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        validateArgs(modelPrice, usage);
         int durationSeconds = usage.getOrDefault(VIDEO_DURATION_KEY, 0);
-        if (durationSeconds <= 0) {
+        BigDecimal videoPrice = modelPrice.videoOutputPrice();
+        if (durationSeconds <= 0 || videoPrice.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
-        return modelPrice.videoOutputPrice().multiply(BigDecimal.valueOf(durationSeconds));
+        return videoPrice.multiply(BigDecimal.valueOf(durationSeconds));
+    }
+
+    private static void validateArgs(ModelPrice modelPrice, Map<String, Integer> usage) {
+        Objects.requireNonNull(modelPrice, "modelPrice must not be null");
+        Objects.requireNonNull(usage, "usage must not be null");
     }
 }

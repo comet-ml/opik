@@ -105,20 +105,11 @@ public class CostService {
                 BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                String mode = Optional.ofNullable(modelCost.mode()).orElse("text_generation");
+                ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
-                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
-                if ("video_generation".equalsIgnoreCase(mode) && videoOutputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = SpanCostCalculator::videoGenerationCost;
-                } else
-                    if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                            || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                                calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                                        SpanCostCalculator::textGenerationCost);
-                            } else
-                        if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                            calculator = SpanCostCalculator::textGenerationCost;
-                        }
+                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
+                        inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
+                        videoOutputPrice);
 
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
@@ -146,5 +137,72 @@ public class CostService {
         }
 
         return true;
+    }
+
+    private static BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> resolveCalculator(
+            String provider,
+            ModelMode mode,
+            BigDecimal inputPrice,
+            BigDecimal outputPrice,
+            BigDecimal cacheCreationInputTokenPrice,
+            BigDecimal cacheReadInputTokenPrice,
+            BigDecimal videoOutputPrice) {
+
+        if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
+            return SpanCostCalculator::videoGenerationCost;
+        }
+
+        if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
+            return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+        }
+
+        if (isPositive(inputPrice) || isPositive(outputPrice)) {
+            return SpanCostCalculator::textGenerationCost;
+        }
+
+        return SpanCostCalculator::defaultCost;
+    }
+
+    private static boolean isPositive(BigDecimal value) {
+        return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
+    }
+
+    private enum ModelMode {
+        TEXT_GENERATION("text_generation"),
+        CHAT("chat"),
+        EMBEDDING("embedding"),
+        COMPLETION("completion"),
+        IMAGE_GENERATION("image_generation"),
+        AUDIO_TRANSCRIPTION("audio_transcription"),
+        AUDIO_SPEECH("audio_speech"),
+        MODERATION("moderation"),
+        RERANK("rerank"),
+        SEARCH("search"),
+        VIDEO_GENERATION("video_generation");
+
+        private static final ModelMode DEFAULT = TEXT_GENERATION;
+        private final String value;
+
+        ModelMode(String value) {
+            this.value = value;
+        }
+
+        static ModelMode fromValue(String rawValue) {
+            if (rawValue == null || rawValue.isBlank()) {
+                return DEFAULT;
+            }
+
+            for (ModelMode mode : values()) {
+                if (mode.value.equalsIgnoreCase(rawValue)) {
+                    return mode;
+                }
+            }
+
+            return DEFAULT;
+        }
+
+        boolean isVideoGeneration() {
+            return this == VIDEO_GENERATION;
+        }
     }
 }
