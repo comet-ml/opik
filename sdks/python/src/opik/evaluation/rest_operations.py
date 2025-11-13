@@ -51,21 +51,25 @@ def get_experiment_test_cases(
         dataset_item_data = dataset_items_by_id.get(item.dataset_item_id)
 
         if dataset_item_data is None:
-            LOGGER.error(f"Unexpected error: Dataset item with id {item.dataset_item_id} not found, skipping experiment item {item.id}")
+            LOGGER.error(
+                f"Unexpected error: Dataset item with id {item.dataset_item_id} not found, skipping experiment item {item.id}"
+            )
             continue
 
         if item.evaluation_task_output is None:
-            LOGGER.error(f"Unexpected error: Evaluation task output is None for experiment item {item.id}, skipping experiment item")
+            LOGGER.error(
+                f"Unexpected error: Evaluation task output is None for experiment item {item.id}, skipping experiment item"
+            )
             continue
 
         test_cases.append(
             test_case.TestCase(
                 trace_id=item.trace_id,
                 dataset_item_id=item.dataset_item_id,
-                task_output=item.evaluation_task_output,  # type: ignore
+                task_output=item.evaluation_task_output,
                 scoring_inputs=arguments_helpers.create_scoring_inputs(
                     dataset_item=dataset_item_data,
-                    task_output=item.evaluation_task_output,  # type: ignore
+                    task_output=item.evaluation_task_output,
                     scoring_key_mapping=scoring_key_mapping,
                 ),
             )
