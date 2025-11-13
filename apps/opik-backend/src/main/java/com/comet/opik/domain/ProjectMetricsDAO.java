@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -81,6 +82,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
@@ -544,8 +546,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM spans final
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9);
+                AND trace_id BETWEEN :uuid_from_time AND :uuid_to_time;
             """;
 
     private static final String GET_AVERAGE_DURATION = """
@@ -559,8 +560,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces final
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9);
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time;
             """;
 
     private static final String GET_THREAD_COUNT = """
@@ -731,10 +731,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 stTemplate.add("project_ids", true);
             }
 
+            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
+            var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
+
             var statement = connection.createStatement(stTemplate.render())
                     .bind("workspace_id", workspaceId)
-                    .bind("start_time", startTime.toString())
-                    .bind("end_time", endTime.toString());
+                    .bind("uuid_from_time", uuidFromTime)
+                    .bind("uuid_to_time", uuidToTime);
 
             // Bind project IDs if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -762,10 +765,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 stTemplate.add("project_ids", true);
             }
 
+            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
+            var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
+
             var statement = connection.createStatement(stTemplate.render())
                     .bind("workspace_id", workspaceId)
-                    .bind("start_time", startTime.toString())
-                    .bind("end_time", endTime.toString());
+                    .bind("uuid_from_time", uuidFromTime)
+                    .bind("uuid_to_time", uuidToTime);
 
             // Bind project IDs if provided
             if (projectIds != null && !projectIds.isEmpty()) {
