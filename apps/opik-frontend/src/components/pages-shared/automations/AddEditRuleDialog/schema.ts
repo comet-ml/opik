@@ -6,7 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -21,16 +21,6 @@ import {
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
-
-const isOpenAIModel = (modelName: string): boolean => {
-  const openAIModels = PROVIDER_MODELS[PROVIDER_TYPE.OPEN_AI] || [];
-  return openAIModels.some((model) => model.value === modelName);
-};
-
-const isVllmQwenModel = (modelName: string): boolean => {
-  return /qwen.*(vl|vi)/i.test(modelName);
-};
 
 const RuleNameSchema = z
   .string({
@@ -203,7 +193,11 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   );
 
   if (hasImages || hasVideos) {
-    if (!isOpenAIModel(data.model) && !isVllmQwenModel(data.model)) {
+    const modelSupportsImages = supportsImageInput(data.model);
+    const modelSupportsVideos = supportsVideoInput(data.model);
+    const supportsMultimodal = modelSupportsImages || modelSupportsVideos;
+
+    if (!supportsMultimodal) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
@@ -211,7 +205,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
         path: ["model"],
       });
     } else {
-      if (hasImages && !supportsImageInput(data.model)) {
+      if (hasImages && !modelSupportsImages) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
@@ -219,7 +213,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
           path: ["model"],
         });
       }
-      if (hasVideos && !supportsVideoInput(data.model)) {
+      if (hasVideos && !modelSupportsVideos) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:

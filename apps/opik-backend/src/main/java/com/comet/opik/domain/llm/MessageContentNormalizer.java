@@ -13,7 +13,9 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -211,8 +213,18 @@ public class MessageContentNormalizer {
                 builder.append(textContent.text());
             } else if (content instanceof dev.langchain4j.data.message.VideoContent videoContent) {
                 var video = videoContent.video();
-                if (video != null && video.url() != null) {
+                if (video == null) {
+                    continue;
+                }
+
+                if (video.url() != null) {
                     builder.append(renderVideoPlaceholder(video.url().toString()));
+                    continue;
+                }
+
+                var inlineVideoPayload = toInlineVideoPayload(video.base64Data(), video.mimeType());
+                if (StringUtils.isNotBlank(inlineVideoPayload)) {
+                    builder.append(renderVideoPlaceholder(inlineVideoPayload));
                 }
             } else if (content instanceof dev.langchain4j.data.message.ImageContent imageContent) {
                 var image = imageContent.image();
@@ -350,5 +362,27 @@ public class MessageContentNormalizer {
             return "";
         }
         return String.format("%s%s%s", VIDEO_PLACEHOLDER_START, videoUrl, VIDEO_PLACEHOLDER_END);
+    }
+
+    private String toInlineVideoPayload(String base64Data, String mimeType) {
+        if (StringUtils.isBlank(base64Data)) {
+            return "";
+        }
+
+        var safeMimeType = StringUtils.defaultIfBlank(mimeType, "video/mp4");
+        Map<String, Object> filePayload = new LinkedHashMap<>();
+        filePayload.put("file_data", base64Data);
+        filePayload.put("format", safeMimeType);
+
+        Map<String, Object> payload = Map.of(
+                "type", "file",
+                "file", filePayload);
+
+        try {
+            return JsonUtils.writeValueAsString(payload);
+        } catch (UncheckedIOException exception) {
+            log.warn("Failed to serialize inline video payload", exception);
+            return "";
+        }
     }
 }
