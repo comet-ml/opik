@@ -30,7 +30,7 @@ import {
 } from "@/types/llm";
 import {
   generateDefaultLLMPromptMessage,
-  getTextFromMessageContent,
+  getAllTemplateStringsFromContent,
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
@@ -264,17 +264,19 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     let parsingVariablesError: boolean = false;
                     messages
                       .reduce<string[]>((acc, m) => {
-                        const contentAsString = getTextFromMessageContent(
-                          m.content,
-                        );
-                        const tags =
-                          safelyGetPromptMustacheTags(contentAsString);
-                        if (!tags) {
-                          parsingVariablesError = true;
-                          return acc;
-                        } else {
-                          return acc.concat(tags);
-                        }
+                        // Extract template strings from both text and image URLs
+                        const templateStrings =
+                          getAllTemplateStringsFromContent(m.content);
+                        // Get mustache tags from all template strings
+                        const allTags = templateStrings.flatMap((str) => {
+                          const tags = safelyGetPromptMustacheTags(str);
+                          if (!tags) {
+                            parsingVariablesError = true;
+                            return [];
+                          }
+                          return tags;
+                        });
+                        return acc.concat(allTags);
                       }, [])
                       .filter((v) => v !== "")
                       .forEach(

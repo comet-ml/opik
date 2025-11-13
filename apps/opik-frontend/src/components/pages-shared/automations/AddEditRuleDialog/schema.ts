@@ -17,7 +17,11 @@ import {
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
 import { supportsImageInput } from "@/lib/modelCapabilities";
-import { hasImagesInContent, getTextFromMessageContent } from "@/lib/llm";
+import {
+  hasImagesInContent,
+  getTextFromMessageContent,
+  convertMessageContentToBackendFormat,
+} from "@/lib/llm";
 import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
 
 const isOpenAIModel = (modelName: string): boolean => {
@@ -343,7 +347,7 @@ export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
   messages.map((m) => ({
-    content: m.content,
+    content: convertMessageContentToBackendFormat(m.content),
     role: m.role.toUpperCase(),
   }));
 

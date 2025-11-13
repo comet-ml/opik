@@ -56,6 +56,26 @@ export const hasImagesInContent = (content: MessageContent): boolean => {
   return content.some((c): c is ImagePart => c.type === "image_url");
 };
 
+/**
+ * Get all template strings from message content (both text and image URLs)
+ * Used for extracting mustache variables from all parts of a message
+ */
+export const getAllTemplateStringsFromContent = (
+  content: MessageContent,
+): string[] => {
+  if (typeof content === "string") {
+    return [content];
+  }
+
+  return content.map((part) => {
+    if (part.type === "text") {
+      return part.text;
+    } else {
+      return part.image_url.url;
+    }
+  });
+};
+
 export const parseLLMMessageContent = (
   content: MessageContent,
 ): { text: string; images: string[] } => {
@@ -146,4 +166,30 @@ export const parsePromptVersionContent = (promptVersion?: {
   }
   // Backward compatibility: treat as plain text
   return template;
+};
+
+/**
+ * Convert MessageContent to backend placeholder format
+ * Backend expects images in the format: <<<image>>>url<<</image>>>
+ * This preserves mustache variables in both text and image URLs for backend template rendering
+ */
+export const convertMessageContentToBackendFormat = (
+  content: MessageContent,
+): string => {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  // Convert array of parts to string with image placeholders
+  return content
+    .map((part) => {
+      if (part.type === "text") {
+        return part.text;
+      } else {
+        // Format: <<<image>>>url<<</image>>>
+        // This preserves mustache variables like {{input.image}} for backend rendering
+        return `<<<image>>>${part.image_url.url}<<</image>>>`;
+      }
+    })
+    .join("\n");
 };
