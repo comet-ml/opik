@@ -1,19 +1,14 @@
 import type { z } from "zod";
-
-type JSONValue =
-  | null
-  | string
-  | number
-  | boolean
-  | {
-      [value: string]: JSONValue;
-    }
-  | Array<JSONValue>;
-/**
- * Provider-specific options.
- * Allows providers to pass through custom metadata and functionality.
- */
-export type ProviderOptions = Record<string, Record<string, JSONValue>>;
+import type {
+  ModelMessage,
+  SystemModelMessage,
+  UserModelMessage,
+  AssistantModelMessage,
+  ToolModelMessage,
+  UserContent,
+  ToolContent,
+  AssistantContent,
+} from "ai";
 
 /**
  * System message containing system instructions.
@@ -22,38 +17,22 @@ export type ProviderOptions = Record<string, Record<string, JSONValue>>;
  * to increase the resilience against prompt injection attacks,
  * and because not all providers support several system messages.
  */
-export interface OpikSystemMessage {
-  role: "system";
-  content: string;
-  providerOptions?: ProviderOptions;
-}
+export type OpikSystemMessage = SystemModelMessage;
 
 /**
  * User message containing user input.
  */
-export interface OpikUserMessage {
-  role: "user";
-  content: string;
-  providerOptions?: ProviderOptions;
-}
+export type OpikUserMessage = UserModelMessage;
 
 /**
  * Assistant message containing model response.
  */
-export interface OpikAssistantMessage {
-  role: "assistant";
-  content: string;
-  providerOptions?: ProviderOptions;
-}
+export type OpikAssistantMessage = AssistantModelMessage;
 
 /**
  * Tool message containing tool call results.
  */
-export interface OpikToolMessage {
-  role: "tool";
-  content: string;
-  providerOptions?: ProviderOptions;
-}
+export type OpikToolMessage = ToolModelMessage;
 
 /**
  * Union type of all message types.
@@ -61,10 +40,13 @@ export interface OpikToolMessage {
  *
  * Provider-agnostic interface that can be adapted to any LLM provider.
  */
-export type OpikMessage =
-  | OpikSystemMessage
-  | OpikUserMessage
-  | OpikAssistantMessage;
+export type OpikMessage = ModelMessage;
+
+export type OpikMessageContent =
+  | string
+  | UserContent
+  | AssistantContent
+  | ToolContent;
 
 /**
  * Abstract base class for all LLM model providers in Opik evaluation system.

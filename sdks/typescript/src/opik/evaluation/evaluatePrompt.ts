@@ -7,9 +7,11 @@ import {
 } from "./models";
 import { EvaluationResult, EvaluationTask } from "./types";
 import { evaluate, EvaluateOptions } from "./evaluate";
-import { formatPromptTemplate } from "@/prompt/formatting";
 import { PromptType } from "@/prompt/types";
-import { formatMessagesAsString } from "./utils/formatMessages";
+import {
+  applyTemplateVariablesToMessage,
+  formatMessagesAsString,
+} from "./utils/formatMessages";
 
 /**
  * Options for evaluating prompt templates against a dataset.
@@ -160,15 +162,14 @@ function _buildPromptEvaluationTask(
   modelOptions?: { temperature?: number; seed?: number }
 ): EvaluationTask<Record<string, unknown>> {
   return async (datasetItem: Record<string, unknown>) => {
-    // Format each message's content with dataset variables
-    const formattedMessages: OpikMessage[] = messages.map((msg) => ({
-      ...msg,
-      content: formatPromptTemplate(msg.content, datasetItem, templateType),
-    }));
+    // Apply template variables to each message
+    const messagesWithVariables: OpikMessage[] = messages.map((message) =>
+      applyTemplateVariablesToMessage(message, datasetItem, templateType)
+    );
 
     // Generate response from model with optional temperature and seed
     const response = await model.generateProviderResponse(
-      formattedMessages,
+      messagesWithVariables,
       modelOptions
     );
 
@@ -177,7 +178,7 @@ function _buildPromptEvaluationTask(
 
     // Convert messages array to human-readable string for metrics
     // This ensures compatibility with metrics that expect string input
-    const inputText = formatMessagesAsString(formattedMessages);
+    const inputText = formatMessagesAsString(messagesWithVariables);
 
     return {
       input: inputText,

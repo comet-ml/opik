@@ -25,7 +25,14 @@ export function formatPromptTemplate(
 
     switch (type) {
       case "mustache":
-        return Mustache.render(template, variables);
+        return Mustache.render(
+          template,
+          variables,
+          {},
+          {
+            escape: (value: string) => value,
+          }
+        );
 
       case "jinja2":
         return nunjucks.renderString(template, variables);

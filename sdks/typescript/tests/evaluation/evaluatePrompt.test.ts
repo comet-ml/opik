@@ -34,7 +34,25 @@ class MockModel extends OpikBaseModel {
   async generateProviderResponse(
     messages: OpikMessage[]
   ): Promise<{ text: string }> {
-    return { text: `Response to: ${messages[0]?.content || ""}` };
+    const first = messages[0]?.content;
+    const normalized =
+      typeof first === "string"
+        ? first
+        : Array.isArray(first)
+          ? first
+              .map((part) => {
+                if (part.type === "text") {
+                  return part.text;
+                }
+                if (part.type === "image") {
+                  return `[image:${typeof part.image === "string" ? part.image : "[binary]"}]`;
+                }
+                return "";
+              })
+              .join(" ")
+          : "";
+
+    return { text: `Response to: ${normalized}` };
   }
 }
 
