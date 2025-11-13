@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 
 from opik.api_objects import dataset, experiment, opik_client
@@ -5,6 +6,8 @@ from opik.types import FeedbackScoreDict
 from . import test_case
 from .metrics import arguments_helpers, score_result
 from .types import ScoringKeyMappingType
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_experiment_with_unique_name(
@@ -45,9 +48,15 @@ def get_experiment_test_cases(
 
     test_cases = []
     for item in experiment_items:
-        dataset_item_data = item.dataset_item_data
+        dataset_item_data = dataset_items_by_id.get(item.dataset_item_id)
+
         if dataset_item_data is None:
-            dataset_item_data = dataset_items_by_id.get(item.dataset_item_id)
+            LOGGER.error(f"Unexpected error: Dataset item with id {item.dataset_item_id} not found, skipping experiment item {item.id}")
+            continue
+
+        if item.evaluation_task_output is None:
+            LOGGER.error(f"Unexpected error: Evaluation task output is None for experiment item {item.id}, skipping experiment item")
+            continue
 
         test_cases.append(
             test_case.TestCase(
@@ -55,7 +64,7 @@ def get_experiment_test_cases(
                 dataset_item_id=item.dataset_item_id,
                 task_output=item.evaluation_task_output,  # type: ignore
                 scoring_inputs=arguments_helpers.create_scoring_inputs(
-                    dataset_item=dataset_item_data,  # type: ignore
+                    dataset_item=dataset_item_data,
                     task_output=item.evaluation_task_output,  # type: ignore
                     scoring_key_mapping=scoring_key_mapping,
                 ),

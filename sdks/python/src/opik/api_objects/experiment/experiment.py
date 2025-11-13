@@ -101,7 +101,7 @@ class Experiment:
 
     def get_items(
         self,
-        max_results: Optional[int] = None,
+        max_results: Optional[int] = 10000,
         truncate: bool = False,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
@@ -115,7 +115,7 @@ class Experiment:
             List of ExperimentItemContent objects for this experiment.
         """
         if max_results is None:
-            max_results = 10000
+            max_results = 10000  # TODO: remove this once we have a proper way to get all experiment items
 
         return self._experiments_client.find_experiment_items_for_dataset(
             dataset_name=self.dataset_name,
