@@ -30,6 +30,7 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TagCell from "@/components/shared/DataTableCells/TagCell";
 import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/components/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
@@ -72,7 +73,6 @@ import {
 } from "@/types/annotation-queues";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { capitalizeFirstLetter } from "@/lib/utils";
-import ScopeCell from "@/components/pages/AnnotationQueuesPage/ScopeCell";
 
 const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   {
@@ -103,8 +103,11 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "scope",
     label: "Scope",
     type: COLUMN_TYPE.category,
-    cell: ScopeCell as never,
+    cell: TagCell as never,
     accessorFn: (row) => capitalizeFirstLetter(row.scope),
+    customMeta: {
+      colored: false,
+    },
   },
   {
     id: "created_at",
