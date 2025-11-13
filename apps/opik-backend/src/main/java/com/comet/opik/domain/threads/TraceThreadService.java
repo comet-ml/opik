@@ -175,32 +175,15 @@ class TraceThreadServiceImpl implements TraceThreadService {
     public Mono<Void> batchUpdate(@NonNull TraceThreadBatchUpdate batchUpdate) {
         log.info("Batch updating '{}' threads", batchUpdate.ids().size());
 
-        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
         Set<String> tags = batchUpdate.update().tags();
-
         if (tags == null || tags.isEmpty()) {
             log.info("No tags to update for '{}' threads", batchUpdate.ids().size());
             return Mono.empty();
         }
 
-        // Fetch minimal data (IDs + tags + metadata), merge/replace in memory, bulk update
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
         List<UUID> threadModelIds = new ArrayList<>(batchUpdate.ids());
-
-        return traceThreadDAO.getIdsTagsAndMetadata(threadModelIds)
-                .collectMap(
-                        threadMeta -> threadMeta,
-                        threadMeta -> {
-                            Set<String> finalTags = mergeTags
-                                    ? Set.copyOf(java.util.stream.Stream.concat(
-                                            threadMeta.tags().stream(),
-                                            tags.stream()).collect(Collectors.toSet()))
-                                    : Set.copyOf(tags);
-
-                            return TraceThreadUpdate.builder()
-                                    .tags(finalTags)
-                                    .build();
-                        })
-                .flatMap(metaToUpdateMap -> traceThreadDAO.bulkUpdateTags(metaToUpdateMap))
+        return traceThreadDAO.bulkUpdate(threadModelIds, batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Bulk updated '{}' threads with {} tags",
                         batchUpdate.ids().size(), mergeTags ? "merged" : "replaced"));
     }

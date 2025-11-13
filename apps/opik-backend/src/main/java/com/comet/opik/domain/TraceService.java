@@ -390,31 +390,14 @@ class TraceServiceImpl implements TraceService {
     public Mono<Void> batchUpdate(@NonNull TraceBatchUpdate batchUpdate) {
         log.info("Batch updating '{}' traces", batchUpdate.ids().size());
 
-        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
         Set<String> tags = batchUpdate.update().tags();
-
         if (tags == null || tags.isEmpty()) {
             log.info("No tags to update for '{}' traces", batchUpdate.ids().size());
             return Mono.empty();
         }
 
-        // Fetch minimal data (IDs + tags + metadata), merge/replace in memory, bulk update
-        return dao.getIdsTagsAndMetadata(batchUpdate.ids())
-                .collectMap(
-                        TraceDAO.TraceIdWithTagsAndMetadata::id,
-                        traceMeta -> {
-                            Set<String> finalTags = mergeTags
-                                    ? Set.copyOf(java.util.stream.Stream.concat(
-                                            traceMeta.tags().stream(),
-                                            tags.stream()).collect(Collectors.toSet()))
-                                    : Set.copyOf(tags);
-
-                            return TraceUpdate.builder()
-                                    .projectId(traceMeta.projectId())
-                                    .tags(finalTags)
-                                    .build();
-                        })
-                .flatMap(idToUpdateMap -> dao.bulkUpdateTags(idToUpdateMap))
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Bulk updated '{}' traces with {} tags",
                         batchUpdate.ids().size(), mergeTags ? "merged" : "replaced"));
     }

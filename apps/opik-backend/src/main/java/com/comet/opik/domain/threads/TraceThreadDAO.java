@@ -27,10 +27,8 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -74,9 +72,7 @@ public interface TraceThreadDAO {
     record ThreadIdWithTagsAndMetadata(UUID id, Set<String> tags, UUID projectId) {
     }
 
-    Flux<ThreadIdWithTagsAndMetadata> getIdsTagsAndMetadata(@NonNull List<UUID> ids);
-
-    Mono<Void> bulkUpdateTags(@NonNull Map<ThreadIdWithTagsAndMetadata, TraceThreadUpdate> metaToUpdateMap);
+    Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags);
 }
 
 @Singleton
@@ -176,19 +172,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             FROM trace_threads
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ;
-            """;
-
-    private static final String SELECT_IDS_TAGS_AND_METADATA = """
-            SELECT
-                id,
-                tags,
-                project_id
-            FROM trace_threads
-            WHERE id IN :ids
-            AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
-            LIMIT 1 BY id
             ;
             """;
 
@@ -571,7 +554,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
-        }).buffer(configuration.getBatchOperations().getAnalytics().getStreamBufferSize());
+        }).buffer(100);
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
@@ -612,102 +595,60 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         }
     }
 
+    private static final String BULK_UPDATE_TAGS = """
+                    INSERT INTO trace_threads (
+                        workspace_id,
+                        project_id,
+                        thread_id,
+                        id,
+                        status,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        tags,
+                        sampling_per_rule,
+                        scored_at
+                    )
+                    SELECT
+                        tt.workspace_id,
+                        tt.project_id,
+                        tt.thread_id,
+                        tt.id,
+                        tt.status,
+                        tt.created_by,
+                        tt.last_updated_by,
+                        tt.created_at,
+                        now64(6) as last_updated_at,
+                {TAGS_EXPRESSION} as tags,
+                tt.sampling_per_rule,
+                tt.scored_at
+            FROM trace_threads tt final
+            WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id;""";
+
     @Override
-    public Flux<ThreadIdWithTagsAndMetadata> getIdsTagsAndMetadata(@NonNull List<UUID> ids) {
+    public Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags) {
         Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
-        log.info("Getting IDs, tags, and metadata for '{}' thread models", ids.size());
+        Preconditions.checkArgument(update.tags() != null && !update.tags().isEmpty(), "tags must not be empty");
+        log.info("Bulk updating tags for '{}' thread models", ids.size());
+
+        String tagsExpression = mergeTags
+                ? "arrayConcat(tt.tags, :new_tags)"
+                : ":new_tags";
+        String query = BULK_UPDATE_TAGS.replace("{TAGS_EXPRESSION}", tagsExpression);
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_IDS_TAGS_AND_METADATA)
-                            .bind("ids", ids);
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids)
+                            .bind("new_tags", update.tags().toArray(new String[0]));
 
-                    Segment segment = startSegment("trace_threads", "Clickhouse", "get_ids_tags_and_metadata");
+                    Segment segment = startSegment("trace_threads", "Clickhouse", "bulk_update_tags");
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .doFinally(signalType -> endSegment(segment));
                 })
-                .flatMap(result -> result.map((row, metadata) -> {
-                    var tags = row.get("tags", String[].class);
-                    return new ThreadIdWithTagsAndMetadata(
-                            row.get("id", UUID.class),
-                            tags != null ? Set.of(tags) : Set.of(),
-                            row.get("project_id", UUID.class));
-                }));
-    }
-
-    private static final String BULK_UPDATE_TAGS = """
-            INSERT INTO trace_threads (
-                workspace_id,
-                project_id,
-                thread_id,
-                id,
-                status,
-                created_by,
-                last_updated_by,
-                created_at,
-                last_updated_at,
-                tags,
-                sampling_per_rule,
-                scored_at
-            )
-            SELECT
-                tt.workspace_id,
-                tt.project_id,
-                tt.thread_id,
-                tt.id,
-                tt.status,
-                tt.created_by,
-                tt.last_updated_by,
-                tt.created_at,
-                now64(6) as last_updated_at,
-                arrayElement(arrayMap(i -> if(tt.id = :ids[i], :tags[i], tt.tags), range(1, length(:ids) + 1)), indexOf(:ids, tt.id)) as tags,
-                tt.sampling_per_rule,
-                tt.scored_at
-            FROM trace_threads tt final
-            WHERE tt.id IN :ids
-            AND tt.workspace_id = :workspace_id
-            AND tt.project_id = :project_id
-            ;
-            """;
-
-    @Override
-    public Mono<Void> bulkUpdateTags(@NonNull Map<ThreadIdWithTagsAndMetadata, TraceThreadUpdate> metaToUpdateMap) {
-        Preconditions.checkArgument(!metaToUpdateMap.isEmpty(), "metaToUpdateMap must not be empty");
-        log.info("Bulk updating tags for '{}' thread models", metaToUpdateMap.size());
-
-        // Convert map to arrays for ClickHouse query
-        List<ThreadIdWithTagsAndMetadata> metas = new ArrayList<>(metaToUpdateMap.keySet());
-        List<UUID> ids = metas.stream().map(ThreadIdWithTagsAndMetadata::id).toList();
-        List<String[]> tagsArrays = metas.stream()
-                .map(meta -> metaToUpdateMap.get(meta).tags().toArray(new String[0]))
-                .toList();
-        UUID projectId = metas.get(0).projectId(); // All should have same projectId
-
-        int chunkSize = configuration.getBatchOperations().getAnalytics().getBulkUpdateChunkSize();
-        return Flux.range(0, (ids.size() + chunkSize - 1) / chunkSize)
-                .flatMap(chunkIndex -> {
-                    int start = chunkIndex * chunkSize;
-                    int end = Math.min(start + chunkSize, ids.size());
-
-                    List<UUID> chunkIds = ids.subList(start, end);
-                    List<String[]> chunkTags = tagsArrays.subList(start, end);
-
-                    return Mono.from(connectionFactory.create())
-                            .flatMapMany(connection -> {
-                                var statement = connection.createStatement(BULK_UPDATE_TAGS)
-                                        .bind("ids", chunkIds.toArray(new UUID[0]))
-                                        .bind("tags", chunkTags.toArray(new String[0][]))
-                                        .bind("project_id", projectId);
-
-                                Segment segment = startSegment("trace_threads", "Clickhouse", "bulk_update_tags");
-
-                                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                                        .doFinally(signalType -> endSegment(segment));
-                            })
-                            .then();
-                })
                 .then()
-                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' thread models", metaToUpdateMap.size()));
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' thread models", ids.size()));
     }
 }
