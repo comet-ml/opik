@@ -154,7 +154,8 @@ class TemplateUtilsTest {
                             factoryMethod,
                             // The majority of ST should be collected
                             TOTAL_TEMPLATES,
-                            5 // Used memory growth should be around 5 MB
+                            5, // Used memory growth should be around 5 MB
+                            20 // Higher variance percentage for small absolute values
                     ),
                     arguments(
                             "preventGCAndCauseMemoryLeak",
@@ -162,7 +163,8 @@ class TemplateUtilsTest {
                             // The majority of ST should also be collected
                             // The issue is the leak of CompiledST and other instances within the default STGroup
                             TOTAL_TEMPLATES,
-                            2650 // Used memory growth should be around 2650 MB
+                            2650, // Used memory growth should be around 2650 MB
+                            5 // Lower variance percentage for large absolute values
                     ));
         }
 
@@ -172,7 +174,8 @@ class TemplateUtilsTest {
                 String testName,
                 Function<String, ST> templateFactory,
                 long expectedGCCount,
-                long expectedUsedMemoryGrowthInMB) {
+                long expectedUsedMemoryGrowthInMB,
+                int memoryVariancePercentage) {
             var weakReferences = new ArrayList<WeakReference<ST>>();
             // Suggest GC before test to start in a clean state
             System.gc();
@@ -200,8 +203,8 @@ class TemplateUtilsTest {
             log.info("{} - Memory growth: {} MB", testName, actualUsedMemoryGrowthInMB);
             // The amount of GC-ed instances shouldn't vary much
             assertThat(actualGCCount).isCloseTo(expectedGCCount, withinPercentage(10));
-            // Allowing a larger variance for the smaller growth value
-            assertThat(actualUsedMemoryGrowthInMB).isCloseTo(expectedUsedMemoryGrowthInMB, withinPercentage(20));
+            assertThat(actualUsedMemoryGrowthInMB)
+                    .isCloseTo(expectedUsedMemoryGrowthInMB, withinPercentage(memoryVariancePercentage));
         }
     }
 
