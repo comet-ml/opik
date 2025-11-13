@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
-import { parseContentWithImages } from "@/lib/llm";
+import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -32,15 +32,25 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     first(versions),
   );
 
-  const { text: baseText, images: baseImages } = useMemo(
-    () => parseContentWithImages(baseVersion?.template || ""),
+  const baseText = useMemo(
+    () => baseVersion?.template || "",
     [baseVersion?.template],
   );
 
-  const { text: diffText, images: diffImages } = useMemo(
-    () => parseContentWithImages(diffVersion?.template || ""),
+  const baseImages = useMemo(() => {
+    const content = parsePromptVersionContent(baseVersion);
+    return parseLLMMessageContent(content).images;
+  }, [baseVersion]);
+
+  const diffText = useMemo(
+    () => diffVersion?.template || "",
     [diffVersion?.template],
   );
+
+  const diffImages = useMemo(() => {
+    const content = parsePromptVersionContent(diffVersion);
+    return parseLLMMessageContent(content).images;
+  }, [diffVersion]);
 
   const imagesHaveChanges = useMemo(
     () => JSON.stringify(baseImages) !== JSON.stringify(diffImages),

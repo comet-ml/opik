@@ -33,7 +33,7 @@ import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
-import { parseContentWithImages } from "@/lib/llm";
+import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -65,7 +65,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const metadataString = promptMetadata
     ? JSON.stringify(promptMetadata, null, 2)
     : "";
-  const [template, setTemplate] = useState(promptTemplate);
+  const [template, setTemplate] = useState<string>(promptTemplate);
   const [metadata, setMetadata] = useState(metadataString);
   const [changeDescription, setChangeDescription] = useState("");
 
@@ -74,11 +74,10 @@ const EditPromptVersionDialog: React.FunctionComponent<
     editable: true,
   });
 
-  const { localText, images, setImages, handleContentChange } =
-    useMessageContent({
-      content: template,
-      onChangeContent: setTemplate,
-    });
+  const { localText, images, handleContentChange } = useMessageContent({
+    content: template,
+    onChangeContent: (content) => setTemplate(content as string),
+  });
 
   const { mutate } = useCreatePromptVersionMutation();
 
@@ -107,10 +106,21 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const isValid =
     template?.length && (templateHasChanges || metadataHasChanges);
 
-  const { text: originalText, images: originalImages } =
-    parseContentWithImages(promptTemplate);
-  const { text: currentText, images: currentImages } =
-    parseContentWithImages(template);
+  const originalText = promptTemplate;
+  const originalImages = parseLLMMessageContent(
+    parsePromptVersionContent({
+      template: promptTemplate,
+      metadata: promptMetadata,
+    }),
+  ).images;
+
+  const currentText = template;
+  const currentImages = parseLLMMessageContent(
+    parsePromptVersionContent({
+      template: localText,
+      metadata: promptMetadata,
+    }),
+  ).images;
 
   const imagesHaveChanges =
     JSON.stringify(originalImages) !== JSON.stringify(currentImages);
@@ -210,9 +220,10 @@ const EditPromptVersionDialog: React.FunctionComponent<
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
               <PromptMessageImageTags
-                images={images}
-                setImages={setImages}
+                images={currentImages}
+                setImages={() => {}}
                 align="start"
+                editable={false}
               />
             </div>
           )}
