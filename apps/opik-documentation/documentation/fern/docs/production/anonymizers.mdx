@@ -105,7 +105,63 @@ opik.hooks.add_anonymizer(anonymizer)
 
 ## Custom Anonymizers
 
-For advanced use cases, create custom anonymizers by extending the `Anonymizer` base class:
+For advanced use cases, create custom anonymizers by extending the `Anonymizer` base class.
+
+### Understanding Anonymizer Arguments
+
+When implementing custom anonymizers, you need to implement the `anonymize()` method with the following signature:
+
+```python
+def anonymize(self, data, **kwargs):
+    # Your anonymization logic here
+    return anonymized_data
+```
+
+**The `kwargs` parameters:**
+
+The `anonymize()` method also receives additional context through `**kwargs`:
+
+- **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, or `"metadata"`)
+- **`object_type`**: The type of the object being processed (typically `dict` for trace/span data)
+
+**When are kwargs available?**
+
+These kwargs are automatically passed by Opik's internal data processors when anonymizing trace and span data before sending it to the backend. This allows you to apply different anonymization strategies based on the field being processed.
+
+**Example: Field-specific anonymization**
+
+```python
+from opik.anonymizer import Anonymizer
+import opik.hooks
+
+class FieldAwareAnonymizer(Anonymizer):
+    def anonymize(self, data, **kwargs):
+        field_name = kwargs.get("field_name", "")
+        
+        # Only anonymize the output field, leave input as-is for debugging
+        if field_name == "output" and isinstance(data, str):
+            import re
+            # More aggressive anonymization for outputs
+            data = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', data)
+            data = re.sub(r'\b\d{3}-\d{3}-\d{4}\b', '[PHONE]', data)
+        elif field_name == "metadata" and isinstance(data, dict):
+            # Remove specific metadata fields entirely
+            sensitive_keys = ["user_id", "session_token", "api_key"]
+            for key in sensitive_keys:
+                if key in data:
+                    data[key] = "[REDACTED]"
+        
+        return data
+
+# Register the field-aware anonymizer
+opik.hooks.add_anonymizer(FieldAwareAnonymizer())
+```
+
+<Tip>
+  The `field_name` and `object_type` kwargs are primarily useful for implementing context-aware anonymization logic. If you don't need field-specific behavior, you can safely ignore these kwargs.
+</Tip>
+
+### Advanced Custom Anonymizer Example
 
 ```python
 import opik
@@ -114,13 +170,7 @@ from opik.anonymizer import Anonymizer
 
 class AdvancedPIIAnonymizer(Anonymizer):
     def anonymize(self, data, **kwargs):
-        """
-        Custom anonymizer with access to metadata about the field being processed.
-        
-        Note: kwargs like 'field_name' and 'object_type' are passed in kwargs by internal data
-        processors. They might be helpful to customize the logic for span/trace input, output, and metadata.
-        Read more in `Understanding Anonymizer kwargs`.
-        """
+        """Custom anonymizer with advanced PII detection and removal."""
         field_name = kwargs.get("field_name")
         object_type = kwargs.get("object_type")
 
@@ -152,46 +202,6 @@ class AdvancedPIIAnonymizer(Anonymizer):
 # Register the custom anonymizer
 opik.hooks.add_anonymizer(AdvancedPIIAnonymizer())
 ```
-
-### Understanding Anonymizer kwargs
-
-When implementing custom anonymizers, the `anonymize()` method receives additional context through `**kwargs`:
-
-- **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, or `"metadata"`)
-- **`object_type`**: The type of the object being processed (typically `dict` for trace/span data)
-
-**When are kwargs available?**
-
-These kwargs are automatically passed by Opik's internal data processors when anonymizing trace and span data before sending it to the backend. This allows you to apply different anonymization strategies based on the field being processed.
-
-**Example: Field-specific anonymization**
-
-```python
-from opik.anonymizer import Anonymizer
-
-class FieldAwareAnonymizer(Anonymizer):
-    def anonymize(self, data, **kwargs):
-        field_name = kwargs.get("field_name", "")
-        
-        # Only anonymize the output field, leave input as-is for debugging
-        if field_name == "output" and isinstance(data, str):
-            import re
-            # More aggressive anonymization for outputs
-            data = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', data)
-            data = re.sub(r'\b\d{3}-\d{3}-\d{4}\b', '[PHONE]', data)
-        elif field_name == "metadata" and isinstance(data, dict):
-            # Remove specific metadata fields entirely
-            sensitive_keys = ["user_id", "session_token", "api_key"]
-            for key in sensitive_keys:
-                if key in data:
-                    data[key] = "[REDACTED]"
-        
-        return data
-```
-
-<Tip>
-  The `field_name` and `object_type` kwargs are primarily useful for implementing context-aware anonymization logic. If you don't need field-specific behavior, you can safely ignore these kwargs.
-</Tip>
 
 # Usage Examples
 
