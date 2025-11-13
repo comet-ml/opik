@@ -22,7 +22,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
+import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
+import org.quartz.UnableToInterruptJobException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -56,12 +58,14 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 @Singleton
 @DisallowConcurrentExecution
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class MetricsAlertJob extends Job {
+public class MetricsAlertJob extends Job implements InterruptableJob {
 
     private static final LockService.Lock METRICS_ALERT_LOCK_KEY = new LockService.Lock("metrics_alert_job:scan_lock");
     private static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
             AlertEventType.TRACE_COST,
             AlertEventType.TRACE_LATENCY);
+    private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
+    private volatile boolean interrupted = false;
 
     private final @NonNull @Config WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
@@ -72,6 +76,10 @@ public class MetricsAlertJob extends Job {
 
     @Override
     public void doJob(JobExecutionContext context) {
+        if (isInterrupted()) {
+            log.info("Metrics alert job interrupted before start");
+            return;
+        }
         log.debug("Starting metrics alert job");
 
         // Use distributed lock to prevent overlapping runs between different instances
@@ -81,6 +89,7 @@ public class MetricsAlertJob extends Job {
                         SUPPORTED_EVENT_TYPES))
                         .subscribeOn(Schedulers.boundedElastic())
                         .flatMapMany(Flux::fromIterable)
+                        .takeWhile(__ -> !isInterrupted())
                         .flatMap(this::processAlert)
                         .onErrorContinue((throwable, alert) -> log.error("Failed to process metrics alert '{}': {}",
                                 alert, throwable.getMessage(), throwable))
@@ -96,7 +105,21 @@ public class MetricsAlertJob extends Job {
                         error -> log.error("Metrics alert job interrupted while acquiring lock", error));
     }
 
+    @Override
+    public void interrupt() throws UnableToInterruptJobException {
+        log.info("Interrupt requested for MetricsAlertJob");
+        interrupted = true;
+    }
+
+    private boolean isInterrupted() {
+        return interrupted || Thread.currentThread().isInterrupted();
+    }
+
     private Mono<Void> processAlert(Alert alert) {
+        if (isInterrupted()) {
+            log.info("Skipping alert '{}' due to job interruption", alert.id());
+            return Mono.empty();
+        }
         // Create a unique lock key for this alert to prevent duplicate firing across instances
         LockService.Lock alertLock = new LockService.Lock("metrics_alert:fired:" + alert.id());
 
@@ -136,6 +159,10 @@ public class MetricsAlertJob extends Job {
     }
 
     private Mono<Void> evaluateTrigger(Alert alert, AlertTrigger trigger) {
+        if (isInterrupted()) {
+            log.info("Skipping trigger evaluation due to job interruption for alert '{}'", alert.id());
+            return Mono.empty();
+        }
         // Extract configuration from trigger
         TriggerConfig config = extractTriggerConfig(trigger);
 
@@ -161,7 +188,7 @@ public class MetricsAlertJob extends Job {
         // For latency, threshold is in seconds but metric value is in milliseconds
         // Convert threshold to milliseconds for comparison
         BigDecimal thresholdForComparison = trigger.eventType() == AlertEventType.TRACE_LATENCY
-                ? config.threshold().multiply(BigDecimal.valueOf(1000))
+                ? config.threshold().multiply(MILLISECONDS_PER_SECOND)
                 : config.threshold();
 
         return metricValueMono
@@ -174,7 +201,7 @@ public class MetricsAlertJob extends Job {
                                 alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
 
                         var metricValueFinal = trigger.eventType() == AlertEventType.TRACE_LATENCY
-                                ? metricValue.divide(BigDecimal.valueOf(1000), 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
+                                ? metricValue.divide(MILLISECONDS_PER_SECOND, 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
                                 : metricValue;
 
                         // Wrap blocking JSON serialization in Mono.fromCallable

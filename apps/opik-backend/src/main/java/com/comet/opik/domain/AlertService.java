@@ -282,7 +282,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var newAlert = prepareAlert(alert, userName);
+        var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
                 .handle(() -> saveAlert(newAlert, workspaceId))
@@ -304,7 +304,7 @@ class AlertServiceImpl implements AlertService {
                 .build();
 
         // Prepare new updated alert with the same ID
-        var newAlert = prepareAlert(alert, userName);
+        var newAlert = prepareAlert(alert, userName, workspaceId);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             // Delete existing alert and all its related entities (triggers, trigger configs, webhook)
@@ -518,7 +518,7 @@ class AlertServiceImpl implements AlertService {
         return new EntityAlreadyExistsException(new ErrorMessage(HttpStatus.SC_CONFLICT, ALERT_ALREADY_EXISTS));
     }
 
-    private Alert prepareAlert(Alert alert, String userName) {
+    private Alert prepareAlert(Alert alert, String userName, String workspaceId) {
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");
 
@@ -550,6 +550,7 @@ class AlertServiceImpl implements AlertService {
                 .triggers(preparedTriggers)
                 .createdBy(Optional.ofNullable(alert.createdBy()).orElse(userName))
                 .lastUpdatedBy(userName)
+                .workspaceId(workspaceId)
                 .build();
     }
 
