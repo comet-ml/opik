@@ -180,29 +180,28 @@ class MockAnonymizer(anonymizer.Anonymizer):
 class TestEncodeAndAnonymize:
     """Test suite for encode_and_anonymize functionality."""
 
-    def test_encode_and_anonymize__no_anonymizer__returns_encoded_only(self):
-        """Test that without anonymizer, only encoding is performed."""
+    def test_encode_and_anonymize__no_anonymizers__returns_encoded_only(self):
+        """Test that with empty anonymizers list, only encoding is performed."""
         obj = {"name": "John Doe", "email": "john@example.com"}
 
         result = jsonable_encoder.encode_and_anonymize(
-            obj=obj, field_anonymizer=None, fields_to_anonymize=None
+            obj=obj, anonymizers=[], fields_to_anonymize=set()
         )
 
         expected = {"name": "John Doe", "email": "john@example.com"}
         assert result == expected
 
-    def test_encode_and_anonymize__with_anonymizer_no_fields__raises_error(self):
-        """Test that providing anonymizer without fields raises ValueError."""
+    def test_encode_and_anonymize__with_anonymizers_no_fields__no_error(self):
+        """Test that providing anonymizers with empty fields works."""
         obj = {"name": "John Doe"}
         mock_anonymizer = MockAnonymizer()
 
-        with pytest.raises(
-            ValueError,
-            match="fields_to_anonymize must be set if field_anonymizer is set",
-        ):
-            jsonable_encoder.encode_and_anonymize(
-                obj=obj, field_anonymizer=mock_anonymizer, fields_to_anonymize=None
-            )
+        result = jsonable_encoder.encode_and_anonymize(
+            obj=obj, anonymizers=[mock_anonymizer], fields_to_anonymize=set()
+        )
+
+        expected = {"name": "John Doe"}
+        assert result == expected
 
     def test_encode_and_anonymize__dict_with_matching_fields(self):
         """Test anonymization of a dictionary with matching field names."""
@@ -217,7 +216,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -237,7 +236,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -252,7 +251,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -267,7 +266,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -282,7 +281,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -307,7 +306,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=person,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -334,7 +333,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -356,7 +355,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -370,7 +369,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -399,7 +398,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=prefix_anonymizer,
+            anonymizers=[prefix_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -427,7 +426,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=mock_anonymizer,
+            anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
         )
 
@@ -457,7 +456,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=ApiKeyAnonymizer(),
+            anonymizers=[ApiKeyAnonymizer()],
             fields_to_anonymize={"metadata"},
         )
 
@@ -465,12 +464,17 @@ class TestEncodeAndAnonymize:
         assert "api_key" not in result["metadata"]
 
     def test_encode_and_anonymize__field_name_passed_to_anonymizer(self):
-        """Test that sensitive field names are passed to the anonymizer."""
+        """Test that sensitive field names and auxiliary information are passed to the anonymizer."""
 
         class ApiKeyAnonymizer(anonymizer.Anonymizer):
             def anonymize(self, data, **kwargs):
                 field_name = kwargs.get("field_name")
-                if field_name == "metadata" and "api_key" in data:
+                object_type = kwargs.get("object_type").__name__
+                if (
+                    field_name == "metadata"
+                    and object_type == "dict"
+                    and "api_key" in data
+                ):
                     del data["api_key"]
                 return data
 
@@ -485,7 +489,7 @@ class TestEncodeAndAnonymize:
 
         result = jsonable_encoder.encode_and_anonymize(
             obj=obj,
-            field_anonymizer=ApiKeyAnonymizer(),
+            anonymizers=[ApiKeyAnonymizer()],
             fields_to_anonymize={"metadata"},
         )
 
@@ -494,3 +498,32 @@ class TestEncodeAndAnonymize:
 
         # should not remove api_key from input
         assert "api_key" in result["input"]
+
+    def test_encode_and_anonymize__multiple_anonymizers(self):
+        """Test that multiple anonymizers are applied in a sequence."""
+
+        class PrefixAnonymizer(anonymizer.Anonymizer):
+            def anonymize(self, data, **kwargs):
+                if isinstance(data, str):
+                    return f"PREFIX_{data}"
+                return data
+
+        class SuffixAnonymizer(anonymizer.Anonymizer):
+            def anonymize(self, data, **kwargs):
+                if isinstance(data, str):
+                    return f"{data}_SUFFIX"
+                return data
+
+        obj = {"email": "test@example.com", "name": "John Doe"}
+        anonymizers = [PrefixAnonymizer(), SuffixAnonymizer()]
+        fields_to_anonymize = {"email"}
+
+        result = jsonable_encoder.encode_and_anonymize(
+            obj=obj,
+            anonymizers=anonymizers,
+            fields_to_anonymize=fields_to_anonymize,
+        )
+
+        # Should apply both anonymizers in order: first prefix, then suffix
+        expected = {"email": "PREFIX_test@example.com_SUFFIX", "name": "John Doe"}
+        assert result == expected

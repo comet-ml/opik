@@ -22,6 +22,11 @@ def has_anonymizers() -> bool:
     return len(_anonymizers) > 0
 
 
+def get_anonymizers() -> List[anonymizer.Anonymizer]:
+    """Get a list of all registered anonymizers."""
+    return _anonymizers
+
+
 def apply_anonymizers(
     data: anonymizer.AnonymizerDataType,
 ) -> anonymizer.AnonymizerDataType:
