@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Any, Dict, Mapping, Optional, List, Tuple, TypeVar, Type
+from typing import Any, Dict, Optional, List, Tuple, TypeVar, Type
 
 from . import logging_messages
 
@@ -11,7 +11,7 @@ def flatten_dict(
     d: Dict[str, Any], parent_key: str, delim: str = "."
 ) -> Dict[str, Any]:
     """
-    Current implementation does not have max depth restrictions or cyclic references handling!
+    The current implementation does not have max depth restrictions or cyclic references handling!
     """
     items = []  # type: ignore
 
@@ -60,7 +60,7 @@ def deepmerge(
     return merged
 
 
-def remove_none_from_dict(original: Mapping[str, Optional[Any]]) -> Mapping[str, Any]:
+def remove_none_from_dict(original: Dict[str, Optional[Any]]) -> Dict[str, Any]:
     new: Dict[str, Any] = {}
 
     for key, value in original.items():

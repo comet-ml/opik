@@ -317,6 +317,9 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
+          - page: Anonymizers
+            path: docs/production/anonymizers.mdx
+            slug: anonymizers
           - page: Alerts
             path: docs/production/alerts.mdx
             slug: alerts
