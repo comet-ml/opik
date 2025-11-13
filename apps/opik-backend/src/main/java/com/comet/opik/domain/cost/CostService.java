@@ -4,7 +4,9 @@ import com.comet.opik.api.ModelCostData;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
 
@@ -47,9 +49,7 @@ public class CostService {
         }
     }
 
-    private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"),
-            SpanCostCalculator::defaultCost);
+    private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
@@ -167,6 +167,7 @@ public class CostService {
         return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
     }
 
+    @RequiredArgsConstructor
     private enum ModelMode {
         TEXT_GENERATION("text_generation"),
         CHAT("chat"),
@@ -183,12 +184,8 @@ public class CostService {
         private static final ModelMode DEFAULT = TEXT_GENERATION;
         private final String value;
 
-        ModelMode(String value) {
-            this.value = value;
-        }
-
         static ModelMode fromValue(String rawValue) {
-            if (rawValue == null || rawValue.isBlank()) {
+            if (StringUtils.isBlank(rawValue)) {
                 return DEFAULT;
             }
 
