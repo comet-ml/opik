@@ -97,4 +97,3 @@ const OptimizationProgressChartContainer: React.FC<
 };
 
 export default OptimizationProgressChartContainer;
-

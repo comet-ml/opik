@@ -93,4 +93,3 @@ export const generateDistinctColorMap = (
 
   return colorMap;
 };
-

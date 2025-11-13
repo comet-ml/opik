@@ -66,6 +66,7 @@ interface LLMPromptMessageProps {
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
+  disabled?: boolean;
 }
 
 const LLMPromptMessage = ({
@@ -81,6 +82,7 @@ const LLMPromptMessage = ({
   onRemoveMessage,
   disableMedia = true,
   improvePromptConfig,
+  disabled = false,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,7 +140,12 @@ const LLMPromptMessage = ({
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))] dark:bg-accent-background dark:shadow-none">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                <Button
+                  variant="minimal"
+                  size="sm"
+                  className="min-w-4 p-0"
+                  disabled={disabled}
+                >
                   {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
                   <ChevronDown className="ml-1 w-4" />
                 </Button>
@@ -222,6 +229,7 @@ const LLMPromptMessage = ({
                 value={localText}
                 onChange={handleContentChange}
                 placeholder="Type your message"
+                editable={!disabled}
                 basicSetup={{
                   foldGutter: false,
                   allowMultipleSelections: false,

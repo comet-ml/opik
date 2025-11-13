@@ -13,6 +13,7 @@ export type UseOptimizationsListParams = {
   workspaceName: string;
   datasetId?: string;
   datasetDeleted?: boolean;
+  studioOnly?: boolean;
   filters?: Filters;
   search?: string;
   page: number;
@@ -31,6 +32,7 @@ export const getOptimizationsList = async (
     workspaceName,
     datasetId,
     datasetDeleted,
+    studioOnly,
     filters,
     search,
     size,
@@ -40,8 +42,9 @@ export const getOptimizationsList = async (
   const { data } = await api.get(OPTIMIZATIONS_REST_ENDPOINT, {
     signal,
     params: {
-      workspace_name: workspaceName, // we just need it to reset the cash in case workspace is changed
+      workspace_name: workspaceName,
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
+      ...(isBoolean(studioOnly) && { studio_only: studioOnly }),
       ...processFilters(filters),
       ...(search && { name: search }),
       ...(datasetId && { dataset_id: datasetId }),

@@ -10,21 +10,14 @@ const OptimizationStudioActions: React.FC = () => {
   const navigate = useNavigate();
   const { activeOptimization } = useOptimizationStudioContext();
 
-  const handleNewOptimization = () => {
-    navigate({
-      to: "/$workspaceName/optimization-studio/run",
-      params: { workspaceName },
-      search: {},
-    });
-  };
-
   const handleViewTrials = () => {
     if (!activeOptimization) return;
 
     navigate({
-      to: "/$workspaceName/optimizations/$optimizationId/compare",
+      to: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
       params: {
         workspaceName,
+        datasetId: activeOptimization.dataset_id,
         optimizationId: activeOptimization.id,
       },
       search: {
@@ -33,13 +26,8 @@ const OptimizationStudioActions: React.FC = () => {
     });
   };
 
-  // No optimization - show "Run optimization"
   if (!activeOptimization) {
-    return (
-      <Button size="sm" className="h-8">
-        Run optimization
-      </Button>
-    );
+    return null;
   }
 
   // Optimization in progress - show "Stop optimization" (outlined) + "View trials" (primary)
@@ -66,9 +54,6 @@ const OptimizationStudioActions: React.FC = () => {
         onClick={handleViewTrials}
       >
         View trials
-      </Button>
-      <Button size="sm" className="h-8" onClick={handleNewOptimization}>
-        New optimization
       </Button>
     </div>
   );
