@@ -39,6 +39,12 @@ const TYPE_OPTIONS = [
     description:
       "Use a numerical range (e.g. 1–5) to rate outputs quantitatively.",
   },
+  {
+    value: FEEDBACK_DEFINITION_TYPE.boolean,
+    label: "Boolean",
+    description:
+      'Use binary labels (e.g. "Pass"/"Fail") to mark outputs as true or false.',
+  },
 ];
 
 function isValidFeedbackDefinition(
@@ -52,6 +58,13 @@ function isValidFeedbackDefinition(
 
   if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
     return Object.keys(feedbackDefinition.details.categories).length >= 2;
+  }
+
+  if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
+    return (
+      feedbackDefinition.details.true_label.trim().length > 0 &&
+      feedbackDefinition.details.false_label.trim().length > 0
+    );
   }
 
   return false;

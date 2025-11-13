@@ -1,12 +1,14 @@
 import React from "react";
 
 import {
+  BooleanFeedbackDefinition,
   CategoricalFeedbackDefinition,
   CreateFeedbackDefinition,
   FEEDBACK_DEFINITION_TYPE,
   NumericalFeedbackDefinition,
 } from "@/types/feedback-definitions";
 
+import BooleanFeedbackDefinitionDetails from "./BooleanFeedbackDefinitionDetails";
 import CategoricalFeedbackDefinitionDetails from "./CategoricalFeedbackDefinitionDetails";
 import NumericalFeedbackDefinitionDetails from "./NumericalFeedbackDefinitionDetails";
 
@@ -33,6 +35,15 @@ const FeedbackDefinitionDetails: React.FunctionComponent<
       <NumericalFeedbackDefinitionDetails
         onChange={onChange}
         details={details as NumericalFeedbackDefinition["details"]}
+      />
+    );
+  }
+
+  if (type === FEEDBACK_DEFINITION_TYPE.boolean) {
+    return (
+      <BooleanFeedbackDefinitionDetails
+        onChange={onChange}
+        details={details as BooleanFeedbackDefinition["details"]}
       />
     );
   }

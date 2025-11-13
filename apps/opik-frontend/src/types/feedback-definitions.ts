@@ -1,6 +1,7 @@
 export enum FEEDBACK_DEFINITION_TYPE {
   categorical = "categorical",
   numerical = "numerical",
+  boolean = "boolean",
 }
 
 export interface CategoricalFeedbackDefinition {
@@ -18,10 +19,22 @@ export interface NumericalFeedbackDefinition {
   type: FEEDBACK_DEFINITION_TYPE.numerical;
 }
 
+export interface BooleanFeedbackDefinition {
+  details: {
+    true_label: string;
+    false_label: string;
+  };
+  type: FEEDBACK_DEFINITION_TYPE.boolean;
+}
+
 export type CreateFeedbackDefinition = {
   name: string;
   description?: string;
-} & (CategoricalFeedbackDefinition | NumericalFeedbackDefinition);
+} & (
+  | CategoricalFeedbackDefinition
+  | NumericalFeedbackDefinition
+  | BooleanFeedbackDefinition
+);
 
 export type FeedbackDefinition = CreateFeedbackDefinition & {
   id: string;

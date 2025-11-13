@@ -66,6 +66,22 @@ public class FeedbackValidator implements ConstraintValidator<FeedbackValidation
 
                 return false;
             }
+            case FeedbackDefinition.BooleanFeedbackDefinition booleanFeedback -> {
+                var result = validatorFactory.getValidator().validate(booleanFeedback.getDetails());
+
+                if (result.isEmpty()) {
+                    return true;
+                }
+                context.disableDefaultConstraintViolation();
+
+                result.forEach(violation -> addViolation(
+                        context,
+                        violation.getMessage(),
+                        FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.class,
+                        violation.getPropertyPath().toString()));
+
+                return false;
+            }
         }
     }
 

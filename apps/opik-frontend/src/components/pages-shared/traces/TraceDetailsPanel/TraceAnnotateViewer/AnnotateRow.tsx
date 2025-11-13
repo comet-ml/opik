@@ -196,6 +196,48 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       );
     }
 
+    if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
+      const onBooleanValueChange = (value?: string) => {
+        const boolValue =
+          value === feedbackDefinition.details.true_label ? 1 : 0;
+        const categoryName = value;
+
+        setCategoryName(categoryName);
+        setValue(boolValue);
+        handleChangeValue(boolValue, categoryName);
+      };
+
+      return (
+        <ToggleGroup
+          className="min-w-fit p-0.5"
+          onValueChange={onBooleanValueChange}
+          variant="outline"
+          type="single"
+          size="md"
+          value={categoryName}
+        >
+          <ToggleGroupItem
+            className="w-full"
+            key="true"
+            value={feedbackDefinition.details.true_label}
+          >
+            <div className="text-nowrap">
+              {feedbackDefinition.details.true_label}
+            </div>
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            className="w-full"
+            key="false"
+            value={feedbackDefinition.details.false_label}
+          >
+            <div className="text-nowrap">
+              {feedbackDefinition.details.false_label}
+            </div>
+          </ToggleGroupItem>
+        </ToggleGroup>
+      );
+    }
+
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
       const onCategoricalValueChange = (value?: string) => {
         if (value === "") {

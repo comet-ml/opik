@@ -777,11 +777,34 @@ class FeedbackDefinitionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetFeedbackDefinition {
 
-        @Test
-        @DisplayName("Success")
-        void getById() {
+        private Stream<Arguments> feedbackDefinitionProvider() {
+            return Stream.of(
+                    arguments("Numerical", factory.manufacturePojo(NumericalFeedbackDefinition.class),
+                            FeedbackType.NUMERICAL),
+                    arguments("Categorical",
+                            factory.manufacturePojo(CategoricalFeedbackDefinition.class)
+                                    .toBuilder()
+                                    .details(CategoricalFeedbackDetail.builder()
+                                            .categories(Map.of("good", 1.0, "bad", 0.0))
+                                            .build())
+                                    .build(),
+                            FeedbackType.CATEGORICAL),
+                    arguments("Boolean",
+                            factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                                    .toBuilder()
+                                    .details(
+                                            FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                                                    .trueLabel("Pass")
+                                                    .falseLabel("Fail")
+                                                    .build())
+                                    .build(),
+                            FeedbackType.BOOLEAN));
+        }
 
-            final var feedback = factory.manufacturePojo(FeedbackDefinition.NumericalFeedbackDefinition.class);
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("feedbackDefinitionProvider")
+        @DisplayName("Success - Get feedback definition by ID")
+        void getById(String typeName, FeedbackDefinition<?> feedback, FeedbackType expectedType) {
 
             var id = create(feedback, API_KEY, TEST_WORKSPACE);
 
@@ -793,7 +816,7 @@ class FeedbackDefinitionResourceTest {
                     .get();
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            var actualEntity = actualResponse.readEntity(FeedbackDefinition.NumericalFeedbackDefinition.class);
+            var actualEntity = actualResponse.readEntity(FeedbackDefinition.class);
 
             assertThat(actualEntity)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
@@ -802,7 +825,7 @@ class FeedbackDefinitionResourceTest {
                             .build())
                     .isEqualTo(feedback);
 
-            assertThat(actualEntity.getType()).isEqualTo(FeedbackType.NUMERICAL);
+            assertThat(actualEntity.getType()).isEqualTo(expectedType);
             assertThat(actualEntity.getLastUpdatedBy()).isEqualTo(USER);
             assertThat(actualEntity.getCreatedBy()).isEqualTo(USER);
             assertThat(actualEntity.getCreatedAt()).isNotNull();
@@ -840,12 +863,35 @@ class FeedbackDefinitionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateFeedbackDefinition {
 
-        @Test
-        @DisplayName("Success")
-        void create() {
-            UUID id;
+        private Stream<Arguments> feedbackDefinitionProvider() {
+            return Stream.of(
+                    arguments("Numerical", factory.manufacturePojo(NumericalFeedbackDefinition.class),
+                            FeedbackType.NUMERICAL),
+                    arguments("Categorical",
+                            factory.manufacturePojo(CategoricalFeedbackDefinition.class)
+                                    .toBuilder()
+                                    .details(CategoricalFeedbackDetail.builder()
+                                            .categories(Map.of("good", 1.0, "bad", 0.0))
+                                            .build())
+                                    .build(),
+                            FeedbackType.CATEGORICAL),
+                    arguments("Boolean",
+                            factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                                    .toBuilder()
+                                    .details(
+                                            FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                                                    .trueLabel("Pass")
+                                                    .falseLabel("Fail")
+                                                    .build())
+                                    .build(),
+                            FeedbackType.BOOLEAN));
+        }
 
-            var feedbackDefinition = factory.manufacturePojo(NumericalFeedbackDefinition.class);
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("feedbackDefinitionProvider")
+        @DisplayName("Success - Create feedback definition")
+        void create(String typeName, FeedbackDefinition<?> feedbackDefinition, FeedbackType expectedType) {
+            UUID id;
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
@@ -870,9 +916,10 @@ class FeedbackDefinitionResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            var actualEntity = actualResponse.readEntity(FeedbackDefinition.NumericalFeedbackDefinition.class);
+            var actualEntity = actualResponse.readEntity(FeedbackDefinition.class);
 
             assertThat(actualEntity.getId()).isEqualTo(id);
+            assertThat(actualEntity.getType()).isEqualTo(expectedType);
         }
 
         @Test
@@ -1074,6 +1121,58 @@ class FeedbackDefinitionResourceTest {
         }
 
         @Test
+        @DisplayName("when boolean true label is blank, then return bad request")
+        void create__whenBooleanTrueLabelIsBlank__thenReturnBadRequest() {
+
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("")
+                            .falseLabel("Fail")
+                            .build())
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(feedbackDefinition))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .containsExactly("details.trueLabel must not be blank");
+            }
+        }
+
+        @Test
+        @DisplayName("when boolean false label is blank, then return bad request")
+        void create__whenBooleanFalseLabelIsBlank__thenReturnBadRequest() {
+
+            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                    .toBuilder()
+                    .details(FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                            .trueLabel("Pass")
+                            .falseLabel("")
+                            .build())
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(feedbackDefinition))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .containsExactly("details.falseLabel must not be blank");
+            }
+        }
+
+        @Test
         @DisplayName("when numerical max is smaller than min, then return bad request")
         void create__whenNumericalMaxIsSmallerThanMin__thenReturnBadRequest() {
 
@@ -1134,20 +1233,51 @@ class FeedbackDefinitionResourceTest {
             }
         }
 
-        @Test
-        void update() {
+        private Stream<Arguments> feedbackDefinitionProvider() {
+            return Stream.of(
+                    arguments("Numerical", factory.manufacturePojo(NumericalFeedbackDefinition.class)),
+                    arguments("Categorical",
+                            factory.manufacturePojo(CategoricalFeedbackDefinition.class)
+                                    .toBuilder()
+                                    .details(CategoricalFeedbackDetail.builder()
+                                            .categories(Map.of("good", 1.0, "bad", 0.0))
+                                            .build())
+                                    .build()),
+                    arguments("Boolean",
+                            factory.manufacturePojo(FeedbackDefinition.BooleanFeedbackDefinition.class)
+                                    .toBuilder()
+                                    .details(
+                                            FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail.builder()
+                                                    .trueLabel("Pass")
+                                                    .falseLabel("Fail")
+                                                    .build())
+                                    .build()));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("feedbackDefinitionProvider")
+        @DisplayName("Success - Update feedback definition")
+        void update(String typeName, FeedbackDefinition<?> feedbackDefinition) {
 
             String nameUpdated = UUID.randomUUID().toString();
             String descriptionUpdated = UUID.randomUUID().toString();
 
-            var feedbackDefinition = factory.manufacturePojo(FeedbackDefinition.CategoricalFeedbackDefinition.class);
-
             UUID id = create(feedbackDefinition, API_KEY, TEST_WORKSPACE);
 
-            var feedbackDefinition1 = feedbackDefinition.toBuilder()
-                    .name(nameUpdated)
-                    .description(descriptionUpdated)
-                    .build();
+            FeedbackDefinition<?> feedbackDefinition1 = switch (feedbackDefinition) {
+                case NumericalFeedbackDefinition numerical -> numerical.toBuilder()
+                        .name(nameUpdated)
+                        .description(descriptionUpdated)
+                        .build();
+                case CategoricalFeedbackDefinition categorical -> categorical.toBuilder()
+                        .name(nameUpdated)
+                        .description(descriptionUpdated)
+                        .build();
+                case FeedbackDefinition.BooleanFeedbackDefinition booleanDef -> booleanDef.toBuilder()
+                        .name(nameUpdated)
+                        .description(descriptionUpdated)
+                        .build();
+            };
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
@@ -1169,12 +1299,10 @@ class FeedbackDefinitionResourceTest {
                     .get();
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            var actualEntity = actualResponse.readEntity(FeedbackDefinition.CategoricalFeedbackDefinition.class);
+            var actualEntity = actualResponse.readEntity(FeedbackDefinition.class);
 
             assertThat(actualEntity.getName()).isEqualTo(nameUpdated);
             assertThat(actualEntity.getDescription()).isEqualTo(descriptionUpdated);
-            assertThat(actualEntity.getDetails().getCategories())
-                    .isEqualTo(feedbackDefinition.getDetails().getCategories());
         }
 
     }

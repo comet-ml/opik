@@ -24,6 +24,10 @@ public class FeedbackDefinitionRowMapper implements RowMapper<FeedbackDefinition
                     .orElseThrow(() -> new IllegalStateException(
                             "No mapper found for Feedback Definition Type: %s".formatted(feedbackType)))
                     .map(rs, ctx);
+            case BOOLEAN -> ctx.findMapperFor(BooleanFeedbackDefinitionDefinitionModel.class)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No mapper found for Feedback Definition Type: %s".formatted(feedbackType)))
+                    .map(rs, ctx);
         };
     }
 }

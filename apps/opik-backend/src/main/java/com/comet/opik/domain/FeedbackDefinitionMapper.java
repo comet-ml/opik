@@ -16,12 +16,18 @@ interface FeedbackDefinitionMapper {
     @Mapping(target = "details", expression = "java(map(model.details()))")
     FeedbackDefinition.CategoricalFeedbackDefinition map(CategoricalFeedbackDefinitionDefinitionModel model);
 
+    @Mapping(target = "details", expression = "java(map(model.details()))")
+    FeedbackDefinition.BooleanFeedbackDefinition map(BooleanFeedbackDefinitionDefinitionModel model);
+
     NumericalFeedbackDefinitionDefinitionModel map(FeedbackDefinition.NumericalFeedbackDefinition numerical);
     CategoricalFeedbackDefinitionDefinitionModel map(FeedbackDefinition.CategoricalFeedbackDefinition categorical);
+    BooleanFeedbackDefinitionDefinitionModel map(FeedbackDefinition.BooleanFeedbackDefinition booleanDef);
 
     FeedbackDefinition.CategoricalFeedbackDefinition.CategoricalFeedbackDetail map(
             CategoricalFeedbackDefinitionDefinitionModel.CategoricalFeedbackDetail detail);
     FeedbackDefinition.NumericalFeedbackDefinition.NumericalFeedbackDetail map(
             NumericalFeedbackDefinitionDefinitionModel.NumericalFeedbackDetail detail);
+    FeedbackDefinition.BooleanFeedbackDefinition.BooleanFeedbackDetail map(
+            BooleanFeedbackDefinitionDefinitionModel.BooleanFeedbackDetail detail);
 
 }
