@@ -8,6 +8,7 @@ from .anonymizer_hook import (
     add_anonymizer,
     apply_anonymizers,
     get_anonymizers,
+    clear_anonymizers,
 )
 
 __all__ = (
@@ -16,6 +17,7 @@ __all__ = (
     "register_httpx_client_hook",
     "add_anonymizer",
     "apply_anonymizers",
+    "clear_anonymizers",
     "get_anonymizers",
     "has_anonymizers",
 )
