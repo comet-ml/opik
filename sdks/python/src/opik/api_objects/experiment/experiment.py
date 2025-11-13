@@ -2,13 +2,12 @@ import functools
 import logging
 from typing import List, Optional
 
-import opik.rest_api
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_public
 from . import experiment_item, experiments_client
-from .. import constants, helpers, rest_stream_parser
+from .. import constants, helpers
 from ...api_objects.prompt import Prompt
 
 LOGGER = logging.getLogger(__name__)
