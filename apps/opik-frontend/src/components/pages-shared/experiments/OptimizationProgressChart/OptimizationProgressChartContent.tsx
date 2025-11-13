@@ -340,4 +340,3 @@ const OptimizationProgressChartContent: React.FC<
 };
 
 export default OptimizationProgressChartContent;
-

@@ -12,7 +12,7 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import MetricSelector from "./MetricSelector";
-import DatasetEmptyState from "./DatasetEmptyState";
+import { DatasetEmptyState } from "@/components/pages-shared/llm/LLMDatasetSelectBox/LLMDatasetSelectBox";
 import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";

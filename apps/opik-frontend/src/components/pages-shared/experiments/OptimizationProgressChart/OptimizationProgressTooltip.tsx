@@ -154,4 +154,3 @@ const OptimizationProgressTooltip = React.forwardRef<
 OptimizationProgressTooltip.displayName = "OptimizationProgressTooltip";
 
 export default OptimizationProgressTooltip;
-
