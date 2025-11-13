@@ -7,14 +7,17 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -280,14 +283,97 @@ public class SlackWebhookPayloadMapper {
 
     private static DetailsBuildResult buildCostDetails(List<?> metadata,
             String baseUrl) {
-        // TODO: implement cost details mapping
-        return new DetailsBuildResult("implement later");
+        if (metadata.isEmpty()) {
+            return new DetailsBuildResult("No cost alerts triggered");
+        }
+
+        List<String> alertDetails = metadata.stream()
+                .map(item -> formatMetricsAlertPayload((MetricsAlertPayload) item, "Cost"))
+                .toList();
+
+        String mainText = "*Cost Alert Triggered:*\n" + String.join("\n", alertDetails);
+        String projectsLink = String.format("\n\n<%s/projects|View All Projects>", baseUrl);
+
+        return new DetailsBuildResult(mainText + projectsLink);
     }
 
     private static DetailsBuildResult buildLatencyDetails(List<?> metadata,
             String baseUrl) {
-        // TODO: implement latency details mapping
-        return new DetailsBuildResult("implement later");
+        if (metadata.isEmpty()) {
+            return new DetailsBuildResult("No latency alerts triggered");
+        }
+
+        List<String> alertDetails = metadata.stream()
+                .map(item -> formatMetricsAlertPayload((MetricsAlertPayload) item, "Latency"))
+                .toList();
+
+        String mainText = "*Latency Alert Triggered:*\n" + String.join("\n", alertDetails);
+        String projectsLink = String.format("\n\n<%s/projects|View All Projects>", baseUrl);
+
+        return new DetailsBuildResult(mainText + projectsLink);
+    }
+
+    /**
+     * Formats metrics alert payload into a readable Slack message.
+     */
+    private static String formatMetricsAlertPayload(@NonNull MetricsAlertPayload payload, String type) {
+        try {
+            // Format window duration
+            String windowDuration = formatWindowDuration(payload.windowSeconds());
+
+            // Build scope description
+            String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
+                    ? "*Workspace-wide*"
+                    : String.format("*Projects:* `%s`", payload.projectIds());
+
+            // Format based on metric type
+            String valuePrefix = type.equals("Cost") ? "$" : "";
+            String valueSuffix = type.equals("Cost") ? "" : " s";
+
+            return String.format("• *Current %s:* %s%s%s\n" +
+                    "  *Threshold:* %s%s%s\n" +
+                    "  *Time Window:* %s\n" +
+                    "  *Scope:* %s",
+                    type,
+                    valuePrefix,
+                    formatDecimal(payload.metricValue()),
+                    valueSuffix,
+                    valuePrefix,
+                    formatDecimal(payload.threshold()),
+                    valueSuffix,
+                    windowDuration,
+                    scope);
+        } catch (Exception e) {
+            log.error("Failed to format metrics alert payload: '{}'", payload, e);
+            return "• %s alert (unable to parse details)".formatted(type);
+        }
+    }
+
+    /**
+     * Formats window duration from seconds to human-readable format.
+     */
+    private static String formatWindowDuration(long seconds) {
+        Duration duration = Duration.ofSeconds(seconds);
+
+        if (duration.toDays() > 0) {
+            long days = duration.toDays();
+            return days + " day" + (days != 1 ? "s" : "");
+        } else if (duration.toHours() > 0) {
+            long hours = duration.toHours();
+            return hours + " hour" + (hours != 1 ? "s" : "");
+        } else if (duration.toMinutes() > 0) {
+            long minutes = duration.toMinutes();
+            return minutes + " minute" + (minutes != 1 ? "s" : "");
+        } else {
+            return seconds + " second" + (seconds != 1 ? "s" : "");
+        }
+    }
+
+    /**
+     * Formats decimal number to 4 decimal places.
+     */
+    private static String formatDecimal(BigDecimal value) {
+        return String.format("%.4f", value.doubleValue());
     }
 
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,

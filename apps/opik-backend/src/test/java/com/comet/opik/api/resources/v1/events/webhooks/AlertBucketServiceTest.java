@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.alerts.AlertBucketService;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;

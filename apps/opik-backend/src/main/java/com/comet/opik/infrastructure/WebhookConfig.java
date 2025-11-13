@@ -73,6 +73,10 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     private DebouncingConfig debouncing = new DebouncingConfig();
 
+    // Metrics alert job configuration
+    @Valid @JsonProperty
+    private MetricsConfig metrics = new MetricsConfig();
+
     @JsonProperty
     @Min(2) private int claimIntervalRatio;
 
@@ -110,5 +114,28 @@ public class WebhookConfig implements StreamConfiguration {
         @Valid @JsonProperty
         @MaxDuration(value = 500, unit = TimeUnit.MILLISECONDS)
         private Duration alertJobLockWaitTimeout = Duration.milliseconds(100);
+    }
+
+    /**
+     * Configuration for metrics alert job scheduling.
+     */
+    @Data
+    public static class MetricsConfig {
+
+        @Valid @JsonProperty
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration initialDelay = Duration.seconds(300);
+
+        @Valid @JsonProperty
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration fixedDelay = Duration.seconds(300);
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration metricsAlertJobTimeout = Duration.seconds(60);
+
+        @Valid @JsonProperty
+        @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
+        private Duration metricsAlertJobLockWaitTimeout = Duration.seconds(1);
     }
 }

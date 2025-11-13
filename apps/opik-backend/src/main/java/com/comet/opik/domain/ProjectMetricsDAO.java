@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -66,6 +67,12 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime,
+            @NonNull Instant endTime);
+
+    Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime,
+            @NonNull Instant endTime);
 }
 
 @Slf4j
@@ -75,6 +82,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
@@ -532,6 +540,29 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
+    private static final String GET_TOTAL_COST = """
+            SELECT
+                sum(total_estimated_cost) AS total_cost
+            FROM spans final
+            WHERE workspace_id = :workspace_id
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                AND trace_id BETWEEN :uuid_from_time AND :uuid_to_time;
+            """;
+
+    private static final String GET_AVERAGE_DURATION = """
+            SELECT
+                avg(
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL)
+                ) AS avg_duration
+            FROM traces final
+            WHERE workspace_id = :workspace_id
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                AND id BETWEEN :uuid_from_time AND :uuid_to_time;
+            """;
+
     private static final String GET_THREAD_COUNT = """
             %s
             SELECT <bucket> AS bucket,
@@ -687,6 +718,72 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         row -> NAME_GUARDRAILS_FAILED_COUNT,
                         row -> row.get("failed_cnt", Integer.class)))
                 .collectList());
+    }
+
+    @Override
+    public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime,
+            @NonNull Instant endTime) {
+        return template.nonTransaction(connection -> {
+            var stTemplate = new ST(GET_TOTAL_COST);
+
+            // Add project_ids flag to template if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                stTemplate.add("project_ids", true);
+            }
+
+            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
+            var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
+
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("uuid_from_time", uuidFromTime)
+                    .bind("uuid_to_time", uuidToTime);
+
+            // Bind project IDs if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+            }
+
+            InstrumentAsyncUtils.Segment segment = startSegment("getTotalCost", "Clickhouse", "get");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("total_cost", BigDecimal.class)))
+                    .next()
+                    .defaultIfEmpty(BigDecimal.ZERO)
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds,
+            @NonNull Instant startTime, @NonNull Instant endTime) {
+        return template.nonTransaction(connection -> {
+            var stTemplate = new ST(GET_AVERAGE_DURATION);
+
+            // Add project_ids flag to template if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                stTemplate.add("project_ids", true);
+            }
+
+            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
+            var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
+
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("uuid_from_time", uuidFromTime)
+                    .bind("uuid_to_time", uuidToTime);
+
+            // Bind project IDs if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+            }
+
+            InstrumentAsyncUtils.Segment segment = startSegment("getAverageDuration", "Clickhouse", "get");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("avg_duration", BigDecimal.class)))
+                    .next()
+                    .defaultIfEmpty(BigDecimal.ZERO)
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private Mono<? extends Result> getMetric(

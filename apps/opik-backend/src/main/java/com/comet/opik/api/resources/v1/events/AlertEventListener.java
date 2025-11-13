@@ -1,6 +1,7 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.webhooks.AlertEvent;
+import com.comet.opik.domain.alerts.AlertEventEvaluationService;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
