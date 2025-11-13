@@ -345,12 +345,22 @@ from opik.integrations.langchain import OpikTracer
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
 
-# Configure anonymization
+# Configure anonymization - mix regex and callable function
+def mask_credit_cards(text: str) -> str:
+    """Partial masking: show first 4 and last 4 digits, mask the middle"""
+    import re
+    def partial_mask(match):
+        card = match.group(0).replace('-', '').replace(' ', '')
+        if len(card) >= 8:
+            return card[:4] + '*' * (len(card) - 8) + card[-4:]
+        return '[CARD]'
+    return re.sub(r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b', partial_mask, text)
+
 anonymizer_rules = [
-    # Email pattern
+    # Email pattern (regex tuple)
     (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]"),
-    # Custom function to handle API keys
-    lambda text: text.replace("sk-", "[API_KEY]"),
+    # Callable function for smart masking
+    mask_credit_cards,
 ]
 opik.hooks.add_anonymizer(create_anonymizer(anonymizer_rules))
 
@@ -358,7 +368,7 @@ opik.hooks.add_anonymizer(create_anonymizer(anonymizer_rules))
 llm = ChatOpenAI(callbacks=[OpikTracer()])
 
 # All inputs and outputs will be automatically anonymized
-messages = [HumanMessage(content="Contact sarah@example.com about the API key sk-1234567890")]
+messages = [HumanMessage(content="Contact sarah@example.com about card 4532-1234-5678-9010")]
 result = llm.invoke(messages)
 ```
 
