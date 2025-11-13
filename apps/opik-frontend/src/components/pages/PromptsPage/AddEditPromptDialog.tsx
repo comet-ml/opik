@@ -62,11 +62,10 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     editable: true,
   });
 
-  const { localText, images, setImages, handleContentChange } =
-    useMessageContent({
-      content: template,
-      onChangeContent: setTemplate,
-    });
+  const { localText, images, handleContentChange } = useMessageContent({
+    content: template,
+    onChangeContent: (content) => setTemplate(content as string),
+  });
 
   const { mutate: createMutate } = usePromptCreateMutation();
   const { mutate: updateMutate } = usePromptUpdateMutation();
@@ -177,7 +176,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
               <Label>Images</Label>
               <PromptMessageImageTags
                 images={images}
-                setImages={setImages}
+                setImages={() => {}}
+                editable={false}
                 align="start"
               />
             </div>

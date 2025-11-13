@@ -26,8 +26,8 @@ import { cn } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
-import { hasImagesInContent } from "@/lib/llm";
 import { supportsImageInput } from "@/lib/modelCapabilities";
+import { hasImagesInContent } from "@/lib/llm";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetEmptyState from "./DatasetEmptyState";
 

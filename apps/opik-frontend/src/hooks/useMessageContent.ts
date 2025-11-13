@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { combineContentWithImages, parseContentWithImages } from "@/lib/llm";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MessageContent, TextPart, ImagePart } from "@/types/llm";
 import { OnChangeFn } from "@/types/shared";
+import { parseLLMMessageContent } from "@/lib/llm";
 
 interface UseMessageContentProps {
-  content: string;
-  onChangeContent: (newContent: string) => void;
+  content: MessageContent;
+  onChangeContent: (newContent: MessageContent) => void;
 }
 
 interface UseMessageContentReturn {
@@ -18,41 +19,54 @@ export const useMessageContent = ({
   content,
   onChangeContent,
 }: UseMessageContentProps): UseMessageContentReturn => {
-  const lastProcessedContentRef = useRef<string>(content);
-  const { text: initText, images: initImages } =
-    parseContentWithImages(content);
-  const [localText, setLocalText] = useState(initText);
-  const [images, setImages] = useState<string[]>(initImages);
-
-  useEffect(() => {
-    if (content !== lastProcessedContentRef.current) {
-      const { text, images: parsedImages } = parseContentWithImages(content);
-      setLocalText(text);
-      setImages(parsedImages);
-      lastProcessedContentRef.current = combineContentWithImages(
-        text,
-        parsedImages,
-      );
-    }
-  }, [content]);
-
-  useEffect(() => {
-    const newContent = combineContentWithImages(localText, images);
-    if (newContent !== lastProcessedContentRef.current) {
-      lastProcessedContentRef.current = newContent;
-      onChangeContent(newContent);
-    }
-  }, [images, localText, onChangeContent]);
-
-  const handleContentChange = useCallback(
-    (newText: string) => {
-      setLocalText(newText);
-      const newContent = combineContentWithImages(newText, images);
-      lastProcessedContentRef.current = newContent;
-      onChangeContent(newContent);
-    },
-    [images, onChangeContent],
+  // Parse content (string or array)
+  const { text: textContent, images: imageUrls } = useMemo(
+    () => parseLLMMessageContent(content),
+    [content],
   );
+
+  const [localText, setLocalText] = useState(textContent);
+  const [images, setImages] = useState<string[]>(imageUrls);
+  const lastProcessedContentRef = useRef<MessageContent>(content);
+
+  // Sync external changes to local state
+  useEffect(() => {
+    setLocalText(textContent);
+    setImages(imageUrls);
+  }, [textContent, imageUrls]);
+
+  // Rebuild content when text or images change
+  useEffect(() => {
+    let newContent: MessageContent;
+
+    if (images.length === 0) {
+      // Text-only: use plain string
+      newContent = localText;
+    } else {
+      // With images: use array format
+      const parts: Array<TextPart | ImagePart> = [];
+      if (localText.trim()) {
+        parts.push({ type: "text", text: localText });
+      }
+      images.forEach((url) => {
+        parts.push({ type: "image_url", image_url: { url } });
+      });
+      newContent = parts;
+    }
+
+    // Only update if content actually changed
+    if (
+      JSON.stringify(newContent) !==
+      JSON.stringify(lastProcessedContentRef.current)
+    ) {
+      lastProcessedContentRef.current = newContent;
+      onChangeContent(newContent);
+    }
+  }, [localText, images, onChangeContent]);
+
+  const handleContentChange = useCallback((newText: string) => {
+    setLocalText(newText);
+  }, []);
 
   return {
     localText,

@@ -16,8 +16,12 @@ import {
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
-import { hasImagesInContent } from "@/lib/llm";
 import { supportsImageInput } from "@/lib/modelCapabilities";
+import {
+  hasImagesInContent,
+  getTextFromMessageContent,
+  convertMessageContentToBackendFormat,
+} from "@/lib/llm";
 import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
 
 const isOpenAIModel = (modelName: string): boolean => {
@@ -145,7 +149,20 @@ const LLMJudgeBaseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      content: z.string().min(1, { message: "Message is required" }),
+      content: z.union([
+        z.string().min(1, { message: "Message is required" }),
+        z
+          .array(
+            z.union([
+              z.object({ type: z.literal("text"), text: z.string() }),
+              z.object({
+                type: z.literal("image_url"),
+                image_url: z.object({ url: z.string() }),
+              }),
+            ]),
+          )
+          .min(1, { message: "Message is required" }),
+      ]),
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
@@ -214,9 +231,10 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) =>
-    m.content.includes("{{context}}"),
-  ).length;
+  const contextCount = data.messages.filter((m) => {
+    const content = getTextFromMessageContent(m.content);
+    return content.includes("{{context}}");
+  }).length;
 
   if (contextCount < 1) {
     ctx.addIssue({
@@ -235,7 +253,8 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   }
 
   data.messages.forEach((message, index) => {
-    const matches = message.content.match(/{{([^}]+)}}/g);
+    const content = getTextFromMessageContent(message.content);
+    const matches = content.match(/{{([^}]+)}}/g);
     if (matches) {
       matches.forEach((match) => {
         if (match !== "{{context}}") {
@@ -327,7 +346,10 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
+  messages.map((m) => ({
+    content: convertMessageContentToBackendFormat(m.content),
+    role: m.role.toUpperCase(),
+  }));
 
 const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
   messages.map(
