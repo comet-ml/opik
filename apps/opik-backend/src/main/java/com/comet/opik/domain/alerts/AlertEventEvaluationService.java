@@ -1,4 +1,4 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.domain.alerts;
 
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;

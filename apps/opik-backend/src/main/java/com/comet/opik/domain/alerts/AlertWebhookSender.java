@@ -1,7 +1,8 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.domain.alerts;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.resources.v1.events.webhooks.WebhookPublisher;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;

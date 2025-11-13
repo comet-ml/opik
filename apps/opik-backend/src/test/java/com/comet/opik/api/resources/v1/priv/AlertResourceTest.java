@@ -1765,10 +1765,27 @@ class AlertResourceTest {
         private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue,
                 String threshold, String windowSeconds, UUID projectId) {
             assertThat(payload).containsEntry("event_type", eventType);
-            assertThat(new BigDecimal(payload.get("metric_value")).compareTo(new BigDecimal(metricValue))).isEqualTo(0);
-            assertThat(payload).containsEntry("threshold", threshold);
-            assertThat(payload).containsEntry("window_seconds", windowSeconds);
-            assertThat(payload.get("project_ids")).contains(projectId.toString());
+
+            // Handle numeric values from JSON deserialization
+            Object metricValueObj = payload.get("metric_value");
+            BigDecimal actualMetricValue = metricValueObj instanceof Number
+                    ? BigDecimal.valueOf(((Number) metricValueObj).doubleValue())
+                    : new BigDecimal(metricValueObj.toString());
+            assertThat(actualMetricValue.compareTo(new BigDecimal(metricValue))).isZero();
+
+            Object thresholdObj = payload.get("threshold");
+            BigDecimal actualThreshold = thresholdObj instanceof Number
+                    ? BigDecimal.valueOf(((Number) thresholdObj).doubleValue())
+                    : new BigDecimal(thresholdObj.toString());
+            assertThat(actualThreshold.compareTo(new BigDecimal(threshold))).isZero();
+
+            Object windowObj = payload.get("window_seconds");
+            long actualWindow = windowObj instanceof Number
+                    ? ((Number) windowObj).longValue()
+                    : Long.parseLong(windowObj.toString());
+            assertThat(actualWindow).isEqualTo(Long.parseLong(windowSeconds));
+
+            assertThat(payload.get("project_ids").toString()).contains(projectId.toString());
         }
 
         private String verifyWebhookCalledAndGetPayload(Alert alert) {
@@ -2810,6 +2827,9 @@ class AlertResourceTest {
                                     .createdAt(null)
                                     .build())
                             .toList();
+                    // Replace TRACE_COST and TRACE_LATENCY with TRACE_ERRORS for test assertion purposes
+                    // This is needed because metrics-based alerts (cost/latency) are processed by MetricsAlertJob
+                    // rather than AlertJob, so we normalize them to TRACE_ERRORS for consistent test validation
                     return trigger.toBuilder()
                             .triggerConfigs(configs)
                             .eventType(trigger.eventType() == AlertEventType.TRACE_COST

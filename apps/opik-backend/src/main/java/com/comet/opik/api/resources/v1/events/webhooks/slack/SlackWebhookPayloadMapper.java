@@ -7,12 +7,14 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -286,11 +288,7 @@ public class SlackWebhookPayloadMapper {
         }
 
         List<String> alertDetails = metadata.stream()
-                .map(item -> {
-                    @SuppressWarnings("unchecked")
-                    Map<String, String> payload = (Map<String, String>) item;
-                    return formatMetricsAlertPayload(payload, "Cost");
-                })
+                .map(item -> formatMetricsAlertPayload((MetricsAlertPayload) item, "Cost"))
                 .toList();
 
         String mainText = "*Cost Alert Triggered:*\n" + String.join("\n", alertDetails);
@@ -306,11 +304,7 @@ public class SlackWebhookPayloadMapper {
         }
 
         List<String> alertDetails = metadata.stream()
-                .map(item -> {
-                    @SuppressWarnings("unchecked")
-                    Map<String, String> payload = (Map<String, String>) item;
-                    return formatMetricsAlertPayload(payload, "Latency");
-                })
+                .map(item -> formatMetricsAlertPayload((MetricsAlertPayload) item, "Latency"))
                 .toList();
 
         String mainText = "*Latency Alert Triggered:*\n" + String.join("\n", alertDetails);
@@ -322,20 +316,15 @@ public class SlackWebhookPayloadMapper {
     /**
      * Formats metrics alert payload into a readable Slack message.
      */
-    private static String formatMetricsAlertPayload(Map<String, String> payload, String type) {
+    private static String formatMetricsAlertPayload(@NonNull MetricsAlertPayload payload, String type) {
         try {
-            String metricValue = payload.get("metric_value");
-            String threshold = payload.get("threshold");
-            String windowSeconds = payload.get("window_seconds");
-            String projectIds = payload.getOrDefault("project_ids", "");
-
             // Format window duration
-            String windowDuration = formatWindowDuration(Long.parseLong(windowSeconds));
+            String windowDuration = formatWindowDuration(payload.windowSeconds());
 
             // Build scope description
-            String scope = projectIds.isEmpty()
+            String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
                     ? "*Workspace-wide*"
-                    : String.format("*Projects:* `%s`", projectIds);
+                    : String.format("*Projects:* `%s`", payload.projectIds());
 
             // Format based on metric type
             String valuePrefix = type.equals("Cost") ? "$" : "";
@@ -347,10 +336,10 @@ public class SlackWebhookPayloadMapper {
                     "  *Scope:* %s",
                     type,
                     valuePrefix,
-                    formatDecimal(metricValue),
+                    formatDecimal(payload.metricValue()),
                     valueSuffix,
                     valuePrefix,
-                    formatDecimal(threshold),
+                    formatDecimal(payload.threshold()),
                     valueSuffix,
                     windowDuration,
                     scope);
@@ -383,13 +372,8 @@ public class SlackWebhookPayloadMapper {
     /**
      * Formats decimal number to 4 decimal places.
      */
-    private static String formatDecimal(String value) {
-        try {
-            double numValue = Double.parseDouble(value);
-            return String.format("%.4f", numValue);
-        } catch (NumberFormatException e) {
-            return value;
-        }
+    private static String formatDecimal(BigDecimal value) {
+        return String.format("%.4f", value.doubleValue());
     }
 
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,

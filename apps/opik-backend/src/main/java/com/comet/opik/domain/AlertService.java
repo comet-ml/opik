@@ -247,6 +247,7 @@ class AlertServiceImpl implements AlertService {
             """
                     {
                       "event_type": "TRACE_COST",
+                      "metric_name": "trace:cost",
                       "metric_value": "150.75",
                       "threshold": "100.00",
                       "window_seconds": "3600",
@@ -257,6 +258,7 @@ class AlertServiceImpl implements AlertService {
             """
                     {
                       "event_type": "TRACE_LATENCY",
+                      "metric_name": "trace:latency",
                       "metric_value": "5250.5000",
                       "threshold": "5",
                       "window_seconds": "1800",
