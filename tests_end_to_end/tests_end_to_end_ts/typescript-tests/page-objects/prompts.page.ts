@@ -1,16 +1,16 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { BasePage } from './base.page';
 
-export class PromptsPage {
-  readonly page: Page;
+export class PromptsPage extends BasePage {
   readonly searchInput: Locator;
 
   constructor(page: Page) {
-    this.page = page;
+    super(page, 'prompts');
     this.searchInput = page.getByTestId('search-input');
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/default/prompts');
+    await super.goto();
     await this.page.waitForLoadState('networkidle');
   }
 

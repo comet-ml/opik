@@ -12,7 +12,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
-import com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -45,6 +44,9 @@ public interface DatasetItemService {
 
     Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
 
+    Mono<Void> createFromSpans(UUID datasetId, Set<UUID> spanIds,
+            SpanEnrichmentOptions enrichmentOptions);
+
     Mono<DatasetItem> get(UUID id);
 
     Mono<Void> delete(List<UUID> ids);
@@ -69,6 +71,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
+    private final @NonNull SpanEnrichmentService spanEnrichmentService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull TransactionTemplate template;
@@ -115,6 +118,47 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .id(idGenerator.generateId())
                                         .source(DatasetItemSource.TRACE)
                                         .traceId(entry.getKey())
+                                        .data(entry.getValue())
+                                        .build())
+                                .toList();
+
+                        // Save dataset items
+                        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, datasetItems);
+                        return saveBatch(batch, datasetId);
+                    });
+        }).then();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> createFromSpans(
+            @NonNull UUID datasetId,
+            @NonNull Set<UUID> spanIds,
+            @NonNull SpanEnrichmentOptions enrichmentOptions) {
+
+        log.info("Creating dataset items from '{}' spans for dataset '{}'", spanIds.size(), datasetId);
+
+        // Verify dataset exists
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> {
+                return template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetDAO.class);
+                    return dao.findById(datasetId, workspaceId)
+                            .orElseThrow(() -> new NotFoundException("Dataset not found: '%s'".formatted(datasetId)));
+                });
+            }).subscribeOn(Schedulers.boundedElastic());
+        }).flatMap(dataset -> {
+            // Enrich spans with metadata
+            return spanEnrichmentService.enrichSpans(spanIds, enrichmentOptions)
+                    .flatMap(enrichedSpans -> {
+                        // Convert enriched spans to dataset items
+                        List<DatasetItem> datasetItems = enrichedSpans.entrySet().stream()
+                                .<DatasetItem>map(entry -> DatasetItem.builder()
+                                        .id(idGenerator.generateId())
+                                        .source(DatasetItemSource.SPAN)
+                                        .spanId(entry.getKey())
                                         .data(entry.getValue())
                                         .build())
                                 .toList();
