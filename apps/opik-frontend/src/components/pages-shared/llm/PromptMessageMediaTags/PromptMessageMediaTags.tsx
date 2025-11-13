@@ -13,10 +13,10 @@ import { CircleX } from "lucide-react";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import {
-  IMAGE_URL_EXTENSIONS,
   isImageBase64String,
   isVideoBase64String,
-  VIDEO_URL_EXTENSIONS,
+  SUPPORTED_IMAGE_FORMATS,
+  SUPPORTED_VIDEO_FORMATS,
 } from "@/lib/images";
 import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
 
@@ -39,8 +39,8 @@ const DEFAULT_MAX_ITEMS: Record<MediaType, number> = {
 const MAX_DISPLAY_LENGTH = 40;
 
 const ACCEPTED_FILE_TYPES: Record<MediaType, string> = {
-  image: IMAGE_URL_EXTENSIONS.join(",."),
-  video: VIDEO_URL_EXTENSIONS.join(",."),
+  image: SUPPORTED_IMAGE_FORMATS,
+  video: SUPPORTED_VIDEO_FORMATS,
 };
 
 const MAX_FILE_SIZE_MB: Record<MediaType, number> = {

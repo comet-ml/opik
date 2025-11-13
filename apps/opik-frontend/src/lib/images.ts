@@ -115,6 +115,13 @@ export const VIDEO_URL_EXTENSIONS = [
   "ogv",
 ] as const;
 
+export const SUPPORTED_VIDEO_FORMATS = VIDEO_URL_EXTENSIONS.map(
+  (ext) => `.${ext}`,
+).join(",");
+export const SUPPORTED_IMAGE_FORMATS = IMAGE_URL_EXTENSIONS.map(
+  (ext) => `.${ext}`,
+).join(",");
+
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 export const DATA_IMAGE_REGEX = new RegExp(
   `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
