@@ -97,6 +97,7 @@ class Prompt:
             and self._metadata.get("type") == "messages_json"
         )
         formatted_string = self._template.format(**kwargs)
+
         if is_playground_chat_prompt:
             try:
                 return json.loads(formatted_string)
