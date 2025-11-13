@@ -2,13 +2,53 @@ package com.comet.opik.utils;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STErrorListener;
 import org.stringtemplate.v4.STGroup;
+import org.stringtemplate.v4.misc.STMessage;
 
 import java.util.List;
 import java.util.stream.IntStream;
 
 public class TemplateUtils {
+
+    /**
+     * Custom error listener that suppresses attribute-not-defined warnings for attributes
+     * used only in conditionals (e.g., {@code <if(trace_id)>}).
+     * <p>
+     * This is a common pattern in SQL query building where parameters are used to conditionally
+     * include query fragments without being rendered directly.
+     */
+    @Slf4j
+    private static class ConditionalAttributeErrorListener implements STErrorListener {
+
+        @Override
+        public void compileTimeError(STMessage msg) {
+            // Suppress "attribute X isn't defined" errors for attributes used only in conditionals
+            // These warnings occur when using patterns like: <if(trace_id)> AND trace_id = :trace_id <endif>
+            if (msg.error != null && msg.error.toString().contains("isn't defined")) {
+                log.debug("Suppressed StringTemplate compile-time warning: {}", msg.toString());
+                return;
+            }
+            log.warn("StringTemplate compile-time error: {}", msg.toString());
+        }
+
+        @Override
+        public void runTimeError(STMessage msg) {
+            log.error("StringTemplate runtime error: {}", msg.toString());
+        }
+
+        @Override
+        public void IOError(STMessage msg) {
+            log.error("StringTemplate IO error: {}", msg.toString());
+        }
+
+        @Override
+        public void internalError(STMessage msg) {
+            log.error("StringTemplate internal error: {}", msg.toString());
+        }
+    }
 
     @RequiredArgsConstructor
     public static class QueryItem {
@@ -78,7 +118,7 @@ public class TemplateUtils {
      */
     public static ST newST(@NonNull String template) {
         var group = new STGroup();
-        // TODO: Add a custom STErrorListener
+        group.setListener(new ConditionalAttributeErrorListener());
         return new ST(group, template);
     }
 }
