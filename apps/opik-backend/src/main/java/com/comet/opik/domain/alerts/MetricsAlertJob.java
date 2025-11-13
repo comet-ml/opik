@@ -10,6 +10,7 @@ import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -148,7 +149,8 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                     // Process each trigger in the alert
                     return Flux.fromIterable(alert.triggers())
                             .filter(trigger -> SUPPORTED_EVENT_TYPES.contains(trigger.eventType()))
-                            .flatMap(trigger -> evaluateTrigger(alert, trigger))
+                            .flatMap(trigger -> evaluateTrigger(alert, trigger).contextWrite(
+                                    ctx -> ctx.put(RequestContext.WORKSPACE_ID, alert.workspaceId())))
                             .then();
                 })
                 .onErrorResume(error -> {
@@ -173,12 +175,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         // Query metrics based on trigger type - this needs to happen with context already set
         Mono<BigDecimal> metricValueMono = switch (trigger.eventType()) {
             case TRACE_COST -> projectMetricsDAO.getTotalCost(
-                    alert.workspaceId(),
                     config.projectIds(),
                     startTime,
                     endTime);
             case TRACE_LATENCY -> projectMetricsDAO.getAverageDuration(
-                    alert.workspaceId(),
                     config.projectIds(),
                     startTime,
                     endTime);

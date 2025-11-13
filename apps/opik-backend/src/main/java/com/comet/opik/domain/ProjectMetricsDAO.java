@@ -68,10 +68,10 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 
-    Mono<BigDecimal> getTotalCost(@NonNull String workspaceId, List<UUID> projectIds, @NonNull Instant startTime,
+    Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime,
             @NonNull Instant endTime);
 
-    Mono<BigDecimal> getAverageDuration(@NonNull String workspaceId, List<UUID> projectIds, @NonNull Instant startTime,
+    Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime,
             @NonNull Instant endTime);
 }
 
@@ -721,7 +721,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     @Override
-    public Mono<BigDecimal> getTotalCost(@NonNull String workspaceId, List<UUID> projectIds, @NonNull Instant startTime,
+    public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime,
             @NonNull Instant endTime) {
         return template.nonTransaction(connection -> {
             var stTemplate = new ST(GET_TOTAL_COST);
@@ -735,7 +735,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
 
             var statement = connection.createStatement(stTemplate.render())
-                    .bind("workspace_id", workspaceId)
                     .bind("uuid_from_time", uuidFromTime)
                     .bind("uuid_to_time", uuidToTime);
 
@@ -755,7 +754,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     @Override
-    public Mono<BigDecimal> getAverageDuration(@NonNull String workspaceId, List<UUID> projectIds,
+    public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds,
             @NonNull Instant startTime, @NonNull Instant endTime) {
         return template.nonTransaction(connection -> {
             var stTemplate = new ST(GET_AVERAGE_DURATION);
@@ -769,7 +768,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
 
             var statement = connection.createStatement(stTemplate.render())
-                    .bind("workspace_id", workspaceId)
                     .bind("uuid_from_time", uuidFromTime)
                     .bind("uuid_to_time", uuidToTime);
 
