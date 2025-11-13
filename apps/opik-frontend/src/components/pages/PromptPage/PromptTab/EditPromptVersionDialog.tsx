@@ -31,7 +31,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 
@@ -107,23 +107,27 @@ const EditPromptVersionDialog: React.FunctionComponent<
     template?.length && (templateHasChanges || metadataHasChanges);
 
   const originalText = promptTemplate;
-  const originalImages = parseLLMMessageContent(
-    parsePromptVersionContent({
-      template: promptTemplate,
-      metadata: promptMetadata,
-    }),
-  ).images;
+  const { images: originalImages, videos: originalVideos } =
+    parseLLMMessageContent(
+      parsePromptVersionContent({
+        template: promptTemplate,
+        metadata: promptMetadata,
+      }),
+    );
 
   const currentText = template;
-  const currentImages = parseLLMMessageContent(
-    parsePromptVersionContent({
-      template: localText,
-      metadata: promptMetadata,
-    }),
-  ).images;
+  const { images: currentImages, videos: currentVideos } =
+    parseLLMMessageContent(
+      parsePromptVersionContent({
+        template: localText,
+        metadata: promptMetadata,
+      }),
+    );
 
   const imagesHaveChanges =
     JSON.stringify(originalImages) !== JSON.stringify(currentImages);
+  const videosHaveChanges =
+    JSON.stringify(originalVideos) !== JSON.stringify(currentVideos);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -184,33 +188,67 @@ const EditPromptVersionDialog: React.FunctionComponent<
                 <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
                   <TextDiff content1={originalText} content2={currentText} />
                 </div>
-                {imagesHaveChanges && (
+                {(imagesHaveChanges || videosHaveChanges) && (
                   <div className="flex flex-col gap-3 rounded-md border p-4">
                     <div className="comet-body-s-accented text-muted-foreground">
-                      Images comparison
+                      Media comparison
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="comet-body-xs text-muted-foreground">
-                        Before:
+                    {imagesHaveChanges && (
+                      <div className="flex gap-6">
+                        <div className="flex flex-1 flex-col gap-2">
+                          <div className="comet-body-xs text-muted-foreground">
+                            Images before:
+                          </div>
+                          <PromptMessageMediaTags
+                            type="image"
+                            items={originalImages}
+                            setItems={() => {}}
+                            align="start"
+                            editable={false}
+                          />
+                        </div>
+                        <div className="flex flex-1 flex-col gap-2">
+                          <div className="comet-body-xs text-muted-foreground">
+                            Images after:
+                          </div>
+                          <PromptMessageMediaTags
+                            type="image"
+                            items={currentImages}
+                            setItems={() => {}}
+                            align="start"
+                            editable={false}
+                          />
+                        </div>
                       </div>
-                      <PromptMessageImageTags
-                        images={originalImages}
-                        setImages={() => {}}
-                        align="start"
-                        editable={false}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="comet-body-xs text-muted-foreground">
-                        After:
+                    )}
+                    {videosHaveChanges && (
+                      <div className="flex gap-6">
+                        <div className="flex flex-1 flex-col gap-2">
+                          <div className="comet-body-xs text-muted-foreground">
+                            Videos before:
+                          </div>
+                          <PromptMessageMediaTags
+                            type="video"
+                            items={originalVideos}
+                            setItems={() => {}}
+                            align="start"
+                            editable={false}
+                          />
+                        </div>
+                        <div className="flex flex-1 flex-col gap-2">
+                          <div className="comet-body-xs text-muted-foreground">
+                            Videos after:
+                          </div>
+                          <PromptMessageMediaTags
+                            type="video"
+                            items={currentVideos}
+                            setItems={() => {}}
+                            align="start"
+                            editable={false}
+                          />
+                        </div>
                       </div>
-                      <PromptMessageImageTags
-                        images={currentImages}
-                        setImages={() => {}}
-                        align="start"
-                        editable={false}
-                      />
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -219,11 +257,22 @@ const EditPromptVersionDialog: React.FunctionComponent<
           {previewMode === PROMPT_PREVIEW_MODE.write && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
-              <PromptMessageImageTags
-                images={currentImages}
-                setImages={() => {}}
+              <PromptMessageMediaTags
+                type="image"
+                items={currentImages}
+                setItems={() => {}}
                 align="start"
                 editable={false}
+                preview={true}
+              />
+              <Label>Videos</Label>
+              <PromptMessageMediaTags
+                type="video"
+                items={currentVideos}
+                setItems={() => {}}
+                align="start"
+                editable={false}
+                preview={true}
               />
             </div>
           )}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MessageContent, TextPart, ImagePart } from "@/types/llm";
+import { MessageContent, TextPart, ImagePart, VideoPart } from "@/types/llm";
 import { OnChangeFn } from "@/types/shared";
 import { parseLLMMessageContent } from "@/lib/llm";
 
@@ -11,7 +11,9 @@ interface UseMessageContentProps {
 interface UseMessageContentReturn {
   localText: string;
   images: string[];
+  videos: string[];
   setImages: OnChangeFn<string[]>;
+  setVideos: OnChangeFn<string[]>;
   handleContentChange: (newText: string) => void;
 }
 
@@ -20,36 +22,42 @@ export const useMessageContent = ({
   onChangeContent,
 }: UseMessageContentProps): UseMessageContentReturn => {
   // Parse content (string or array)
-  const { text: textContent, images: imageUrls } = useMemo(
-    () => parseLLMMessageContent(content),
-    [content],
-  );
+  const {
+    text: textContent,
+    images: imageUrls,
+    videos: videoUrls,
+  } = useMemo(() => parseLLMMessageContent(content), [content]);
 
   const [localText, setLocalText] = useState(textContent);
   const [images, setImages] = useState<string[]>(imageUrls);
+  const [videos, setVideos] = useState<string[]>(videoUrls);
   const lastProcessedContentRef = useRef<MessageContent>(content);
 
   // Sync external changes to local state
   useEffect(() => {
     setLocalText(textContent);
     setImages(imageUrls);
-  }, [textContent, imageUrls]);
+    setVideos(videoUrls);
+  }, [textContent, imageUrls, videoUrls]);
 
-  // Rebuild content when text or images change
+  // Rebuild content when text, images, or videos change
   useEffect(() => {
     let newContent: MessageContent;
 
-    if (images.length === 0) {
+    if (images.length === 0 && videos.length === 0) {
       // Text-only: use plain string
       newContent = localText;
     } else {
-      // With images: use array format
-      const parts: Array<TextPart | ImagePart> = [];
+      // With images or videos: use array format
+      const parts: Array<TextPart | ImagePart | VideoPart> = [];
       if (localText.trim()) {
         parts.push({ type: "text", text: localText });
       }
       images.forEach((url) => {
         parts.push({ type: "image_url", image_url: { url } });
+      });
+      videos.forEach((url) => {
+        parts.push({ type: "video_url", video_url: { url } });
       });
       newContent = parts;
     }
@@ -62,7 +70,7 @@ export const useMessageContent = ({
       lastProcessedContentRef.current = newContent;
       onChangeContent(newContent);
     }
-  }, [localText, images, onChangeContent]);
+  }, [localText, images, videos, onChangeContent]);
 
   const handleContentChange = useCallback((newText: string) => {
     setLocalText(newText);
@@ -71,7 +79,9 @@ export const useMessageContent = ({
   return {
     localText,
     images,
+    videos,
     setImages,
+    setVideos,
     handleContentChange,
   };
 };

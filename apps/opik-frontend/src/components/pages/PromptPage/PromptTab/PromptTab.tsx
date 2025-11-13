@@ -18,7 +18,7 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
@@ -88,9 +88,9 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     [activeVersion?.template],
   );
 
-  const extractedImages = useMemo(() => {
+  const { images: extractedImages, videos: extractedVideos } = useMemo(() => {
     const content = parsePromptVersionContent(activeVersion);
-    return parseLLMMessageContent(content).images;
+    return parseLLMMessageContent(content);
   }, [activeVersion]);
 
   if (!prompt) {
@@ -140,9 +140,25 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <p className="comet-body-s-accented mt-4 text-foreground">
                 Images
               </p>
-              <PromptMessageImageTags
-                images={extractedImages}
-                setImages={() => {}}
+              <PromptMessageMediaTags
+                type="image"
+                items={extractedImages}
+                setItems={() => {}}
+                editable={false}
+                preview={true}
+                align="start"
+              />
+            </>
+          )}
+          {extractedVideos.length > 0 && (
+            <>
+              <p className="comet-body-s-accented mt-4 text-foreground">
+                Videos
+              </p>
+              <PromptMessageMediaTags
+                type="video"
+                items={extractedVideos}
+                setItems={() => {}}
                 editable={false}
                 preview={true}
                 align="start"

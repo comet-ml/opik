@@ -14,6 +14,7 @@ import {
   MessageContent,
   TextPart,
   ImagePart,
+  VideoPart,
 } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import isUndefined from "lodash/isUndefined";
@@ -73,7 +74,7 @@ const transformMessageIntoProviderMessage = (
       { escape: (val: string) => val },
     );
   } else {
-    // Array with images: render mustache in both text and image URLs
+    // Array with images/videos: render mustache in text, image URLs, and video URLs
     processedContent = message.content.map((part) => {
       if (part.type === "text") {
         return {
@@ -85,8 +86,8 @@ const transformMessageIntoProviderMessage = (
             { escape: (val: string) => val },
           ),
         } as TextPart;
-      } else {
-        // Render mustache variables in image URLs too
+      } else if (part.type === "image_url") {
+        // Render mustache variables in image URLs
         return {
           type: "image_url",
           image_url: {
@@ -98,6 +99,19 @@ const transformMessageIntoProviderMessage = (
             ),
           },
         } as ImagePart;
+      } else {
+        // Render mustache variables in video URLs
+        return {
+          type: "video_url",
+          video_url: {
+            url: mustache.render(
+              part.video_url.url,
+              serializedDatasetItem,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as VideoPart;
       }
     });
   }

@@ -1,5 +1,6 @@
 import {
   ImagePart,
+  VideoPart,
   LLM_MESSAGE_ROLE,
   LLMMessage,
   MessageContent,
@@ -48,6 +49,18 @@ export const getImagesFromMessageContent = (
     .map((c) => c.image_url.url);
 };
 
+export const getVideosFromMessageContent = (
+  content: MessageContent,
+): string[] => {
+  if (typeof content === "string") {
+    return [];
+  }
+
+  return content
+    .filter((c): c is VideoPart => c.type === "video_url")
+    .map((c) => c.video_url.url);
+};
+
 export const hasImagesInContent = (content: MessageContent): boolean => {
   if (typeof content === "string") {
     return false;
@@ -56,8 +69,16 @@ export const hasImagesInContent = (content: MessageContent): boolean => {
   return content.some((c): c is ImagePart => c.type === "image_url");
 };
 
+export const hasVideosInContent = (
+  content: MessageContent,
+): content is Array<TextPart | ImagePart | VideoPart> => {
+  if (typeof content === "string") return false;
+
+  return content.some((c): c is VideoPart => c.type === "video_url");
+};
+
 /**
- * Get all template strings from message content (both text and image URLs)
+ * Get all template strings from message content (text, image URLs, and video URLs)
  * Used for extracting mustache variables from all parts of a message
  */
 export const getAllTemplateStringsFromContent = (
@@ -70,18 +91,21 @@ export const getAllTemplateStringsFromContent = (
   return content.map((part) => {
     if (part.type === "text") {
       return part.text;
-    } else {
+    } else if (part.type === "image_url") {
       return part.image_url.url;
+    } else {
+      return part.video_url.url;
     }
   });
 };
 
 export const parseLLMMessageContent = (
   content: MessageContent,
-): { text: string; images: string[] } => {
+): { text: string; images: string[]; videos: string[] } => {
   return {
     text: getTextFromMessageContent(content),
     images: getImagesFromMessageContent(content),
+    videos: getVideosFromMessageContent(content),
   };
 };
 
@@ -171,7 +195,8 @@ export const parsePromptVersionContent = (promptVersion?: {
 /**
  * Convert MessageContent to backend placeholder format
  * Backend expects images in the format: <<<image>>>url<<</image>>>
- * This preserves mustache variables in both text and image URLs for backend template rendering
+ * Backend expects videos in the format: <<<video>>>url<<</video>>>
+ * This preserves mustache variables in text, image URLs, and video URLs for backend template rendering
  */
 export const convertMessageContentToBackendFormat = (
   content: MessageContent,
@@ -180,15 +205,19 @@ export const convertMessageContentToBackendFormat = (
     return content;
   }
 
-  // Convert array of parts to string with image placeholders
+  // Convert array of parts to string with image and video placeholders
   return content
     .map((part) => {
       if (part.type === "text") {
         return part.text;
-      } else {
+      } else if (part.type === "image_url") {
         // Format: <<<image>>>url<<</image>>>
         // This preserves mustache variables like {{input.image}} for backend rendering
         return `<<<image>>>${part.image_url.url}<<</image>>>`;
+      } else {
+        // Format: <<<video>>>url<<</video>>>
+        // This preserves mustache variables like {{input.video}} for backend rendering
+        return `<<<video>>>${part.video_url.url}<<</video>>>`;
       }
     })
     .join("\n");
