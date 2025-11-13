@@ -17,7 +17,7 @@ class TestRulesAnonymizer:
         assert anonymizer.rules == rules
         assert anonymizer.max_depth == 5
 
-    def test_anonymize_text_single_regex_rule(self):
+    def test_anonymize_text__single_regex_rule(self):
         """Test anonymizing text with a single regex rule."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -26,7 +26,7 @@ class TestRulesAnonymizer:
 
         assert result == "Phone: ***-***-***"
 
-    def test_anonymize_text_multiple_regex_rules(self):
+    def test_anonymize_text__multiple_regex_rules(self):
         """Test anonymizing text with multiple regex rules applied sequentially."""
         email_rule = RegexRule(
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[EMAIL]"
@@ -39,7 +39,7 @@ class TestRulesAnonymizer:
 
         assert result == "Contact: [EMAIL] or [PHONE]"
 
-    def test_anonymize_text_function_rule(self):
+    def test_anonymize_text__function_rule(self):
         """Test anonymizing text with a function rule."""
 
         def uppercase_anonymizer(text: str) -> str:
@@ -52,7 +52,7 @@ class TestRulesAnonymizer:
 
         assert result == "HELLO WORLD"
 
-    def test_anonymize_text_mixed_rules(self):
+    def test_anonymize_text__mixed_rules(self):
         """Test anonymizing text with mixed rule types."""
         regex_rule = RegexRule(r"\d+", "XXX")
         function_rule = FunctionRule(lambda text: text.replace(" ", "_"))
@@ -63,7 +63,7 @@ class TestRulesAnonymizer:
 
         assert result == "Phone_XXX_XXX"
 
-    def test_anonymize_text_no_rules(self):
+    def test_anonymize_text__no_rules(self):
         """Test anonymizing text with no rules returns original text."""
         anonymizer = RulesAnonymizer([])
 
@@ -71,7 +71,7 @@ class TestRulesAnonymizer:
 
         assert result == "sensitive data"
 
-    def test_anonymize_string_data(self):
+    def test_anonymize__string_data(self):
         """Test anonymizing string data."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -80,7 +80,7 @@ class TestRulesAnonymizer:
 
         assert result == "Phone: ***-***-***"
 
-    def test_anonymize_dict_data(self):
+    def test_anonymize__dict_data(self):
         """Test anonymizing dictionary data."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -96,7 +96,7 @@ class TestRulesAnonymizer:
         }
         assert result == expected
 
-    def test_anonymize_list_data(self):
+    def test_anonymize__list_data(self):
         """Test anonymizing list data."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -108,7 +108,7 @@ class TestRulesAnonymizer:
         expected = ["Contact: ***-***-***", "Another: ***-***-***", "No numbers here"]
         assert result == expected
 
-    def test_anonymize_nested_dict_data(self):
+    def test_anonymize__nested_dict_data(self):
         """Test anonymizing nested dictionary data."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -132,7 +132,7 @@ class TestRulesAnonymizer:
         }
         assert result == expected
 
-    def test_anonymize_nested_list_data(self):
+    def test_anonymize__nested_list_data(self):
         """Test anonymizing nested list data."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -152,7 +152,7 @@ class TestRulesAnonymizer:
         ]
         assert result == expected
 
-    def test_anonymize_mixed_nested_data(self):
+    def test_anonymize__mixed_nested_data(self):
         """Test anonymizing complex mixed nested data structures."""
         email_rule = RegexRule(
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[EMAIL]"
@@ -180,7 +180,7 @@ class TestRulesAnonymizer:
         }
         assert result == expected
 
-    def test_anonymize_non_string_values_unchanged(self):
+    def test_anonymize__non_string_values_unchanged(self):
         """Test that non-string values are not processed."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -204,7 +204,7 @@ class TestRulesAnonymizer:
         }
         assert result == expected
 
-    def test_max_depth_limiting(self):
+    def test_anonymize__max_depth_limiting(self):
         """Test that max_depth limits recursion depth."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule], max_depth=2)
@@ -226,7 +226,7 @@ class TestRulesAnonymizer:
         }
         assert result == expected
 
-    def test_max_depth_exact_limit(self):
+    def test_anonymize__max_depth_exact_limit(self):
         """Test that max_depth allows processing exactly at the limit."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule], max_depth=4)
@@ -240,7 +240,7 @@ class TestRulesAnonymizer:
         expected = {"level1": {"level2": {"phone": "***-***-***"}}}
         assert result == expected
 
-    def test_circular_reference_protection(self):
+    def test_anonymize__circular_reference_protection(self):
         """Test protection against circular references through depth limiting."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule], max_depth=3)
@@ -257,7 +257,7 @@ class TestRulesAnonymizer:
         assert "self" in result
 
     @pytest.mark.parametrize("rule_count", [1, 5, 10])
-    def test_performance_with_multiple_rules(self, rule_count):
+    def test_anonymize_text__performance_with_multiple_rules(self, rule_count):
         """Test performance with varying numbers of rules."""
         rules = []
         for i in range(rule_count):
@@ -271,7 +271,7 @@ class TestRulesAnonymizer:
         # Should apply all applicable rules
         assert "replacement0" in result or "pattern0" in result
 
-    def test_empty_string_handling(self):
+    def test_anonymize_text__empty_string_handling(self):
         """Test handling of empty strings."""
         regex_rule = RegexRule(r"\d+", "***")
         anonymizer = RulesAnonymizer([regex_rule])
@@ -280,7 +280,7 @@ class TestRulesAnonymizer:
 
         assert result == ""
 
-    def test_complex_regex_patterns(self):
+    def test_anonymize_text__complex_regex_patterns(self):
         """Test complex regex patterns for real-world scenarios."""
         # Email pattern
         email_rule = RegexRule(
