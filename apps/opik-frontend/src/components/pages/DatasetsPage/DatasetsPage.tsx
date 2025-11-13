@@ -80,13 +80,13 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     cell: ListCell as never,
   },
   {
-    id: "last_created_experiment_at",
+    id: "most_recent_experiment_at",
     label: "Most recent experiment",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.most_recent_experiment_at),
   },
   {
-    id: "last_created_optimization_at",
+    id: "most_recent_optimization_at",
     label: "Most recent optimization",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.most_recent_optimization_at),
@@ -157,7 +157,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "description",
   "dataset_items_count",
-  "last_created_experiment_at",
+  "most_recent_experiment_at",
   "created_at",
 ];
 
