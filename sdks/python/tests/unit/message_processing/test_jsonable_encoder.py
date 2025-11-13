@@ -170,7 +170,7 @@ def test_jsonable_encoder__non_serializable_to_text__bytes():
 class MockAnonymizer(anonymizer.Anonymizer):
     """Mock anonymizer for testing purposes."""
 
-    def anonymize(self, data):
+    def anonymize(self, data, **kwargs):
         """Mock anonymization that replaces strings with '[ANONYMIZED]'."""
         if isinstance(data, str):
             return "[ANONYMIZED]"
@@ -391,7 +391,7 @@ class TestEncodeAndAnonymize:
 
         # Create an anonymizer that just adds a prefix
         class PrefixAnonymizer(anonymizer.Anonymizer):
-            def anonymize(self, data):
+            def anonymize(self, data, **kwargs):
                 return f"ANON_{data}"
 
         prefix_anonymizer = PrefixAnonymizer()
@@ -438,10 +438,10 @@ class TestEncodeAndAnonymize:
         assert result["data"] == {"nested": "value"}  # Unchanged nested data
 
     def test_encode_and_anonymize__remove_sensitive_dictionary_key(self):
-        """Test"""
+        """Test that sensitive keys can be removed from the result."""
 
         class ApiKeyAnonymizer(anonymizer.Anonymizer):
-            def anonymize(self, data):
+            def anonymize(self, data, **kwargs):
                 if "api_key" in data:
                     del data["api_key"]
                 return data
@@ -463,3 +463,34 @@ class TestEncodeAndAnonymize:
 
         # should remove api_key
         assert "api_key" not in result["metadata"]
+
+    def test_encode_and_anonymize__field_name_passed_to_anonymizer(self):
+        """Test that sensitive field names are passed to the anonymizer."""
+
+        class ApiKeyAnonymizer(anonymizer.Anonymizer):
+            def anonymize(self, data, **kwargs):
+                field_name = kwargs.get("field_name")
+                if field_name == "metadata" and "api_key" in data:
+                    del data["api_key"]
+                return data
+
+        obj = {
+            "metadata": {
+                "api_key": "12345",
+                "email": "test@example.com",
+                "data": {"nested": "value"},
+            },
+            "input": {"api_key": "12345", "role": "user", "question": "What is LLM?"},
+        }
+
+        result = jsonable_encoder.encode_and_anonymize(
+            obj=obj,
+            field_anonymizer=ApiKeyAnonymizer(),
+            fields_to_anonymize={"metadata"},
+        )
+
+        # should remove api_key from metadata
+        assert "api_key" not in result["metadata"]
+
+        # should not remove api_key from input
+        assert "api_key" in result["input"]

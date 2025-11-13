@@ -1,4 +1,5 @@
 import abc
+from typing import Any
 
 from . import anonymizer
 
@@ -22,7 +23,7 @@ class RecursiveAnonymizer(anonymizer.Anonymizer):
         self.max_depth = max_depth
 
     def anonymize(
-        self, data: anonymizer.AnonymizerDataType
+        self, data: anonymizer.AnonymizerDataType, **kwargs: Any
     ) -> anonymizer.AnonymizerDataType:
         return self._recursive_anonymize(data)
 

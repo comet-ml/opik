@@ -64,7 +64,7 @@ def encode_and_anonymize(
         for field_name in fields_to_anonymize:
             if field_name in encoded_obj:
                 encoded_obj[field_name] = field_anonymizer.anonymize(
-                    encoded_obj[field_name]
+                    encoded_obj[field_name], field_name=field_name
                 )
 
     return encoded_obj
