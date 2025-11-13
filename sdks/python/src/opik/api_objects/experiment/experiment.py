@@ -2,13 +2,12 @@ import functools
 import logging
 from typing import List, Optional
 
-import opik.rest_api
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_public
-from . import experiment_item
-from .. import constants, helpers, rest_stream_parser
+from . import experiment_item, experiments_client
+from .. import constants, helpers
 from ...api_objects.prompt import Prompt
 
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +21,7 @@ class Experiment:
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
         streamer: streamer.Streamer,
+        experiments_client: experiments_client.ExperimentsClient,
         prompts: Optional[List[Prompt]] = None,
     ) -> None:
         self._id = id
@@ -30,6 +30,7 @@ class Experiment:
         self._rest_client = rest_client
         self._prompts = prompts
         self._streamer = streamer
+        self._experiments_client = experiments_client
 
     @property
     def id(self) -> str:
@@ -100,55 +101,25 @@ class Experiment:
 
     def get_items(
         self,
-        max_results: Optional[int] = None,
+        max_results: Optional[int] = 10000,
         truncate: bool = False,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
-        Retrieves and returns a list of experiment items by streaming from the backend in batches, with an option to
-        truncate the results for each batch.
-
-        This method streams experiment items from a backend service in chunks up to the specified `max_results`
-        or until the available items are exhausted. It handles batch-wise retrieval and parsing, ensuring the client
-        receives a list of `ExperimentItemContent` objects, while respecting the constraints on maximum retrieval size
-        from the backend. If truncation is enabled, the backend may return truncated details for each item.
+        Retrieves and returns a list of experiment items for this experiment.
 
         Args:
-            max_results: Maximum number of experiment items to retrieve.
-            truncate: Whether to truncate the items returned by the backend.
+            max_results: Maximum number of experiment items to retrieve. Defaults to 10000 if not specified.
+            truncate: Whether to truncate the items returned by the backend. Defaults to False.
 
+        Returns:
+            List of ExperimentItemContent objects for this experiment.
         """
-        result: List[experiment_item.ExperimentItemContent] = []
-        max_endpoint_batch_size = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE
+        if max_results is None:
+            max_results = 10000  # TODO: remove this once we have a proper way to get all experiment items
 
-        while True:
-            if max_results is None:
-                current_batch_size = max_endpoint_batch_size
-            else:
-                current_batch_size = min(
-                    max_results - len(result), max_endpoint_batch_size
-                )
-
-            items_stream = self._rest_client.experiments.stream_experiment_items(
-                experiment_name=self.name,
-                limit=current_batch_size,
-                last_retrieved_id=result[-1].id if len(result) > 0 else None,
-                truncate=truncate,
-            )
-
-            experiment_item_compare_current_batch = (
-                rest_stream_parser.read_and_parse_stream(
-                    stream=items_stream,
-                    item_class=opik.rest_api.ExperimentItemCompare,
-                )
-            )
-
-            for item in experiment_item_compare_current_batch:
-                converted_item = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
-                    value=item
-                )
-                result.append(converted_item)
-
-            if current_batch_size > len(experiment_item_compare_current_batch):
-                break
-
-        return result
+        return self._experiments_client.find_experiment_items_for_dataset(
+            dataset_name=self.dataset_name,
+            experiment_ids=[self.id],
+            truncate=truncate,
+            max_results=max_results,
+        )
