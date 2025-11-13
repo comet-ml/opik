@@ -17,6 +17,11 @@ def clear_anonymizers() -> None:
     _anonymizers.clear()
 
 
+def has_anonymizers() -> bool:
+    """Check if any anonymizers have been registered."""
+    return len(_anonymizers) > 0
+
+
 def apply_anonymizers(
     data: anonymizer.AnonymizerDataType,
 ) -> anonymizer.AnonymizerDataType:
