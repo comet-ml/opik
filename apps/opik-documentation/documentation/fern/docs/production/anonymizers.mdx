@@ -65,12 +65,21 @@ def mask_api_keys(text: str) -> str:
     api_key_pattern = r'\b(sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,})\b'
     return re.sub(api_key_pattern, '[API_KEY]', text)
 
-def uppercase_names(text: str) -> str:
-    """Transform names to uppercase for consistency"""
-    return text.upper()
+def anonymize_with_hash(text: str) -> str:
+    """Replace emails with consistent hashes for tracking without exposing PII"""
+    import re
+    import hashlib
+    
+    def hash_replace(match):
+        email = match.group(0)
+        hash_val = hashlib.md5(email.encode()).hexdigest()[:8]
+        return f"[EMAIL_{hash_val}]"
+    
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    return re.sub(email_pattern, hash_replace, text)
 
 # Create anonymizer with function rules
-anonymizer = create_anonymizer([mask_api_keys, uppercase_names])
+anonymizer = create_anonymizer([mask_api_keys, anonymize_with_hash])
 opik.hooks.add_anonymizer(anonymizer)
 ```
 
@@ -96,7 +105,63 @@ opik.hooks.add_anonymizer(anonymizer)
 
 ## Custom Anonymizers
 
-For advanced use cases, create custom anonymizers by extending the `Anonymizer` base class:
+For advanced use cases, create custom anonymizers by extending the `Anonymizer` base class.
+
+### Understanding Anonymizer Arguments
+
+When implementing custom anonymizers, you need to implement the `anonymize()` method with the following signature:
+
+```python
+def anonymize(self, data, **kwargs):
+    # Your anonymization logic here
+    return anonymized_data
+```
+
+**The `kwargs` parameters:**
+
+The `anonymize()` method also receives additional context through `**kwargs`:
+
+- **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, or `"metadata"`)
+- **`object_type`**: The type of the object being processed (typically `dict` for trace/span data)
+
+**When are kwargs available?**
+
+These kwargs are automatically passed by Opik's internal data processors when anonymizing trace and span data before sending it to the backend. This allows you to apply different anonymization strategies based on the field being processed.
+
+**Example: Field-specific anonymization**
+
+```python
+from opik.anonymizer import Anonymizer
+import opik.hooks
+
+class FieldAwareAnonymizer(Anonymizer):
+    def anonymize(self, data, **kwargs):
+        field_name = kwargs.get("field_name", "")
+        
+        # Only anonymize the output field, leave input as-is for debugging
+        if field_name == "output" and isinstance(data, str):
+            import re
+            # More aggressive anonymization for outputs
+            data = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', data)
+            data = re.sub(r'\b\d{3}-\d{3}-\d{4}\b', '[PHONE]', data)
+        elif field_name == "metadata" and isinstance(data, dict):
+            # Remove specific metadata fields entirely
+            sensitive_keys = ["user_id", "session_token", "api_key"]
+            for key in sensitive_keys:
+                if key in data:
+                    data[key] = "[REDACTED]"
+        
+        return data
+
+# Register the field-aware anonymizer
+opik.hooks.add_anonymizer(FieldAwareAnonymizer())
+```
+
+<Tip>
+  The `field_name` and `object_type` kwargs are primarily useful for implementing context-aware anonymization logic. If you don't need field-specific behavior, you can safely ignore these kwargs.
+</Tip>
+
+### Advanced Custom Anonymizer Example
 
 ```python
 import opik
@@ -105,9 +170,7 @@ from opik.anonymizer import Anonymizer
 
 class AdvancedPIIAnonymizer(Anonymizer):
     def anonymize(self, data, **kwargs):
-        """
-        Custom anonymizer with access to metadata about the field being processed
-        """
+        """Custom anonymizer with advanced PII detection and removal."""
         field_name = kwargs.get("field_name")
         object_type = kwargs.get("object_type")
 
@@ -282,12 +345,22 @@ from opik.integrations.langchain import OpikTracer
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
 
-# Configure anonymization
+# Configure anonymization - mix regex and callable function
+def mask_credit_cards(text: str) -> str:
+    """Partial masking: show first 4 and last 4 digits, mask the middle"""
+    import re
+    def partial_mask(match):
+        card = match.group(0).replace('-', '').replace(' ', '')
+        if len(card) >= 8:
+            return card[:4] + '*' * (len(card) - 8) + card[-4:]
+        return '[CARD]'
+    return re.sub(r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b', partial_mask, text)
+
 anonymizer_rules = [
-    # Email pattern
+    # Email pattern (regex tuple)
     (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]"),
-    # Custom function to handle API keys
-    lambda text: text.replace("sk-", "[API_KEY]"),
+    # Callable function for smart masking
+    mask_credit_cards,
 ]
 opik.hooks.add_anonymizer(create_anonymizer(anonymizer_rules))
 
@@ -295,7 +368,7 @@ opik.hooks.add_anonymizer(create_anonymizer(anonymizer_rules))
 llm = ChatOpenAI(callbacks=[OpikTracer()])
 
 # All inputs and outputs will be automatically anonymized
-messages = [HumanMessage(content="Contact sarah@example.com about the API key sk-1234567890")]
+messages = [HumanMessage(content="Contact sarah@example.com about card 4532-1234-5678-9010")]
 result = llm.invoke(messages)
 ```
 

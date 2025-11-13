@@ -2,6 +2,7 @@ import base64
 import dataclasses
 import datetime as dt
 import logging
+import copy
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
@@ -47,7 +48,7 @@ def encode_and_anonymize(
         The encoded version of the input object, with specified fields
         anonymized using the provided anonymizers.
     """
-    encoded_obj = encode(obj)
+    encoded_obj = copy.deepcopy(encode(obj))
 
     if isinstance(encoded_obj, dict):
         for field_name in fields_to_anonymize:
