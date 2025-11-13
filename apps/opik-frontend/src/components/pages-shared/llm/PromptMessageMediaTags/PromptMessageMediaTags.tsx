@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Image, Plus, Upload, Video } from "lucide-react";
+import { Image, Loader2, Plus, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -19,6 +19,7 @@ import {
   SUPPORTED_VIDEO_FORMATS,
 } from "@/lib/images";
 import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
+import { useBase64InputHandler } from "@/hooks/useBase64InputHandler";
 
 type MediaType = "image" | "video";
 
@@ -44,8 +45,8 @@ const ACCEPTED_FILE_TYPES: Record<MediaType, string> = {
 };
 
 const MAX_FILE_SIZE_MB: Record<MediaType, number> = {
-  image: 20,
-  video: 1000,
+  image: 200,
+  video: 2000,
 };
 
 const PromptMessageMediaTags: React.FunctionComponent<
@@ -71,6 +72,17 @@ const PromptMessageMediaTags: React.FunctionComponent<
     maxSizeMB: MAX_FILE_SIZE_MB[type],
     onFilesConverted: (base64Items) => {
       setItems([...items, ...base64Items]);
+    },
+  });
+
+  const { isProcessing, handleBase64Input } = useBase64InputHandler({
+    currentItemsCount: items.length,
+    maxItems: resolvedMaxItems,
+    maxSizeMB: MAX_FILE_SIZE_MB[type],
+    type,
+    existingItems: items,
+    onBase64Converted: (base64) => {
+      setItems([...items, base64]);
     },
   });
 
@@ -192,6 +204,24 @@ const PromptMessageMediaTags: React.FunctionComponent<
     setItems(items.filter((item) => item !== value));
   };
 
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+
+    const isBase64 = handleBase64Input(value, {
+      onSuccess: () => {
+        setNewItem("");
+        setOpen(false);
+      },
+      onError: () => {
+        setNewItem("");
+      },
+    });
+
+    if (!isBase64) {
+      setNewItem(value);
+    }
+  };
+
   const canAddMore = items.length < resolvedMaxItems;
 
   const icon = useMemo(
@@ -280,16 +310,24 @@ const PromptMessageMediaTags: React.FunctionComponent<
             <PopoverContent className="w-[460px] p-6" align={align}>
               <div className="space-y-3">
                 <div className="flex gap-2">
-                  <Input
-                    placeholder={placeholder}
-                    value={newItem}
-                    onChange={(event) => setNewItem(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        handleAddItem();
-                      }
-                    }}
-                  />
+                  <div className="relative flex-1">
+                    <Input
+                      placeholder={placeholder}
+                      value={newItem}
+                      onChange={handleInputChange}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !isProcessing) {
+                          handleAddItem();
+                        }
+                      }}
+                      disabled={isProcessing}
+                    />
+                    {isProcessing && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                        <Loader2 className="size-4 animate-spin" />
+                      </div>
+                    )}
+                  </div>
                   <TooltipWrapper
                     content={`Upload ${type} file${
                       type === "image" ? "s" : ""
@@ -301,11 +339,16 @@ const PromptMessageMediaTags: React.FunctionComponent<
                       size="default"
                       aria-label={`Upload ${type}`}
                       onClick={() => fileInputRef.current?.click()}
+                      disabled={isProcessing}
                     >
                       <Upload className="size-3.5 shrink-0" />
                     </Button>
                   </TooltipWrapper>
-                  <Button variant="default" onClick={handleAddItem}>
+                  <Button
+                    variant="default"
+                    onClick={handleAddItem}
+                    disabled={isProcessing}
+                  >
                     Add
                   </Button>
                 </div>
