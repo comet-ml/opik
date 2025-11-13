@@ -4,6 +4,7 @@ import opik.exceptions as exceptions
 from opik.message_processing import streamer
 from . import dataset
 from .. import experiment
+from ..experiment import experiments_client
 from ...rest_api.core.api_error import ApiError
 
 
@@ -60,6 +61,7 @@ def get_dataset_experiments(
     dataset_id: str,
     max_results: int,
     streamer: streamer.Streamer,
+    experiments_client: experiments_client.ExperimentsClient,
 ) -> List[experiment.Experiment]:
     page_size = 100
     experiments: List[experiment.Experiment] = []
@@ -83,6 +85,7 @@ def get_dataset_experiments(
                     dataset_name=experiment_.dataset_name,
                     rest_client=rest_client,
                     streamer=streamer,
+                    experiments_client=experiments_client,
                 )
             )
 

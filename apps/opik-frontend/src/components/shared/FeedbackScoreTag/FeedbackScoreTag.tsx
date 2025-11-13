@@ -69,6 +69,9 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     </FeedbackScoreReasonTooltip>
   ) : null;
 
+  // Determine what to display as the value
+  const displayValue = category || value;
+
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (
     <div className="flex max-w-full items-center gap-1.5">
@@ -91,7 +94,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
         data-testid="feedback-score-tag-value"
         className="comet-body-s-accented"
       >
-        {value}
+        {displayValue}
       </span>
     </div>
   );
