@@ -1,9 +1,9 @@
 from typing import List
 
-from . import anonymizer, rules
+from . import recursive_anonymizer, rules
 
 
-class RulesAnonymizer(anonymizer.Anonymizer):
+class RulesAnonymizer(recursive_anonymizer.RecursiveAnonymizer):
     """An anonymizer that applies a list of rules sequentially to text data.
 
     This class takes a list of Rule objects and applies them to
