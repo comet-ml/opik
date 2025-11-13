@@ -1,24 +1,24 @@
 from typing import List
-from .anonymizer import Anonymizer
-from .rules import Rule
+
+from . import anonymizer, rules
 
 
-class RulesAnonymizer(Anonymizer):
+class RulesAnonymizer(anonymizer.Anonymizer):
     """An anonymizer that applies a list of rules sequentially to text data.
 
     This class takes a list of Rule objects and applies them to
     anonymize sensitive information in text.
     """
 
-    def __init__(self, rules: List[Rule], max_depth: int = 10):
+    def __init__(self, anonymizer_rules: List[rules.Rule], max_depth: int = 10):
         """Initialize the RulesAnonymizer with a list of rules.
 
         Args:
-            rules: List of Rule objects to apply for anonymization.
+            anonymizer_rules: List of Rule objects to apply for anonymization.
             max_depth: Maximum recursion depth for nested data structures.
         """
         super().__init__(max_depth)
-        self.rules = rules
+        self.rules = anonymizer_rules
 
     def anonymize_text(self, data: str) -> str:
         """Apply all rules sequentially to the input text.
