@@ -13,6 +13,8 @@ public class SortableFields {
     public static final String LAST_UPDATED_TRACE_AT = "last_updated_trace_at";
     public static final String LAST_CREATED_EXPERIMENT_AT = "last_created_experiment_at";
     public static final String LAST_CREATED_OPTIMIZATION_AT = "last_created_optimization_at";
+    public static final String MOST_RECENT_EXPERIMENT_AT = "most_recent_experiment_at";
+    public static final String MOST_RECENT_OPTIMIZATION_AT = "most_recent_optimization_at";
     public static final String INPUT = "input";
     public static final String OUTPUT = "output";
     public static final String START_TIME = "start_time";
