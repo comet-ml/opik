@@ -65,12 +65,21 @@ def mask_api_keys(text: str) -> str:
     api_key_pattern = r'\b(sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,})\b'
     return re.sub(api_key_pattern, '[API_KEY]', text)
 
-def uppercase_names(text: str) -> str:
-    """Transform names to uppercase for consistency"""
-    return text.upper()
+def anonymize_with_hash(text: str) -> str:
+    """Replace emails with consistent hashes for tracking without exposing PII"""
+    import re
+    import hashlib
+    
+    def hash_replace(match):
+        email = match.group(0)
+        hash_val = hashlib.md5(email.encode()).hexdigest()[:8]
+        return f"[EMAIL_{hash_val}]"
+    
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    return re.sub(email_pattern, hash_replace, text)
 
 # Create anonymizer with function rules
-anonymizer = create_anonymizer([mask_api_keys, uppercase_names])
+anonymizer = create_anonymizer([mask_api_keys, anonymize_with_hash])
 opik.hooks.add_anonymizer(anonymizer)
 ```
 
@@ -106,7 +115,11 @@ from opik.anonymizer import Anonymizer
 class AdvancedPIIAnonymizer(Anonymizer):
     def anonymize(self, data, **kwargs):
         """
-        Custom anonymizer with access to metadata about the field being processed
+        Custom anonymizer with access to metadata about the field being processed.
+        
+        Note: kwargs like 'field_name' and 'object_type' are passed in kwargs by internal data
+        processors. They might be helpful to customize the logic for span/trace input, output, and metadata.
+        Read more in `Understanding Anonymizer kwargs`.
         """
         field_name = kwargs.get("field_name")
         object_type = kwargs.get("object_type")
@@ -139,6 +152,46 @@ class AdvancedPIIAnonymizer(Anonymizer):
 # Register the custom anonymizer
 opik.hooks.add_anonymizer(AdvancedPIIAnonymizer())
 ```
+
+### Understanding Anonymizer kwargs
+
+When implementing custom anonymizers, the `anonymize()` method receives additional context through `**kwargs`:
+
+- **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, or `"metadata"`)
+- **`object_type`**: The type of the object being processed (typically `dict` for trace/span data)
+
+**When are kwargs available?**
+
+These kwargs are automatically passed by Opik's internal data processors when anonymizing trace and span data before sending it to the backend. This allows you to apply different anonymization strategies based on the field being processed.
+
+**Example: Field-specific anonymization**
+
+```python
+from opik.anonymizer import Anonymizer
+
+class FieldAwareAnonymizer(Anonymizer):
+    def anonymize(self, data, **kwargs):
+        field_name = kwargs.get("field_name", "")
+        
+        # Only anonymize the output field, leave input as-is for debugging
+        if field_name == "output" and isinstance(data, str):
+            import re
+            # More aggressive anonymization for outputs
+            data = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', data)
+            data = re.sub(r'\b\d{3}-\d{3}-\d{4}\b', '[PHONE]', data)
+        elif field_name == "metadata" and isinstance(data, dict):
+            # Remove specific metadata fields entirely
+            sensitive_keys = ["user_id", "session_token", "api_key"]
+            for key in sensitive_keys:
+                if key in data:
+                    data[key] = "[REDACTED]"
+        
+        return data
+```
+
+<Tip>
+  The `field_name` and `object_type` kwargs are primarily useful for implementing context-aware anonymization logic. If you don't need field-specific behavior, you can safely ignore these kwargs.
+</Tip>
 
 # Usage Examples
 
