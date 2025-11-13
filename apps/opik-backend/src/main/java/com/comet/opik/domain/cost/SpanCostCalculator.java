@@ -96,7 +96,7 @@ class SpanCostCalculator {
         validateArgs(modelPrice, usage);
         int durationSeconds = usage.getOrDefault(VIDEO_DURATION_KEY, 0);
         BigDecimal videoPrice = modelPrice.videoOutputPrice();
-        if (durationSeconds <= 0 || videoPrice.compareTo(BigDecimal.ZERO) <= 0) {
+        if (durationSeconds <= 0 || !isPositive(videoPrice)) {
             return BigDecimal.ZERO;
         }
         return videoPrice.multiply(BigDecimal.valueOf(durationSeconds));
@@ -105,5 +105,9 @@ class SpanCostCalculator {
     private static void validateArgs(ModelPrice modelPrice, Map<String, Integer> usage) {
         Objects.requireNonNull(modelPrice, "modelPrice must not be null");
         Objects.requireNonNull(usage, "usage must not be null");
+    }
+
+    private static boolean isPositive(BigDecimal value) {
+        return value != null && value.compareTo(BigDecimal.ZERO) > 0;
     }
 }
