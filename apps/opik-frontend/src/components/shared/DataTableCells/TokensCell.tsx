@@ -48,4 +48,3 @@ const CompareTokensCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
 TokensCell.Compare = CompareTokensCell;
 
 export default TokensCell;
-
