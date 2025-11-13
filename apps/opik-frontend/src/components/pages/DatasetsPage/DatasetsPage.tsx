@@ -72,7 +72,6 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     id: "dataset_items_count",
     label: "Item count",
     type: COLUMN_TYPE.number,
-    sortable: false,
   },
   {
     id: "tags",

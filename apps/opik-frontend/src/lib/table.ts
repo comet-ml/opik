@@ -73,10 +73,7 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      // Respect explicit sortable: false on column definition
-      if (column.sortable === false) {
-        retVal.push(mapColumnDataFields(column));
-      } else if (
+      if (
         Boolean(sortableColumns?.length) &&
         isColumnSortable(column.id, sortableColumns)
       ) {
