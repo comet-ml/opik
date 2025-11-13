@@ -1,11 +1,14 @@
 import copy
 import json
+import logging
 from typing import Any, Dict, Optional, Union, List
 
 from opik.rest_api.types import PromptVersionDetail
 from .prompt_template import PromptTemplate
 from .types import PromptType
 from opik.api_objects.prompt import client as prompt_client
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Prompt:
@@ -93,11 +96,17 @@ class Prompt:
             and self._metadata.get("created_from") == "opik_ui"
             and self._metadata.get("type") == "messages_json"
         )
+        formatted_string = self._template.format(**kwargs)
         if is_playground_chat_prompt:
-            formatted_string = self._template.format(**kwargs)
-            return json.loads(formatted_string)
+            try:
+                return json.loads(formatted_string)
+            except json.JSONDecodeError:
+                LOGGER.error(
+                    f"Failed to parse JSON string: {formatted_string}. Make sure chat prompt is valid JSON. Returning the raw string."
+                )
+                return formatted_string
 
-        return self._template.format(**kwargs)
+        return formatted_string
 
     @classmethod
     def from_fern_prompt_version(
