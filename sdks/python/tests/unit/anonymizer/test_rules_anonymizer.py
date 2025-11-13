@@ -1,7 +1,7 @@
 import pytest
 
-from opik.anonymizer.rules import RegexRule, FunctionRule
-from opik.anonymizer.rules_anonymizer import RulesAnonymizer
+from opik.anonymizer import rules
+from opik.anonymizer import rules_anonymizer
 
 
 class TestRulesAnonymizer:
@@ -9,18 +9,18 @@ class TestRulesAnonymizer:
 
     def test_init(self):
         """Test RulesAnonymizer initialization."""
-        regex_rule = RegexRule(r"\d+", "***")
-        rules = [regex_rule]
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        rules_ = [regex_rule]
 
-        anonymizer = RulesAnonymizer(rules, max_depth=5)
+        anonymizer = rules_anonymizer.RulesAnonymizer(rules_, max_depth=5)
 
-        assert anonymizer.rules == rules
+        assert anonymizer.rules == rules_
         assert anonymizer.max_depth == 5
 
     def test_anonymize_text__single_regex_rule(self):
         """Test anonymizing text with a single regex rule."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         result = anonymizer.anonymize_text("Phone: 123-456-7890")
 
@@ -28,12 +28,12 @@ class TestRulesAnonymizer:
 
     def test_anonymize_text__multiple_regex_rules(self):
         """Test anonymizing text with multiple regex rules applied sequentially."""
-        email_rule = RegexRule(
+        email_rule = rules.RegexRule(
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[EMAIL]"
         )
-        phone_rule = RegexRule(r"\d{3}-\d{3}-\d{4}", "[PHONE]")
+        phone_rule = rules.RegexRule(r"\d{3}-\d{3}-\d{4}", "[PHONE]")
 
-        anonymizer = RulesAnonymizer([email_rule, phone_rule])
+        anonymizer = rules_anonymizer.RulesAnonymizer([email_rule, phone_rule])
 
         result = anonymizer.anonymize_text("Contact: user@example.com or 123-456-7890")
 
@@ -45,8 +45,8 @@ class TestRulesAnonymizer:
         def uppercase_anonymizer(text: str) -> str:
             return text.upper()
 
-        function_rule = FunctionRule(uppercase_anonymizer)
-        anonymizer = RulesAnonymizer([function_rule])
+        function_rule = rules.FunctionRule(uppercase_anonymizer)
+        anonymizer = rules_anonymizer.RulesAnonymizer([function_rule])
 
         result = anonymizer.anonymize_text("hello world")
 
@@ -54,10 +54,10 @@ class TestRulesAnonymizer:
 
     def test_anonymize_text__mixed_rules(self):
         """Test anonymizing text with mixed rule types."""
-        regex_rule = RegexRule(r"\d+", "XXX")
-        function_rule = FunctionRule(lambda text: text.replace(" ", "_"))
+        regex_rule = rules.RegexRule(r"\d+", "XXX")
+        function_rule = rules.FunctionRule(lambda text: text.replace(" ", "_"))
 
-        anonymizer = RulesAnonymizer([regex_rule, function_rule])
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule, function_rule])
 
         result = anonymizer.anonymize_text("Phone 123 456")
 
@@ -65,7 +65,7 @@ class TestRulesAnonymizer:
 
     def test_anonymize_text__no_rules(self):
         """Test anonymizing text with no rules returns original text."""
-        anonymizer = RulesAnonymizer([])
+        anonymizer = rules_anonymizer.RulesAnonymizer([])
 
         result = anonymizer.anonymize_text("sensitive data")
 
@@ -73,8 +73,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__string_data(self):
         """Test anonymizing string data."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         result = anonymizer.anonymize("Phone: 123-456-7890")
 
@@ -82,8 +82,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__dict_data(self):
         """Test anonymizing dictionary data."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         data = {"name": "John Doe", "phone": "123-456-7890", "address": "123 Main St"}
 
@@ -98,8 +98,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__list_data(self):
         """Test anonymizing list data."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         data = ["Contact: 123-456-7890", "Another: 987-654-3210", "No numbers here"]
 
@@ -110,8 +110,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__nested_dict_data(self):
         """Test anonymizing nested dictionary data."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         data = {
             "user": {
@@ -134,8 +134,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__nested_list_data(self):
         """Test anonymizing nested list data."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         data = [
             ["Phone: 123", "Email: user@test.com"],
@@ -154,12 +154,12 @@ class TestRulesAnonymizer:
 
     def test_anonymize__mixed_nested_data(self):
         """Test anonymizing complex mixed nested data structures."""
-        email_rule = RegexRule(
+        email_rule = rules.RegexRule(
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[EMAIL]"
         )
-        phone_rule = RegexRule(r"\d{3}-\d{3}-\d{4}", "[PHONE]")
+        phone_rule = rules.RegexRule(r"\d{3}-\d{3}-\d{4}", "[PHONE]")
 
-        anonymizer = RulesAnonymizer([email_rule, phone_rule])
+        anonymizer = rules_anonymizer.RulesAnonymizer([email_rule, phone_rule])
 
         data = {
             "users": [
@@ -182,8 +182,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__non_string_values_unchanged(self):
         """Test that non-string values are not processed."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         data = {
             "number": 12345,
@@ -206,8 +206,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__max_depth_limiting(self):
         """Test that max_depth limits recursion depth."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule], max_depth=2)
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule], max_depth=2)
 
         # Create deeply nested data that exceeds max_depth
         data = {"level1": {"level2": {"level3": {"phone": "123-456-7890"}}}}
@@ -228,8 +228,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__max_depth_exact_limit(self):
         """Test that max_depth allows processing exactly at the limit."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule], max_depth=4)
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule], max_depth=4)
 
         # Create data where string is processed at depth=3 (within limit)
         data = {"level1": {"level2": {"phone": "123-456-7890"}}}
@@ -242,8 +242,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize__circular_reference_protection(self):
         """Test protection against circular references through depth limiting."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule], max_depth=3)
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule], max_depth=3)
 
         # Create circular reference
         data = {"phone": "123"}
@@ -259,11 +259,11 @@ class TestRulesAnonymizer:
     @pytest.mark.parametrize("rule_count", [1, 5, 10])
     def test_anonymize_text__performance_with_multiple_rules(self, rule_count):
         """Test performance with varying numbers of rules."""
-        rules = []
+        rules_ = []
         for i in range(rule_count):
-            rules.append(RegexRule(f"pattern{i}", f"replacement{i}"))
+            rules_.append(rules.RegexRule(f"pattern{i}", f"replacement{i}"))
 
-        anonymizer = RulesAnonymizer(rules)
+        anonymizer = rules_anonymizer.RulesAnonymizer(rules_)
 
         # Test with a simple string
         result = anonymizer.anonymize_text("test pattern0 and pattern5")
@@ -273,8 +273,8 @@ class TestRulesAnonymizer:
 
     def test_anonymize_text__empty_string_handling(self):
         """Test handling of empty strings."""
-        regex_rule = RegexRule(r"\d+", "***")
-        anonymizer = RulesAnonymizer([regex_rule])
+        regex_rule = rules.RegexRule(r"\d+", "***")
+        anonymizer = rules_anonymizer.RulesAnonymizer([regex_rule])
 
         result = anonymizer.anonymize_text("")
 
@@ -283,19 +283,19 @@ class TestRulesAnonymizer:
     def test_anonymize_text__complex_regex_patterns(self):
         """Test complex regex patterns for real-world scenarios."""
         # Email pattern
-        email_rule = RegexRule(
+        email_rule = rules.RegexRule(
             r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL_REDACTED]"
         )
 
         # Credit card pattern (simplified)
-        cc_rule = RegexRule(
+        cc_rule = rules.RegexRule(
             r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[CARD_REDACTED]"
         )
 
         # SSN pattern
-        ssn_rule = RegexRule(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN_REDACTED]")
+        ssn_rule = rules.RegexRule(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN_REDACTED]")
 
-        anonymizer = RulesAnonymizer([email_rule, cc_rule, ssn_rule])
+        anonymizer = rules_anonymizer.RulesAnonymizer([email_rule, cc_rule, ssn_rule])
 
         text = """
         Contact info:

@@ -1,7 +1,7 @@
 import pytest
 
-from opik.anonymizer.factory import create_anonymizer
-from opik.anonymizer.rules_anonymizer import RulesAnonymizer
+from opik.anonymizer import factory
+from opik.anonymizer import rules_anonymizer
 
 
 class TestCreateAnonymizer:
@@ -10,9 +10,9 @@ class TestCreateAnonymizer:
     def test_create_anonymizer__single_dict_rule(self):
         """Test creating anonymizer with a single dictionary rule."""
         rules = {"regex": r"\d+", "replace": "***"}
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 1
         assert anonymizer.max_depth == 10
 
@@ -22,9 +22,9 @@ class TestCreateAnonymizer:
     def test_create_anonymizer__single_tuple_rule(self):
         """Test creating anonymizer with a single tuple rule."""
         rules = (r"\d+", "***")
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 1
 
         result = anonymizer.anonymize("Phone: 123-456")
@@ -37,9 +37,9 @@ class TestCreateAnonymizer:
             return text.upper()
 
         rules = uppercase_rule
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 1
 
         result = anonymizer.anonymize("hello world")
@@ -54,9 +54,9 @@ class TestCreateAnonymizer:
                 "replace": "[EMAIL]",
             },
         ]
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 2
 
         result = anonymizer.anonymize("Contact: test@example.com or 123")
@@ -68,9 +68,9 @@ class TestCreateAnonymizer:
             (r"\d+", "[NUMBER]"),
             (r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[EMAIL]"),
         ]
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 2
 
         result = anonymizer.anonymize("Contact: test@example.com or 123")
@@ -86,9 +86,9 @@ class TestCreateAnonymizer:
             return text.replace(" ", "_")
 
         rules = [uppercase_rule, replace_spaces]
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 2
 
         result = anonymizer.anonymize("hello world")
@@ -101,9 +101,9 @@ class TestCreateAnonymizer:
             return f"[PROCESSED] {text}"
 
         rules = [{"regex": r"\d+", "replace": "***"}, (r"test", "TEST"), prefix_rule]
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 3
 
         result = anonymizer.anonymize("test 123")
@@ -112,7 +112,7 @@ class TestCreateAnonymizer:
     def test_create_anonymizer__custom_max_depth(self):
         """Test creating anonymizer with custom max_depth."""
         rules = {"regex": r"\d+", "replace": "***"}
-        anonymizer = create_anonymizer(rules, max_depth=5)
+        anonymizer = factory.create_anonymizer(rules, max_depth=5)
 
         assert anonymizer.max_depth == 5
 
@@ -125,7 +125,7 @@ class TestCreateAnonymizer:
                 "replace": "[EMAIL]",
             },
         ]
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
         data = {
             "users": [
@@ -150,7 +150,7 @@ class TestCreateAnonymizer:
         with pytest.raises(
             ValueError, match="Dictionary rule must have 'regex' and 'replace' keys"
         ):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__invalid_dict_rule_missing_replace__error_raised(self):
         """Test error handling for a dictionary rule missing the 'replace' key."""
@@ -158,13 +158,13 @@ class TestCreateAnonymizer:
         with pytest.raises(
             ValueError, match="Dictionary rule must have 'regex' and 'replace' keys"
         ):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__invalid_tuple_rule_wrong_length__error_raised(self):
         """Test error handling for tuple rule with the wrong length."""
         rules = (r"\d+",)  # Only one element
         with pytest.raises(ValueError, match="Tuple rule must have exactly 2 elements"):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__invalid_tuple_rule_too_many_elements__error_raised(
         self,
@@ -172,7 +172,7 @@ class TestCreateAnonymizer:
         """Test error handling for tuple rule with too many elements."""
         rules = (r"\d+", "***", "extra")
         with pytest.raises(ValueError, match="Tuple rule must have exactly 2 elements"):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__invalid_dict_rule_in_list__error_raised(self):
         """Test error handling for invalid dictionary rule in a list."""
@@ -183,7 +183,7 @@ class TestCreateAnonymizer:
         with pytest.raises(
             ValueError, match="Dictionary rule must have 'regex' and 'replace' keys"
         ):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__invalid_tuple_rule_in_list__error_raised(self):
         """Test error handling for invalid tuple rule in a list."""
@@ -192,7 +192,7 @@ class TestCreateAnonymizer:
             (r"test",),  # Wrong length
         ]
         with pytest.raises(ValueError, match="Tuple rule must have exactly 2 elements"):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__unsupported_rule_type_in_list__error_raised(self):
         """Test error handling for an unsupported rule type in the list."""
@@ -201,20 +201,20 @@ class TestCreateAnonymizer:
             123,  # Invalid type
         ]
         with pytest.raises(ValueError, match="Unsupported rule type in list"):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__unsupported_rules_type__error_raised(self):
         """Test error handling for completely unsupported rules type."""
         rules = 123  # Invalid type
         with pytest.raises(ValueError, match="Unsupported rules type"):
-            create_anonymizer(rules)
+            factory.create_anonymizer(rules)
 
     def test_create_anonymizer__empty_list(self):
         """Test creating anonymizer with an empty rules list."""
         rules = []
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 0
 
         # Should return original text with no rules
@@ -223,11 +223,11 @@ class TestCreateAnonymizer:
 
     def test_create_anonymizer__lambda_function(self):
         """Test creating anonymizer with lambda function rule."""
-        anonymizer = create_anonymizer(
+        anonymizer = factory.create_anonymizer(
             lambda text: text.replace("secret", "[REDACTED]")
         )
 
-        assert isinstance(anonymizer, RulesAnonymizer)
+        assert isinstance(anonymizer, rules_anonymizer.RulesAnonymizer)
         assert len(anonymizer.rules) == 1
 
         result = anonymizer.anonymize("This is secret information")
@@ -248,7 +248,7 @@ class TestCreateAnonymizer:
             # Credit card (simplified)
             {"regex": r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "replace": "[CARD]"},
         ]
-        anonymizer = create_anonymizer(rules)
+        anonymizer = factory.create_anonymizer(rules)
 
         text = """
         Personal Information:
