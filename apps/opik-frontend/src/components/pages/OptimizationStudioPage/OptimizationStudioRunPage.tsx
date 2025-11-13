@@ -12,7 +12,9 @@ import {
   useOptimizationStudioContext,
 } from "./OptimizationStudioContext";
 import OptimizationStudioActions from "./OptimizationStudioActions";
-import ConfigureOptimizationSection from "./ConfigureOptimizationSection";
+import ConfigureOptimizationSection from "./ConfigureOptimizationSection/ConfigureOptimizationSection";
+import ObserveOptimizationSection from "@/components/pages/OptimizationStudioPage/ObserveOptimizationSection/ObserveOptimizationSection";
+import { DEMO_TEMPLATES } from "@/constants/optimizations";
 
 const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
@@ -21,12 +23,16 @@ const OptimizationStudioRunPageContent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const [optimizationId] = useQueryParam("optimizationId", StringParam);
-  const { setActiveOptimization, setExperiments } =
+  const [templateId] = useQueryParam("template", StringParam);
+  const { setActiveOptimization, setExperiments, setTemplateData } =
     useOptimizationStudioContext();
 
   const { data: optimization, isPending: isOptimizationPending } =
     useOptimizationById(
-      { optimizationId: optimizationId! },
+      {
+        optimizationId: optimizationId!,
+        includeStudioConfig: true,
+      },
       {
         enabled: Boolean(optimizationId),
         placeholderData: keepPreviousData,
@@ -61,6 +67,15 @@ const OptimizationStudioRunPageContent = () => {
   }, [setBreadcrumbParam]);
 
   useEffect(() => {
+    if (templateId) {
+      const template = DEMO_TEMPLATES.find((t) => t.id === templateId);
+      setTemplateData(template || null);
+    } else {
+      setTemplateData(null);
+    }
+  }, [templateId, setTemplateData]);
+
+  useEffect(() => {
     setActiveOptimization(optimization || null);
   }, [optimization, setActiveOptimization]);
 
@@ -75,22 +90,20 @@ const OptimizationStudioRunPageContent = () => {
   }
 
   return (
-    <div className="pt-6">
+    <div className="py-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
           Optimization studio
         </h1>
         <OptimizationStudioActions />
       </div>
-      <div className="flex flex-wrap-reverse gap-6">
-        <div className="flex min-w-[480px] flex-1 flex-col">
-          <div className="rounded-md border p-6">
-            <h2 className="comet-title-m mb-4">Initial prompt</h2>
-          </div>
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <div className="flex w-full flex-col gap-4 lg:w-1/3">
+          <ConfigureOptimizationSection />
         </div>
 
-        <div className="flex min-w-[720px] flex-[1.5] flex-col">
-          <ConfigureOptimizationSection />
+        <div className="flex w-full flex-col lg:w-2/3">
+          <ObserveOptimizationSection />
         </div>
       </div>
     </div>

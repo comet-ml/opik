@@ -25,8 +25,8 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     : [];
 
   return (
-    <Card>
-      <CardContent className="p-4">
+    <Card className="h-full">
+      <CardContent className="flex h-full flex-col p-4">
         <div className="space-y-2">
           {logs.length === 0 ? (
             <div className="comet-body-s text-muted-slate">

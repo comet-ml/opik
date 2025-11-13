@@ -287,6 +287,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       workspaceName,
       page: 1,
       size: 1,
+      studioOnly: true,
       filters: ACTIVE_OPTIMIZATION_FILTER,
     },
     {
