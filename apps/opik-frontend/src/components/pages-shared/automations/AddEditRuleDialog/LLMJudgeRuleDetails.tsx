@@ -28,7 +28,10 @@ import {
   LLMMessage,
   LLMPromptTemplate,
 } from "@/types/llm";
-import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import {
+  generateDefaultLLMPromptMessage,
+  getTextFromMessageContent,
+} from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { EvaluationRuleFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
@@ -261,7 +264,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     let parsingVariablesError: boolean = false;
                     messages
                       .reduce<string[]>((acc, m) => {
-                        const tags = safelyGetPromptMustacheTags(m.content);
+                        const contentAsString = getTextFromMessageContent(
+                          m.content,
+                        );
+                        const tags =
+                          safelyGetPromptMustacheTags(contentAsString);
                         if (!tags) {
                           parsingVariablesError = true;
                           return acc;

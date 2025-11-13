@@ -74,7 +74,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
     editable: true,
   });
 
-  const { localText, images, handleContentChange } = useMessageContent({
+  const { localText, handleContentChange } = useMessageContent({
     content: template,
     onChangeContent: (content) => setTemplate(content as string),
   });
