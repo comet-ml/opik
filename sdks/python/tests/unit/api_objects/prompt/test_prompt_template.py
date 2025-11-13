@@ -128,3 +128,12 @@ def test_prompt__format_jinja2__with_filters():
 
     result = tested.format(name="Harry", city="LONDON")
     assert result == "HARRY lives in london."
+
+
+def test_prompt__format__none_values_render_as_empty_strings() -> None:
+    PROMPT_TEMPLATE = "Primary: {{primary}} Secondary: {{secondary}}"
+
+    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+
+    result = tested.format(primary="cat", secondary=None)
+    assert result == "Primary: cat Secondary: "
