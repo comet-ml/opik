@@ -242,3 +242,41 @@ into potential issues.
 
 Reviewing these sections can help pinpoint the source of the problem and suggest possible
 resolutions.
+
+### ⌨️ Using Comet Debugger Mode (UI/Browser)
+
+**Comet Debugger Mode** is a hidden diagnostic feature in the **Opik web application** that displays real-time technical information to help you troubleshoot issues. This mode is particularly useful when investigating connectivity problems, reporting bugs, or verifying your deployment version.
+
+**To toggle Comet Debugger Mode:**
+
+Press `Command + Shift + .` on macOS or `Ctrl + Shift + .` on Windows/Linux
+
+<Frame>
+  <img src="/img/faq/comet_debugger_mode.png" alt="Comet Debugger Mode showing RTT and version" />
+</Frame>
+
+**What it displays:**
+
+- **Network Status**: Real-time connectivity indicator with RTT (Round Trip Time) showing latency to the Opik backend server in seconds
+- **Opik Version**: The current version of Opik you're running (click to copy to clipboard)
+
+This information is helpful when:
+
+- Reporting issues to the Opik team (include the version number and RTT)
+- Verifying your Opik version matches expected deployment
+- Diagnosing connectivity problems between UI and backend (check RTT for latency issues)
+- Troubleshooting UI-related issues or unexpected behavior
+- Confirming successful updates or deployments
+- Monitoring network performance and latency to the backend server
+
+**How it works:**
+
+The keyboard shortcut toggles the debug information overlay on and off. When enabled, a small
+status bar appears in the UI showing the network connectivity status and version information.
+The mode persists across browser sessions (stored in local storage), so you only need to enable
+it once until you toggle it off again.
+
+<Note>
+  The debugger mode setting persists across sessions and is stored in your browser's local storage.
+  Press the keyboard shortcut again to hide the debug information.
+</Note>
