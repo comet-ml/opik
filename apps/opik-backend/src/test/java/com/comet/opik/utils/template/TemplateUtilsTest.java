@@ -1,4 +1,4 @@
-package com.comet.opik.utils;
+package com.comet.opik.utils.template;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
