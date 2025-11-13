@@ -51,7 +51,10 @@ const Tag = React.forwardRef<HTMLDivElement, TagProps>(
 );
 Tag.displayName = "Tag";
 
-export const TAG_VARIANTS: Exclude<TagProps["variant"], "red">[] = [
+export const TAG_VARIANTS: Exclude<
+  TagProps["variant"],
+  "red" | "transparent"
+>[] = [
   "primary",
   "gray",
   "purple",
@@ -62,11 +65,10 @@ export const TAG_VARIANTS: Exclude<TagProps["variant"], "red">[] = [
   "green",
   "turquoise",
   "blue",
-  "transparent",
 ];
 
 export const TAG_VARIANTS_COLOR_MAP: Record<
-  Exclude<TagProps["variant"], null | undefined | "red">,
+  Exclude<TagProps["variant"], null | undefined | "red" | "transparent">,
   string
 > = {
   default: "var(--color-gray)",
@@ -80,7 +82,6 @@ export const TAG_VARIANTS_COLOR_MAP: Record<
   green: "var(--color-green)",
   turquoise: "var(--color-turquoise)",
   blue: "var(--color-blue)",
-  transparent: "transparent",
 };
 
 export { Tag, tagVariants };
