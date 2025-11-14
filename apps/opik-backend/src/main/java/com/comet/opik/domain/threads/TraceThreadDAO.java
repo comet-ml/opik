@@ -4,11 +4,14 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
@@ -33,6 +36,7 @@ import java.util.UUID;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -64,6 +68,11 @@ public interface TraceThreadDAO {
     Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 
     Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant lastUpdatedAt);
+
+    record ThreadIdWithTagsAndMetadata(UUID id, Set<String> tags, UUID projectId) {
+    }
+
+    Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags);
 }
 
 @Singleton
@@ -258,6 +267,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public Mono<Long> save(@NonNull List<TraceThreadModel> traceThreads) {
@@ -543,7 +554,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
-        }).buffer(1000);
+        }).buffer(100);
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
@@ -582,5 +593,62 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         if (criteria.status() != null) {
             statement.bind("status", criteria.status().getValue());
         }
+    }
+
+    private static final String BULK_UPDATE_TAGS = """
+                    INSERT INTO trace_threads (
+                        workspace_id,
+                        project_id,
+                        thread_id,
+                        id,
+                        status,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        tags,
+                        sampling_per_rule,
+                        scored_at
+                    )
+                    SELECT
+                        tt.workspace_id,
+                        tt.project_id,
+                        tt.thread_id,
+                        tt.id,
+                        tt.status,
+                        tt.created_by,
+                        tt.last_updated_by,
+                        tt.created_at,
+                        now64(6) as last_updated_at,
+                {TAGS_EXPRESSION} as tags,
+                tt.sampling_per_rule,
+                tt.scored_at
+            FROM trace_threads tt final
+            WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id;""";
+
+    @Override
+    public Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        Preconditions.checkArgument(update.tags() != null && !update.tags().isEmpty(), "tags must not be empty");
+        log.info("Bulk updating tags for '{}' thread models", ids.size());
+
+        String tagsExpression = mergeTags
+                ? "arrayConcat(tt.tags, :new_tags)"
+                : ":new_tags";
+        String query = BULK_UPDATE_TAGS.replace("{TAGS_EXPRESSION}", tagsExpression);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids)
+                            .bind("new_tags", update.tags().toArray(new String[0]));
+
+                    Segment segment = startSegment("trace_threads", "Clickhouse", "bulk_update_tags");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' thread models", ids.size()));
     }
 }

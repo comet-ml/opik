@@ -10,9 +10,11 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadBatchIdentifier;
+import com.comet.opik.api.TraceThreadBatchUpdate;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -673,6 +675,39 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .cookie(RequestContext.SESSION_COOKIE, sessionToken)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(new TraceBatch(traces)));
+    }
+
+    public void batchUpdateTraces(TraceBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        try (var actualResponse = callBatchUpdateTraces(batchUpdate, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callBatchUpdateTraces(TraceBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(batchUpdate));
+    }
+
+    public void batchUpdateThreads(TraceThreadBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        try (var actualResponse = callBatchUpdateThreads(batchUpdate, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callBatchUpdateThreads(TraceThreadBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(batchUpdate));
     }
 
     public Response callPostWithCookie(Object body, String sessionToken, String workspaceName) {

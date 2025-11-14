@@ -1632,6 +1632,7 @@ class SpanDAO {
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
+
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -2249,6 +2250,84 @@ class SpanDAO {
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
+    }
+
+    private static final String BULK_UPDATE_TAGS = """
+                    INSERT INTO spans (
+                        id,
+                        project_id,
+                        workspace_id,
+                        trace_id,
+                        parent_span_id,
+                        name,
+                        type,
+                        start_time,
+                        end_time,
+                        input,
+                        output,
+                        metadata,
+                        model,
+                        provider,
+                        total_estimated_cost,
+                        total_estimated_cost_version,
+                        tags,
+                        usage,
+                        error_info,
+                        created_at,
+                        created_by,
+                        last_updated_by,
+                        truncation_threshold
+                    )
+                    SELECT
+                        s.id,
+                        s.project_id,
+                        s.workspace_id,
+                        s.trace_id,
+                        s.parent_span_id,
+                        s.name,
+                        s.type,
+                        s.start_time,
+                        s.end_time,
+                        s.input,
+                        s.output,
+                        s.metadata,
+                        s.model,
+                        s.provider,
+                        s.total_estimated_cost,
+                        s.total_estimated_cost_version,
+                {TAGS_EXPRESSION} as tags,
+                s.usage, s.error_info, s.created_at, s.created_by, s.last_updated_by,
+                s.truncation_threshold
+            FROM spans s
+            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+            ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
+                    """;
+
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull SpanUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        Preconditions.checkArgument(update.tags() != null && !update.tags().isEmpty(), "tags must not be empty");
+        log.info("Bulk updating tags for '{}' spans", ids.size());
+
+        String tagsExpression = mergeTags
+                ? "arrayConcat(s.tags, :new_tags)"
+                : ":new_tags";
+        String query = BULK_UPDATE_TAGS.replace("{TAGS_EXPRESSION}", tagsExpression);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids)
+                            .bind("new_tags", update.tags().toArray(new String[0]));
+
+                    Segment segment = startSegment("spans", "Clickhouse", "bulk_update_tags");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", ids.size()));
     }
 
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {

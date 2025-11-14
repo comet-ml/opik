@@ -6,6 +6,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.attachment.AttachmentInfo;
@@ -202,6 +203,22 @@ public class SpanService {
                                                 Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                         .onErrorResume(this::handleSpanDBError)
                                         .then()))));
+    }
+
+    @WithSpan
+    public Mono<Void> batchUpdate(@NonNull SpanBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' spans", batchUpdate.ids().size());
+
+        Set<String> tags = batchUpdate.update().tags();
+        if (tags == null || tags.isEmpty()) {
+            log.info("No tags to update for '{}' spans", batchUpdate.ids().size());
+            return Mono.empty();
+        }
+
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Bulk updated '{}' spans with {} tags",
+                        batchUpdate.ids().size(), mergeTags ? "merged" : "replaced"));
     }
 
     private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {

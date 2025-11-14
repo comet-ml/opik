@@ -31,6 +31,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -127,6 +128,8 @@ interface TraceDAO {
     Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
 
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
+
+    Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags);
 }
 
 @Slf4j
@@ -2407,6 +2410,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
     @WithSpan
@@ -3519,6 +3523,71 @@ class TraceDAOImpl implements TraceDAO {
                     log.info("Closing trace search stream");
                     endSegment(segment);
                 });
+    }
+
+    private static final String BULK_UPDATE_TAGS = """
+                    INSERT INTO traces (
+                        id,
+                        project_id,
+                        workspace_id,
+                        name,
+                        start_time,
+                        end_time,
+                        input,
+                        output,
+                        metadata,
+                        tags,
+                        error_info,
+                        created_at,
+                        created_by,
+                        last_updated_by,
+                        thread_id,
+                        visibility_mode,
+                        truncation_threshold
+                    )
+                    SELECT
+                        t.id,
+                        t.project_id,
+                        t.workspace_id,
+                        t.name,
+                        t.start_time,
+                        t.end_time,
+                        t.input,
+                        t.output,
+                        t.metadata,
+                {TAGS_EXPRESSION} as tags,
+                t.error_info, t.created_at, t.created_by, t.last_updated_by, t.thread_id, t.visibility_mode,
+                t.truncation_threshold
+            FROM traces t
+            WHERE t.id IN :ids AND t.workspace_id = :workspace_id
+            ORDER BY t.last_updated_at DESC
+            LIMIT 1 BY t.id;""";
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        Preconditions.checkArgument(update.tags() != null && !update.tags().isEmpty(), "tags must not be empty");
+        log.info("Bulk updating tags for '{}' traces", ids.size());
+
+        String tagsExpression = mergeTags
+                ? "arrayConcat(t.tags, :new_tags)"
+                : ":new_tags";
+        String query = BULK_UPDATE_TAGS.replace("{TAGS_EXPRESSION}", tagsExpression);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids)
+                            .bind("new_tags", update.tags().toArray(new String[0]));
+
+                    Segment segment = startSegment("traces", "Clickhouse", "bulk_update_tags");
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' traces", ids.size()));
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {

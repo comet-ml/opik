@@ -7,6 +7,7 @@ import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.SpanFilter;
@@ -436,6 +437,22 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         }
 
         return null;
+    }
+
+    public void batchUpdateSpans(SpanBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        try (var actualResponse = callBatchUpdateSpans(batchUpdate, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callBatchUpdateSpans(SpanBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(batchUpdate));
     }
 
 }
