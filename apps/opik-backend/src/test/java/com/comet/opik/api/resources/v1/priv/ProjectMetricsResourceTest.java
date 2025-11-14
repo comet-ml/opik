@@ -971,6 +971,39 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        @DisplayName("interval_end is optional - filters token usage from interval_start onwards")
+        void whenIntervalEndOmitted_thenFilterTokenUsageFromIntervalStart(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var usageMinus3 = createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var usageMinus1 = createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var usage = createSpans(projectName, marker, names);
+
+            // SUT - omit interval_end
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Long.class, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Verify response contains all metric names
+            assertThat(response.results()).hasSizeGreaterThanOrEqualTo(names.size());
+            // With no interval_end, WITH FILL is omitted, so only actual data points are returned
+            response.results().forEach(result -> {
+                assertThat(result.data()).hasSizeGreaterThanOrEqualTo(1);
+            });
+        }
+
+        @ParameterizedTest
         @MethodSource
         void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
             // setup
@@ -1154,6 +1187,37 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class, costMinus3, costMinus1,
                     costCurrent);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        @DisplayName("interval_end is optional - filters cost from interval_start onwards")
+        void whenIntervalEndOmitted_thenFilterCostFromIntervalStart(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval));
+            createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval));
+            createSpans(projectName, marker);
+
+            // SUT - omit interval_end
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, BigDecimal.class, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Verify response
+            assertThat(response.results()).hasSize(1);
+            assertThat(response.results().getFirst().name()).isEqualTo(ProjectMetricsDAO.NAME_COST);
+            // With no interval_end, WITH FILL is omitted, so only actual data points are returned
+            assertThat(response.results().getFirst().data()).hasSizeGreaterThanOrEqualTo(3);
         }
 
         @ParameterizedTest
