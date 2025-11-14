@@ -76,22 +76,20 @@ const PlaygroundOutput = ({
   return (
     <div className="size-full min-w-[var(--min-prompt-width)]">
       <p className="comet-body-s-accented my-3">{outputLabel}</p>
-      <div className="comet-body-s min-h-52 rounded-lg border bg-background p-3">
-        <div className="group relative size-full">
-          {traceId && playgroundProject?.id && (
-            <TooltipWrapper content="Click to open original trace">
-              <Button
-                size="icon-xs"
-                variant="outline"
-                onClick={handleTraceLinkClick}
-                className="absolute right-1 top-1 hidden group-hover:flex"
-              >
-                <ListTree />
-              </Button>
-            </TooltipWrapper>
-          )}
-          {renderContent()}
-        </div>
+      <div className="comet-body-s group relative min-h-52 rounded-lg border bg-background p-3">
+        {traceId && playgroundProject?.id && (
+          <TooltipWrapper content="Click to open original trace">
+            <Button
+              size="icon-xs"
+              variant="outline"
+              onClick={handleTraceLinkClick}
+              className="absolute right-4 top-4 hidden group-hover:flex"
+            >
+              <ListTree />
+            </Button>
+          </TooltipWrapper>
+        )}
+        {renderContent()}
       </div>
     </div>
   );
