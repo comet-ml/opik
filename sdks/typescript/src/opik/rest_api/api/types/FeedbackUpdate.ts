@@ -4,7 +4,10 @@
 
 import * as OpikApi from "../index";
 
-export type FeedbackUpdate = OpikApi.FeedbackUpdate.Numerical | OpikApi.FeedbackUpdate.Categorical;
+export type FeedbackUpdate =
+    | OpikApi.FeedbackUpdate.Numerical
+    | OpikApi.FeedbackUpdate.Categorical
+    | OpikApi.FeedbackUpdate.Boolean;
 
 export namespace FeedbackUpdate {
     export interface Numerical extends OpikApi.NumericalFeedbackDefinitionUpdate, _Base {
@@ -13,6 +16,10 @@ export namespace FeedbackUpdate {
 
     export interface Categorical extends OpikApi.CategoricalFeedbackDefinitionUpdate, _Base {
         type: "categorical";
+    }
+
+    export interface Boolean extends OpikApi.BooleanFeedbackDefinitionUpdate, _Base {
+        type: "boolean";
     }
 
     export interface _Base {

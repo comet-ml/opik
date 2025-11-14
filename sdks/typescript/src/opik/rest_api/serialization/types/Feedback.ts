@@ -7,6 +7,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { NumericalFeedbackDefinition } from "./NumericalFeedbackDefinition";
 import { CategoricalFeedbackDefinition } from "./CategoricalFeedbackDefinition";
+import { BooleanFeedbackDefinition } from "./BooleanFeedbackDefinition";
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -21,6 +22,7 @@ export const Feedback: core.serialization.Schema<serializers.Feedback.Raw, OpikA
     .union("type", {
         numerical: NumericalFeedbackDefinition.extend(_Base),
         categorical: CategoricalFeedbackDefinition.extend(_Base),
+        boolean: BooleanFeedbackDefinition.extend(_Base),
     })
     .transform<OpikApi.Feedback>({
         transform: (value) => value,
@@ -28,7 +30,7 @@ export const Feedback: core.serialization.Schema<serializers.Feedback.Raw, OpikA
     });
 
 export declare namespace Feedback {
-    export type Raw = Feedback.Numerical | Feedback.Categorical;
+    export type Raw = Feedback.Numerical | Feedback.Categorical | Feedback.Boolean;
 
     export interface Numerical extends _Base, NumericalFeedbackDefinition.Raw {
         type: "numerical";
@@ -36,6 +38,10 @@ export declare namespace Feedback {
 
     export interface Categorical extends _Base, CategoricalFeedbackDefinition.Raw {
         type: "categorical";
+    }
+
+    export interface Boolean extends _Base, BooleanFeedbackDefinition.Raw {
+        type: "boolean";
     }
 
     export interface _Base {

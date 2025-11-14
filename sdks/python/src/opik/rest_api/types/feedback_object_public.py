@@ -9,6 +9,7 @@ import pydantic
 import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from ..core.serialization import FieldMetadata
+from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .categorical_feedback_detail_public import CategoricalFeedbackDetailPublic
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 
@@ -74,4 +75,24 @@ class FeedbackObjectPublic_Categorical(Base):
             extra = pydantic.Extra.allow
 
 
-FeedbackObjectPublic = typing.Union[FeedbackObjectPublic_Numerical, FeedbackObjectPublic_Categorical]
+class FeedbackObjectPublic_Boolean(Base):
+    type: typing.Literal["boolean"] = "boolean"
+    details: typing.Optional[BooleanFeedbackDetailPublic] = None
+    created_at: typing.Optional[dt.datetime] = None
+    created_by: typing.Optional[str] = None
+    last_updated_at: typing.Optional[dt.datetime] = None
+    last_updated_by: typing.Optional[str] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
+FeedbackObjectPublic = typing.Union[
+    FeedbackObjectPublic_Numerical, FeedbackObjectPublic_Categorical, FeedbackObjectPublic_Boolean
+]
