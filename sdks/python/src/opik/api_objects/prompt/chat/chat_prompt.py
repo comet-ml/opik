@@ -116,13 +116,21 @@ class ChatPrompt(base_prompt.BasePrompt):
                 are booleans indicating support. When a modality is not supported (False or not
                 specified), structured content parts (e.g., images, videos) are replaced with
                 text placeholders like "<<<image>>>" or "<<<video>>>". When supported (True),
-                the structured content is preserved as-is. If None, all modalities default to
-                unsupported. Example: {"vision": True, "video": False}
+                the structured content is preserved as-is.
+                Example: {"vision": True, "video": False}
+
+                If not specified, all modalities default to SUPPORTED. Example: {"vision": True, "video": False}
 
         Returns:
             A list of rendered message dictionaries with variables substituted and multimodal
             content either preserved or replaced with placeholders based on supported_modalities.
         """
+        if supported_modalities is None:
+            supported_modalities = {
+                "vision": True,
+                "video": True,
+            }
+
         return self._chat_template.format(
             variables=variables, supported_modalities=supported_modalities
         )
