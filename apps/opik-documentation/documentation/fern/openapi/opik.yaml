@@ -2078,6 +2078,7 @@ paths:
           enum:
           - numerical
           - categorical
+          - boolean
       responses:
         "200":
           description: Feedback definitions resource
@@ -5064,6 +5065,8 @@ components:
           enum:
           - scope:project
           - threshold:feedback_score
+          - threshold:cost
+          - threshold:latency
         config_value:
           type: object
           additionalProperties:
@@ -5130,6 +5133,8 @@ components:
           enum:
           - scope:project
           - threshold:feedback_score
+          - threshold:cost
+          - threshold:latency
         config_value:
           type: object
           additionalProperties:
@@ -5260,6 +5265,8 @@ components:
           enum:
           - scope:project
           - threshold:feedback_score
+          - threshold:cost
+          - threshold:latency
         config_value:
           type: object
           additionalProperties:
@@ -9253,6 +9260,48 @@ components:
           - cancelled
     JsonNode:
       type: object
+    BooleanFeedbackDefinition:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail"
+          created_at:
+            type: string
+            format: date-time
+            readOnly: true
+          created_by:
+            type: string
+            readOnly: true
+          last_updated_at:
+            type: string
+            format: date-time
+            readOnly: true
+          last_updated_by:
+            type: string
+            readOnly: true
+    BooleanFeedbackDetail:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition:
       required:
       - details
@@ -9327,11 +9376,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition"
     NumericalFeedbackDefinition:
       required:
       - details
@@ -9368,6 +9419,34 @@ components:
           type: number
         min:
           type: number
+    BooleanFeedbackDefinition_Create:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback_Create"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail_Create"
+    BooleanFeedbackDetail_Create:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition_Create:
       required:
       - details
@@ -9414,11 +9493,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Create"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Create"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Create"
     NumericalFeedbackDefinition_Create:
       required:
       - details
@@ -9441,6 +9522,48 @@ components:
           type: number
         min:
           type: number
+    BooleanFeedbackDefinition_Public:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback_Public"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail_Public"
+          created_at:
+            type: string
+            format: date-time
+            readOnly: true
+          created_by:
+            type: string
+            readOnly: true
+          last_updated_at:
+            type: string
+            format: date-time
+            readOnly: true
+          last_updated_by:
+            type: string
+            readOnly: true
+    BooleanFeedbackDetail_Public:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition_Public:
       required:
       - details
@@ -9531,11 +9654,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Public"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Public"
     NumericalFeedbackDefinition_Public:
       required:
       - details
@@ -9610,11 +9735,41 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Public"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Public"
+    BooleanFeedbackDefinition_Update:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback_Update"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail_Update"
+    BooleanFeedbackDetail_Update:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition_Update:
       required:
       - details
@@ -9661,11 +9816,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Update"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Update"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Update"
     NumericalFeedbackDefinition_Update:
       required:
       - details
