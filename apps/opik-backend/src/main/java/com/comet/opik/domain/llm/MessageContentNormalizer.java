@@ -46,7 +46,7 @@ public class MessageContentNormalizer {
         // For non-vision models: flatten structured content to string
         var needsNormalization = request.messages().stream()
                 .anyMatch(message -> (message instanceof UserMessage userMessage
-                                && !(userMessage.content() instanceof String))
+                        && !(userMessage.content() instanceof String))
                         || (message instanceof OpikUserMessage opikUserMessage
                                 && !(opikUserMessage.content() instanceof String)));
 
@@ -77,8 +77,8 @@ public class MessageContentNormalizer {
     private ChatCompletionRequest expandImagePlaceholders(ChatCompletionRequest request) {
         var needsExpansion = request.messages().stream()
                 .anyMatch(message -> (message instanceof UserMessage userMessage
-                                && userMessage.content() instanceof String content
-                                && content.contains(IMAGE_PLACEHOLDER_START))
+                        && userMessage.content() instanceof String content
+                        && content.contains(IMAGE_PLACEHOLDER_START))
                         || (message instanceof OpikUserMessage opikUserMessage
                                 && opikUserMessage.content() instanceof String opikContent
                                 && opikContent.contains(IMAGE_PLACEHOLDER_START)));
@@ -89,7 +89,8 @@ public class MessageContentNormalizer {
 
         var expandedMessages = new ArrayList<Message>(request.messages().size());
         for (var message : request.messages()) {
-            if (message instanceof OpikUserMessage opikUserMessage && opikUserMessage.content() instanceof String content) {
+            if (message instanceof OpikUserMessage opikUserMessage
+                    && opikUserMessage.content() instanceof String content) {
                 expandedMessages.add(expandOpikUserMessage(opikUserMessage, content));
             } else if (message instanceof UserMessage userMessage && userMessage.content() instanceof String content) {
                 expandedMessages.add(expandUserMessage(userMessage, content));
