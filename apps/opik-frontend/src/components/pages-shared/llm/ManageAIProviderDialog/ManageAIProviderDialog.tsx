@@ -50,6 +50,45 @@ import {
   buildComposedProviderKey,
 } from "@/lib/provider";
 
+/**
+ * Converts header array from form state to API-compatible object format
+ * @param headersArray - Array of header key-value pairs from form
+ * @param isEditing - Whether editing an existing custom provider
+ * @returns Headers object, empty object to clear, or undefined
+ *
+ * Three cases handled:
+ * 1. Non-empty array → Convert to object, filtering empty keys
+ * 2. Empty array when editing → Return {} to clear headers from backend
+ * 3. Empty array when creating → Return undefined (don't send headers field)
+ */
+function convertHeadersForAPI(
+  headersArray: Array<{ key: string; value: string }> | undefined,
+  isEditing: boolean,
+): Record<string, string> | undefined {
+  if (headersArray === undefined) {
+    return undefined;
+  }
+
+  // Case 1: Convert non-empty array to object, filtering empty keys
+  if (headersArray.length > 0) {
+    return headersArray.reduce<Record<string, string>>((acc, header) => {
+      const trimmedKey = header.key.trim();
+      if (trimmedKey) {
+        acc[trimmedKey] = header.value;
+      }
+      return acc;
+    }, {});
+  }
+
+  // Case 2: Empty array when editing = clear headers from backend
+  if (isEditing) {
+    return {};
+  }
+
+  // Case 3: Empty array when creating = don't send headers field
+  return undefined;
+}
+
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderObject;
   open: boolean;
@@ -96,6 +135,14 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey?.configuration?.models ?? "",
         providerKey?.provider_name,
       ),
+      headers:
+        providerKey?.headers && Object.keys(providerKey.headers).length > 0
+          ? Object.entries(providerKey.headers).map(([key, value]) => ({
+              key,
+              value,
+              id: crypto.randomUUID(),
+            }))
+          : [],
     } as AIProviderFormType,
   });
 
@@ -122,6 +169,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const url = form.getValues("url");
     const location = form.getValues("location");
     const providerName = form.getValues("providerName");
+    const headersArray = form.getValues("headers");
     const composedProviderType = buildComposedProviderKey(
       provider!,
       providerName,
@@ -142,6 +190,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           }
         : undefined;
 
+    const isEditingCustomProvider =
+      isCustom && !!(providerKey || calculatedProviderKey);
+    const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
+
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
@@ -149,6 +201,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey,
           base_url: isCustom ? url : undefined,
           ...(configuration && { configuration }),
+          ...(isCustom && headers !== undefined && { headers }),
         },
       });
     } else if (provider) {
@@ -163,6 +216,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustom ? url : undefined,
           provider_name: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
+          ...(isCustom && headers !== undefined && { headers }),
         },
       });
     }
@@ -279,6 +333,19 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             form.setValue(
                               "location",
                               providerData?.configuration?.location ?? "",
+                            );
+                            form.setValue(
+                              "headers",
+                              providerData?.headers &&
+                                Object.keys(providerData.headers).length > 0
+                                ? Object.entries(providerData.headers).map(
+                                    ([key, value]) => ({
+                                      key,
+                                      value,
+                                      id: crypto.randomUUID(),
+                                    }),
+                                  )
+                                : [],
                             );
 
                             form.setValue(
