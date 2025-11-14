@@ -61,8 +61,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const [description, setDescription] = useState(
     defaultPrompt?.description || "",
   );
-  const [templateStructure, setTemplateStructure] = useState<"string" | "chat">(
-    "string",
+  const [templateStructure, setTemplateStructure] = useState<"text" | "chat">(
+    "text",
   );
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
@@ -194,16 +194,16 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
               <RadioGroup
                 value={templateStructure}
                 onValueChange={(value) =>
-                  setTemplateStructure(value as "string" | "chat")
+                  setTemplateStructure(value as "text" | "chat")
                 }
               >
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="string" id="string" />
+                  <RadioGroupItem value="text" id="text" />
                   <Label
-                    htmlFor="string"
+                    htmlFor="text"
                     className="cursor-pointer font-normal"
                   >
-                    String prompt - Single text template
+                    Text prompt - Single text template
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -214,7 +214,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                 </div>
               </RadioGroup>
               <Description>
-                Choose string for single text prompts or chat for
+                Choose text for single text prompts or chat for
                 conversation-style prompts with multiple messages.
               </Description>
             </div>

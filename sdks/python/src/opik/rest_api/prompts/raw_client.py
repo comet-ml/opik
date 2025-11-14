@@ -126,7 +126,7 @@ class RawPromptsClient:
         type : typing.Optional[PromptWriteType]
 
         template_structure : typing.Optional[PromptWriteTemplateStructure]
-            Template structure type: 'string' or 'chat'. Immutable after creation.
+            Template structure type: 'text' or 'chat'. Immutable after creation.
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -848,7 +848,7 @@ class AsyncRawPromptsClient:
         type : typing.Optional[PromptWriteType]
 
         template_structure : typing.Optional[PromptWriteTemplateStructure]
-            Template structure type: 'string' or 'chat'. Immutable after creation.
+            Template structure type: 'text' or 'chat'. Immutable after creation.
 
         tags : typing.Optional[typing.Sequence[str]]
 

@@ -2,4 +2,4 @@
 
 import typing
 
-PromptPublicTemplateStructure = typing.Union[typing.Literal["string", "chat"], typing.Any]
+PromptPublicTemplateStructure = typing.Union[typing.Literal["text", "chat"], typing.Any]

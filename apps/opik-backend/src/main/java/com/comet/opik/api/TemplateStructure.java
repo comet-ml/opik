@@ -3,7 +3,7 @@ package com.comet.opik.api;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum TemplateStructure {
-    STRING("string"),
+    TEXT("text"),
     CHAT("chat");
 
     private final String value;
@@ -19,7 +19,7 @@ public enum TemplateStructure {
 
     public static TemplateStructure fromString(String value) {
         if (value == null) {
-            return STRING; // Default to STRING if null
+            return TEXT; // Default to TEXT if null
         }
         for (TemplateStructure structure : TemplateStructure.values()) {
             if (structure.value.equalsIgnoreCase(value)) {

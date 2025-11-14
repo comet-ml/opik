@@ -21,7 +21,7 @@ interface PromptsSelectBoxProps {
   clearable?: boolean;
   refetchOnMount?: boolean;
   asNewOption?: boolean;
-  filterByTemplateStructure?: "string" | "chat";
+  filterByTemplateStructure?: "text" | "chat";
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
@@ -104,8 +104,8 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   const searchPlaceholder = useMemo(() => {
     if (filterByTemplateStructure === "chat") {
       return "Search chat prompt";
-    } else if (filterByTemplateStructure === "string") {
-      return "Search string prompt";
+    } else if (filterByTemplateStructure === "text") {
+      return "Search text prompt";
     }
     return "Search";
   }, [filterByTemplateStructure]);

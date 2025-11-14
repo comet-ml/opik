@@ -2,4 +2,4 @@
 
 import typing
 
-PromptWriteTemplateStructure = typing.Union[typing.Literal["string", "chat"], typing.Any]
+PromptWriteTemplateStructure = typing.Union[typing.Literal["text", "chat"], typing.Any]

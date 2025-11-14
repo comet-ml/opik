@@ -1427,7 +1427,7 @@ class Opik:
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
-            name=name, commit=commit, template_structure="string"
+            name=name, commit=commit, template_structure="text"
         )
         if fern_prompt_version is None:
             return None
@@ -1478,7 +1478,7 @@ class Opik:
         # First, validate that this is a string prompt by trying to get the latest version
         # This will return None if it's a chat prompt (backend validates template_structure)
         latest_version = prompt_client_.get_prompt(
-            name=name, template_structure="string"
+            name=name, template_structure="text"
         )
         if latest_version is None:
             return []
@@ -1505,7 +1505,7 @@ class Opik:
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
         # First, validate that this is a chat prompt by trying to get the latest version
-        # This will return None if it's a string prompt (backend validates template_structure)
+        # This will return None if it's a text prompt (backend validates template_structure)
         latest_version = prompt_client_.get_prompt(name=name, template_structure="chat")
         if latest_version is None:
             return []

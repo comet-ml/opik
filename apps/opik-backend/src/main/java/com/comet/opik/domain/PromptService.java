@@ -276,10 +276,10 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(id, "prompt version");
 
-        // Get template_structure from request, defaulting to STRING if not provided
+        // Get template_structure from request, defaulting to TEXT if not provided
         TemplateStructure templateStructure = createPromptVersion.templateStructure() != null
                 ? createPromptVersion.templateStructure()
-                : TemplateStructure.STRING;
+                : TemplateStructure.TEXT;
 
         Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure);
 
@@ -590,8 +590,8 @@ class PromptServiceImpl implements PromptService {
 
             // Validate template structure if specified (for early error detection)
             if (templateStructure != null && !prompt.templateStructure().equals(templateStructure)) {
-                String expectedType = templateStructure == TemplateStructure.CHAT ? "chat" : "string";
-                String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "string";
+                String expectedType = templateStructure == TemplateStructure.CHAT ? "chat" : "text";
+                String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "text";
                 throw new BadRequestException(
                         "Prompt '%s' is a %s prompt, but %s prompt was requested".formatted(
                                 name, actualType, expectedType));

@@ -27,7 +27,7 @@ class PromptClient:
         prompt: str,
         metadata: Optional[Dict[str, Any]],
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
-        template_structure: str = "string",
+        template_structure: str = "text",
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -37,7 +37,7 @@ class PromptClient:
         - prompt: The template content for the prompt.
         - metadata: Optional metadata for the prompt.
         - type: The template type (MUSTACHE or JINJA2).
-        - template_structure: Either "string" (default) or "chat".
+        - template_structure: Either "text" (default) or "chat".
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -88,7 +88,7 @@ class PromptClient:
         prompt: str,
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
-        template_structure: str = "string",
+        template_structure: str = "text",
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
             template=prompt,
@@ -131,7 +131,7 @@ class PromptClient:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
-            template_structure: Optional template structure filter ("string" or "chat"). Defaults to "string" if not specified.
+            template_structure: Optional template structure filter ("text" or "chat"). Defaults to "text" if not specified.
 
         Returns:
             Prompt: The details of the specified prompt.
@@ -265,7 +265,7 @@ class PromptClient:
                 if len(content) == 0:
                     break
                 prompt_info.extend(
-                    [(p.name, p.template_structure or "string") for p in content]
+                    [(p.name, p.template_structure or "text") for p in content]
                 )
                 if len(content) < size:
                     break

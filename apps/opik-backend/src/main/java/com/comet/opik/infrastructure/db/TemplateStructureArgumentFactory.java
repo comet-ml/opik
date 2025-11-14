@@ -16,7 +16,7 @@ public class TemplateStructureArgumentFactory extends AbstractArgumentFactory<Te
     protected Argument build(TemplateStructure value, ConfigRegistry config) {
         return (position, statement, ctx) -> {
             if (value == null) {
-                statement.setString(position, TemplateStructure.STRING.getValue());
+                statement.setString(position, TemplateStructure.TEXT.getValue());
             } else {
                 statement.setString(position, value.getValue());
             }

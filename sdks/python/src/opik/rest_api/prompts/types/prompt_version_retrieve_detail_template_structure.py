@@ -2,4 +2,4 @@
 
 import typing
 
-PromptVersionRetrieveDetailTemplateStructure = typing.Union[typing.Literal["string", "chat"], typing.Any]
+PromptVersionRetrieveDetailTemplateStructure = typing.Union[typing.Literal["text", "chat"], typing.Any]

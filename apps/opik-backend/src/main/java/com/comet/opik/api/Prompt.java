@@ -39,7 +39,7 @@ public record Prompt(
         @JsonView({Prompt.View.Write.class}) @Nullable PromptType type,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
-                Prompt.View.Detail.class}) @Schema(description = "Template structure type: 'string' or 'chat'. Immutable after creation.", defaultValue = "string") @Nullable TemplateStructure templateStructure,
+                Prompt.View.Detail.class}) @Schema(description = "Template structure type: 'text' or 'chat'. Immutable after creation.", defaultValue = "text") @Nullable TemplateStructure templateStructure,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Write.class,
                 Prompt.View.Detail.class,
@@ -94,6 +94,6 @@ public record Prompt(
 
     @Override
     public TemplateStructure templateStructure() {
-        return templateStructure == null ? TemplateStructure.STRING : templateStructure;
+        return templateStructure == null ? TemplateStructure.TEXT : templateStructure;
     }
 }

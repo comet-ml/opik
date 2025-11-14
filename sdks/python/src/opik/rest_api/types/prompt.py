@@ -21,7 +21,7 @@ class Prompt(UniversalBaseModel):
     type: typing.Optional[PromptType] = None
     template_structure: typing.Optional[PromptTemplateStructure] = pydantic.Field(default=None)
     """
-    Template structure type: 'string' or 'chat'. Immutable after creation.
+    Template structure type: 'text' or 'chat'. Immutable after creation.
     """
 
     tags: typing.Optional[typing.List[str]] = None

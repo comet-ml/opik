@@ -509,8 +509,8 @@ def test_search_prompts__returns_both_types(opik_client: opik.Opik):
     assert {p.name for p in chat_prompts} == {chat_prompt_1.name, chat_prompt_2.name}
 
 
-def test_search_prompts__filter_by_template_structure_string(opik_client: opik.Opik):
-    """Test that search_prompts() can filter by template_structure='string'."""
+def test_search_prompts__filter_by_template_structure_text(opik_client: opik.Opik):
+    """Test that search_prompts() can filter by template_structure='text'."""
     unique_id = str(uuid.uuid4())[-6:]
 
     # Create string and chat prompts
@@ -525,7 +525,7 @@ def test_search_prompts__filter_by_template_structure_string(opik_client: opik.O
 
     # Search for only string prompts
     results = opik_client.search_prompts(
-        filter_string=f'name contains "{unique_id}" AND template_structure = "string"'
+        filter_string=f'name contains "{unique_id}" AND template_structure = "text"'
     )
 
     # Should only return string prompts

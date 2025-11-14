@@ -48,7 +48,7 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
-  templateStructure?: "string" | "chat";
+  templateStructure?: "text" | "chat";
   defaultName?: string;
   onSave: (version: PromptVersion) => void;
 };
@@ -58,7 +58,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   setOpen,
   prompt,
   template,
-  templateStructure = "string",
+  templateStructure = "text",
   defaultName = "",
   onSave,
 }) => {

@@ -157,7 +157,7 @@ class PromptResourceTest {
                     public TemplateStructure getType(uk.co.jemos.podam.api.DataProviderStrategy dataProviderStrategy,
                             uk.co.jemos.podam.api.AttributeMetadata attributeMetadata,
                             uk.co.jemos.podam.common.ManufacturingContext manufacturingContext) {
-                        return TemplateStructure.STRING;
+                        return TemplateStructure.TEXT;
                     }
                 });
         return podamFactory;
@@ -2462,7 +2462,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .latestVersion(null)
-                    .templateStructure(TemplateStructure.STRING)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2473,10 +2473,10 @@ class PromptResourceTest {
                     .template("Hello {{name}}")
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.STRING);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.TEXT);
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.STRING);
+            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.TEXT);
 
             retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
         }
@@ -2520,7 +2520,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .latestVersion(null)
-                    .templateStructure(TemplateStructure.STRING)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2531,7 +2531,7 @@ class PromptResourceTest {
                     .template("Hello {{name}}")
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.STRING);
+            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.TEXT);
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             // Try to retrieve it as CHAT prompt - should fail with clear error
@@ -2549,7 +2549,7 @@ class PromptResourceTest {
                 var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(errorMessage.getMessage())
-                        .contains("is a string prompt, but chat prompt was requested");
+                        .contains("is a text prompt, but chat prompt was requested");
             }
         }
 

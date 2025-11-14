@@ -10848,12 +10848,12 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "Template structure type: 'string' or 'chat'. Immutable after\
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
           enum:
-          - string
+          - text
           - chat
-          default: string
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -10912,7 +10912,7 @@ components:
           description: "Template structure: 'string' or 'chat'. Inherited from parent\
             \ prompt."
           enum:
-          - string
+          - text
           - chat
         change_description:
           type: string
@@ -10961,12 +10961,12 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "Template structure type: 'string' or 'chat'. Immutable after\
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
           enum:
-          - string
+          - text
           - chat
-          default: string
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11007,7 +11007,7 @@ components:
           description: "Template structure: 'string' or 'chat'. Inherited from parent\
             \ prompt."
           enum:
-          - string
+          - text
           - chat
         change_description:
           type: string
@@ -11049,7 +11049,7 @@ components:
         template_structure:
           type: string
           enum:
-          - string
+          - text
           - chat
     Prompt_Detail:
       required:
@@ -11069,12 +11069,12 @@ components:
           type: string
         template_structure:
           type: string
-          description: "Template structure type: 'string' or 'chat'. Immutable after\
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
           enum:
-          - string
+          - text
           - chat
-          default: string
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11151,7 +11151,7 @@ components:
           description: "Template structure: 'string' or 'chat'. Inherited from parent\
             \ prompt."
           enum:
-          - string
+          - text
           - chat
         change_description:
           type: string
@@ -11200,12 +11200,12 @@ components:
           type: string
         template_structure:
           type: string
-          description: "Template structure type: 'string' or 'chat'. Immutable after\
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
           enum:
-          - string
+          - text
           - chat
-          default: string
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11242,7 +11242,7 @@ components:
         template_structure:
           type: string
           enum:
-          - string
+          - text
           - chat
     Prompt_Updatable:
       required:
