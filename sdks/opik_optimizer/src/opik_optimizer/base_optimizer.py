@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 from typing import Any, cast
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import copy
 import inspect
 import logging
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import random
 import importlib.metadata
 
@@ -19,7 +22,7 @@ from pydantic import BaseModel
 from . import _throttle, optimization_result
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class
+from .utils import DatasetSplitResult, ValidationSplit, create_litellm_agent_class
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -41,10 +44,10 @@ class OptimizationRound(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     round_number: int
-    current_prompt: "chat_prompt.ChatPrompt"
+    current_prompt: chat_prompt.ChatPrompt
     current_score: float
     generated_prompts: Any
-    best_prompt: "chat_prompt.ChatPrompt"
+    best_prompt: chat_prompt.ChatPrompt
     best_score: float
     improvement: float
 
@@ -132,7 +135,7 @@ class BaseOptimizer(ABC):
         return self._opik_client
 
     def _validate_optimization_inputs(
-        self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
+        self, prompt: chat_prompt.ChatPrompt, dataset: Dataset, metric: Callable
     ) -> None:
         """
         Validate common optimization inputs.
@@ -157,7 +160,7 @@ class BaseOptimizer(ABC):
             )
 
     def _setup_agent_class(
-        self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
+        self, prompt: chat_prompt.ChatPrompt, agent_class: Any = None
     ) -> Any:
         """
         Setup agent class for optimization.
@@ -173,6 +176,48 @@ class BaseOptimizer(ABC):
             return create_litellm_agent_class(prompt, optimizer_ref=self)
         else:
             return agent_class
+
+    def _prepare_dataset_split(
+        self,
+        dataset: Dataset,
+        *,
+        n_samples: int | None = None,
+        validation: ValidationSplit | None = None,
+    ) -> DatasetSplitResult:
+        """
+        Combine training and optional validation splits for downstream optimizers.
+
+        Args:
+            dataset: Primary dataset used for optimization.
+            n_samples: Optional limit applied when sampling examples for the run.
+            validation: Optional :class:`ValidationSplit` describing how to build
+                a validation subset.
+
+        Returns:
+            Tuple containing train item dictionaries and validation item dictionaries.
+        """
+        if validation is None or not validation.is_configured():
+            items = list(dataset.get_items())
+            if n_samples is not None and n_samples < len(items):
+                rng = random.Random(self.seed)
+                items = rng.sample(items, n_samples)
+            return DatasetSplitResult(dataset, None, items, [])
+
+        split = validation.build(
+            dataset,
+            n_samples=n_samples,
+            default_seed=self.seed,
+        )
+        if n_samples is not None and n_samples < len(split.train_items):
+            rng = random.Random(self.seed)
+            sampled_train = rng.sample(split.train_items, n_samples)
+            split = DatasetSplitResult(
+                split.train_dataset,
+                split.validation_dataset,
+                sampled_train,
+                split.validation_items,
+            )
+        return split
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -195,6 +240,110 @@ class BaseOptimizer(ABC):
             ).get("description", "")
             for idx, tool in enumerate(tools)
         }
+
+    def _pop_validation_split(self, kwargs: dict[str, Any]) -> ValidationSplit | None:
+        """Extract a validation split from keyword arguments, enforcing type checks."""
+        if "validation" not in kwargs:
+            return None
+
+        candidate = kwargs.pop("validation")
+        if candidate is None:
+            return None
+        if not isinstance(candidate, ValidationSplit):
+            raise TypeError("validation must be a ValidationSplit or None")
+        return candidate
+
+    def _build_eval_spec(
+        self, dataset: Dataset, ids: list[str], n_samples: int | None
+    ) -> EvaluationSpec:
+        if ids:
+            rng = random.Random(self.seed)
+            population = list(ids)
+            if n_samples is not None and 0 < n_samples < len(population):
+                sampled_ids = tuple(rng.sample(population, n_samples))
+            else:
+                sampled_ids = tuple(population)
+            return EvaluationSpec(dataset, sampled_ids, None)
+        return EvaluationSpec(dataset, None, n_samples)
+
+    def _build_evaluation_plan(
+        self, split: DatasetSplitResult, n_samples: int | None
+    ) -> EvaluationPlan:
+        train_spec = self._build_eval_spec(
+            split.train_dataset, split.train_ids(), n_samples
+        )
+        validation_spec: EvaluationSpec | None = None
+        if split.validation_items:
+            validation_dataset = split.validation_dataset or split.train_dataset
+            validation_spec = self._build_eval_spec(
+                validation_dataset, split.validation_ids(), None
+            )
+        return EvaluationPlan(split=split, train=train_spec, validation=validation_spec)
+
+    def _evaluate_with_spec(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        metric: Callable,
+        spec: EvaluationSpec,
+        **kwargs: Any,
+    ) -> Any:
+        payload = {**spec.kwargs(), **kwargs}
+        return self._evaluate_prompt(
+            prompt,
+            dataset=spec.dataset,
+            metric=metric,
+            **payload,
+        )
+
+    def _select_items_for_spec(
+        self,
+        spec: EvaluationSpec,
+        items: Sequence[dict[str, Any]],
+    ) -> SpecSelection:
+        available = list(items)
+        if spec.item_ids is not None:
+            lookup = {
+                item.get("id"): item
+                for item in available
+                if isinstance(item, dict) and item.get("id")
+            }
+            ordered_items: list[dict[str, Any]] = []
+            resolved_ids: list[str] = []
+            for item_id in spec.item_ids:
+                candidate = lookup.get(item_id)
+                if candidate is not None:
+                    ordered_items.append(candidate)
+                    resolved_ids.append(item_id)
+            return SpecSelection(
+                items=ordered_items,
+                dataset_item_ids=resolved_ids if resolved_ids else None,
+                sample_count=len(resolved_ids),
+            )
+
+        if not available:
+            return SpecSelection([], None, spec.sample_count)
+
+        if spec.sample_count is not None and spec.sample_count < len(available):
+            rng = random.Random(self.seed)
+            chosen = rng.sample(available, spec.sample_count)
+        else:
+            chosen = available
+
+        resolved_ids = [
+            item["id"] for item in chosen if isinstance(item, dict) and item.get("id")
+        ]
+        effective_count = len(resolved_ids) if resolved_ids else spec.sample_count
+        return SpecSelection(
+            items=chosen,
+            dataset_item_ids=resolved_ids if resolved_ids else None,
+            sample_count=effective_count,
+        )
+
+    def _evaluate_prompt(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+        """Subclasses must implement evaluation logic used by `_evaluate_with_spec`."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _evaluate_prompt()"
+        )
 
     # ------------------------------------------------------------------
     # LLM call methods
@@ -482,7 +631,7 @@ class BaseOptimizer(ABC):
         return result
 
     @staticmethod
-    def _serialize_tools(prompt: "chat_prompt.ChatPrompt") -> list[dict[str, Any]]:
+    def _serialize_tools(prompt: chat_prompt.ChatPrompt) -> list[dict[str, Any]]:
         tools_obj = getattr(prompt, "tools", None)
         if not isinstance(tools_obj, list):
             return []
@@ -505,7 +654,7 @@ class BaseOptimizer(ABC):
         return str(annotation)
 
     def _summarize_tool_signatures(
-        self, prompt: "chat_prompt.ChatPrompt"
+        self, prompt: chat_prompt.ChatPrompt
     ) -> list[dict[str, Any]]:
         signatures: list[dict[str, Any]] = []
         for name, func in getattr(prompt, "function_map", {}).items():
@@ -546,7 +695,7 @@ class BaseOptimizer(ABC):
             )
         return signatures
 
-    def _build_agent_config(self, prompt: "chat_prompt.ChatPrompt") -> dict[str, Any]:
+    def _build_agent_config(self, prompt: chat_prompt.ChatPrompt) -> dict[str, Any]:
         agent_config: dict[str, Any] = dict(prompt.to_dict())
         agent_config["project_name"] = getattr(prompt, "project_name", None)
         agent_config["model"] = getattr(prompt, "model", None) or self.model
@@ -584,7 +733,7 @@ class BaseOptimizer(ABC):
     def _prepare_experiment_config(
         self,
         *,
-        prompt: "chat_prompt.ChatPrompt",
+        prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
         experiment_config: dict[str, Any] | None = None,
@@ -640,7 +789,7 @@ class BaseOptimizer(ABC):
     @abstractmethod
     def optimize_prompt(
         self,
-        prompt: "chat_prompt.ChatPrompt",
+        prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
         experiment_config: dict | None = None,
@@ -773,3 +922,36 @@ class BaseOptimizer(ABC):
             verbose=verbose,
         )
         return score
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationSpec:
+    dataset: Dataset
+    item_ids: tuple[str, ...] | None
+    sample_count: int | None
+
+    def kwargs(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if self.item_ids is not None:
+            payload["dataset_item_ids"] = list(self.item_ids)
+        if self.sample_count is not None:
+            payload["n_samples"] = self.sample_count
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationPlan:
+    split: DatasetSplitResult
+    train: EvaluationSpec
+    validation: EvaluationSpec | None
+
+    @property
+    def has_validation(self) -> bool:
+        return self.validation is not None
+
+
+@dataclass(frozen=True, slots=True)
+class SpecSelection:
+    items: list[dict[str, Any]]
+    dataset_item_ids: list[str] | None
+    sample_count: int | None

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from collections.abc import Callable
 
@@ -18,6 +20,7 @@ from opik_optimizer import base_optimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
+from ..base_optimizer import EvaluationPlan, EvaluationSpec
 from . import reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -202,22 +205,31 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        plan: EvaluationPlan | None = None,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
         random.seed(self.seed)
 
-        # Load the dataset
-        dataset_items = dataset.get_items()
-        all_dataset_item_ids = [item["id"] for item in dataset_items]
-        eval_dataset_item_ids = all_dataset_item_ids
-        if n_samples is not None and n_samples < len(dataset_items):
-            eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
-
+        train_spec = (
+            plan.train if plan is not None else EvaluationSpec(dataset, None, n_samples)
+        )
+        train_items_source = (
+            plan.split.train_items
+            if plan is not None and plan.split.train_items
+            else list(dataset.get_items())
+        )
+        selection = self._select_items_for_spec(train_spec, train_items_source)
+        dataset_items = selection.items
+        eval_dataset_item_ids = selection.dataset_item_ids
+        eval_n_samples = (
+            None if eval_dataset_item_ids is not None else selection.sample_count
+        )
+        effective_samples = selection.sample_count
         configuration_updates = self._drop_none(
             {
                 "n_trials": n_trials,
-                "n_samples": n_samples,
+                "n_samples": effective_samples,
                 "baseline_score": baseline_score,
             }
         )
@@ -311,6 +323,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     experiment_config=trial_config,
                     optimization_id=optimization_id,
                     verbose=self.verbose,
+                    n_samples=eval_n_samples,
                 )
                 trial_reporter.set_score(baseline_score, score)
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
@@ -473,6 +486,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
+        validation = self._pop_validation_split(kwargs)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -517,16 +535,26 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         utils.disable_experiment_reporting()
 
+        evaluation_plan = self._build_evaluation_plan(
+            self._prepare_dataset_split(
+                dataset,
+                n_samples=n_samples,
+                validation=validation,
+            ),
+            n_samples,
+        )
+        train_spec = evaluation_plan.train
+        validation_spec = evaluation_plan.validation
+
         # Step 1. Compute the baseline evaluation
         with reporting.display_evaluation(
             message="First we will establish the baseline performance:",
             verbose=self.verbose,
         ) as eval_report:
-            baseline_score = self._evaluate_prompt(
+            baseline_score = self._evaluate_with_spec(
                 prompt,
-                dataset=dataset,
-                metric=metric,
-                n_samples=n_samples,
+                metric,
+                train_spec,
                 optimization_id=(optimization.id if optimization is not None else None),
             )
 
@@ -536,12 +564,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         with reporting.creation_few_shot_prompt_template(
             verbose=self.verbose
         ) as fewshot_template_report:
+            few_shot_source = (
+                evaluation_plan.split.train_items[:10]
+                if evaluation_plan.split.train_items
+                else dataset.get_items(nb_samples=10)
+            )
             fewshot_template = self._create_fewshot_prompt_template(
                 model=self.model,
                 prompt=prompt,
                 few_shot_examples=[
                     {k: v for k, v in item.items() if k != "id"}
-                    for item in dataset.get_items(nb_samples=10)
+                    for item in few_shot_source
                 ],
             )
 
@@ -558,7 +591,22 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             n_trials=max_trials,
             n_samples=n_samples,
+            plan=evaluation_plan,
         )
+        if validation_spec is not None:
+            final_prompt = prompt.copy()
+            final_prompt.set_messages(result.prompt)
+            validation_score = self._evaluate_with_spec(
+                final_prompt,
+                metric,
+                validation_spec,
+                experiment_config=experiment_config,
+                optimization_id=optimization.id if optimization else None,
+            )
+            result.details["validation_score"] = validation_score
+            result.details["validation_dataset_id"] = getattr(
+                validation_spec.dataset, "id", None
+            )
         if optimization:
             self._update_optimization(optimization, status="completed")
 
