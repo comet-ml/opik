@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CopyPlus, Trash, Save } from "lucide-react";
 import last from "lodash/last";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
@@ -63,6 +64,7 @@ const PlaygroundPrompt = ({
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
   const datasetVariables = useDatasetVariables();
@@ -314,9 +316,11 @@ const PlaygroundPrompt = ({
           {name} {getAlphabetLetter(index)}
         </p>
 
-        <div className="flex h-full items-center justify-center gap-2">
-          <TooltipWrapper content="Load chat prompt">
-            <div className="h-full w-48">
+        <div className="flex h-full flex-1 items-center justify-end gap-1">
+          <TooltipWrapper
+            content={chatPromptData?.name || "Load chat prompt"}
+          >
+            <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
               <PromptsSelectBox
                 value={selectedChatPromptId}
                 onValueChange={handleImportChatPrompt}
@@ -406,6 +410,9 @@ const PlaygroundPrompt = ({
         defaultName={lastImportedPromptName}
         onSave={() => {
           setShowSaveChatPromptDialog(false);
+          // Invalidate prompt queries to ensure the latest version is selected
+          queryClient.invalidateQueries({ queryKey: ["prompts"] });
+          queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
         }}
       />
     </div>

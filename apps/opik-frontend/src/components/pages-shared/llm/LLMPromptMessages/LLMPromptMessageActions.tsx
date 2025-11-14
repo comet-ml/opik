@@ -335,7 +335,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               }
             }}
             onOpenChange={onPromptSelectBoxOpenChange}
-            filterByTemplateStructure="string"
+            filterByTemplateStructure="text"
           />
         </div>
         <TooltipWrapper content="Discard changes">
