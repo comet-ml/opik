@@ -42,7 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-@Path("/v1/private/workspaces/{workspaceId}/dashboards")
+@Path("/v1/private/dashboards")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
@@ -58,12 +58,11 @@ public class DashboardsResource {
     @POST
     @Operation(operationId = "createDashboard", summary = "Create dashboard", description = "Create a new dashboard in a workspace", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/workspaces/{workspaceId}/dashboards/{dashboardId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = Dashboard.class)))
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/dashboards/{dashboardId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = Dashboard.class)))
     })
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response createDashboard(
-            @PathParam("workspaceId") String workspaceIdPath,
             @RequestBody(content = @Content(schema = @Schema(implementation = Dashboard.class))) @JsonView(Dashboard.View.Write.class) @NotNull @Valid Dashboard dashboard,
             @Context UriInfo uriInfo) {
 
@@ -86,9 +85,7 @@ public class DashboardsResource {
             @ApiResponse(responseCode = "404", description = "Dashboard not found")
     })
     @JsonView(Dashboard.View.Public.class)
-    public Response getDashboardById(
-            @PathParam("workspaceId") String workspaceIdPath,
-            @PathParam("dashboardId") UUID id) {
+    public Response getDashboardById(@PathParam("dashboardId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dashboard by id '{}' in workspace '{}'", id, workspaceId);
@@ -105,7 +102,6 @@ public class DashboardsResource {
     })
     @JsonView(Dashboard.View.Public.class)
     public Response findDashboards(
-            @PathParam("workspaceId") String workspaceIdPath,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter dashboards by name (partial match, case insensitive)") String name) {
@@ -130,7 +126,6 @@ public class DashboardsResource {
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response updateDashboard(
-            @PathParam("workspaceId") String workspaceIdPath,
             @PathParam("dashboardId") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DashboardUpdate.class))) @NotNull @Valid DashboardUpdate dashboardUpdate) {
 
@@ -150,9 +145,7 @@ public class DashboardsResource {
     @Operation(operationId = "deleteDashboard", summary = "Delete dashboard", description = "Delete dashboard by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })
-    public Response deleteDashboard(
-            @PathParam("workspaceId") String workspaceIdPath,
-            @PathParam("dashboardId") UUID id) {
+    public Response deleteDashboard(@PathParam("dashboardId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting dashboard by id '{}' in workspace '{}'", id, workspaceId);

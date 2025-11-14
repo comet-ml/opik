@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 public class DashboardResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/workspaces/%s/dashboards";
+    private static final String RESOURCE_PATH = "%s/v1/private/dashboards";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -39,7 +39,7 @@ public class DashboardResourceClient {
     }
 
     public Response callCreate(Dashboard dashboard, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI, workspaceName))
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -67,7 +67,7 @@ public class DashboardResourceClient {
     }
 
     public Response callGet(UUID id, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI, workspaceName))
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -87,7 +87,7 @@ public class DashboardResourceClient {
     }
 
     public Response callFind(String apiKey, String workspaceName, int page, int size, String name) {
-        var target = client.target(RESOURCE_PATH.formatted(baseURI, workspaceName))
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
 
@@ -115,7 +115,7 @@ public class DashboardResourceClient {
     }
 
     public Response callUpdate(UUID id, DashboardUpdate update, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI, workspaceName))
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -134,7 +134,7 @@ public class DashboardResourceClient {
     }
 
     public Response callDelete(UUID id, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI, workspaceName))
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
