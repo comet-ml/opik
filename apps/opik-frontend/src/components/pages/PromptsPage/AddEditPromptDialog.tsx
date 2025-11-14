@@ -34,7 +34,6 @@ import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import useAppStore from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 
 type AddPromptDialogProps = {
@@ -62,7 +61,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     editable: true,
   });
 
-  const { localText, images, videos, handleContentChange } = useMessageContent({
+  const { localText, handleContentChange } = useMessageContent({
     content: template,
     onChangeContent: (content) => setTemplate(content as string),
   });
@@ -169,32 +168,6 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                     .description
                 }
               </Description>
-            </div>
-          )}
-          {!isEdit && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label>Images</Label>
-              <PromptMessageMediaTags
-                type="image"
-                items={images}
-                setItems={() => {}}
-                editable={false}
-                align="start"
-                preview={true}
-              />
-            </div>
-          )}
-          {!isEdit && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label>Videos</Label>
-              <PromptMessageMediaTags
-                type="video"
-                items={videos}
-                setItems={() => {}}
-                editable={false}
-                align="start"
-                preview={true}
-              />
             </div>
           )}
           <div className="flex flex-col gap-2 border-t border-border pb-4">
