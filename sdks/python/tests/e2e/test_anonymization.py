@@ -140,8 +140,12 @@ def test_tracked_function__rules_anonymization_remove_sensitive_key__happy_flow(
     class ApiKeyAnonymizer(anonymizer.Anonymizer):
         def anonymize(self, data, **kwargs):
             field_name = kwargs.get("field_name")
-            object_type = kwargs.get("object_type").__name__
-            if field_name == "metadata" and object_type == "dict" and "api_key" in data:
+            object_type = kwargs.get("object_type")
+            if (
+                field_name == "metadata"
+                and object_type in ["span", "trace"]
+                and "api_key" in data
+            ):
                 del data["api_key"]
             return data
 
