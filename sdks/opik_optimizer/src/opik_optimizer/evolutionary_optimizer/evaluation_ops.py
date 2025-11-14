@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 from .. import task_evaluator
 from ..optimization_config import mappers, chat_prompt
-from ..mcp_utils.mcp_workflow import MCPExecutionConfig
 import opik
 from opik import opik_context
 import copy
@@ -73,62 +72,10 @@ class EvaluationOps:
         except Exception:
             return 0.0
 
-        mcp_execution_config: MCPExecutionConfig | None = kwargs.get("mcp_config")
-
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = new_prompt.get_messages(dataset_item)
 
-            if mcp_execution_config is None:
-                model_output = agent.invoke(messages)
-
-                # Add tags to trace for optimization tracking
-                if (
-                    hasattr(self, "current_optimization_id")
-                    and self.current_optimization_id
-                ):
-                    opik_context.update_current_trace(
-                        tags=[self.current_optimization_id, "Evaluation"]
-                    )
-
-                return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}
-
-            coordinator = mcp_execution_config.coordinator
-            coordinator.reset()
-
-            raw_model_output = agent.llm_invoke(
-                messages=messages,
-                seed=getattr(self, "seed", None),
-                allow_tool_use=True,
-            )
-
-            second_pass_messages = coordinator.build_second_pass_messages(
-                base_messages=messages,
-                dataset_item=dataset_item,
-            )
-
-            if (
-                second_pass_messages is None
-                and mcp_execution_config.fallback_invoker is not None
-            ):
-                fallback_args = mcp_execution_config.fallback_arguments(dataset_item)
-                if fallback_args:
-                    summary_override = mcp_execution_config.fallback_invoker(
-                        fallback_args
-                    )
-                    second_pass_messages = coordinator.build_second_pass_messages(
-                        base_messages=messages,
-                        dataset_item=dataset_item,
-                        summary_override=summary_override,
-                    )
-
-            if second_pass_messages is not None:
-                final_response = agent.llm_invoke(
-                    messages=second_pass_messages,
-                    seed=getattr(self, "seed", None),
-                    allow_tool_use=mcp_execution_config.allow_tool_use_on_second_pass,
-                )
-            else:
-                final_response = raw_model_output
+            model_output = agent.invoke(messages)
 
             # Add tags to trace for optimization tracking
             if (
@@ -139,7 +86,7 @@ class EvaluationOps:
                     tags=[self.current_optimization_id, "Evaluation"]
                 )
 
-            return {mappers.EVALUATED_LLM_TASK_OUTPUT: final_response.strip()}
+            return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}
 
         score = task_evaluator.evaluate(
             dataset=dataset,
