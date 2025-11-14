@@ -22,6 +22,11 @@
       "env": {},
       "args": []
     },
+    "Notion": {
+      "command": "npx -y mcp-remote https://mcp.notion.com/mcp",
+      "env": {},
+      "args": []
+    },
     "Playwright": {
       "command": "npx @playwright/mcp@latest",
       "env": {},
