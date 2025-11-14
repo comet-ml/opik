@@ -458,24 +458,39 @@ const extractDataURIVideos = (
   };
 };
 
-const extractImageURLs = (input: string, images: ParsedImageData[]) => {
-  const matches = input.match(IMAGE_URL_REGEX) || [];
-  matches.forEach((url) => {
-    images.push({
-      url: url,
-      name: extractFilename(url),
-    });
+const addUniqueMediaUrls = <T extends { url: string; name: string }>(
+  input: string,
+  regex: RegExp,
+  collection: T[],
+  createItem: (url: string) => T,
+) => {
+  const matches = input.match(regex) || [];
+  const sortedMatches = matches.sort((a, b) => b.length - a.length);
+
+  sortedMatches.forEach((url) => {
+    const existingUrls = collection.map((item) => item.url);
+    const isDuplicate = existingUrls.some(
+      (existing) => existing.includes(url) || url.includes(existing),
+    );
+
+    if (!isDuplicate) {
+      collection.push(createItem(url));
+    }
   });
 };
 
+const extractImageURLs = (input: string, images: ParsedImageData[]) => {
+  addUniqueMediaUrls(input, IMAGE_URL_REGEX, images, (url) => ({
+    url,
+    name: extractFilename(url),
+  }));
+};
+
 const extractVideoURLs = (input: string, videos: ParsedVideoData[]) => {
-  const matches = input.match(VIDEO_URL_REGEX) || [];
-  matches.forEach((url) => {
-    videos.push({
-      url,
-      name: extractFilename(url),
-    });
-  });
+  addUniqueMediaUrls(input, VIDEO_URL_REGEX, videos, (url) => ({
+    url,
+    name: extractFilename(url),
+  }));
 };
 
 export const processInputData = (input?: object): ProcessedInput => {
