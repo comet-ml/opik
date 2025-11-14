@@ -366,8 +366,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
-  const noData =
-    !search && filters.length === 0 && !intervalStart && !intervalEnd;
+  const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no threads yet` : "No search results";
 
   const filtersConfig = useMemo(

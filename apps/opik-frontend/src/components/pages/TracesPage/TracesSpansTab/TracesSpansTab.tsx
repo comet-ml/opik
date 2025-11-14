@@ -495,8 +495,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     );
 
-  const noData =
-    !search && filters.length === 0 && !intervalStart && !intervalEnd;
+  const noData = !search && filters.length === 0;
   const noDataText = noData
     ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
     : "No search results";
