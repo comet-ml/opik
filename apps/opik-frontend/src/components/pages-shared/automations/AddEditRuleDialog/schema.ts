@@ -23,7 +23,6 @@ import {
 import {
   hasImagesInContent,
   getTextFromMessageContent,
-  convertMessageContentToBackendFormat,
   hasVideosInContent,
 } from "@/lib/llm";
 import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
@@ -379,7 +378,7 @@ export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
   messages.map((m) => ({
-    content: convertMessageContentToBackendFormat(m.content),
+    content: m.content,
     role: m.role.toUpperCase(),
   }));
 

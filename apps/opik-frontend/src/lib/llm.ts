@@ -191,34 +191,3 @@ export const parsePromptVersionContent = (promptVersion?: {
   // Backward compatibility: treat as plain text
   return template;
 };
-
-/**
- * Convert MessageContent to backend placeholder format
- * Backend expects images in the format: <<<image>>>url<<</image>>>
- * Backend expects videos in the format: <<<video>>>url<<</video>>>
- * This preserves mustache variables in text, image URLs, and video URLs for backend template rendering
- */
-export const convertMessageContentToBackendFormat = (
-  content: MessageContent,
-): string => {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  // Convert array of parts to string with image and video placeholders
-  return content
-    .map((part) => {
-      if (part.type === "text") {
-        return part.text;
-      } else if (part.type === "image_url") {
-        // Format: <<<image>>>url<<</image>>>
-        // This preserves mustache variables like {{input.image}} for backend rendering
-        return `<<<image>>>${part.image_url.url}<<</image>>>`;
-      } else {
-        // Format: <<<video>>>url<<</video>>>
-        // This preserves mustache variables like {{input.video}} for backend rendering
-        return `<<<video>>>${part.video_url.url}<<</video>>>`;
-      }
-    })
-    .join("\n");
-};
