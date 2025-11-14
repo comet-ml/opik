@@ -157,8 +157,7 @@ class TemplateUtilsTest {
                             // Growth is about 5MB in local isolated runs
                             // But allowing 1 to 100 MB range for other environments and running with other tests
                             1,
-                            100
-                    ),
+                            100),
                     arguments(
                             "preventGCAndCauseMemoryLeak",
                             directConstructor,
@@ -166,8 +165,7 @@ class TemplateUtilsTest {
                             // But allowing 2 to 3 GB range for other environments and running with other tests
                             TOTAL_TEMPLATES,
                             2000,
-                            3000
-                    ));
+                            3000));
         }
 
         @ParameterizedTest(name = "{0}")
