@@ -3757,8 +3757,6 @@ class FindSpansResourceTest {
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
-
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("project_name", projectName)
