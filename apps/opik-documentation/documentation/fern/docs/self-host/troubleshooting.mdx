@@ -11,18 +11,11 @@ This guide covers common troubleshooting scenarios for self-hosted Opik deployme
 
 #### Problem Description
 
-If Zookeeper loses the metadata paths for ClickHouse tables, you may encounter errors when querying ClickHouse. This typically manifests as coordination exceptions indicating that Zookeeper cannot find table metadata paths.
+If Zookeeper loses the metadata paths for ClickHouse tables, you will see coordination exceptions in the ClickHouse logs and potentially in the opik-backend service logs. These errors indicate that Zookeeper cannot find table metadata paths.
 
 **Symptoms:**
 
-When running the following query in ClickHouse:
-
-```sql
-SELECT database, table, is_readonly, is_session_expired, zookeeper_exception
-FROM system.replicas;
-```
-
-You receive errors similar to:
+Error messages appearing in ClickHouse logs and propagating to opik-backend service:
 
 ```
 Code: 999. Coordination::Exception: Coordination error: No node, path /clickhouse/tables/0/default/DATABASECHANGELOG/log. (KEEPER_EXCEPTION)
@@ -34,11 +27,7 @@ This indicates that Zookeeper has lost the metadata paths for one or more ClickH
 
 Follow these steps to restore ClickHouse table metadata in Zookeeper:
 
-##### 1. Scale Down to Single Replica
-
-Ensure you're running with only one ClickHouse replica to avoid replication conflicts during recovery.
-
-##### 2. Clean Zookeeper Paths (If Needed)
+##### 1. Clean Zookeeper Paths (If Needed)
 
 If only some table paths are missing in Zookeeper, you'll need to delete the existing paths manually. Connect to the Zookeeper pod and use the Zookeeper CLI:
 
@@ -51,10 +40,10 @@ deleteall /clickhouse/tables
 ```
 
 <Callout intent="warning">
-  **Warning**: This operation removes all table metadata from Zookeeper. Make sure you have only one ClickHouse replica running before proceeding.
+  **Warning**: This operation removes all table metadata from Zookeeper. Proceed with caution.
 </Callout>
 
-##### 3. Restart ClickHouse
+##### 2. Restart ClickHouse
 
 Restart the ClickHouse pods so they become aware that Zookeeper no longer has the metadata:
 
@@ -62,12 +51,12 @@ Restart the ClickHouse pods so they become aware that Zookeeper no longer has th
 kubectl rollout restart statefulset/chi-opik-clickhouse-cluster-0-0
 ```
 
-##### 4. Restore Replica Definitions
+##### 3. Restore Replica Definitions
 
-Connect to ClickHouse and restore the replica definitions for each table:
+Connect to the first ClickHouse replica and restore the replica definitions for each table:
 
 ```bash
-# Connect to ClickHouse pod
+# Connect to the first ClickHouse replica
 kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client
 ```
 
@@ -82,28 +71,28 @@ SYSTEM RESTORE REPLICA default.DATABASECHANGELOGLOCK;
 USE opik;
 \d
 
--- Restore each Opik table
-SYSTEM RESTORE REPLICA opik_prod.attachments;
-SYSTEM RESTORE REPLICA opik_prod.automation_rule_evaluator_logs;
-SYSTEM RESTORE REPLICA opik_prod.comments;
-SYSTEM RESTORE REPLICA opik_prod.dataset_items;
-SYSTEM RESTORE REPLICA opik_prod.experiment_items;
-SYSTEM RESTORE REPLICA opik_prod.experiments;
-SYSTEM RESTORE REPLICA opik_prod.feedback_scores;
-SYSTEM RESTORE REPLICA opik_prod.guardrails;
-SYSTEM RESTORE REPLICA opik_prod.optimizations;
-SYSTEM RESTORE REPLICA opik_prod.project_configurations;
-SYSTEM RESTORE REPLICA opik_prod.spans;
-SYSTEM RESTORE REPLICA opik_prod.traces;
-SYSTEM RESTORE REPLICA opik_prod.trace_threads;
-SYSTEM RESTORE REPLICA opik_prod.workspace_configurations;
+-- Restore each Opik table (schema name may vary per installation)
+SYSTEM RESTORE REPLICA opik.attachments;
+SYSTEM RESTORE REPLICA opik.automation_rule_evaluator_logs;
+SYSTEM RESTORE REPLICA opik.comments;
+SYSTEM RESTORE REPLICA opik.dataset_items;
+SYSTEM RESTORE REPLICA opik.experiment_items;
+SYSTEM RESTORE REPLICA opik.experiments;
+SYSTEM RESTORE REPLICA opik.feedback_scores;
+SYSTEM RESTORE REPLICA opik.guardrails;
+SYSTEM RESTORE REPLICA opik.optimizations;
+SYSTEM RESTORE REPLICA opik.project_configurations;
+SYSTEM RESTORE REPLICA opik.spans;
+SYSTEM RESTORE REPLICA opik.traces;
+SYSTEM RESTORE REPLICA opik.trace_threads;
+SYSTEM RESTORE REPLICA opik.workspace_configurations;
 ```
 
 <Callout intent="info">
-  **Note**: The exact list of tables may vary depending on your Opik version. Use the `\d` command to list all tables in your database and restore each one.
+  **Note**: The exact list of tables may vary depending on your Opik version, and the schema name is typically `opik` but may differ in your installation. Use the `\d` command to list all tables in your database and restore each one.
 </Callout>
 
-##### 5. Restart ClickHouse Again
+##### 4. Restart ClickHouse Again
 
 Restart ClickHouse again to ensure it:
 - Re-establishes connections to Zookeeper
@@ -114,13 +103,13 @@ Restart ClickHouse again to ensure it:
 kubectl rollout restart statefulset/chi-opik-clickhouse-cluster-0-0
 ```
 
-##### 6. Validate the Recovery
+##### 5. Validate the Recovery
 
 After the restart completes, verify that the replica status is healthy:
 
 ```sql
 -- Check table creation
-SHOW CREATE TABLE opik_prod.attachments;
+SHOW CREATE TABLE opik.attachments;
 
 -- Verify replica status
 SELECT table, is_readonly, replica_is_active, zookeeper_exception
@@ -171,21 +160,21 @@ zkCli.sh -server localhost:2181
 Common Zookeeper commands:
 
 ```bash
-# List tables in Zookeeper (production example)
+# List tables in Zookeeper
 kubectl exec -it cometml-production-opik-zookeeper-0 -- \
-  zkCli.sh -server localhost:2181 ls /clickhouse/tables/0/opik_prod
+  zkCli.sh -server localhost:2181 ls /clickhouse/tables/0/opik
 
 # Remove a specific table from Zookeeper
 kubectl exec -it cometml-production-opik-zookeeper-0 -- \
   zkCli.sh -server localhost:2181 \
-  deleteall /clickhouse/tables/0/opik_prod/optimizations
+  deleteall /clickhouse/tables/0/opik/optimizations
 ```
 
 ## Prevention and Best Practices
 
 To avoid Zookeeper metadata loss issues:
 
-1. **Regular Backups**: Implement regular backups of both ClickHouse data and Zookeeper metadata. See the [Advanced ClickHouse Backup](/docs/opik/self-host/backup) guide for details.
+1. **Regular Backups**: Implement regular backups of ClickHouse data. See the [Advanced ClickHouse Backup](/docs/opik/self-host/backup) guide for details.
 
 2. **Monitoring**: Set up monitoring for Zookeeper health and ClickHouse replica status. Alert on `zookeeper_exception` in `system.replicas`.
 
