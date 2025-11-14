@@ -57,8 +57,57 @@ export const createCustomProviderDetailsFormSchema = (
           },
           { message: "All model names should be unique" },
         ),
+      headers: z
+        .array(
+          z.object({
+            key: z.string(),
+            value: z.string(),
+            id: z.string(),
+          }),
+        )
+        .optional(),
     })
     .superRefine((data, ctx) => {
+      // Validate headers: if a header has any content, both key and value must be non-empty
+      if (data.headers) {
+        const headerKeys: string[] = [];
+
+        data.headers.forEach((header, index) => {
+          const hasKey = header.key.trim().length > 0;
+          const hasValue = header.value.trim().length > 0;
+
+          // If either field has content, both must have content
+          if ((hasKey || hasValue) && !hasKey) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Header key is required",
+              path: ["headers", index, "key"],
+            });
+          }
+
+          if ((hasKey || hasValue) && !hasValue) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Header value is required",
+              path: ["headers", index, "value"],
+            });
+          }
+
+          // Check for duplicate header keys
+          if (hasKey) {
+            const trimmedKey = header.key.trim();
+            if (headerKeys.includes(trimmedKey)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Header key must be unique",
+                path: ["headers", index, "key"],
+              });
+            } else {
+              headerKeys.push(trimmedKey);
+            }
+          }
+        });
+      }
       if (!data.id && (!data.providerName || data.providerName.length === 0)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

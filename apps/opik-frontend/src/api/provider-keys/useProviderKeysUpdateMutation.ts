@@ -27,6 +27,7 @@ const useProviderKeysUpdateMutation = () => {
           ...(providerKey?.configuration && {
             configuration: providerKey.configuration,
           }),
+          ...(providerKey?.headers && { headers: providerKey.headers }),
         },
       );
       return data;

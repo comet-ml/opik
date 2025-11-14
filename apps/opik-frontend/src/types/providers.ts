@@ -432,6 +432,7 @@ export interface BaseProviderKey {
   provider: PROVIDER_TYPE;
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
+  headers?: Record<string, string>;
 }
 
 export interface StandardProviderObject extends BaseProviderKey {
@@ -456,6 +457,7 @@ export type PartialProviderKeyUpdate = Partial<
   apiKey?: string;
   base_url?: string;
   provider_name?: string;
+  headers?: Record<string, string>;
 };
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
