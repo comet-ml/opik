@@ -150,6 +150,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         : undefined;
 
     // Convert headers array to object, filtering out empty keys
+    // If editing and headers array is empty or undefined, send empty object to clear headers
     const headers =
       headersArray && headersArray.length > 0
         ? headersArray.reduce(
@@ -161,7 +162,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
             },
             {} as Record<string, string>,
           )
-        : undefined;
+        : isCustom && (providerKey || calculatedProviderKey)
+          ? {}
+          : undefined;
 
     if (providerKey || calculatedProviderKey) {
       updateMutate({
@@ -170,7 +173,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey,
           base_url: isCustom ? url : undefined,
           ...(configuration && { configuration }),
-          ...(isCustom && headers && { headers }),
+          ...(isCustom && headers !== undefined && { headers }),
         },
       });
     } else if (provider) {
@@ -185,7 +188,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustom ? url : undefined,
           provider_name: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
-          ...(isCustom && headers && { headers }),
+          ...(isCustom && headers !== undefined && { headers }),
         },
       });
     }
