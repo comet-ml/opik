@@ -41,6 +41,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
+import { useRawJsonView } from "@/hooks/useRawJsonView";
+import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -69,32 +71,13 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   ]);
   const [showRawView, setShowRawView] = useState(false);
   
-  // Separate state for raw JSON editing to avoid cursor jumping
-  const [rawJsonValue, setRawJsonValue] = useState("");
+  // Use hook for raw JSON view state management
+  const { rawJsonValue, setRawJsonValue } = useRawJsonView(messages, showRawView);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
     editable: true,
   });
-
-  // Sync raw JSON value when switching to raw view or when messages change from message view
-  const prevShowRawView = React.useRef(showRawView);
-  React.useEffect(() => {
-    // Only update rawJsonValue when switching TO raw view (not while already in raw view)
-    if (showRawView && !prevShowRawView.current) {
-      setRawJsonValue(
-        JSON.stringify(
-          messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          null,
-          2,
-        ),
-      );
-    }
-    prevShowRawView.current = showRawView;
-  }, [showRawView, messages]);
 
   const { localText, images, setImages, handleContentChange } =
     useMessageContent({
@@ -301,56 +284,11 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                 </Button>
               </div>
               {showRawView ? (
-                <>
-                  <div className="min-h-[400px] overflow-y-auto rounded-md border">
-                    <CodeMirror
-                      theme={theme}
-                      value={rawJsonValue}
-                      onChange={(value) => {
-                        // Update the raw value immediately for smooth typing
-                        setRawJsonValue(value);
-                        
-                        // Try to parse and update messages only if valid
-                        try {
-                          const parsed = JSON.parse(value);
-                          if (Array.isArray(parsed)) {
-                            // Validate that all messages have role and content
-                            const allValid = parsed.every(
-                              (msg) => 
-                                msg && 
-                                typeof msg === 'object' &&
-                                typeof msg.role === 'string'
-                            );
-                            
-                            if (allValid) {
-                              setMessages(
-                                parsed.map((msg, index) => ({
-                                  id: `msg-${index}`,
-                                  role: msg.role,
-                                  content: msg.content,
-                                })),
-                              );
-                            }
-                          }
-                        } catch {
-                          // Invalid JSON, don't update messages
-                        }
-                      }}
-                      extensions={[jsonLanguage, EditorView.lineWrapping]}
-                      basicSetup={{
-                        lineNumbers: true,
-                        highlightActiveLineGutter: true,
-                        highlightActiveLine: true,
-                        foldGutter: true,
-                      }}
-                    />
-                  </div>
-                  <Description>
-                    Edit the raw JSON representation of chat messages. Must be a
-                    valid JSON array with objects containing required "role" and
-                    "content" fields.
-                  </Description>
-                </>
+                <ChatPromptRawView
+                  value={rawJsonValue}
+                  onMessagesChange={setMessages}
+                  onRawValueChange={setRawJsonValue}
+                />
               ) : (
                 <div className="rounded-md border">
                   <LLMPromptMessages

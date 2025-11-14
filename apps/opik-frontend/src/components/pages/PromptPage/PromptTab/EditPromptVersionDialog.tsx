@@ -37,9 +37,12 @@ import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   parseContentWithImages,
   generateDefaultLLMPromptMessage,
+  getNextMessageType,
 } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLMMessage } from "@/types/llm";
+import { useRawJsonView } from "@/hooks/useRawJsonView";
+import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -102,6 +105,9 @@ const EditPromptVersionDialog: React.FunctionComponent<
 
   const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);
   const [showRawView, setShowRawView] = useState(false);
+  
+  // Use hook for raw JSON view state management
+  const { rawJsonValue, setRawJsonValue} = useRawJsonView(messages, showRawView);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -117,7 +123,11 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const { mutate } = useCreatePromptVersionMutation();
 
   const handleAddMessage = useCallback(() => {
-    setMessages((prev) => [...prev, generateDefaultLLMPromptMessage()]);
+    setMessages((prev) => {
+      const lastMessage = prev[prev.length - 1];
+      const nextRole = lastMessage ? getNextMessageType(lastMessage) : undefined;
+      return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
+    });
   }, []);
 
   const handleClickEditPrompt = () => {
@@ -230,41 +240,11 @@ const EditPromptVersionDialog: React.FunctionComponent<
             </div>
             {isChatPrompt ? (
               showRawView ? (
-                <>
-                  <Textarea
-                    id="template"
-                    className="comet-code min-h-[400px]"
-                    placeholder="Chat messages JSON"
-                    value={JSON.stringify(
-                      messages.map((m) => ({
-                        role: m.role,
-                        content: m.content,
-                      })),
-                      null,
-                      2,
-                    )}
-                    onChange={(event) => {
-                      try {
-                        const parsed = JSON.parse(event.target.value);
-                        if (Array.isArray(parsed)) {
-                          setMessages(
-                            parsed.map((msg, index) => ({
-                              id: `msg-${index}`,
-                              role: msg.role,
-                              content: msg.content,
-                            })),
-                          );
-                        }
-                      } catch {
-                        // Invalid JSON, don't update
-                      }
-                    }}
-                  />
-                  <Description>
-                    Edit the raw JSON representation of chat messages. Must be a
-                    valid JSON array.
-                  </Description>
-                </>
+                <ChatPromptRawView
+                  value={rawJsonValue}
+                  onMessagesChange={setMessages}
+                  onRawValueChange={setRawJsonValue}
+                />
               ) : (
                 <LLMPromptMessages
                   messages={messages}
