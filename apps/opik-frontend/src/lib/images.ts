@@ -465,18 +465,31 @@ const addUniqueMediaUrls = <T extends { url: string; name: string }>(
   createItem: (url: string) => T,
 ) => {
   const matches = input.match(regex) || [];
-  const sortedMatches = matches.sort((a, b) => b.length - a.length);
+  const urlMap = new Map<string, T>();
 
-  sortedMatches.forEach((url) => {
-    const existingUrls = collection.map((item) => item.url);
-    const isDuplicate = existingUrls.some(
-      (existing) => existing.includes(url) || url.includes(existing),
-    );
+  // Build initial map from existing collection
+  collection.forEach((item) => urlMap.set(item.url, item));
 
-    if (!isDuplicate) {
-      collection.push(createItem(url));
-    }
+  matches.forEach((url) => {
+    const existingUrls = Array.from(urlMap.keys());
+
+    // Skip if this URL is already contained in a longer existing URL
+    const isCovered = existingUrls.some((existing) => existing.includes(url));
+    if (isCovered) return;
+
+    // Remove any existing shorter URLs that this URL contains
+    existingUrls.forEach((existing) => {
+      if (url.includes(existing)) {
+        urlMap.delete(existing);
+      }
+    });
+
+    urlMap.set(url, createItem(url));
   });
+
+  // Replace collection with deduplicated items in original order
+  collection.length = 0;
+  collection.push(...urlMap.values());
 };
 
 const extractImageURLs = (input: string, images: ParsedImageData[]) => {
