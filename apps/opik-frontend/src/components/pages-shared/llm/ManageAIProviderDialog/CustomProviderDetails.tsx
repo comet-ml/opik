@@ -176,11 +176,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
             field.onChange(newHeaders);
           };
 
-          const updateHeader = (
-            index: number,
-            key: string,
-            value: string,
-          ) => {
+          const updateHeader = (index: number, key: string, value: string) => {
             const newHeaders = [...headers];
             newHeaders[index] = { key, value };
             field.onChange(newHeaders);
@@ -214,7 +210,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                             })}
                           />
                           {keyError && (
-                            <p className="text-xs text-destructive mt-1">
+                            <p className="mt-1 text-xs text-destructive">
                               {keyError.message as string}
                             </p>
                           )}
@@ -231,7 +227,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                             })}
                           />
                           {valueError && (
-                            <p className="text-xs text-destructive mt-1">
+                            <p className="mt-1 text-xs text-destructive">
                               {valueError.message as string}
                             </p>
                           )}

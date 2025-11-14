@@ -71,13 +71,16 @@ function convertHeadersForAPI(
 
   // Case 1: Convert non-empty array to object, filtering empty keys
   if (headersArray.length > 0) {
-    return headersArray.reduce((acc, header) => {
-      const trimmedKey = header.key.trim();
-      if (trimmedKey) {
-        acc[trimmedKey] = header.value;
-      }
-      return acc;
-    }, {} as Record<string, string>);
+    return headersArray.reduce(
+      (acc, header) => {
+        const trimmedKey = header.key.trim();
+        if (trimmedKey) {
+          acc[trimmedKey] = header.value;
+        }
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   }
 
   // Case 2: Empty array when editing = clear headers from backend
