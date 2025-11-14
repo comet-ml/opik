@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
@@ -92,6 +93,10 @@ interface LlmProviderAnthropicMapper {
             case AssistantMessage assistantMessage -> AnthropicMessage.builder()
                     .role(AnthropicRole.ASSISTANT)
                     .content(List.of(new AnthropicTextContent(assistantMessage.content())))
+                    .build();
+            case OpikUserMessage opikUserMessage -> AnthropicMessage.builder()
+                    .role(AnthropicRole.USER)
+                    .content(List.of(toAnthropicMessageContent(opikUserMessage.content())))
                     .build();
             case UserMessage userMessage -> AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
