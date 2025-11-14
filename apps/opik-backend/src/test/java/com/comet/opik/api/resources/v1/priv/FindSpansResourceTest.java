@@ -3755,11 +3755,9 @@ class FindSpansResourceTest {
         @Test
         void whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
                     .queryParam("sorting",
                             URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
                     .request()
