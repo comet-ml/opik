@@ -2,4 +2,6 @@
 
 import typing
 
-AlertTriggerConfigType = typing.Union[typing.Literal["scope:project", "threshold:feedback_score"], typing.Any]
+AlertTriggerConfigType = typing.Union[
+    typing.Literal["scope:project", "threshold:feedback_score", "threshold:cost", "threshold:latency"], typing.Any
+]

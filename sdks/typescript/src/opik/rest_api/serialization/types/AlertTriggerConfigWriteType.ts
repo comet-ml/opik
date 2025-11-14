@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const AlertTriggerConfigWriteType: core.serialization.Schema<
     serializers.AlertTriggerConfigWriteType.Raw,
     OpikApi.AlertTriggerConfigWriteType
-> = core.serialization.enum_(["scope:project", "threshold:feedback_score"]);
+> = core.serialization.enum_(["scope:project", "threshold:feedback_score", "threshold:cost", "threshold:latency"]);
 
 export declare namespace AlertTriggerConfigWriteType {
-    export type Raw = "scope:project" | "threshold:feedback_score";
+    export type Raw = "scope:project" | "threshold:feedback_score" | "threshold:cost" | "threshold:latency";
 }
