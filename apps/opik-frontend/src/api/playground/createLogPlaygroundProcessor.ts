@@ -119,6 +119,11 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
 };
 
 const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
+  const spanOutput =
+    run.choices && run.choices.length > 0
+      ? { choices: run.choices }
+      : run.result;
+
   return {
     id: v7(),
     traceId,
@@ -128,7 +133,7 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     startTime: run.startTime,
     endTime: run.endTime,
     input: { messages: run.providerMessages },
-    output: { choices: run.choices ? run.choices : [] },
+    output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: run.model,
     provider: run.provider,
