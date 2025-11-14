@@ -31,6 +31,11 @@ import LLMPromptMessageActions, {
 } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
+import {
+  getTextFromMessageContent,
+  hasImagesInContent,
+  hasVideosInContent,
+} from "@/lib/llm";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -101,6 +106,18 @@ const LLMPromptMessage = ({
     onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
   });
 
+  const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
+    if (
+      newRole !== LLM_MESSAGE_ROLE.user &&
+      (hasImagesInContent(content) || hasVideosInContent(content))
+    ) {
+      const textOnlyContent = getTextFromMessageContent(content);
+      onChangeMessage({ role: newRole, content: textOnlyContent });
+    } else {
+      onChangeMessage({ role: newRole });
+    }
+  };
+
   return (
     <>
       <Card
@@ -130,7 +147,7 @@ const LLMPromptMessage = ({
                   return (
                     <DropdownMenuCheckboxItem
                       key={value}
-                      onSelect={() => onChangeMessage({ role: value })}
+                      onSelect={() => handleRoleChange(value)}
                       checked={role === value}
                     >
                       {label}
@@ -212,7 +229,7 @@ const LLMPromptMessage = ({
                 }}
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
-              {!disableMedia && (
+              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
                 <div className="mt-3 flex items-center gap-2">
                   <div className="comet-body-s-accented">Images</div>
                   <PromptMessageMediaTags
@@ -222,7 +239,7 @@ const LLMPromptMessage = ({
                   />
                 </div>
               )}
-              {!disableMedia && (
+              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
                 <div className="mt-3 flex items-center gap-2">
                   <div className="comet-body-s-accented">Videos</div>
                   <PromptMessageMediaTags
