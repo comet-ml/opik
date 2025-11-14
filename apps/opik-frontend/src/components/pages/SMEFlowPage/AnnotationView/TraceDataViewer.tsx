@@ -91,10 +91,8 @@ const TraceDataViewer: React.FC = () => {
         defaultValue={["attachments", "input", "output"]}
       >
         {displayTrace && <AttachmentsList data={displayTrace} media={media} />}
-        <AccordionItem className="group" value="input" disabled>
-          <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
-            Input
-          </AccordionTrigger>
+        <AccordionItem className="group" value="input">
+          <AccordionTrigger>Input</AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"
@@ -111,10 +109,8 @@ const TraceDataViewer: React.FC = () => {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem className="group" value="output" disabled>
-          <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
-            Output
-          </AccordionTrigger>
+        <AccordionItem className="group" value="output">
+          <AccordionTrigger>Output</AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"
