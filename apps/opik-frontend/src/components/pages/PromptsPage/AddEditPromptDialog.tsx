@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
-import { Code2, MessageSquare } from "lucide-react";
+import { Code2, FileText, MessagesSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,11 +26,11 @@ import {
   AccordionTrigger,
   Accordion,
 } from "@/components/ui/accordion";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Prompt } from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
-import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
@@ -68,11 +68,33 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     generateDefaultLLMPromptMessage(),
   ]);
   const [showRawView, setShowRawView] = useState(false);
+  
+  // Separate state for raw JSON editing to avoid cursor jumping
+  const [rawJsonValue, setRawJsonValue] = useState("");
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
     editable: true,
   });
+
+  // Sync raw JSON value when switching to raw view or when messages change from message view
+  const prevShowRawView = React.useRef(showRawView);
+  React.useEffect(() => {
+    // Only update rawJsonValue when switching TO raw view (not while already in raw view)
+    if (showRawView && !prevShowRawView.current) {
+      setRawJsonValue(
+        JSON.stringify(
+          messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          null,
+          2,
+        ),
+      );
+    }
+    prevShowRawView.current = showRawView;
+  }, [showRawView, messages]);
 
   const { localText, images, setImages, handleContentChange } =
     useMessageContent({
@@ -93,7 +115,11 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const submitText = isEdit ? "Update prompt" : "Create prompt";
 
   const handleAddMessage = useCallback(() => {
-    setMessages((prev) => [...prev, generateDefaultLLMPromptMessage()]);
+    setMessages((prev) => {
+      const lastMessage = prev[prev.length - 1];
+      const nextRole = lastMessage ? getNextMessageType(lastMessage) : undefined;
+      return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
+    });
   }, []);
 
   const onPromptCreated = useCallback(
@@ -191,31 +217,36 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
               <Label htmlFor="templateStructure">Prompt type</Label>
-              <RadioGroup
+              <ToggleGroup
+                type="single"
+                variant="ghost"
                 value={templateStructure}
-                onValueChange={(value) =>
-                  setTemplateStructure(value as "text" | "chat")
-                }
+                onValueChange={(value) => {
+                  if (value) {
+                    setTemplateStructure(value as "text" | "chat");
+                  }
+                }}
+                className="w-fit justify-start"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="text" id="text" />
-                  <Label
-                    htmlFor="text"
-                    className="cursor-pointer font-normal"
-                  >
-                    Text prompt - Single text template
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="chat" id="chat" />
-                  <Label htmlFor="chat" className="cursor-pointer font-normal">
-                    Chat prompt - Array of messages with roles
-                  </Label>
-                </div>
-              </RadioGroup>
+                <ToggleGroupItem
+                  value="text"
+                  aria-label="Text prompt"
+                  className="gap-1.5"
+                >
+                  <FileText className="size-3.5" />
+                  <span>Text prompt</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="chat"
+                  aria-label="Chat prompt"
+                  className="gap-1.5"
+                >
+                  <MessagesSquare className="size-3.5" />
+                  <span>Chat prompt</span>
+                </ToggleGroupItem>
+              </ToggleGroup>
               <Description>
-                Choose text for single text prompts or chat for
-                conversation-style prompts with multiple messages.
+                Choose between a simple text prompt or a chat conversation
               </Description>
             </div>
           )}
@@ -249,7 +280,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           )}
           {!isEdit && isChatPrompt && (
             <div className="flex flex-col gap-2 pb-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-0.5">
                 <Label>Chat messages</Label>
                 <Button
                   variant="ghost"
@@ -258,7 +289,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                 >
                   {showRawView ? (
                     <>
-                      <MessageSquare className="mr-1.5 size-3.5" />
+                      <MessagesSquare className="mr-1.5 size-3.5" />
                       Message view
                     </>
                   ) : (
@@ -271,55 +302,64 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
               </div>
               {showRawView ? (
                 <>
-                  <Textarea
-                    id="template"
-                    className="comet-code min-h-[400px]"
-                    placeholder="Chat messages JSON"
-                    value={JSON.stringify(
-                      messages.map((m) => ({
-                        role: m.role,
-                        content: m.content,
-                      })),
-                      null,
-                      2,
-                    )}
-                    onChange={(event) => {
-                      try {
-                        const parsed = JSON.parse(event.target.value);
-                        if (Array.isArray(parsed)) {
-                          setMessages(
-                            parsed.map((msg, index) => ({
-                              id: `msg-${index}`,
-                              role: msg.role,
-                              content: msg.content,
-                            })),
-                          );
+                  <div className="min-h-[400px] overflow-y-auto rounded-md border">
+                    <CodeMirror
+                      theme={theme}
+                      value={rawJsonValue}
+                      onChange={(value) => {
+                        // Update the raw value immediately for smooth typing
+                        setRawJsonValue(value);
+                        
+                        // Try to parse and update messages only if valid
+                        try {
+                          const parsed = JSON.parse(value);
+                          if (Array.isArray(parsed)) {
+                            // Validate that all messages have role and content
+                            const allValid = parsed.every(
+                              (msg) => 
+                                msg && 
+                                typeof msg === 'object' &&
+                                typeof msg.role === 'string'
+                            );
+                            
+                            if (allValid) {
+                              setMessages(
+                                parsed.map((msg, index) => ({
+                                  id: `msg-${index}`,
+                                  role: msg.role,
+                                  content: msg.content,
+                                })),
+                              );
+                            }
+                          }
+                        } catch {
+                          // Invalid JSON, don't update messages
                         }
-                      } catch {
-                        // Invalid JSON, don't update
-                      }
-                    }}
-                  />
-                  <Description>
-                    Edit the raw JSON representation of chat messages. Must be a
-                    valid JSON array.
-                  </Description>
-                </>
-              ) : (
-                <>
-                  <div className="h-[400px] rounded-md border bg-primary-foreground">
-                    <LLMPromptMessages
-                      messages={messages}
-                      onChange={setMessages}
-                      onAddMessage={handleAddMessage}
-                      hidePromptActions
+                      }}
+                      extensions={[jsonLanguage, EditorView.lineWrapping]}
+                      basicSetup={{
+                        lineNumbers: true,
+                        highlightActiveLineGutter: true,
+                        highlightActiveLine: true,
+                        foldGutter: true,
+                      }}
                     />
                   </div>
                   <Description>
-                    Create your chat prompt with multiple messages. Each message
-                    has a role (system, user, assistant) and content.
+                    Edit the raw JSON representation of chat messages. Must be a
+                    valid JSON array with objects containing required "role" and
+                    "content" fields.
                   </Description>
                 </>
+              ) : (
+                <div className="rounded-md border">
+                  <LLMPromptMessages
+                    messages={messages}
+                    onChange={setMessages}
+                    onAddMessage={handleAddMessage}
+                    hidePromptActions
+                  />
+                </div>
               )}
             </div>
           )}
