@@ -163,7 +163,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
       <FormField
         control={form.control}
         name="headers"
-        render={({ field }) => {
+        render={({ field, formState }) => {
           const headers = field.value || [];
 
           const addHeader = () => {
@@ -186,39 +186,69 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
             field.onChange(newHeaders);
           };
 
+          // Get validation errors for individual headers
+          const getHeaderError = (index: number, field: "key" | "value") => {
+            return get(formState.errors, ["headers", index, field]);
+          };
+
           return (
             <FormItem>
               <Label>Custom headers (optional)</Label>
               <div className="flex flex-col gap-2">
-                {headers.map((header, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      placeholder="Header name"
-                      value={header.key}
-                      onChange={(e) =>
-                        updateHeader(index, e.target.value, header.value)
-                      }
-                      className="flex-1"
-                    />
-                    <Input
-                      placeholder="Header value"
-                      value={header.value}
-                      onChange={(e) =>
-                        updateHeader(index, header.key, e.target.value)
-                      }
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeHeader(index)}
-                      className="shrink-0"
-                    >
-                      <Trash2 className="comet-body-s" />
-                    </Button>
-                  </div>
-                ))}
+                {headers.map((header, index) => {
+                  const keyError = getHeaderError(index, "key");
+                  const valueError = getHeaderError(index, "value");
+
+                  return (
+                    <div key={index} className="flex flex-col gap-1">
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Header name"
+                            value={header.key}
+                            onChange={(e) =>
+                              updateHeader(index, e.target.value, header.value)
+                            }
+                            className={cn("w-full", {
+                              "border-destructive": Boolean(keyError),
+                            })}
+                          />
+                          {keyError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {keyError.message as string}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Header value"
+                            value={header.value}
+                            onChange={(e) =>
+                              updateHeader(index, header.key, e.target.value)
+                            }
+                            className={cn("w-full", {
+                              "border-destructive": Boolean(valueError),
+                            })}
+                          />
+                          {valueError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {valueError.message as string}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeHeader(index)}
+                          className="shrink-0"
+                        >
+                          <Trash2 className="comet-body-s" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
                 <Button
                   type="button"
                   variant="outline"

@@ -50,6 +50,45 @@ import {
   buildComposedProviderKey,
 } from "@/lib/provider";
 
+/**
+ * Converts header array from form state to API-compatible object format
+ * @param headersArray - Array of header key-value pairs from form
+ * @param isEditing - Whether editing an existing custom provider
+ * @returns Headers object, empty object to clear, or undefined
+ *
+ * Three cases handled:
+ * 1. Non-empty array → Convert to object, filtering empty keys
+ * 2. Empty array when editing → Return {} to clear headers from backend
+ * 3. Empty array when creating → Return undefined (don't send headers field)
+ */
+function convertHeadersForAPI(
+  headersArray: Array<{ key: string; value: string }> | undefined,
+  isEditing: boolean,
+): Record<string, string> | undefined {
+  if (headersArray === undefined) {
+    return undefined;
+  }
+
+  // Case 1: Convert non-empty array to object, filtering empty keys
+  if (headersArray.length > 0) {
+    return headersArray.reduce((acc, header) => {
+      const trimmedKey = header.key.trim();
+      if (trimmedKey) {
+        acc[trimmedKey] = header.value;
+      }
+      return acc;
+    }, {} as Record<string, string>);
+  }
+
+  // Case 2: Empty array when editing = clear headers from backend
+  if (isEditing) {
+    return {};
+  }
+
+  // Case 3: Empty array when creating = don't send headers field
+  return undefined;
+}
+
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderObject;
   open: boolean;
@@ -150,24 +189,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           }
         : undefined;
 
-    // Convert headers array to object, filtering out empty keys
-    // If editing and headers array is empty, send empty object to clear headers
-    const headers =
-      headersArray !== undefined
-        ? headersArray.length > 0
-          ? headersArray.reduce(
-              (acc, header) => {
-                if (header.key.trim()) {
-                  acc[header.key.trim()] = header.value;
-                }
-                return acc;
-              },
-              {} as Record<string, string>,
-            )
-          : isCustom && (providerKey || calculatedProviderKey)
-            ? {} // Empty array when editing = clear headers
-            : undefined
-        : undefined;
+    const isEditingCustomProvider =
+      isCustom && !!(providerKey || calculatedProviderKey);
+    const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
 
     if (providerKey || calculatedProviderKey) {
       updateMutate({
