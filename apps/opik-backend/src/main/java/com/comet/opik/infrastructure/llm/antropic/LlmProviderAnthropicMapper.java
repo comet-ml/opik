@@ -1,10 +1,13 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
+import com.comet.opik.domain.llm.langchain4j.OpikContentType;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicImageContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicMessageContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
@@ -21,11 +24,13 @@ import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Mapper
@@ -96,7 +101,7 @@ interface LlmProviderAnthropicMapper {
                     .build();
             case OpikUserMessage opikUserMessage -> AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
-                    .content(List.of(toAnthropicMessageContent(opikUserMessage.content())))
+                    .content(toAnthropicMessageContents(opikUserMessage.content()))
                     .build();
             case UserMessage userMessage -> AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
@@ -104,6 +109,52 @@ interface LlmProviderAnthropicMapper {
                     .build();
             default -> throw new BadRequestException("unexpected message role: " + message.role());
         };
+    }
+
+    /**
+     * Convert OpikUserMessage content to Anthropic message content list.
+     * Handles both string content and structured multimodal content (text, images, etc.).
+     */
+    default List<AnthropicMessageContent> toAnthropicMessageContents(@NonNull Object rawContent) {
+        // If it's a string, return a single text content (if not empty)
+        if (rawContent instanceof String stringContent) {
+            if (StringUtils.isNotBlank(stringContent)) {
+                return List.of(new AnthropicTextContent(stringContent));
+            }
+            // Empty string - return empty list (Anthropic will reject empty text blocks)
+            return List.of();
+        }
+
+        // If it's a list of OpikContent, convert each item
+        if (rawContent instanceof List<?> contentList) {
+            var anthropicContents = new ArrayList<AnthropicMessageContent>();
+            for (Object item : contentList) {
+                if (item instanceof OpikContent opikContent) {
+                    // Only add text content if it's not blank
+                    if (opikContent.type() == OpikContentType.TEXT) {
+                        if (StringUtils.isNotBlank(opikContent.text())) {
+                            anthropicContents.add(new AnthropicTextContent(opikContent.text()));
+                        }
+                    } else if (opikContent.type() == OpikContentType.IMAGE_URL) {                     
+                        anthropicContents
+                                .add(AnthropicImageContent.fromUrl(opikContent.imageUrl().getUrl()));
+                    } else if (opikContent.type() == OpikContentType.VIDEO_URL) {
+                        // Videos are not supported by Anthropic, convert to text representation
+                        anthropicContents
+                                .add(new AnthropicTextContent("[Video: " + opikContent.videoUrl().url() + "]"));
+                    }
+                    // Other types (AUDIO, FILE) are not supported by Anthropic
+                }
+            }
+            return anthropicContents;
+        }
+
+        // Fallback: flatten to string
+        var content = MessageContentNormalizer.flattenContent(rawContent);
+        if (StringUtils.isNotBlank(content)) {
+            return List.of(new AnthropicTextContent(content));
+        }
+        return List.of();
     }
 
     default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {
