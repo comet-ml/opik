@@ -971,6 +971,39 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        @DisplayName("interval_end is optional - filters token usage from interval_start onwards")
+        void whenIntervalEndOmitted_thenFilterTokenUsageFromIntervalStart(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            var usageMinus3 = createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval), names);
+            var usageMinus1 = createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval), names);
+            var usage = createSpans(projectName, marker, names);
+
+            // SUT - omit interval_end
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.TOKEN_USAGE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Long.class, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Verify response contains all metric names
+            assertThat(response.results()).hasSizeGreaterThanOrEqualTo(names.size());
+            // With no interval_end, WITH FILL is omitted, so only actual data points are returned
+            response.results().forEach(result -> {
+                assertThat(result.data()).hasSizeGreaterThanOrEqualTo(1);
+            });
+        }
+
+        @ParameterizedTest
         @MethodSource
         void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
             // setup
@@ -1154,6 +1187,37 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class, costMinus3, costMinus1,
                     costCurrent);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        @DisplayName("interval_end is optional - filters cost from interval_start onwards")
+        void whenIntervalEndOmitted_thenFilterCostFromIntervalStart(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval));
+            createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval));
+            createSpans(projectName, marker);
+
+            // SUT - omit interval_end
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, BigDecimal.class, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Verify response
+            assertThat(response.results()).hasSize(1);
+            assertThat(response.results().getFirst().name()).isEqualTo(ProjectMetricsDAO.NAME_COST);
+            // With no interval_end, WITH FILL is omitted, so only actual data points are returned
+            assertThat(response.results().getFirst().data()).hasSizeGreaterThanOrEqualTo(3);
         }
 
         @ParameterizedTest
@@ -1705,6 +1769,53 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
                     minus3, minus1, current);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        @DisplayName("interval_end is optional - filters threads from interval_start onwards without filling gaps")
+        void whenIntervalEndOmitted_thenFilterThreadsFromIntervalStart(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            Instant marker = getIntervalStart(interval);
+
+            // Create traces with different thread_ids at different times
+            Long threadCountMinus3 = (long) createTracesWithThreads(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 2, null).size();
+            Long threadCountMinus1 = (long) createTracesWithThreads(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval), 4, null).size();
+            Long threadCountNow = (long) createTracesWithThreads(projectName, marker, 3, null).size();
+
+            // SUT - omit interval_end
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    // interval_end intentionally omitted to test optional behavior
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Long.class, API_KEY,
+                    WORKSPACE_NAME);
+
+            // When interval_end is omitted, WITH FILL is not used, so only actual data points are returned (no nulls for gaps)
+            assertThat(response.results()).hasSize(1);
+            var result = response.results().getFirst();
+            assertThat(result.name()).isEqualTo(ProjectMetricsDAO.NAME_THREADS);
+            assertThat(result.data()).hasSize(3); // Only 3 actual data points, no filled null values
+
+            // Verify the actual data points exist
+            var dataPointTimes = result.data().stream().map(dp -> dp.time()).toList();
+            assertThat(dataPointTimes).contains(
+                    subtract(marker, TIME_BUCKET_3, interval),
+                    subtract(marker, TIME_BUCKET_1, interval),
+                    marker);
+
+            var dataPointValues = result.data().stream().map(dp -> dp.value()).toList();
+            assertThat(dataPointValues).containsExactlyInAnyOrder(threadCountMinus3, threadCountMinus1, threadCountNow);
         }
 
         @ParameterizedTest

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/RequestChartDialog/RequestChartDialog";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
@@ -8,14 +8,12 @@ import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import {
   useMetricDateRangeWithQuery,
   MetricDateRangeSelect,
-  DEFAULT_METRICS_DATE_RANGE,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 import ProjectMetricsSection from "./ProjectMetricsSection";
 import ThreadMetricsSection from "./ThreadMetricsSection";
 import TraceMetricsSection from "./TraceMetricsSection";
-import { getRangePreset } from "@/components/shared/DateRangeSelect";
 
-const METRICS_DATE_RANGE_KEY = "range";
+export const DEFAULT_DATE_URL_KEY = "metrics_time_range";
 
 interface MetricsTabProps {
   projectId: string;
@@ -33,16 +31,8 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     minDate,
     maxDate,
   } = useMetricDateRangeWithQuery({
-    key: METRICS_DATE_RANGE_KEY,
+    key: DEFAULT_DATE_URL_KEY,
   });
-
-  // If "alltime" is selected, fall back to default (Past 30 days)
-  useEffect(() => {
-    const preset = getRangePreset(dateRange);
-    if (preset === "alltime") {
-      handleDateRangeChange(DEFAULT_METRICS_DATE_RANGE);
-    }
-  }, [dateRange, handleDateRangeChange]);
 
   const { data: traces } = useTracesList(
     {

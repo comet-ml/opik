@@ -27,8 +27,8 @@ public record SpanSearchStreamRequest(
         @Schema(description = "Max number of spans to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         UUID lastRetrievedId,
         @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate,
-        @Schema(description = "Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant fromTime,
-        @Schema(description = "Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant toTime) {
+        @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant fromTime,
+        @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant toTime) {
 
     @Override
     public Integer limit() {

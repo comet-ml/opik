@@ -72,7 +72,7 @@ public class InstantToUUIDMapper {
      * - Bits 66-127: Random (62 bits) - set to 1 for upper bound
      *
      * @param timestamp the instant in time
-     * @return the upper bound UUIDv7 (max UUID at this timestamp)
+     * @return the upper bound UUIDv7 (max UUID at this timestamp), or null if timestamp is null
      */
     public UUID toUpperBound(Instant timestamp) {
         if (timestamp == null) {

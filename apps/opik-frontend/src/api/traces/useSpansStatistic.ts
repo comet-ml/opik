@@ -11,6 +11,8 @@ type UseSpansStatisticParams = {
   type?: SPAN_TYPE;
   filters?: Filters;
   search?: string;
+  fromTime?: string;
+  toTime?: string;
 };
 
 export type UseSpansStatisticResponse = {
@@ -19,7 +21,15 @@ export type UseSpansStatisticResponse = {
 
 const getSpansStatistic = async (
   { signal }: QueryFunctionContext,
-  { projectId, traceId, type, filters, search }: UseSpansStatisticParams,
+  {
+    projectId,
+    traceId,
+    type,
+    filters,
+    search,
+    fromTime,
+    toTime,
+  }: UseSpansStatisticParams,
 ) => {
   const { data } = await api.get(`${SPANS_REST_ENDPOINT}stats`, {
     signal,
@@ -28,6 +38,8 @@ const getSpansStatistic = async (
       ...(traceId && { trace_id: traceId }),
       ...(type && { type }),
       ...processFilters(filters, generateSearchByIDFilters(search)),
+      ...(fromTime && { from_time: fromTime }),
+      ...(toTime && { to_time: toTime }),
     },
   });
 

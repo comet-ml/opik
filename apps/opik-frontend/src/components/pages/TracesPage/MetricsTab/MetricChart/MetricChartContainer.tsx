@@ -108,7 +108,9 @@ const MetricContainerChart = ({
 
       trace.data.forEach((d, dataIndex) => {
         values.push(d.value);
-        transformedData[dataIndex][trace.name] = d.value;
+        if (transformedData[dataIndex]) {
+          transformedData[dataIndex][trace.name] = d.value;
+        }
       });
     });
 

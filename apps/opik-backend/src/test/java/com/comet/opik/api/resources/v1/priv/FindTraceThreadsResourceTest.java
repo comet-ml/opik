@@ -1244,9 +1244,10 @@ class FindTraceThreadsResourceTest {
                 var sortedExpected = new ArrayList<>(expectedThreads);
                 Collections.reverse(sortedExpected);
 
-                var queryParams = Map.of(
+                var queryParams = Optional.ofNullable(toTime).map(time -> Map.of(
                         "from_time", fromTime.toString(),
-                        "to_time", toTime.toString());
+                        "to_time", toTime.toString())).orElse(Map.of("from_time", fromTime.toString()));
+
                 assertThreadPage(projectName, null, sortedExpected, List.of(), queryParams, apiKey, workspaceName);
             } else {
                 // Stream endpoint orders by: thread_model_id DESC (based on first trace timestamp)
@@ -1385,11 +1386,11 @@ class FindTraceThreadsResourceTest {
                     workspaceName);
         }
 
-        // Scenario 4: Incomplete time parameters should be rejected
+        // Scenario 4: time filtering works with only from_time parameter
         @ParameterizedTest
-        @DisplayName("time filtering requires both from_time and to_time parameters")
+        @DisplayName("time filtering works with only from_time parameter - to_time is optional")
         @MethodSource("provideBoundaryScenarios")
-        void whenOnlyFromTimeProvided_thenReturnBadRequest(boolean stream) {
+        void whenOnlyFromTimeProvided_thenFilterThreadsFromThatTime(boolean stream) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1397,26 +1398,33 @@ class FindTraceThreadsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            Instant now = Instant.now();
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofHours(1));
+            Instant upperBound = null; // to_time is optional - test without it
 
-            if (!stream) {
-                var queryParams = Map.of("from_time", now.toString());
-                var actualResponse = traceResourceClient.callGetTraceThreadsWithQueryParams(projectName, null,
-                        queryParams, apiKey, workspaceName);
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            } else {
-                var request = TraceThreadSearchStreamRequest.builder()
-                        .projectName(projectName)
-                        .fromTime(now)
-                        .build();
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            lowerBound.plus(Duration.ofMinutes(10)), "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime, "Within bounds"),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
+                            lowerBound.minus(Duration.ofMinutes(10)), "Outside bounds (before lower)"));
 
-                try (var response = traceResourceClient.callSearchTraceThreadsWithRequest(request, apiKey,
-                        workspaceName)) {
-                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                }
-            }
+            createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            // Expected: first 2 threads (from lowerBound onwards) - exclude trace before lowerBound
+            List<Trace> expectedTraces = allTraces.subList(0, 2);
+            List<TraceThread> expectedThreads = expectedTraces.stream()
+                    .map(trace -> getExpectedThreads(List.of(trace), projectId, trace.threadId(), List.of(),
+                            TraceThreadStatus.INACTIVE).getFirst())
+                    .toList();
+
+            assertTimeFilteredThreads(stream, expectedThreads, projectName, lowerBound, upperBound, apiKey,
+                    workspaceName);
         }
 
+        // Scenario 5: from_time must be before to_time
         @ParameterizedTest
         @DisplayName("from_time must be before to_time")
         @MethodSource("provideBoundaryScenarios")
