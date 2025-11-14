@@ -2412,7 +2412,7 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
-        ST template = buildInsertTemplate(trace);
+        var template = buildInsertTemplate(trace);
 
         Statement statement = buildInsertStatement(trace, connection, template);
 
@@ -2479,7 +2479,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> update(UUID id, TraceUpdate traceUpdate, Connection connection) {
 
-        ST template = buildUpdateTemplate(traceUpdate, UPDATE);
+        var template = buildUpdateTemplate(traceUpdate, UPDATE);
 
         String sql = template.render();
 
@@ -3124,7 +3124,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+            var statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_ids", List.of(criteria.projectId()));
@@ -3229,7 +3229,7 @@ class TraceDAOImpl implements TraceDAO {
 
                     int offset = (page - 1) * size;
 
-                    ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+                    var template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
@@ -3271,7 +3271,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate.stream(connection -> {
 
-            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            var template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)

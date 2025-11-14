@@ -342,7 +342,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             return asyncTemplate.nonTransaction(connection -> {
 
-                ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+                var template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
                 template.add("author", author);
 
                 var statement = connection.createStatement(template.render());

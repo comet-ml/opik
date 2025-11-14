@@ -620,7 +620,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
-        ST template = buildUpdateTemplate(update);
+        var template = buildUpdateTemplate(update);
 
         var statement = createUpdateStatement(id, update, connection, template.render());
 

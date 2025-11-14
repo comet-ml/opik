@@ -1281,7 +1281,7 @@ class ExperimentDAO {
     private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
             Connection connection) {
 
-        ST template = buildUpdateTemplate(experimentUpdate, UPDATE);
+        var template = buildUpdateTemplate(experimentUpdate, UPDATE);
         String sql = template.render();
 
         Statement statement = connection.createStatement(sql);

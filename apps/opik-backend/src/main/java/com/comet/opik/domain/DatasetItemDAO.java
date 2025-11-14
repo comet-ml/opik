@@ -1255,7 +1255,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE, contentSegmentName);
 
-                    ST selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
+                    var selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
@@ -1322,7 +1322,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
+            var countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
 
             var statement = connection.createStatement(countTemplate.render())
                     .bind("datasetId", datasetItemSearchCriteria.datasetId());
