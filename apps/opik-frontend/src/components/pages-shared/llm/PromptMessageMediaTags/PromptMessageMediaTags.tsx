@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Image, Loader2, Plus, Upload, Video } from "lucide-react";
+import { Image, Plus, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -15,11 +15,12 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import {
   isImageBase64String,
   isVideoBase64String,
-  SUPPORTED_IMAGE_FORMATS,
-  SUPPORTED_VIDEO_FORMATS,
+  IMAGE_URL_EXTENSIONS,
+  VIDEO_URL_EXTENSIONS,
 } from "@/lib/images";
-import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
-import { useBase64InputHandler } from "@/hooks/useBase64InputHandler";
+/* TODO: Temporarily disabled - restore when base64 support is re-enabled */
+// import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
+// import { useBase64InputHandler } from "@/hooks/useBase64InputHandler";
 
 type MediaType = "image" | "video";
 
@@ -39,6 +40,8 @@ const DEFAULT_MAX_ITEMS: Record<MediaType, number> = {
 };
 const MAX_DISPLAY_LENGTH = 40;
 
+/* TODO: Temporarily disabled - restore when base64 support is re-enabled */
+/*
 const ACCEPTED_FILE_TYPES: Record<MediaType, string> = {
   image: SUPPORTED_IMAGE_FORMATS,
   video: SUPPORTED_VIDEO_FORMATS,
@@ -48,6 +51,7 @@ const MAX_FILE_SIZE_MB: Record<MediaType, number> = {
   image: 200,
   video: 2000,
 };
+*/
 
 const PromptMessageMediaTags: React.FunctionComponent<
   PromptMessageMediaTagsProps
@@ -66,6 +70,8 @@ const PromptMessageMediaTags: React.FunctionComponent<
 
   const resolvedMaxItems = maxItems ?? DEFAULT_MAX_ITEMS[type];
 
+  /* TODO: Temporarily disabled - restore when base64 support is re-enabled */
+  /*
   const { fileInputRef, handleFileSelect } = useMediaFileUpload({
     currentItemsCount: items.length,
     maxItems: resolvedMaxItems,
@@ -85,6 +91,7 @@ const PromptMessageMediaTags: React.FunctionComponent<
       setItems([...items, base64]);
     },
   });
+  */
 
   const truncateMediaString = (value: string) => {
     if (value.length <= MAX_DISPLAY_LENGTH) {
@@ -100,6 +107,45 @@ const PromptMessageMediaTags: React.FunctionComponent<
     } catch {
       return false;
     }
+  };
+
+  const validateMediaUrl = (
+    url: string,
+  ): { valid: boolean; error?: string } => {
+    // Check if it's a valid HTTP/HTTPS URL
+    if (!isHttpUrl(url)) {
+      // Allow template variables like {{image}} or {{video}}
+      if (url.match(/^\{\{.+\}\}$/)) {
+        return { valid: true };
+      }
+      return { valid: false, error: "Please enter a valid HTTP or HTTPS URL" };
+    }
+
+    // Define valid extensions by media type using imported constants
+    const validExtensions: Record<MediaType, readonly string[]> = {
+      image: IMAGE_URL_EXTENSIONS,
+      video: VIDEO_URL_EXTENSIONS,
+    };
+
+    // Extract the path from the URL (without query parameters)
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname.toLowerCase();
+
+    // Check if URL has a valid file extension
+    const hasValidExtension = validExtensions[type].some((ext) =>
+      pathname.endsWith(`.${ext}`),
+    );
+
+    if (!hasValidExtension) {
+      return {
+        valid: false,
+        error: `URL must end with a valid ${type} extension (.${validExtensions[
+          type
+        ].join(", .")})`,
+      };
+    }
+
+    return { valid: true };
   };
 
   const isPreviewable = (value: string): boolean => {
@@ -195,6 +241,17 @@ const PromptMessageMediaTags: React.FunctionComponent<
       return;
     }
 
+    // Validate URL
+    const validation = validateMediaUrl(trimmed);
+    if (!validation.valid) {
+      toast({
+        title: "Invalid URL",
+        description: validation.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setItems([...items, trimmed]);
     setNewItem("");
     setOpen(false);
@@ -206,20 +263,7 @@ const PromptMessageMediaTags: React.FunctionComponent<
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
-
-    const isBase64 = handleBase64Input(value, {
-      onSuccess: () => {
-        setNewItem("");
-        setOpen(false);
-      },
-      onError: () => {
-        setNewItem("");
-      },
-    });
-
-    if (!isBase64) {
-      setNewItem(value);
-    }
+    setNewItem(value);
   };
 
   const canAddMore = items.length < resolvedMaxItems;
@@ -235,12 +279,12 @@ const PromptMessageMediaTags: React.FunctionComponent<
   );
   const placeholder =
     type === "image"
-      ? "Enter image URL, base64, or template variable"
-      : "Enter video URL, base64, or template variable";
+      ? "Enter image URL or template variable"
+      : "Enter video URL or template variable";
   const helperText =
     type === "image"
-      ? `You can add a base64 string, image URL, or template variable. For file uploads, max size is ${MAX_FILE_SIZE_MB[type]}MB. `
-      : `You can add a base64 string, video URL, or template variable. For file uploads, max size is ${MAX_FILE_SIZE_MB[type]}MB. `;
+      ? "You can add an image URL or template variable. "
+      : "You can add a video URL or template variable. ";
 
   return (
     <div
@@ -284,6 +328,8 @@ const PromptMessageMediaTags: React.FunctionComponent<
       })}
       {editable && canAddMore && (
         <>
+          {/* TODO: Temporarily disabled - restore when base64 support is re-enabled */}
+          {/*
           <input
             ref={fileInputRef}
             type="file"
@@ -292,9 +338,10 @@ const PromptMessageMediaTags: React.FunctionComponent<
             className="hidden"
             onChange={handleFileSelect}
           />
+          */}
           <Popover onOpenChange={setOpen} open={open}>
             <TooltipWrapper
-              content={`Add ${type}: ${type} URL, base64 data, or template variable {{${type}}}`}
+              content={`Add ${type}: ${type} URL or template variable {{${type}}}`}
             >
               <PopoverTrigger asChild>
                 <Button
@@ -316,18 +363,14 @@ const PromptMessageMediaTags: React.FunctionComponent<
                       value={newItem}
                       onChange={handleInputChange}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter" && !isProcessing) {
+                        if (event.key === "Enter") {
                           handleAddItem();
                         }
                       }}
-                      disabled={isProcessing}
                     />
-                    {isProcessing && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-background/50">
-                        <Loader2 className="size-4 animate-spin" />
-                      </div>
-                    )}
                   </div>
+                  {/* TODO: Temporarily disabled - restore when base64 support is re-enabled */}
+                  {/*
                   <TooltipWrapper
                     content={`Upload ${type} file${
                       type === "image" ? "s" : ""
@@ -344,11 +387,8 @@ const PromptMessageMediaTags: React.FunctionComponent<
                       <Upload className="size-3.5 shrink-0" />
                     </Button>
                   </TooltipWrapper>
-                  <Button
-                    variant="default"
-                    onClick={handleAddItem}
-                    disabled={isProcessing}
-                  >
+                  */}
+                  <Button variant="default" onClick={handleAddItem}>
                     Add
                   </Button>
                 </div>

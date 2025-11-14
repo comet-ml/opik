@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { RotateCcw, Save, Wand2 } from "lucide-react";
+import { Copy, RotateCcw, Save, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { OnChangeFn } from "@/types/shared";
@@ -168,6 +168,23 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
+  const handleCopyJson = useCallback(async () => {
+    try {
+      const jsonString = convertMessageToMessagesJson(message);
+      await navigator.clipboard.writeText(jsonString);
+      toast({
+        title: "Copied to clipboard",
+        description: "Prompt copied successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to copy",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
+      });
+    }
+  }, [message, toast]);
+
   const resetDisabled =
     !promptId ||
     promptData?.id !== promptId ||
@@ -318,6 +335,18 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             }}
           >
             <Save />
+          </Button>
+        </TooltipWrapper>
+
+        <TooltipWrapper content="Copy prompt">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={saveDisabled}
+            onClick={handleCopyJson}
+            type="button"
+          >
+            <Copy />
           </Button>
         </TooltipWrapper>
 
