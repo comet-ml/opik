@@ -96,12 +96,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey?.configuration?.models ?? "",
         providerKey?.provider_name,
       ),
-      headers: providerKey?.headers
-        ? Object.entries(providerKey.headers).map(([key, value]) => ({
-            key,
-            value,
-          }))
-        : undefined,
+      headers:
+        providerKey?.headers && Object.keys(providerKey.headers).length > 0
+          ? Object.entries(providerKey.headers).map(([key, value]) => ({
+              key,
+              value,
+            }))
+          : [],
     } as AIProviderFormType,
   });
 
@@ -150,21 +151,23 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         : undefined;
 
     // Convert headers array to object, filtering out empty keys
-    // If editing and headers array is empty or undefined, send empty object to clear headers
+    // If editing and headers array is empty, send empty object to clear headers
     const headers =
-      headersArray && headersArray.length > 0
-        ? headersArray.reduce(
-            (acc, header) => {
-              if (header.key.trim()) {
-                acc[header.key.trim()] = header.value;
-              }
-              return acc;
-            },
-            {} as Record<string, string>,
-          )
-        : isCustom && (providerKey || calculatedProviderKey)
-          ? {}
-          : undefined;
+      headersArray !== undefined
+        ? headersArray.length > 0
+          ? headersArray.reduce(
+              (acc, header) => {
+                if (header.key.trim()) {
+                  acc[header.key.trim()] = header.value;
+                }
+                return acc;
+              },
+              {} as Record<string, string>,
+            )
+          : isCustom && (providerKey || calculatedProviderKey)
+            ? {} // Empty array when editing = clear headers
+            : undefined
+        : undefined;
 
     if (providerKey || calculatedProviderKey) {
       updateMutate({
@@ -308,14 +311,15 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             );
                             form.setValue(
                               "headers",
-                              providerData?.headers
+                              providerData?.headers &&
+                                Object.keys(providerData.headers).length > 0
                                 ? Object.entries(providerData.headers).map(
                                     ([key, value]) => ({
                                       key,
                                       value,
                                     }),
                                   )
-                                : undefined,
+                                : [],
                             );
 
                             form.setValue(

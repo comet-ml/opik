@@ -172,7 +172,8 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           const removeHeader = (index: number) => {
             const newHeaders = headers.filter((_, i) => i !== index);
-            field.onChange(newHeaders.length > 0 ? newHeaders : undefined);
+            // Always set to array (even if empty) so backend can clear headers
+            field.onChange(newHeaders);
           };
 
           const updateHeader = (
