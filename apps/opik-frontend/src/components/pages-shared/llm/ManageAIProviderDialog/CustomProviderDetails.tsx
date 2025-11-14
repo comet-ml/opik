@@ -264,7 +264,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                   onClick={addHeader}
                   className="w-fit"
                 >
-                  <Plus className="comet-body-s" />
+                  <Plus className="mr-1.5 size-3.5" />
                   Add header
                 </Button>
               </div>
