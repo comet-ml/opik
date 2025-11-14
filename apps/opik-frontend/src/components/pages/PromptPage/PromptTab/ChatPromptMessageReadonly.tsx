@@ -13,9 +13,9 @@ interface ChatPromptMessageReadonlyProps {
   message: ChatMessage;
 }
 
-const ChatPromptMessageReadonly: React.FunctionComponent<
-  ChatPromptMessageReadonlyProps
-> = ({ message }) => {
+const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
+  message,
+}) => {
   const getRoleLabel = (role: string): string => {
     const roleKey = role.toUpperCase() as keyof typeof LLM_MESSAGE_ROLE;
     if (LLM_MESSAGE_ROLE[roleKey]) {

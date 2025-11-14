@@ -15,9 +15,7 @@ interface ChatPromptViewProps {
   template: string;
 }
 
-const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
-  template,
-}) => {
+const ChatPromptView: React.FC<ChatPromptViewProps> = ({ template }) => {
   const [showRawView, setShowRawView] = useState(false);
 
   const messages = useMemo<ChatMessage[]>(() => {

@@ -50,7 +50,7 @@ type AddPromptDialogProps = {
   prompt?: Prompt;
 };
 
-const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
+const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   open,
   setOpen,
   prompt: defaultPrompt,
@@ -125,7 +125,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     [workspaceName, navigate],
   );
 
-  const createPrompt = useCallback(() => {
+  const createPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
     if (!isMetadataValid) {
@@ -155,21 +155,9 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
       { onSuccess: onPromptCreated },
     );
     setOpen(false);
-  }, [
-    metadata,
-    createMutate,
-    name,
-    template,
-    templateStructure,
-    isChatPrompt,
-    messages,
-    description,
-    setOpen,
-    setShowInvalidJSON,
-    onPromptCreated,
-  ]);
+  };
 
-  const editPrompt = useCallback(() => {
+  const editPrompt = () => {
     updateMutate({
       prompt: {
         id: defaultPrompt?.id,
@@ -178,7 +166,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
       },
     });
     setOpen(false);
-  }, [updateMutate, defaultPrompt?.id, name, description, setOpen]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

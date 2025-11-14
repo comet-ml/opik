@@ -7,11 +7,11 @@ import { Description } from "@/components/ui/description";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { LLMMessage } from "@/types/llm";
 
-type ChatPromptRawViewProps = {
+interface ChatPromptRawViewProps {
   value: string;
   onMessagesChange: (messages: LLMMessage[]) => void;
   onRawValueChange: (value: string) => void;
-};
+}
 
 const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
   value,

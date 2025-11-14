@@ -59,9 +59,7 @@ type EditPromptVersionDialogProps = {
   onSetActiveVersionId: (versionId: string) => void;
 };
 
-const EditPromptVersionDialog: React.FunctionComponent<
-  EditPromptVersionDialogProps
-> = ({
+const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   open,
   setOpen,
   template: promptTemplate,
