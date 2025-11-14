@@ -4234,12 +4234,11 @@ class GetTracesByProjectResourceTest {
         }
 
         @Test
-        void getTracesByProject__whenSortingByInvalidField__thenReturn400() {
+        void getTracesByProject__whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
-                    "Invalid sorting fields '%s'".formatted(field));
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
 
@@ -4250,10 +4249,11 @@ class GetTracesByProjectResourceTest {
 
             var actualResponse = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE, queryParams);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
+            var actualEntity = actualResponse.readEntity(Trace.TracePage.class);
+            assertThat(actualEntity).isNotNull();
         }
 
         @ParameterizedTest

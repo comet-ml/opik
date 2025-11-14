@@ -4,6 +4,7 @@ import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
@@ -57,14 +58,14 @@ public abstract class SortingFactory {
      * @param sorting the sorting fields to filter
      * @return list of valid sorting fields (may be empty)
      */
-    private List<SortingField> filterValidFields(@NonNull List<SortingField> sorting) {
-        if (sorting.isEmpty()) {
+    private List<SortingField> filterValidFields(List<SortingField> sorting) {
+        if (CollectionUtils.isEmpty(sorting)) {
             return sorting;
         }
 
         // Only support single field sorting for now
         if (sorting.size() > 1) {
-            log.warn("Multiple sorting fields requested but not supported, using first field only: '{}'",
+            log.info("Multiple sorting fields requested but not supported, using first field only: '{}'",
                     sorting.stream().map(SortingField::field).toList());
             sorting = List.of(sorting.get(0));
         }
@@ -74,7 +75,7 @@ public abstract class SortingFactory {
                 .filter(sortField -> {
                     boolean isValid = isFieldSupported(sortField.field()) || isDynamicFieldSupported(sortField.field());
                     if (!isValid) {
-                        log.warn("Ignoring unsupported sorting field: '{}'", sortField.field());
+                        log.info("Ignoring unsupported sorting field: '{}'", sortField.field());
                     }
                     return isValid;
                 })
