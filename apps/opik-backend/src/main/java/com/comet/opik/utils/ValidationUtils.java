@@ -52,15 +52,8 @@ public class ValidationUtils {
     }
 
     public static void validateTimeRangeParameters(Instant startTime, Instant endTime) {
-        boolean startTimePresent = startTime != null;
-        boolean endTimePresent = endTime != null;
-
-        if (startTimePresent != endTimePresent) {
-            throw new BadRequestException(
-                    "Both 'from_time' and 'to_time' parameters must be provided together, or both must be omitted");
-        }
-
-        if (startTimePresent && endTimePresent && !startTime.isBefore(endTime)) {
+        // to_time is optional, but if both are provided, from_time must be before to_time
+        if (startTime != null && endTime != null && !startTime.isBefore(endTime)) {
             throw new BadRequestException(
                     "Parameter 'from_time' must be before 'to_time'");
         }
