@@ -7,8 +7,9 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 ## Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` method
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
 - **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 - **Backward Compatibility**: All original parameters preserved through kwargs extraction
@@ -40,6 +41,27 @@ def optimize_prompt(
     n_samples: int | None = None,
     auto_continue: bool = False,
     agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+### optimize_mcp()
+```python
+def optimize_mcp(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    *,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
     **kwargs: Any,
 ) -> OptimizationResult
 ```
@@ -371,6 +393,42 @@ get_optimizer_metadata()
 ```
 
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: MCPSecondPassCoordinator,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    fallback_invoker: collections.abc.Callable[[dict[str, typing.Any]], str] | None = None,
+    fallback_arguments: collections.abc.Callable[[typing.Any], dict[str, typing.Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="MCPSecondPassCoordinator" />
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} default="False" />
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="fallback_invoker" type="collections.abc.Callable[[dict[str, typing.Any]], str] | None" optional={true} />
+<ParamField path="fallback_arguments" type="collections.abc.Callable[[typing.Any], dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} default="False" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -382,10 +440,11 @@ optimize_prompt(
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
-    optimization_id: str | None = None,
     max_trials: int = 10,
+    mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
     candidate_generator: collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None = None,
     candidate_generator_kwargs: dict[str, typing.Any] | None = None,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -402,10 +461,11 @@ optimize_prompt(
 <ParamField path="auto_continue" type="bool" optional={true} default="False">If True, optimizer may continue beyond max_trials if improvements are still being found.</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Custom agent class for prompt execution. If None, uses default LiteLLM-based agent. Must inherit from OptimizableAgent.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces and experiments. Default: "Optimization"</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum total number of prompts to evaluate across all rounds. Optimizer stops when this limit is reached.</ParamField>
+<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
 <ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
 <ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs to pass to candidate_generator.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -501,6 +561,42 @@ get_optimizer_metadata()
 ```
 
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: MCPSecondPassCoordinator,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    fallback_invoker: collections.abc.Callable[[dict[str, typing.Any]], str] | None = None,
+    fallback_arguments: collections.abc.Callable[[typing.Any], dict[str, typing.Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="MCPSecondPassCoordinator" />
+<ParamField path="experiment_config" type="dict | None" optional={true} />
+<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} default="False" />
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="fallback_invoker" type="collections.abc.Callable[[dict[str, typing.Any]], str] | None" optional={true} />
+<ParamField path="fallback_arguments" type="collections.abc.Callable[[typing.Any], dict[str, typing.Any]] | None" optional={true} />
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} default="False" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -512,8 +608,9 @@ optimize_prompt(
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
-    optimization_id: str | None = None,
     max_trials: int = 10,
+    mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -530,8 +627,9 @@ optimize_prompt(
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue automatically after each generation.</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent implementation for executing prompts.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization").</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of prompt evaluations allowed.</ParamField>
+<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool-calling configuration (default: None).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -616,7 +714,6 @@ optimize_prompt(
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
-    optimization_id: str | None = None,
     max_trials: int = 10,
     reflection_minibatch_size: int = 3,
     candidate_selection_strategy: str = 'pareto',
@@ -629,8 +726,7 @@ optimize_prompt(
     display_progress_bar: bool = False,
     seed: int = 42,
     raise_on_exception: bool = True,
-    args: Any,
-    kwargs: Any
+    optimization_id: str | None = None
 )
 ```
 
@@ -645,7 +741,6 @@ optimize_prompt(
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization" />
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
 <ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
 <ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (default: "pareto")</ParamField>
@@ -658,8 +753,7 @@ optimize_prompt(
 <ParamField path="display_progress_bar" type="bool" optional={true} default="False">Display progress bar (default: False)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility (default: 42)</ParamField>
 <ParamField path="raise_on_exception" type="bool" optional={true} default="True">Raise exceptions instead of continuing (default: True)</ParamField>
-<ParamField path="args" type="Any" />
-<ParamField path="kwargs" type="Any" />
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 
 ## HierarchicalReflectiveOptimizer
 
@@ -748,9 +842,9 @@ optimize_prompt(
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
-    optimization_id: str | None = None,
     max_trials: int = 5,
     max_retries: int = 2,
+    optimization_id: str | None = None,
     args: Any,
     kwargs: Any
 )
@@ -767,9 +861,9 @@ optimize_prompt(
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically after each round.</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent implementation to execute prompt evaluations.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for trace logging (default: "Optimization").</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="5">Maximum number of optimization iterations to run.</ParamField>
 <ParamField path="max_retries" type="int" optional={true} default="2">Maximum retries allowed for addressing a failure mode.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
