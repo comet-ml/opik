@@ -14,6 +14,7 @@ import { buildDocsUrl, cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
+import { Plus, Trash2 } from "lucide-react";
 
 type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -154,6 +155,85 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                 Comma separated list of available models. Example:
                 {`"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B"`}
               </Description>
+            </FormItem>
+          );
+        }}
+      />
+
+      <FormField
+        control={form.control}
+        name="headers"
+        render={({ field }) => {
+          const headers = field.value || [];
+
+          const addHeader = () => {
+            field.onChange([...headers, { key: "", value: "" }]);
+          };
+
+          const removeHeader = (index: number) => {
+            const newHeaders = headers.filter((_, i) => i !== index);
+            field.onChange(newHeaders.length > 0 ? newHeaders : undefined);
+          };
+
+          const updateHeader = (
+            index: number,
+            key: string,
+            value: string,
+          ) => {
+            const newHeaders = [...headers];
+            newHeaders[index] = { key, value };
+            field.onChange(newHeaders);
+          };
+
+          return (
+            <FormItem>
+              <Label>Custom headers (optional)</Label>
+              <div className="flex flex-col gap-2">
+                {headers.map((header, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      placeholder="Header name"
+                      value={header.key}
+                      onChange={(e) =>
+                        updateHeader(index, e.target.value, header.value)
+                      }
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="Header value"
+                      value={header.value}
+                      onChange={(e) =>
+                        updateHeader(index, header.key, e.target.value)
+                      }
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeHeader(index)}
+                      className="shrink-0"
+                    >
+                      <Trash2 className="comet-body-s" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addHeader}
+                  className="w-fit"
+                >
+                  <Plus className="comet-body-s" />
+                  Add header
+                </Button>
+              </div>
+              <Description>
+                Custom providers may require additional headers beyond the API
+                key. Add them here as key-value pairs.
+              </Description>
+              <FormMessage />
             </FormItem>
           );
         }}

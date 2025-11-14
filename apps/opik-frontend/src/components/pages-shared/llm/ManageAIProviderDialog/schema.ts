@@ -57,6 +57,14 @@ export const createCustomProviderDetailsFormSchema = (
           },
           { message: "All model names should be unique" },
         ),
+      headers: z
+        .array(
+          z.object({
+            key: z.string(),
+            value: z.string(),
+          }),
+        )
+        .optional(),
     })
     .superRefine((data, ctx) => {
       if (!data.id && (!data.providerName || data.providerName.length === 0)) {

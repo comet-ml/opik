@@ -96,6 +96,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey?.configuration?.models ?? "",
         providerKey?.provider_name,
       ),
+      headers: providerKey?.headers
+        ? Object.entries(providerKey.headers).map(([key, value]) => ({
+            key,
+            value,
+          }))
+        : undefined,
     } as AIProviderFormType,
   });
 
@@ -122,6 +128,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const url = form.getValues("url");
     const location = form.getValues("location");
     const providerName = form.getValues("providerName");
+    const headersArray = form.getValues("headers");
     const composedProviderType = buildComposedProviderKey(
       provider!,
       providerName,
@@ -142,6 +149,20 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           }
         : undefined;
 
+    // Convert headers array to object, filtering out empty keys
+    const headers =
+      headersArray && headersArray.length > 0
+        ? headersArray.reduce(
+            (acc, header) => {
+              if (header.key.trim()) {
+                acc[header.key.trim()] = header.value;
+              }
+              return acc;
+            },
+            {} as Record<string, string>,
+          )
+        : undefined;
+
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
@@ -149,6 +170,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey,
           base_url: isCustom ? url : undefined,
           ...(configuration && { configuration }),
+          ...(isCustom && headers && { headers }),
         },
       });
     } else if (provider) {
@@ -163,6 +185,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustom ? url : undefined,
           provider_name: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
+          ...(isCustom && headers && { headers }),
         },
       });
     }
@@ -279,6 +302,17 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             form.setValue(
                               "location",
                               providerData?.configuration?.location ?? "",
+                            );
+                            form.setValue(
+                              "headers",
+                              providerData?.headers
+                                ? Object.entries(providerData.headers).map(
+                                    ([key, value]) => ({
+                                      key,
+                                      value,
+                                    }),
+                                  )
+                                : undefined,
                             );
 
                             form.setValue(
