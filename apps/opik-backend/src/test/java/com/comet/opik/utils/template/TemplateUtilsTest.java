@@ -154,17 +154,19 @@ class TemplateUtilsTest {
                             factoryMethod,
                             // The majority of ST should be collected
                             TOTAL_TEMPLATES,
-                            5, // Used memory growth should be around 5 MB
-                            20 // Higher variance percentage for small absolute values
+                            // Growth is about 5MB in local isolated runs
+                            // But allowing 1 to 100 MB range for other environments and running with other tests
+                            1,
+                            100
                     ),
                     arguments(
                             "preventGCAndCauseMemoryLeak",
                             directConstructor,
-                            // The majority of ST should also be collected
-                            // The issue is the leak of CompiledST and other instances within the default STGroup
+                            // Growth is about 2650 MB in local isolated runs
+                            // But allowing 2 to 3 GB range for other environments and running with other tests
                             TOTAL_TEMPLATES,
-                            2650, // Used memory growth should be around 2650 MB
-                            5 // Lower variance percentage for large absolute values
+                            2000,
+                            3000
                     ));
         }
 
@@ -174,8 +176,8 @@ class TemplateUtilsTest {
                 String testName,
                 Function<String, ST> templateFactory,
                 long expectedGCCount,
-                long expectedUsedMemoryGrowthInMB,
-                int memoryVariancePercentage) {
+                long expectedUsedMemoryGrowthInMBMin,
+                long expectedUsedMemoryGrowthInMBMax) {
             var weakReferences = new ArrayList<WeakReference<ST>>();
             // Suggest GC before test to start in a clean state
             System.gc();
@@ -203,8 +205,9 @@ class TemplateUtilsTest {
             log.info("{} - Memory growth: {} MB", testName, actualUsedMemoryGrowthInMB);
             // The amount of GC-ed instances shouldn't vary much
             assertThat(actualGCCount).isCloseTo(expectedGCCount, withinPercentage(10));
+            // Using a range, as it may vary based on the environment or if running test in isolation or with others
             assertThat(actualUsedMemoryGrowthInMB)
-                    .isCloseTo(expectedUsedMemoryGrowthInMB, withinPercentage(memoryVariancePercentage));
+                    .isBetween(expectedUsedMemoryGrowthInMBMin, expectedUsedMemoryGrowthInMBMax);
         }
     }
 
