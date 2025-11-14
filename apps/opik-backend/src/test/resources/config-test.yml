@@ -515,3 +515,10 @@ webhook:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint
     windowSize: 1s
+  metrics:
+    # Default: 1s
+    # Description: Initial delay before the first metrics alert job execution
+    initialDelay: 1s
+    # Default: 2s
+    # Description: Fixed delay between metrics alert job executions (waits this duration after completion)
+    fixedDelay: 2s

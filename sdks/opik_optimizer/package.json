@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@browsermcp/mcp": "^0.1.3",
-    "@upstash/context7-mcp": "^1.0.17"
-  }
-}
