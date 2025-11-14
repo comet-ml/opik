@@ -385,23 +385,6 @@ public class SpanDAO {
 }
 ```
 
-**Why This Matters**:
-- **Memory Leak**: Direct `ST` construction caches templates in the default STGroup singleton
-- **Unbounded Growth**: In production with 50,000 templates, memory grows from ~5 MB to ~2,650 MB
-- **Performance**: The factory method has negligible CPU overhead (~1-2 microseconds per template)
-- **Thread Safety**: Each template gets its own isolated STGroup, ensuring thread safety
-
-**Implementation Details**:
-- The factory method creates a fresh `STGroup` for each template
-- Templates and their groups can be garbage collected after use
-- Similar pattern used successfully by jdbi3-stringtemplate4 in production
-- Custom error listener suppresses noise from conditional-only attributes (e.g., `<if(trace_id)>`)
-
-**References**:
-- Issue: [#2676 - StringTemplate memory leak](https://github.com/comet-ml/opik/issues/2676)
-- Implementation: `com.comet.opik.utils.template.TemplateUtils.newST()`
-- Tests: `com.comet.opik.utils.template.TemplateUtilsTest`
-
 ## Error Handling and Validation
 
 ### **Exception Handling**
