@@ -1,22 +1,13 @@
 import copy
-<<<<<<< HEAD:sdks/python/src/opik/api_objects/prompt/string/prompt.py
-from typing import Any, Dict, Optional
+import json
+import logging
+from typing import Any, Dict, Optional, Union, List
 from typing_extensions import override
 from opik.rest_api import types as rest_api_types
 from . import prompt_template
 from .. import types as prompt_types
 from .. import client as prompt_client
 from .. import base_prompt
-=======
-import json
-import logging
-from typing import Any, Dict, Optional, Union, List
-
-from opik.rest_api.types import PromptVersionDetail
-from .prompt_template import PromptTemplate
-from .types import PromptType
-from opik.api_objects.prompt import client as prompt_client
->>>>>>> main:sdks/python/src/opik/api_objects/prompt/prompt.py
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,12 +88,8 @@ class Prompt(base_prompt.BasePrompt):
         """The prompt type of the prompt."""
         return self._type
 
-<<<<<<< HEAD:sdks/python/src/opik/api_objects/prompt/string/prompt.py
     @override
-    def format(self, **kwargs: Any) -> str:
-=======
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
->>>>>>> main:sdks/python/src/opik/api_objects/prompt/prompt.py
         """
         Replaces placeholders in the template with provided keyword arguments.
 
