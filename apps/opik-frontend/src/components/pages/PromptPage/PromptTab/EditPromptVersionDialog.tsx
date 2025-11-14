@@ -191,7 +191,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
             {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_my_prompt]}
           />
           <div className="flex flex-col gap-2 pb-4">
-            <div className="mt-3 flex items-center justify-between">
+            <div className="mt-3 flex items-center justify-between gap-0.5">
               <Label htmlFor="promptTemplate">
                 {isChatPrompt ? "Chat messages" : "Prompt"}
               </Label>
