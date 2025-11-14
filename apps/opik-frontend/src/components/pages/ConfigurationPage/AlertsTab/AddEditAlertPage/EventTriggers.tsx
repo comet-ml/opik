@@ -1,9 +1,16 @@
 import React, { useMemo } from "react";
 import { Path, useFieldArray, UseFormReturn } from "react-hook-form";
 import { CircleHelp, ExternalLink, Plus, WebhookIcon, X } from "lucide-react";
+import get from "lodash/get";
 
 import { Label } from "@/components/ui/label";
-import { FormErrorSkeleton, FormField, FormItem } from "@/components/ui/form";
+import {
+  FormControl,
+  FormErrorSkeleton,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Description } from "@/components/ui/description";
@@ -14,17 +21,34 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
+import { DropdownOption } from "@/types/shared";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { cn } from "@/lib/utils";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
   projectsIds: string[];
 };
+
+const WINDOW_OPTIONS: DropdownOption<string>[] = [
+  { label: "5 minutes", value: "300" },
+  { label: "15 minutes", value: "900" },
+  { label: "30 minutes", value: "1800" },
+  { label: "1 hour", value: "3600" },
+  { label: "6 hours", value: "21600" },
+  { label: "12 hours", value: "43200" },
+  { label: "24 hours", value: "86400" },
+  { label: "7 days", value: "604800" },
+  { label: "15 days", value: "1296000" },
+  { label: "30 days", value: "2592000" },
+];
 
 const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   form,
@@ -62,6 +86,81 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
 
   const removeTrigger = (index: number) => {
     remove(index);
+  };
+
+  const renderThresholdConfig = (
+    index: number,
+    eventType: ALERT_EVENT_TYPE,
+  ) => {
+    return (
+      <div className="flex items-start gap-4">
+        <FormField
+          control={form.control}
+          name={`triggers.${index}.threshold` as Path<AlertFormType>}
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "triggers",
+              index,
+              "threshold",
+            ]);
+            return (
+              <FormItem className="flex-1">
+                <Label className="comet-body-s">
+                  {eventType === ALERT_EVENT_TYPE.trace_cost
+                    ? "Total cost exceeds (USD)"
+                    : "Average latency exceeds (seconds)"}
+                </Label>
+                <FormControl>
+                  <Input
+                    className={cn("h-8", {
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                    type="number"
+                    step="any"
+                    placeholder={
+                      eventType === ALERT_EVENT_TYPE.trace_cost ? "100" : "0.0"
+                    }
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+        <FormField
+          control={form.control}
+          name={`triggers.${index}.window` as Path<AlertFormType>}
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "triggers",
+              index,
+              "window",
+            ]);
+            return (
+              <FormItem className="flex-1">
+                <Label className="comet-body-s">In the last</Label>
+                <FormControl>
+                  <SelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    options={WINDOW_OPTIONS}
+                    className={cn("h-8", {
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                    placeholder="Select time window"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      </div>
+    );
   };
 
   const allEventTypes = useMemo(() => {
@@ -171,38 +270,46 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
               {fields.map((field, index) => {
                 const config = TRIGGER_CONFIG[field.eventType];
                 const isLastItem = index === fields.length - 1;
+                const isCostOrLatencyTrigger =
+                  field.eventType === ALERT_EVENT_TYPE.trace_cost ||
+                  field.eventType === ALERT_EVENT_TYPE.trace_latency;
 
                 return (
                   <div key={field.id}>
                     <div className="flex items-stretch gap-4">
-                      <div className="flex flex-1 flex-col gap-1">
-                        <Label className="comet-body-s-accented">
-                          {config.title}
-                        </Label>
-                        <Description>{config.description}</Description>
-                      </div>
+                      <div className="flex flex-auto flex-col gap-3">
+                        <div className="flex gap-4">
+                          <div className="flex flex-1 flex-col gap-1">
+                            <Label className="comet-body-s-accented">
+                              {config.title}
+                            </Label>
+                            <Description>{config.description}</Description>
+                          </div>
 
-                      {config.hasScope && (
-                        <FormField
-                          control={form.control}
-                          name={
-                            `triggers.${index}.projectIds` as Path<AlertFormType>
-                          }
-                          render={({ field }) => (
-                            <FormItem className="justify-center">
-                              <ProjectsSelectBox
-                                value={field.value as string[]}
-                                onValueChange={field.onChange}
-                                multiselect={true}
-                                className="h-8 w-40"
-                                showSelectAll={true}
-                                minWidth={204}
-                              />
-                            </FormItem>
+                          {config.hasScope && (
+                            <FormField
+                              control={form.control}
+                              name={
+                                `triggers.${index}.projectIds` as Path<AlertFormType>
+                              }
+                              render={({ field }) => (
+                                <FormItem className="justify-center">
+                                  <ProjectsSelectBox
+                                    value={field.value as string[]}
+                                    onValueChange={field.onChange}
+                                    multiselect={true}
+                                    className="h-8 w-40"
+                                    showSelectAll={true}
+                                    minWidth={204}
+                                  />
+                                </FormItem>
+                              )}
+                            />
                           )}
-                        />
-                      )}
-
+                        </div>
+                        {isCostOrLatencyTrigger &&
+                          renderThresholdConfig(index, field.eventType)}
+                      </div>
                       <div className="flex items-center">
                         <Button
                           type="button"

@@ -1,10 +1,14 @@
 import copy
-from typing import Any, Dict, Optional
+import json
+import logging
+from typing import Any, Dict, Optional, Union, List
 
 from opik.rest_api.types import PromptVersionDetail
 from .prompt_template import PromptTemplate
 from .types import PromptType
 from opik.api_objects.prompt import client as prompt_client
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Prompt:
@@ -76,7 +80,7 @@ class Prompt:
         """The prompt type of the prompt."""
         return self._type
 
-    def format(self, **kwargs: Any) -> str:
+    def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
         """
         Replaces placeholders in the template with provided keyword arguments.
 
@@ -87,7 +91,23 @@ class Prompt:
         Returns:
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
-        return self._template.format(**kwargs)
+        is_playground_chat_prompt = (
+            self._metadata is not None
+            and self._metadata.get("created_from") == "opik_ui"
+            and self._metadata.get("type") == "messages_json"
+        )
+        formatted_string = self._template.format(**kwargs)
+
+        if is_playground_chat_prompt:
+            try:
+                return json.loads(formatted_string)
+            except json.JSONDecodeError:
+                LOGGER.error(
+                    f"Failed to parse JSON string: {formatted_string}. Make sure chat prompt is valid JSON. Returning the raw string."
+                )
+                return formatted_string
+
+        return formatted_string
 
     @classmethod
     def from_fern_prompt_version(

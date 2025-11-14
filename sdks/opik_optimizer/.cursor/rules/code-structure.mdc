@@ -31,7 +31,6 @@ src/opik_optimizer/
 │   ├── operators/
 │   ├── prompts.py
 │   └── reporting.py
-└── mcp_utils/
 ```
 
 - Replace `{optimizer}` with concrete packages such as `evolutionary_optimizer`, `meta_prompt_optimizer`, `parameter_optimizer`, etc. A healthy default layout for each optimizer package is:
@@ -42,7 +41,7 @@ src/opik_optimizer/
 - Split new logic into focused modules when a file grows beyond ~300 lines or mixes concerns (for example, extraction of mutation operators, prompt planners, evaluation helpers, or style utilities). Prefer creating a dedicated submodule over adding yet another helper to the main optimizer file.
 
 - Keep algorithm-specific helpers (mutation ops, prompts, stage planners) inside the corresponding optimizer package.
-- Shared utilities that are reused across optimizers live in top-level directories (`utils/`, `optimization_config/`, `metrics/`, `mcp_utils/`). Do not introduce generic `helpers.py` dumps.
+- Shared utilities that are reused across optimizers live in top-level directories (`utils/`, `optimization_config/`, `metrics/`). Do not introduce generic `helpers.py` dumps.
 
 ## Public Surface
 

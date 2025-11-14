@@ -194,10 +194,6 @@ function executeTrack<T extends (...args: any[]) => any>(
   } = {},
   originalFn: T
 ): T {
-  logger.info(
-    "Executing track with enrichSpan:",
-    JSON.stringify(enrichSpan, null, 2)
-  );
   const wrappedFn = function (this: any, ...args: any[]): ReturnType<T> {
     const context = trackStorage.getStore();
     const { span, trace } = logSpan({
