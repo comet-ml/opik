@@ -128,6 +128,46 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     }
   }, [model, config, form]);
 
+  // Memoized callback to handle messages change
+  const handleMessagesChange = useCallback(
+    (
+      messages: LLMMessage[],
+      fieldOnChange: (messages: LLMMessage[]) => void,
+      formInstance: UseFormReturn<EvaluationRuleFormType>,
+    ) => {
+      fieldOnChange(messages);
+
+      // recalculate variables
+      const variables = formInstance.getValues("llmJudgeDetails.variables");
+      const localVariables: Record<string, string> = {};
+      let parsingVariablesError: boolean = false;
+      messages
+        .reduce<string[]>((acc, m) => {
+          // Extract template strings from both text and image URLs
+          const templateStrings = getAllTemplateStringsFromContent(m.content);
+          // Get mustache tags from all template strings
+          const allTags = templateStrings.flatMap((str) => {
+            const tags = safelyGetPromptMustacheTags(str);
+            if (!tags) {
+              parsingVariablesError = true;
+              return [];
+            }
+            return tags;
+          });
+          return acc.concat(allTags);
+        }, [])
+        .filter((v) => v !== "")
+        .forEach((v: string) => (localVariables[v] = variables[v] ?? ""));
+
+      formInstance.setValue("llmJudgeDetails.variables", localVariables);
+      formInstance.setValue(
+        "llmJudgeDetails.parsingVariablesError",
+        parsingVariablesError,
+      );
+    },
+    [],
+  );
+
   return (
     <>
       <FormField
@@ -253,42 +293,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   validationErrors={validationErrors}
                   possibleTypes={MESSAGE_TYPE_OPTIONS}
                   disableMedia={isThreadScope}
-                  onChange={(messages: LLMMessage[]) => {
-                    field.onChange(messages);
-
-                    // recalculate variables
-                    const variables = form.getValues(
-                      "llmJudgeDetails.variables",
-                    );
-                    const localVariables: Record<string, string> = {};
-                    let parsingVariablesError: boolean = false;
-                    messages
-                      .reduce<string[]>((acc, m) => {
-                        // Extract template strings from both text and image URLs
-                        const templateStrings =
-                          getAllTemplateStringsFromContent(m.content);
-                        // Get mustache tags from all template strings
-                        const allTags = templateStrings.flatMap((str) => {
-                          const tags = safelyGetPromptMustacheTags(str);
-                          if (!tags) {
-                            parsingVariablesError = true;
-                            return [];
-                          }
-                          return tags;
-                        });
-                        return acc.concat(allTags);
-                      }, [])
-                      .filter((v) => v !== "")
-                      .forEach(
-                        (v: string) => (localVariables[v] = variables[v] ?? ""),
-                      );
-
-                    form.setValue("llmJudgeDetails.variables", localVariables);
-                    form.setValue(
-                      "llmJudgeDetails.parsingVariablesError",
-                      parsingVariablesError,
-                    );
-                  }}
+                  onChange={(messages: LLMMessage[]) =>
+                    handleMessagesChange(messages, field.onChange, form)
+                  }
                   onAddMessage={() =>
                     field.onChange([
                       ...messages,
