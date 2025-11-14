@@ -10,6 +10,7 @@ import {
   useAddPrompt,
   usePromptCount,
   usePromptIds,
+  useSetIsRunning,
   useSetPromptMap,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
@@ -33,6 +34,7 @@ const PlaygroundPrompts = ({
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
+  const setIsRunning = useSetIsRunning();
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
@@ -64,6 +66,7 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
+    setIsRunning(false);
     onResetHeight();
   }, [
     providerKeys,
@@ -71,6 +74,7 @@ const PlaygroundPrompts = ({
     calculateModelProvider,
     calculateDefaultModel,
     setPromptMap,
+    setIsRunning,
     onResetHeight,
   ]);
 
