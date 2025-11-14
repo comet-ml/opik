@@ -41,25 +41,6 @@ class TestCounterFunctionality:
             ) -> Any:
                 pass
 
-            def optimize_mcp(
-                self,
-                prompt: Any,
-                dataset: Any,
-                metric: Any,
-                *,
-                tool_name: str,
-                second_pass: Any,
-                experiment_config: dict[Any, Any] | None = None,
-                n_samples: int | None = None,
-                auto_continue: bool = False,
-                agent_class: type[Any] | None = None,
-                fallback_invoker: Any | None = None,
-                fallback_arguments: Any | None = None,
-                allow_tool_use_on_second_pass: bool = False,
-                **kwargs: Any,
-            ) -> Any:
-                pass
-
         optimizer = MockOptimizer(model="gpt-4o-mini")
 
         # Check that counters are initialized
