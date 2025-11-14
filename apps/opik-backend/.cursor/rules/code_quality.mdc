@@ -339,6 +339,52 @@ public class DatabaseConfiguration {
 }
 ```
 
+## Template Engine Usage
+
+### **StringTemplate4 (ST4) Factory Pattern**
+
+**Rule**: Always use `TemplateUtils.newST()` to create StringTemplate instances. Never use `new ST(template)` directly.
+
+**Problem**: Using `new ST(template)` directly causes templates to be cached in the default STGroup singleton, which prevents garbage collection and leads to unbounded memory growth in high-throughput scenarios.
+
+**Solution**: Use the factory method that creates ephemeral ST instances with dedicated STGroups.
+
+```java
+// ✅ GOOD: Use TemplateUtils.newST() factory method
+import com.comet.opik.utils.template.TemplateUtils;
+
+public class SpanDAO {
+    private static final String QUERY = """
+        SELECT * FROM spans 
+        WHERE project_id = :project_id
+        <if(trace_id)> AND trace_id = :trace_id <endif>
+        ORDER BY start_time DESC
+        """;
+    
+    public List<Span> findSpans(UUID projectId, UUID traceId) {
+        var template = TemplateUtils.newST(QUERY);
+        template.add("project_id", projectId);
+        Optional.ofNullable(traceId)
+            .ifPresent(id -> template.add("trace_id", id));
+        
+        String sql = template.render();
+        // Execute query with sql
+    }
+}
+
+// ❌ BAD: Direct ST construction causes memory leaks
+import org.stringtemplate.v4.ST;
+
+public class SpanDAO {
+    public List<Span> findSpans(UUID projectId, UUID traceId) {
+        // This caches the template in default STGroup and causes memory leaks!
+        var template = new ST(QUERY);
+        template.add("project_id", projectId);
+        // ... rest of code
+    }
+}
+```
+
 ## Error Handling and Validation
 
 ### **Exception Handling**
