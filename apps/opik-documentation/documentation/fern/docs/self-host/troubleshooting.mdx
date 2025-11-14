@@ -1,5 +1,5 @@
 ---
-title: Troubleshooting Self-Hosted Opik
+title: Troubleshooting
 description: Troubleshooting guide for common issues when running self-hosted Opik deployments.
 ---
 
@@ -96,7 +96,7 @@ SYSTEM RESTORE REPLICA opik.workspace_configurations;
 ```
 
 <Callout intent="info">
-  **Note**: The exact list of tables may vary depending on your Opik version. Use the `\d` command to list all tables in your database and restore each one.
+  **Note**: The exact list of tables may vary depending on your Opik version. Use the `SHOW DATABASES;` or `\d` command to list all tables in your database and restore each one.
 </Callout>
 
 ##### 4. Restart ClickHouse Again
