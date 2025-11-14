@@ -767,6 +767,9 @@ navigation:
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
+      - page: Troubleshooting
+        path: docs/self-host/troubleshooting.mdx
+        slug: troubleshooting
       - section: Configuration
         slug: /configure
         contents:
