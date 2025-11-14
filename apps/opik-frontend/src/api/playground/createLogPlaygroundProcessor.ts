@@ -118,11 +118,15 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
   return trace;
 };
 
+const hasChoicesContent = (run: LogQueueParams): boolean => {
+  return run?.choices?.some((choice) => choice.delta.content) ?? false;
+};
+
 const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
   const spanOutput =
-    run.choices && run.choices.length > 0
+    run.choices && hasChoicesContent(run)
       ? { choices: run.choices }
-      : run.result;
+      : { output: run.result };
 
   return {
     id: v7(),
