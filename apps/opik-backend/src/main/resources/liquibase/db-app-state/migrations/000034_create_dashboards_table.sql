@@ -1,5 +1,7 @@
 --liquibase formatted sql
---changeset thiagohora:000033_create_dashboards_table
+--changeset thiagohora:000034_create_dashboards_table
+
+DROP TABLE IF EXISTS dashboards;
 
 CREATE TABLE dashboards (
     id CHAR(36) NOT NULL,
@@ -12,7 +14,6 @@ CREATE TABLE dashboards (
     last_updated_by VARCHAR(100),
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    version INT NOT NULL DEFAULT 0,
     CONSTRAINT dashboards_pk PRIMARY KEY (id),
     CONSTRAINT dashboards_workspace_name_uk UNIQUE (workspace_id, name),
     CONSTRAINT dashboards_workspace_slug_uk UNIQUE (workspace_id, slug)

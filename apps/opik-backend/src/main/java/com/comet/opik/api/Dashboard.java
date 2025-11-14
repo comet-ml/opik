@@ -34,8 +34,6 @@ public record Dashboard(
                 Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String createdBy,
         @JsonView({
                 Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String lastUpdatedBy,
-        @JsonView({Dashboard.View.Public.class,
-                Dashboard.View.Write.class}) @Schema(accessMode = Schema.AccessMode.WRITE_ONLY) @Nullable Integer version,
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
                 Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt){

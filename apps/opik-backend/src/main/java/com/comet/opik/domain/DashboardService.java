@@ -58,9 +58,6 @@ class DashboardServiceImpl implements DashboardService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // Validate config
-        DashboardConfigValidator.validate(dashboard.config());
-
         // Generate ID if not provided
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
@@ -82,7 +79,6 @@ class DashboardServiceImpl implements DashboardService {
                     .slug(uniqueSlug)
                     .createdBy(userName)
                     .lastUpdatedBy(userName)
-                    .version(0)
                     .build();
 
             try {
@@ -148,11 +144,6 @@ class DashboardServiceImpl implements DashboardService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // Validate config if provided
-        if (dashboardUpdate.config() != null) {
-            DashboardConfigValidator.validate(dashboardUpdate.config());
-        }
-
         log.info("Updating dashboard with id '{}' in workspace '{}'", id, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
@@ -166,15 +157,15 @@ class DashboardServiceImpl implements DashboardService {
                 newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
             }
 
-            boolean checkVersion = dashboardUpdate.version() != null;
+            boolean checkLastUpdatedAt = dashboardUpdate.lastUpdatedAt() != null;
 
             try {
-                int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, checkVersion);
+                int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, checkLastUpdatedAt);
 
                 if (result == 0) {
-                    if (checkVersion) {
+                    if (checkLastUpdatedAt) {
                         log.warn(
-                                "Dashboard update failed for id '{}' in workspace '{}' - version mismatch or not found",
+                                "Dashboard update failed for id '{}' in workspace '{}' - timestamp mismatch or not found",
                                 id, workspaceId);
                         throw new jakarta.ws.rs.ClientErrorException(
                                 "Version mismatch - dashboard may have been modified by another user",

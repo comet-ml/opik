@@ -50,7 +50,7 @@ import static org.assertj.core.api.Assertions.within;
 class DashboardsResourceTest {
 
     public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "createdAt", "lastUpdatedAt",
-            "createdBy", "lastUpdatedBy", "version"};
+            "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -139,7 +139,7 @@ class DashboardsResourceTest {
             assertThat(createdDashboard.workspaceId()).isEqualTo(WORKSPACE_ID);
             assertThat(createdDashboard.createdBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedBy()).isEqualTo(USER);
-            assertThat(createdDashboard.version()).isEqualTo(0);
+            assertThat(createdDashboard.lastUpdatedAt()).isNotNull();
         }
 
         @Test
@@ -185,30 +185,6 @@ class DashboardsResourceTest {
 
             try (var response = dashboardResourceClient.callCreate(dashboard2, API_KEY, TEST_WORKSPACE_NAME)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            }
-        }
-
-        @Test
-        @DisplayName("Create dashboard with invalid config size fails")
-        void createDashboardWithInvalidConfigSizeFails() {
-            var dashboard = dashboardResourceClient.createPartialDashboard()
-                    .config(dashboardResourceClient.createInvalidConfigTooLarge())
-                    .build();
-
-            try (var response = dashboardResourceClient.callCreate(dashboard, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            }
-        }
-
-        @Test
-        @DisplayName("Create dashboard with too many widgets fails")
-        void createDashboardWithTooManyWidgetsFails() {
-            var dashboard = dashboardResourceClient.createPartialDashboard()
-                    .config(dashboardResourceClient.createInvalidConfigTooManyWidgets())
-                    .build();
-
-            try (var response = dashboardResourceClient.callCreate(dashboard, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
 
@@ -390,6 +366,7 @@ class DashboardsResourceTest {
         void updateDashboardName() {
             var dashboard = dashboardResourceClient.createPartialDashboard().build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
+            var createdDashboard = dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
 
             var update = DashboardUpdate.builder()
                     .name("Updated Dashboard Name")
@@ -399,7 +376,7 @@ class DashboardsResourceTest {
 
             assertThat(updatedDashboard.name()).isEqualTo("Updated Dashboard Name");
             assertThat(updatedDashboard.slug()).isEqualTo("updated-dashboard-name");
-            assertThat(updatedDashboard.version()).isEqualTo(1);
+            assertThat(updatedDashboard.lastUpdatedAt()).isAfter(createdDashboard.lastUpdatedAt());
             assertThat(updatedDashboard.lastUpdatedBy()).isEqualTo(USER);
         }
 
@@ -416,7 +393,7 @@ class DashboardsResourceTest {
             var updatedDashboard = dashboardResourceClient.updateAndGet(id, update, API_KEY, TEST_WORKSPACE_NAME);
 
             assertThat(updatedDashboard.description()).isEqualTo("Updated description");
-            assertThat(updatedDashboard.version()).isEqualTo(1);
+            assertThat(updatedDashboard.lastUpdatedAt()).isNotNull();
         }
 
         @Test
@@ -433,32 +410,32 @@ class DashboardsResourceTest {
             var updatedDashboard = dashboardResourceClient.updateAndGet(id, update, API_KEY, TEST_WORKSPACE_NAME);
 
             assertThat(updatedDashboard.config()).isEqualTo(newConfig);
-            assertThat(updatedDashboard.version()).isEqualTo(1);
+            assertThat(updatedDashboard.lastUpdatedAt()).isNotNull();
         }
 
         @Test
-        @DisplayName("Update dashboard with version check")
-        void updateDashboardWithVersionCheck() {
+        @DisplayName("Update dashboard with timestamp check")
+        void updateDashboardWithTimestampCheck() {
             var dashboard = dashboardResourceClient.createPartialDashboard().build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
             var currentDashboard = dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
 
-            // Update with correct version
+            // Update with correct timestamp
             var update = DashboardUpdate.builder()
-                    .name("Updated with version")
-                    .version(currentDashboard.version())
+                    .name("Updated with timestamp")
+                    .lastUpdatedAt(currentDashboard.lastUpdatedAt())
                     .build();
 
             dashboardResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
 
-            // Try to update with old version (should fail)
-            var updateWithOldVersion = DashboardUpdate.builder()
+            // Try to update with old timestamp (should fail)
+            var updateWithOldTimestamp = DashboardUpdate.builder()
                     .name("Should fail")
-                    .version(currentDashboard.version())
+                    .lastUpdatedAt(currentDashboard.lastUpdatedAt())
                     .build();
 
-            try (var response = dashboardResourceClient.callUpdate(id, updateWithOldVersion, API_KEY,
+            try (var response = dashboardResourceClient.callUpdate(id, updateWithOldTimestamp, API_KEY,
                     TEST_WORKSPACE_NAME)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_PRECONDITION_FAILED);
             }

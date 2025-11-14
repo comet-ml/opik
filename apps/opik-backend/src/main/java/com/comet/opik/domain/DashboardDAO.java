@@ -26,9 +26,9 @@ import java.util.UUID;
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
 
-    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, name, slug, description, config, created_by, last_updated_by, version, created_at, last_updated_at) "
+    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, name, slug, description, config, created_by, last_updated_by) "
             +
-            "VALUES (:dashboard.id, :workspaceId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.createdBy, :dashboard.lastUpdatedBy, COALESCE(:dashboard.version, 0), CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))")
+            "VALUES (:dashboard.id, :workspaceId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
     void save(@BindMethods("dashboard") Dashboard dashboard, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
@@ -37,10 +37,9 @@ public interface DashboardDAO {
                 slug = COALESCE(:slug, slug),
                 description = :dashboard.description,
                 config = COALESCE(:dashboard.config, config),
-                last_updated_by = :lastUpdatedBy,
-                version = version + 1
+                last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId
-            <if(checkVersion)> AND version = :dashboard.version <endif>
+            <if(checkLastUpdatedAt)> AND last_updated_at = :dashboard.lastUpdatedAt <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -49,7 +48,7 @@ public interface DashboardDAO {
             @BindMethods("dashboard") DashboardUpdate dashboard,
             @Bind("slug") String slug,
             @Bind("lastUpdatedBy") String lastUpdatedBy,
-            @Define("checkVersion") boolean checkVersion);
+            @Define("checkLastUpdatedAt") boolean checkLastUpdatedAt);
 
     @SqlQuery("SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId")
     Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
