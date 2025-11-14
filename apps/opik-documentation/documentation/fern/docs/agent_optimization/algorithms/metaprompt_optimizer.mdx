@@ -103,7 +103,6 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Custom agent class for prompt execution. If None, uses default LiteLLM-based agent. Must inherit from OptimizableAgent.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces and experiments. Default: "Optimization"</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum total number of prompts to evaluate across all rounds. Optimizer stops when this limit is reached.</ParamField>
-<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
 <ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
 <ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs to pass to candidate_generator.</ParamField>
 <ParamField path="args" type="Any" />
@@ -129,20 +128,6 @@ optimizer = MetaPromptOptimizer(
     }
 )
 ```
-
-## MCP Tool Calling Support
-
-The MetaPrompt Optimizer is the only optimizer that currently supports **MCP (Model Context
-Protocol) tool calling optimization**. This means you can optimize prompts that include MCP tools
-and function calls.
-
-<Note>
-  MCP tool calling optimization is a specialized feature that allows the optimizer to understand and optimize prompts
-  that use external tools and functions through the Model Context Protocol. This is particularly useful for complex
-  agent workflows that require tool usage.
-</Note>
-
-For comprehensive information about tool optimization, see the [Tool Optimization Guide](/agent_optimization/algorithms/tool_optimization).
 
 ## Research and References
 
