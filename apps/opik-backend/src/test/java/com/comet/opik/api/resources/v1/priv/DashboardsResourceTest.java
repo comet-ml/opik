@@ -104,7 +104,7 @@ class DashboardsResourceTest {
 
         ClientSupportUtils.config(client);
 
-        this.dashboardResourceClient = new DashboardResourceClient(this.client, baseURI, podamFactory);
+        this.dashboardResourceClient = new DashboardResourceClient(this.client, baseURI);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID);
     }

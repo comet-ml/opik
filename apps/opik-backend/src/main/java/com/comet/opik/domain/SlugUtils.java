@@ -13,6 +13,8 @@ import java.util.Locale;
 @UtilityClass
 public class SlugUtils {
 
+    private static final int MAX_SLUG_LENGTH = 150;
+
     /**
      * Generates a URL-safe slug from a given name.
      *
@@ -39,9 +41,9 @@ public class SlugUtils {
         // Remove leading/trailing hyphens
         slug = slug.replaceAll("^-+|-+$", "");
 
-        // Limit length to 140 characters (matching database constraint)
-        if (slug.length() > 140) {
-            slug = slug.substring(0, 140);
+        // Limit length to match database constraint
+        if (slug.length() > MAX_SLUG_LENGTH) {
+            slug = slug.substring(0, MAX_SLUG_LENGTH);
             // Remove trailing hyphen if present after truncation
             slug = slug.replaceAll("-+$", "");
         }
@@ -64,9 +66,9 @@ public class SlugUtils {
         String suffix = "-" + (existingCount + 1);
         String slug = baseSlug + suffix;
 
-        // Ensure the slug doesn't exceed 140 characters
-        if (slug.length() > 140) {
-            int maxBaseLength = 140 - suffix.length();
+        // Ensure the slug doesn't exceed database constraint
+        if (slug.length() > MAX_SLUG_LENGTH) {
+            int maxBaseLength = MAX_SLUG_LENGTH - suffix.length();
             slug = baseSlug.substring(0, maxBaseLength) + suffix;
         }
 

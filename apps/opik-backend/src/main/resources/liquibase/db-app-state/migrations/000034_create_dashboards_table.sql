@@ -1,8 +1,6 @@
 --liquibase formatted sql
 --changeset thiagohora:000034_create_dashboards_table
 
-DROP TABLE IF EXISTS dashboards;
-
 CREATE TABLE dashboards (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,

@@ -146,48 +146,58 @@ class DashboardServiceImpl implements DashboardService {
 
         log.info("Updating dashboard with id '{}' in workspace '{}'", id, workspaceId);
 
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(DashboardDAO.class);
+        final int MAX_RETRIES = 3;
 
-            // Generate new slug if name is being updated
-            String newSlug = null;
-            if (StringUtils.isNotBlank(dashboardUpdate.name())) {
-                String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
-                long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
-                newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
-            }
-
-            boolean checkLastUpdatedAt = dashboardUpdate.lastUpdatedAt() != null;
-
+        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
-                int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, checkLastUpdatedAt);
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DashboardDAO.class);
 
-                if (result == 0) {
-                    if (checkLastUpdatedAt) {
-                        log.warn(
-                                "Dashboard update failed for id '{}' in workspace '{}' - timestamp mismatch or not found",
-                                id, workspaceId);
-                        throw new jakarta.ws.rs.ClientErrorException(
-                                "Version mismatch - dashboard may have been modified by another user",
-                                jakarta.ws.rs.core.Response.Status.PRECONDITION_FAILED);
-                    } else {
-                        log.warn("Dashboard not found with id '{}' in workspace '{}'", id, workspaceId);
-                        throw new NotFoundException(DASHBOARD_NOT_FOUND);
+                    // Generate new slug if name is being updated
+                    String newSlug = null;
+                    if (StringUtils.isNotBlank(dashboardUpdate.name())) {
+                        String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
+                        long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
+                        newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
                     }
-                }
 
-                log.info("Updated dashboard with id '{}' in workspace '{}'", id, workspaceId);
+                    boolean checkLastUpdatedAt = dashboardUpdate.lastUpdatedAt() != null;
+
+                    int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, checkLastUpdatedAt);
+
+                    if (result == 0) {
+                        if (checkLastUpdatedAt) {
+                            log.warn(
+                                    "Dashboard update failed for id '{}' in workspace '{}' - timestamp mismatch or not found",
+                                    id, workspaceId);
+                            throw new jakarta.ws.rs.ClientErrorException(
+                                    "Version mismatch - dashboard may have been modified by another user",
+                                    jakarta.ws.rs.core.Response.Status.PRECONDITION_FAILED);
+                        } else {
+                            log.warn("Dashboard not found with id '{}' in workspace '{}'", id, workspaceId);
+                            throw new NotFoundException(DASHBOARD_NOT_FOUND);
+                        }
+                    }
+
+                    log.info("Updated dashboard with id '{}' in workspace '{}'", id, workspaceId);
+                    return null;
+                });
+                return; // success
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard already exists with name in workspace '{}'", workspaceId);
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
+                    if (attempt == MAX_RETRIES - 1) {
+                        log.warn("Dashboard already exists with name in workspace '{}' after {} attempts",
+                                workspaceId, attempt + 1);
+                        throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
+                    }
+                    log.info("Slug conflict detected, retrying dashboard update (attempt {}/{})", attempt + 1,
+                            MAX_RETRIES);
+                    // retry
                 } else {
                     throw e;
                 }
             }
-
-            return null;
-        });
+        }
     }
 
     @Override

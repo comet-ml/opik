@@ -11,7 +11,7 @@ import java.sql.SQLException;
 
 public class JsonNodeColumnMapper implements ColumnMapper<JsonNode> {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Override
     public JsonNode map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
@@ -20,7 +20,7 @@ public class JsonNodeColumnMapper implements ColumnMapper<JsonNode> {
             return null;
         }
         try {
-            return objectMapper.readTree(json);
+            return OBJECT_MAPPER.readTree(json);
         } catch (JsonProcessingException e) {
             throw new SQLException("Failed to parse JSON string to JsonNode", e);
         }

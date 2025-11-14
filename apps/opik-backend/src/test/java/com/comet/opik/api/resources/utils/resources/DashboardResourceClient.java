@@ -12,7 +12,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.UUID;
 
@@ -27,8 +26,6 @@ public class DashboardResourceClient {
 
     private final ClientSupport client;
     private final String baseURI;
-    @SuppressWarnings("unused")
-    private final PodamFactory podamFactory;
 
     public UUID create(String apiKey, String workspaceName) {
         var dashboard = createPartialDashboard().build();
