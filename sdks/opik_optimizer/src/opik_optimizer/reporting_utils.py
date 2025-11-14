@@ -30,7 +30,7 @@ def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool
     """
     if baseline == 0:
         return 0.0, False
-    return ((current - baseline) / baseline) * 100, True
+    return ((current - baseline) / baseline), True
 
 
 def get_console(*args: Any, **kwargs: Any) -> Console:
