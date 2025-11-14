@@ -10,7 +10,7 @@ Tests live under `sdks/opik_optimizer/tests` and mirror the package structure so
 ## Layout
 
 - `test_setup.py`: ensures `src/` is on the import path for the test suite.
-- `unit/`: deterministic tests for helpers, configuration models, mutation operators, logging config, etc. Subdirectories group related helper modules.
+- `unit/`: deterministic tests for helpers, configuration models, mutation operators, logging config, MCP utilities, etc. Subdirectories (like `unit/mcp/`) group related helper modules.
 - `e2e/optimizers/`: high-level runs for each optimizer family with reduced populations/iterations. These tests may require provider keys.
 - `test_requirements.txt`: pinned list of packages needed to run the suite locally or in CI.
 

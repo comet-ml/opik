@@ -21,6 +21,14 @@ from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.optimizable_agent import OptimizableAgent
+from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator
+from opik_optimizer.mcp_utils.mcp_workflow import (
+    MCPExecutionConfig,
+    extract_tool_arguments,
+)
+from opik_optimizer.utils.prompt_segments import extract_prompt_segments
+
+from .mcp import EvolutionaryMCPContext, finalize_mcp_result
 
 from . import reporting
 from .mutation_ops import MutationOps
@@ -214,6 +222,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             f"population_size: {self.population_size}, num_generations: {self.num_generations}, "
             f"mutation_rate: {self.mutation_rate}, crossover_rate: {self.crossover_rate}"
         )
+
+        # (methods already attached above)
+        self._mcp_context: EvolutionaryMCPContext | None = None
 
     def _attach_helper_methods(self) -> None:
         """Bind selected methods from mixin modules onto this instance."""
@@ -505,6 +516,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         project_name: str = "Optimization",
         optimization_id: str | None = None,
         max_trials: int = 10,
+        mcp_config: MCPExecutionConfig | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -521,11 +533,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
             max_trials: Maximum number of prompt evaluations allowed.
+            mcp_config: MCP tool-calling configuration (default: None).
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
         evaluation_kwargs: dict[str, Any] = {}
+        if mcp_config is not None:
+            evaluation_kwargs["mcp_config"] = mcp_config
 
         # Set project name from parameter
         self.project_name = project_name
@@ -1014,6 +1029,100 @@ class EvolutionaryOptimizer(BaseOptimizer):
             optimization_id=self.current_optimization_id,
             tool_prompts=tool_prompts,
         )
+
+    def optimize_mcp(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
+        metric: Callable,
+        *,
+        tool_name: str,
+        second_pass: MCPSecondPassCoordinator,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
+        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+        allow_tool_use_on_second_pass: bool = False,
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        if prompt.tools is None or not prompt.tools:
+            raise ValueError("Prompt must include tools for MCP optimization")
+
+        panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
+
+        segments = extract_prompt_segments(prompt)
+        tool_segment_id = f"tool:{tool_name}"
+        segment_lookup = {segment.segment_id: segment for segment in segments}
+        if tool_segment_id not in segment_lookup:
+            raise ValueError(f"Tool '{tool_name}' not present in prompt tools")
+
+        fallback_args_fn = fallback_arguments or extract_tool_arguments
+
+        if fallback_invoker is None:
+            function_map = getattr(prompt, "function_map", {}) or {}
+            default_invoker_candidate = function_map.get(tool_name)
+            if default_invoker_candidate is not None:
+                typed_invoker = cast(Callable[..., str], default_invoker_candidate)
+
+                def _fallback_invoker(args: dict[str, Any]) -> str:
+                    return typed_invoker(**args)
+
+                fallback_invoker = _fallback_invoker
+
+        tool_entry = None
+        for entry in prompt.tools or []:
+            function = entry.get("function", {})
+            if (function.get("name") or entry.get("name")) == tool_name:
+                tool_entry = entry
+                break
+        if tool_entry is None:
+            raise ValueError(f"Tool '{tool_name}' not present in prompt.tools")
+
+        original_description = tool_entry.get("function", {}).get("description", "")
+        tool_metadata = segment_lookup[tool_segment_id].metadata.get("raw_tool", {})
+
+        mcp_config = MCPExecutionConfig(
+            coordinator=second_pass,
+            tool_name=tool_name,
+            fallback_arguments=fallback_args_fn,
+            fallback_invoker=fallback_invoker,
+            allow_tool_use_on_second_pass=allow_tool_use_on_second_pass,
+        )
+
+        previous_context = getattr(self, "_mcp_context", None)
+        previous_crossover = self.enable_llm_crossover
+
+        context = EvolutionaryMCPContext(
+            tool_name=tool_name,
+            tool_segment_id=tool_segment_id,
+            original_description=original_description,
+            tool_metadata=tool_metadata,
+            panel_style=panel_style,
+        )
+
+        self._mcp_context = context
+        self.enable_llm_crossover = False
+
+        try:
+            result = self.optimize_prompt(
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                experiment_config=experiment_config,
+                n_samples=n_samples,
+                auto_continue=auto_continue,
+                agent_class=agent_class,
+                mcp_config=mcp_config,
+                **kwargs,
+            )
+        finally:
+            self._mcp_context = previous_context
+            self.enable_llm_crossover = previous_crossover
+
+        finalize_mcp_result(result, context, panel_style, optimizer=self)
+        return result
 
     # Evaluation is provided by EvaluationOps
 

@@ -15,15 +15,15 @@ og:image: "/img/agent_optimization/introducing.png"
 
 - **Automatic prompt optimization** – end-to-end workflow that installs in minutes and runs locally or in your  stack.
 - **Open-source and framework agnostic** – no lock-in, use Opik’s first-party optimizers or community favorites like GEPA in the same SDK.
-- **Agent-aware** – optimize beyond system prompts, function-calling schemas, and full multi-agent systems.
+- **Agent-aware** – optimize beyond system prompts, including MCP tool signatures, function-calling schemas, and full multi-agent systems.
 - **Deep observability** – every trial logs prompts, tool calls, traces, and metric reasons to Opik so you can explain and ship changes confidently.
 
 ## Key capabilities
 
 <Cards>
   <Card title="Optimizers" body="MetaPrompt, Hierarchical Reflective, Few-Shot Bayesian, Evolutionary, GEPA, Parameter tuning—all open-source, mixing in-house algorithms with popular public projects." />
-  <Card title="Tool support" body="Optimize beyond system prompts: OpenAI function calling, and traditional prompt text all benefit from the same workflows." />
-  <Card title="Agent integrations" body="Ready-made adapters for LangGraph, Google ADK, and custom agents, plus the ability to build your own `OptimizableAgent`." />
+  <Card title="Tool & MCP support" body="Optimize beyond system prompts: MCP tool signatures, OpenAI function calling, and traditional prompt text all benefit from the same workflows." />
+  <Card title="Agent integrations" body="Ready-made adapters for LangGraph, Google ADK, MCP workflows, and custom agents, plus the ability to build your own `OptimizableAgent`." />
   <Card title="Dashboard analytics" body="Optimization runs show progress charts, per-trial prompts, dataset coverage, and traces for root-cause analysis." />
   <Card title="Secure & offline" body="Run the SDK locally or inside Opik’s Docker compose to keep data inside your network." />
 </Cards>
@@ -56,7 +56,7 @@ Optimizer as a first step:
 
 | **Algorithm**                                                                               | **Description**                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. |
+| [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool calling optimization](/agent_optimization/algorithms/tool_optimization).** |
 | [Hierarchical Reflective Optimization](/agent_optimization/algorithms/hierarchical_reflective_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
 | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
