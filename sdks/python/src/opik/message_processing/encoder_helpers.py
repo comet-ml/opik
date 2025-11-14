@@ -44,6 +44,23 @@ def anonymize_encoded_obj(
     anonymizers: List[anonymizer.Anonymizer],
     object_type: Any,
 ) -> Dict[str, Any]:
+    """
+    Anonymizes specified fields in an encoded dictionary using the provided anonymizers.
+    This function iterates over the given set of field names and applies each anonymizer
+    to the corresponding field in the dictionary, if present. The anonymizers are expected
+    to implement an `anonymize` method that takes the field value, field name, and object type
+    as arguments. Only fields present in the dictionary and listed in `fields_to_anonymize`
+    are anonymized.
+
+    Args:
+        obj: The encoded dictionary whose fields are to be anonymized.
+        fields_to_anonymize: A set of field names within the dictionary to anonymize.
+        anonymizers: A list of anonymizer instances to apply to each field.
+        object_type: The type of the original object, providing context for anonymization.
+
+    Returns:
+        The dictionary with specified fields anonymized using the provided anonymizers.
+    """
     if isinstance(obj, dict):
         for field_name in fields_to_anonymize:
             if field_name in obj:

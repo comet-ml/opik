@@ -359,7 +359,7 @@ class PresidioPIIAnonymizer(RecursiveAnonymizer):
     This anonymizer is a simple wrapper around Presidio's built-in anonymizer engine.
     It extends the RecursiveAnonymizer base class to support nested data structures.
     """
-    def __init__(self, language: str = "en",  max_depth: int = 10):
+    def __init__(self, language: str="en",  max_depth: int=10):
         super().__init__(max_depth=max_depth)
         self.language = language
         self.analyzer = AnalyzerEngine()
