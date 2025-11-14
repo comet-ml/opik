@@ -25,7 +25,7 @@ type ThumbnailConfig = {
 const DEFAULT_CONFIG: ThumbnailConfig = {
   quality: 0.8,
   format: "image/jpeg",
-  maxDimension: 4096,
+  maxDimension: 500,
   seekTimeSeconds: 0.1,
   timeoutMs: 10000,
 };
@@ -48,7 +48,6 @@ export const useVideoThumbnail = (
 
   const isCancelledRef = useRef(false);
   const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
-  const currentBlobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Validate video URL
@@ -62,7 +61,6 @@ export const useVideoThumbnail = (
     // Check cache first (always check cache regardless of shouldLoad)
     const cachedUrl = thumbnailCache.get(videoUrl);
     if (cachedUrl) {
-      currentBlobUrlRef.current = cachedUrl;
       setThumbnailUrl(cachedUrl);
       setIsLoading(false);
       setHasError(false);
@@ -195,7 +193,6 @@ export const useVideoThumbnail = (
 
               // Cache the result
               thumbnailCache.set(videoUrl, blobUrl);
-              currentBlobUrlRef.current = blobUrl;
 
               setThumbnailUrl(blobUrl);
               setIsLoading(false);
@@ -266,13 +263,6 @@ export const useVideoThumbnail = (
 
     return () => {
       cleanup();
-
-      // Revoke object URL and remove from cache on unmount
-      if (currentBlobUrlRef.current) {
-        URL.revokeObjectURL(currentBlobUrlRef.current);
-        thumbnailCache.delete(videoUrl);
-        currentBlobUrlRef.current = null;
-      }
     };
   }, [videoUrl, config, shouldLoad]);
 
