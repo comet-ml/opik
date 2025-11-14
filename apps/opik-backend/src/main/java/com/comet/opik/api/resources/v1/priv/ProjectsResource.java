@@ -275,7 +275,8 @@ public class ProjectsResource {
     }
 
     private void validate(ProjectMetricRequest request) {
-        if (!request.intervalStart().isBefore(request.intervalEnd())) {
+        // interval_end is optional, but if provided, interval_start must be before interval_end
+        if (request.intervalEnd() != null && !request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
     }

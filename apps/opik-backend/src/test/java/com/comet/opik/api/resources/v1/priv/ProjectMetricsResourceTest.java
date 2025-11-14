@@ -1708,6 +1708,53 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        @DisplayName("interval_end is optional - filters threads from interval_start onwards without filling gaps")
+        void whenIntervalEndOmitted_thenFilterThreadsFromIntervalStart(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            Instant marker = getIntervalStart(interval);
+
+            // Create traces with different thread_ids at different times
+            Long threadCountMinus3 = (long) createTracesWithThreads(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 2, null).size();
+            Long threadCountMinus1 = (long) createTracesWithThreads(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval), 4, null).size();
+            Long threadCountNow = (long) createTracesWithThreads(projectName, marker, 3, null).size();
+
+            // SUT - omit interval_end
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    // interval_end intentionally omitted to test optional behavior
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Long.class, API_KEY,
+                    WORKSPACE_NAME);
+
+            // When interval_end is omitted, WITH FILL is not used, so only actual data points are returned (no nulls for gaps)
+            assertThat(response.results()).hasSize(1);
+            var result = response.results().getFirst();
+            assertThat(result.name()).isEqualTo(ProjectMetricsDAO.NAME_THREADS);
+            assertThat(result.data()).hasSize(3); // Only 3 actual data points, no filled null values
+
+            // Verify the actual data points exist
+            var dataPointTimes = result.data().stream().map(dp -> dp.time()).toList();
+            assertThat(dataPointTimes).contains(
+                    subtract(marker, TIME_BUCKET_3, interval),
+                    subtract(marker, TIME_BUCKET_1, interval),
+                    marker);
+
+            var dataPointValues = result.data().stream().map(dp -> dp.value()).toList();
+            assertThat(dataPointValues).containsExactlyInAnyOrder(threadCountMinus3, threadCountMinus1, threadCountNow);
+        }
+
+        @ParameterizedTest
         @MethodSource
         void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
             // setup
