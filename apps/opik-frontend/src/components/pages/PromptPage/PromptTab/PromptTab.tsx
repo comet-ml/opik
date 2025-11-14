@@ -124,7 +124,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
           <p className="comet-body-s-accented text-foreground">
-            {isChatPrompt ? "Chat Messages" : "Prompt"}
+            {isChatPrompt ? "Chat messages" : "Prompt"}
           </p>
           {isChatPrompt ? (
             <ChatPromptView template={activeVersion?.template || ""} />

@@ -190,7 +190,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           </div>
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
-              <Label htmlFor="templateStructure">Prompt Type</Label>
+              <Label htmlFor="templateStructure">Prompt type</Label>
               <RadioGroup
                 value={templateStructure}
                 onValueChange={(value) =>
@@ -250,7 +250,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           {!isEdit && isChatPrompt && (
             <div className="flex flex-col gap-2 pb-4">
               <div className="flex items-center justify-between">
-                <Label>Chat Messages</Label>
+                <Label>Chat messages</Label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -259,12 +259,12 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                   {showRawView ? (
                     <>
                       <MessageSquare className="mr-1.5 size-3.5" />
-                      Message View
+                      Message view
                     </>
                   ) : (
                     <>
                       <Code2 className="mr-1.5 size-3.5" />
-                      Raw View
+                      Raw view
                     </>
                   )}
                 </Button>

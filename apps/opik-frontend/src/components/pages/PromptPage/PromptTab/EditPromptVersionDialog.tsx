@@ -183,7 +183,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
           <div className="flex flex-col gap-2 pb-4">
             <div className="mt-3 flex items-center justify-between">
               <Label htmlFor="promptTemplate">
-                {isChatPrompt ? "Chat Messages" : "Prompt"}
+                {isChatPrompt ? "Chat messages" : "Prompt"}
               </Label>
               {isChatPrompt ? (
                 <Button
@@ -194,12 +194,12 @@ const EditPromptVersionDialog: React.FunctionComponent<
                   {showRawView ? (
                     <>
                       <MessageSquare className="mr-1.5 size-3.5" />
-                      Message View
+                      Message view
                     </>
                   ) : (
                     <>
                       <Code2 className="mr-1.5 size-3.5" />
-                      Raw View
+                      Raw view
                     </>
                   )}
                 </Button>

@@ -86,12 +86,12 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
           {showRawView ? (
             <>
               <MessageSquare className="mr-1.5 size-3.5" />
-              Message View
+              Message view
             </>
           ) : (
             <>
               <Code2 className="mr-1.5 size-3.5" />
-              Raw View
+              Raw view
             </>
           )}
         </Button>
