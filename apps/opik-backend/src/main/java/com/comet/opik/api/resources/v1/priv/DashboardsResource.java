@@ -108,13 +108,13 @@ public class DashboardsResource {
             @PathParam("workspaceId") String workspaceIdPath,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("search") String search) {
+            @QueryParam("name") @Schema(description = "Filter dashboards by name (partial match, case insensitive)") String name) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dashboards in workspace '{}', page '{}', size '{}', search '{}'",
-                workspaceId, page, size, search);
+        log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}'",
+                workspaceId, page, size, name);
 
-        DashboardPage dashboardPage = service.find(page, size, search);
+        DashboardPage dashboardPage = service.find(page, size, name);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
         return Response.ok(dashboardPage).build();
@@ -122,11 +122,10 @@ public class DashboardsResource {
 
     @PUT
     @Path("/{dashboardId}")
-    @Operation(operationId = "updateDashboard", summary = "Update dashboard", description = "Update dashboard by id", responses = {
+    @Operation(operationId = "updateDashboard", summary = "Update dashboard", description = "Update dashboard by id. Partial updates are supported - only provided fields will be updated.", responses = {
             @ApiResponse(responseCode = "200", description = "Updated dashboard", content = @Content(schema = @Schema(implementation = Dashboard.class))),
             @ApiResponse(responseCode = "404", description = "Dashboard not found"),
-            @ApiResponse(responseCode = "409", description = "Conflict - dashboard with this name already exists"),
-            @ApiResponse(responseCode = "412", description = "Precondition Failed - version mismatch")
+            @ApiResponse(responseCode = "409", description = "Conflict - dashboard with this name already exists")
     })
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
@@ -138,10 +137,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Updating dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        service.update(id, dashboardUpdate);
-
-        // Fetch updated dashboard to return
-        Dashboard updatedDashboard = service.findById(id);
+        Dashboard updatedDashboard = service.update(id, dashboardUpdate);
 
         log.info("Updated dashboard by id '{}', name '{}' in workspace '{}'",
                 id, updatedDashboard.name(), workspaceId);

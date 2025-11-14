@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
@@ -21,7 +20,7 @@ public class SlugUtils {
      * @param name the name to convert to a slug
      * @return the generated slug
      */
-    public static String generateSlug(@NonNull String name) {
+    public static String generateSlug(String name) {
         if (StringUtils.isBlank(name)) {
             return "";
         }
@@ -58,7 +57,7 @@ public class SlugUtils {
      * @param existingCount the count of existing slugs with the same prefix
      * @return the unique slug
      */
-    public static String generateUniqueSlug(@NonNull String baseSlug, long existingCount) {
+    public static String generateUniqueSlug(String baseSlug, long existingCount) {
         if (existingCount == 0) {
             return baseSlug;
         }

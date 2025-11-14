@@ -33,9 +33,9 @@ public interface DashboardService {
 
     Dashboard findById(@NonNull UUID id);
 
-    DashboardPage find(int page, int size, String search);
+    DashboardPage find(int page, int size, String name);
 
-    void update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate);
+    Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate);
 
     void delete(@NonNull UUID id);
 }
@@ -114,20 +114,20 @@ class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardPage find(int page, int size, String search) {
+    public DashboardPage find(int page, int size, String name) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Finding dashboards in workspace '{}', page '{}', size '{}', search '{}'", workspaceId, page, size,
-                search);
+        log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}'", workspaceId, page, size,
+                name);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
-            String searchTerm = StringUtils.isNotBlank(search) ? search.trim() : null;
+            String nameTerm = StringUtils.isNotBlank(name) ? name.trim() : null;
             int offset = (page - 1) * size;
 
-            long total = dao.findCount(workspaceId, searchTerm);
-            List<Dashboard> dashboards = dao.find(workspaceId, searchTerm, size, offset);
+            long total = dao.findCount(workspaceId, nameTerm);
+            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, size, offset);
 
             log.info("Found '{}' dashboards in workspace '{}'", total, workspaceId);
             return DashboardPage.builder()
@@ -140,64 +140,44 @@ class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public void update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate) {
+    public Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         log.info("Updating dashboard with id '{}' in workspace '{}'", id, workspaceId);
 
-        final int MAX_RETRIES = 3;
+        return template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(DashboardDAO.class);
 
-        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            // Generate new slug if name is being updated
+            String newSlug = null;
+            if (StringUtils.isNotBlank(dashboardUpdate.name())) {
+                String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
+                long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
+                newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
+            }
+
             try {
-                template.inTransaction(WRITE, handle -> {
-                    var dao = handle.attach(DashboardDAO.class);
+                int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName);
 
-                    // Generate new slug if name is being updated
-                    String newSlug = null;
-                    if (StringUtils.isNotBlank(dashboardUpdate.name())) {
-                        String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
-                        long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
-                        newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
-                    }
+                if (result == 0) {
+                    log.warn("Dashboard not found with id '{}' in workspace '{}'", id, workspaceId);
+                    throw new NotFoundException(DASHBOARD_NOT_FOUND);
+                }
 
-                    boolean checkLastUpdatedAt = dashboardUpdate.lastUpdatedAt() != null;
+                log.info("Updated dashboard with id '{}' in workspace '{}'", id, workspaceId);
 
-                    int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, checkLastUpdatedAt);
-
-                    if (result == 0) {
-                        if (checkLastUpdatedAt) {
-                            log.warn(
-                                    "Dashboard update failed for id '{}' in workspace '{}' - timestamp mismatch or not found",
-                                    id, workspaceId);
-                            throw new jakarta.ws.rs.ClientErrorException(
-                                    "Version mismatch - dashboard may have been modified by another user",
-                                    jakarta.ws.rs.core.Response.Status.PRECONDITION_FAILED);
-                        } else {
-                            log.warn("Dashboard not found with id '{}' in workspace '{}'", id, workspaceId);
-                            throw new NotFoundException(DASHBOARD_NOT_FOUND);
-                        }
-                    }
-
-                    log.info("Updated dashboard with id '{}' in workspace '{}'", id, workspaceId);
-                    return null;
-                });
-                return; // success
+                // Return updated dashboard
+                return dao.findById(id, workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    if (attempt == MAX_RETRIES - 1) {
-                        log.warn("Dashboard already exists with name in workspace '{}' after {} attempts",
-                                workspaceId, attempt + 1);
-                        throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
-                    }
-                    log.info("Slug conflict detected, retrying dashboard update (attempt {}/{})", attempt + 1,
-                            MAX_RETRIES);
-                    // retry
+                    log.warn("Dashboard already exists with name in workspace '{}'", workspaceId);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
                 } else {
                     throw e;
                 }
             }
-        }
+        });
     }
 
     @Override

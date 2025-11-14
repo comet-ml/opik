@@ -39,7 +39,6 @@ public interface DashboardDAO {
                 config = COALESCE(:dashboard.config, config),
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId
-            <if(checkLastUpdatedAt)> AND last_updated_at = :dashboard.lastUpdatedAt <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -47,8 +46,7 @@ public interface DashboardDAO {
             @Bind("id") UUID id,
             @BindMethods("dashboard") DashboardUpdate dashboard,
             @Bind("slug") String slug,
-            @Bind("lastUpdatedBy") String lastUpdatedBy,
-            @Define("checkLastUpdatedAt") boolean checkLastUpdatedAt);
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlQuery("SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId")
     Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
@@ -73,7 +71,7 @@ public interface DashboardDAO {
     @SqlQuery("SELECT * FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
-            "ORDER BY last_updated_at DESC " +
+            "ORDER BY id DESC " +
             "LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine
     @AllowUnusedBindings

@@ -4,8 +4,8 @@ import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -22,7 +22,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class DashboardResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/workspaces/%s/dashboards";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final ClientSupport client;
     private final String baseURI;
@@ -76,9 +75,9 @@ public class DashboardResourceClient {
                 .get();
     }
 
-    public DashboardPage find(String apiKey, String workspaceName, int page, int size, String search,
+    public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
             int expectedStatus) {
-        try (var response = callFind(apiKey, workspaceName, page, size, search)) {
+        try (var response = callFind(apiKey, workspaceName, page, size, name)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
             if (expectedStatus == HttpStatus.SC_OK) {
                 return response.readEntity(DashboardPage.class);
@@ -87,13 +86,13 @@ public class DashboardResourceClient {
         }
     }
 
-    public Response callFind(String apiKey, String workspaceName, int page, int size, String search) {
+    public Response callFind(String apiKey, String workspaceName, int page, int size, String name) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI, workspaceName))
                 .queryParam("page", page)
                 .queryParam("size", size);
 
-        if (search != null) {
-            target = target.queryParam("search", search);
+        if (name != null) {
+            target = target.queryParam("name", name);
         }
 
         return target.request()
@@ -179,7 +178,7 @@ public class DashboardResourceClient {
                         ]
                     }
                     """;
-            return MAPPER.readTree(configJson);
+            return JsonUtils.getMapper().readTree(configJson);
         } catch (Exception e) {
             throw new RuntimeException("Failed to create valid config", e);
         }
@@ -193,7 +192,7 @@ public class DashboardResourceClient {
                 largeConfig.append("x");
             }
             largeConfig.append("\"}");
-            return MAPPER.readTree(largeConfig.toString());
+            return JsonUtils.getMapper().readTree(largeConfig.toString());
         } catch (Exception e) {
             throw new RuntimeException("Failed to create invalid config", e);
         }
@@ -211,7 +210,7 @@ public class DashboardResourceClient {
                         i));
             }
             config.append("]}");
-            return MAPPER.readTree(config.toString());
+            return JsonUtils.getMapper().readTree(config.toString());
         } catch (Exception e) {
             throw new RuntimeException("Failed to create invalid config", e);
         }
