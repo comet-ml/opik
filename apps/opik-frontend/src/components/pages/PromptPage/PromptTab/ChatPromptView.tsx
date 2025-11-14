@@ -65,10 +65,12 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
         </Button>
       </div>
       {showRawView ? (
-        <CodeHighlighter
-          data={JSON.stringify(messages, null, 2)}
-          language={SUPPORTED_LANGUAGE.json}
-        />
+        <div className="max-h-[600px] overflow-y-auto">
+          <CodeHighlighter
+            data={JSON.stringify(messages, null, 2)}
+            language={SUPPORTED_LANGUAGE.json}
+          />
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
           {messages.map((message, index) => (
