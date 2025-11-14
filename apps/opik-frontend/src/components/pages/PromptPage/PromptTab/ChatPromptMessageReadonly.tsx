@@ -1,5 +1,4 @@
 import React from "react";
-import { cn } from "@/lib/utils";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
@@ -69,4 +68,3 @@ const ChatPromptMessageReadonly: React.FunctionComponent<
 };
 
 export default ChatPromptMessageReadonly;
-

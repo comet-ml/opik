@@ -29,7 +29,6 @@ const ChatPromptView: React.FunctionComponent<ChatPromptViewProps> = ({
     }
   }, [template]);
 
-
   if (messages.length === 0) {
     return (
       <div className="flex items-center justify-center p-8 text-muted-foreground">

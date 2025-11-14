@@ -105,9 +105,12 @@ const EditPromptVersionDialog: React.FunctionComponent<
 
   const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);
   const [showRawView, setShowRawView] = useState(false);
-  
+
   // Use hook for raw JSON view state management
-  const { rawJsonValue, setRawJsonValue} = useRawJsonView(messages, showRawView);
+  const { rawJsonValue, setRawJsonValue } = useRawJsonView(
+    messages,
+    showRawView,
+  );
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -125,7 +128,9 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const handleAddMessage = useCallback(() => {
     setMessages((prev) => {
       const lastMessage = prev[prev.length - 1];
-      const nextRole = lastMessage ? getNextMessageType(lastMessage) : undefined;
+      const nextRole = lastMessage
+        ? getNextMessageType(lastMessage)
+        : undefined;
       return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
     });
   }, []);

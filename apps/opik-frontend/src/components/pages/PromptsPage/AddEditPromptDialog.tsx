@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
@@ -70,9 +70,12 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     generateDefaultLLMPromptMessage(),
   ]);
   const [showRawView, setShowRawView] = useState(false);
-  
+
   // Use hook for raw JSON view state management
-  const { rawJsonValue, setRawJsonValue } = useRawJsonView(messages, showRawView);
+  const { rawJsonValue, setRawJsonValue } = useRawJsonView(
+    messages,
+    showRawView,
+  );
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -100,7 +103,9 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const handleAddMessage = useCallback(() => {
     setMessages((prev) => {
       const lastMessage = prev[prev.length - 1];
-      const nextRole = lastMessage ? getNextMessageType(lastMessage) : undefined;
+      const nextRole = lastMessage
+        ? getNextMessageType(lastMessage)
+        : undefined;
       return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
     });
   }, []);
