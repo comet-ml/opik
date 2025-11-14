@@ -167,18 +167,22 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
           const headers = field.value || [];
 
           const addHeader = () => {
-            field.onChange([...headers, { key: "", value: "" }]);
+            field.onChange([
+              ...headers,
+              { key: "", value: "", id: crypto.randomUUID() },
+            ]);
           };
 
-          const removeHeader = (index: number) => {
-            const newHeaders = headers.filter((_, i) => i !== index);
+          const removeHeader = (id: string) => {
+            const newHeaders = headers.filter((h) => h.id !== id);
             // Always set to array (even if empty) so backend can clear headers
             field.onChange(newHeaders);
           };
 
-          const updateHeader = (index: number, key: string, value: string) => {
-            const newHeaders = [...headers];
-            newHeaders[index] = { key, value };
+          const updateHeader = (id: string, key: string, value: string) => {
+            const newHeaders = headers.map((h) =>
+              h.id === id ? { ...h, key, value } : h,
+            );
             field.onChange(newHeaders);
           };
 
@@ -196,14 +200,18 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                   const valueError = getHeaderError(index, "value");
 
                   return (
-                    <div key={index} className="flex flex-col gap-1">
+                    <div key={header.id} className="flex flex-col gap-1">
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <Input
                             placeholder="Header name"
                             value={header.key}
                             onChange={(e) =>
-                              updateHeader(index, e.target.value, header.value)
+                              updateHeader(
+                                header.id,
+                                e.target.value,
+                                header.value,
+                              )
                             }
                             className={cn("w-full", {
                               "border-destructive": Boolean(keyError),
@@ -220,7 +228,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                             placeholder="Header value"
                             value={header.value}
                             onChange={(e) =>
-                              updateHeader(index, header.key, e.target.value)
+                              updateHeader(
+                                header.id,
+                                header.key,
+                                e.target.value,
+                              )
                             }
                             className={cn("w-full", {
                               "border-destructive": Boolean(valueError),
@@ -236,7 +248,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeHeader(index)}
+                          onClick={() => removeHeader(header.id)}
                           className="shrink-0"
                         >
                           <Trash2 className="comet-body-s" />

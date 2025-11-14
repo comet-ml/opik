@@ -71,16 +71,13 @@ function convertHeadersForAPI(
 
   // Case 1: Convert non-empty array to object, filtering empty keys
   if (headersArray.length > 0) {
-    return headersArray.reduce(
-      (acc, header) => {
-        const trimmedKey = header.key.trim();
-        if (trimmedKey) {
-          acc[trimmedKey] = header.value;
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    return headersArray.reduce<Record<string, string>>((acc, header) => {
+      const trimmedKey = header.key.trim();
+      if (trimmedKey) {
+        acc[trimmedKey] = header.value;
+      }
+      return acc;
+    }, {});
   }
 
   // Case 2: Empty array when editing = clear headers from backend
@@ -143,6 +140,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           ? Object.entries(providerKey.headers).map(([key, value]) => ({
               key,
               value,
+              id: crypto.randomUUID(),
             }))
           : [],
     } as AIProviderFormType,
@@ -344,6 +342,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                                     ([key, value]) => ({
                                       key,
                                       value,
+                                      id: crypto.randomUUID(),
                                     }),
                                   )
                                 : [],

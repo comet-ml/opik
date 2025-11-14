@@ -62,6 +62,7 @@ export const createCustomProviderDetailsFormSchema = (
           z.object({
             key: z.string(),
             value: z.string(),
+            id: z.string(),
           }),
         )
         .optional(),
@@ -69,6 +70,8 @@ export const createCustomProviderDetailsFormSchema = (
     .superRefine((data, ctx) => {
       // Validate headers: if a header has any content, both key and value must be non-empty
       if (data.headers) {
+        const headerKeys: string[] = [];
+
         data.headers.forEach((header, index) => {
           const hasKey = header.key.trim().length > 0;
           const hasValue = header.value.trim().length > 0;
@@ -88,6 +91,20 @@ export const createCustomProviderDetailsFormSchema = (
               message: "Header value is required",
               path: ["headers", index, "value"],
             });
+          }
+
+          // Check for duplicate header keys
+          if (hasKey) {
+            const trimmedKey = header.key.trim();
+            if (headerKeys.includes(trimmedKey)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Header key must be unique",
+                path: ["headers", index, "key"],
+              });
+            } else {
+              headerKeys.push(trimmedKey);
+            }
           }
         });
       }
