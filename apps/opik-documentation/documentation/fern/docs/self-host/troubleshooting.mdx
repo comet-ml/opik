@@ -1,9 +1,9 @@
 ---
 title: Troubleshooting Self-Hosted Opik
-description: Troubleshooting guide for common issues when running self-hosted Opik deployments with ClickHouse and Zookeeper.
+description: Troubleshooting guide for common issues when running self-hosted Opik deployments.
 ---
 
-This guide covers common troubleshooting scenarios for self-hosted Opik deployments, particularly issues related to ClickHouse and Zookeeper metadata management.
+This guide covers common troubleshooting scenarios for self-hosted Opik deployments.
 
 ## Common Issues
 
@@ -60,6 +60,10 @@ Connect to the first ClickHouse replica and restore the replica definitions for 
 kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client
 ```
 
+<Callout intent="warning">
+  **Important**: The Opik schema name is typically `opik` but may vary depending on your installation. Before proceeding, verify your schema name by running `SHOW DATABASES;` in ClickHouse and identifying the Opik database. Use that database name in all subsequent commands.
+</Callout>
+
 Run the `SYSTEM RESTORE REPLICA` command for each table:
 
 ```sql
@@ -67,11 +71,14 @@ Run the `SYSTEM RESTORE REPLICA` command for each table:
 SYSTEM RESTORE REPLICA default.DATABASECHANGELOG;
 SYSTEM RESTORE REPLICA default.DATABASECHANGELOGLOCK;
 
--- List all Opik tables
+-- Verify your Opik database name
+SHOW DATABASES;
+
+-- List all Opik tables (replace 'opik' with your actual schema name if different)
 USE opik;
 \d
 
--- Restore each Opik table (schema name may vary per installation)
+-- Restore each Opik table
 SYSTEM RESTORE REPLICA opik.attachments;
 SYSTEM RESTORE REPLICA opik.automation_rule_evaluator_logs;
 SYSTEM RESTORE REPLICA opik.comments;
@@ -89,7 +96,7 @@ SYSTEM RESTORE REPLICA opik.workspace_configurations;
 ```
 
 <Callout intent="info">
-  **Note**: The exact list of tables may vary depending on your Opik version, and the schema name is typically `opik` but may differ in your installation. Use the `\d` command to list all tables in your database and restore each one.
+  **Note**: The exact list of tables may vary depending on your Opik version. Use the `\d` command to list all tables in your database and restore each one.
 </Callout>
 
 ##### 4. Restart ClickHouse Again
@@ -191,8 +198,12 @@ If you continue to experience issues after following this guide:
 1. Check the [Opik GitHub Issues](https://github.com/comet-ml/opik/issues) for similar problems
 2. Review ClickHouse and Zookeeper logs for additional error details
 3. Open a new issue on GitHub with:
+   - **Opik versions**:
+     - Backend version (opik-backend)
+     - Frontend version (opik-frontend)
+     - Helm chart version (if deployed via Helm)
    - ClickHouse version
    - Zookeeper version
-   - Error logs from both services
+   - Error logs from all services (ClickHouse, Zookeeper, opik-backend)
    - Steps taken to reproduce the issue
 
