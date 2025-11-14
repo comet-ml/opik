@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
-import com.comet.opik.domain.llm.langchain4j.OpikContentType;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
@@ -30,8 +29,8 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Mapper
 interface LlmProviderAnthropicMapper {
@@ -127,26 +126,17 @@ interface LlmProviderAnthropicMapper {
 
         // If it's a list of OpikContent, convert each item
         if (rawContent instanceof List<?> contentList) {
-            var anthropicContents = new ArrayList<AnthropicMessageContent>();
-            for (Object item : contentList) {
-                if (item instanceof OpikContent opikContent) {
-                    // Only add text content if it's not blank
-                    if (opikContent.type() == OpikContentType.TEXT) {
-                        if (StringUtils.isNotBlank(opikContent.text())) {
-                            anthropicContents.add(new AnthropicTextContent(opikContent.text()));
-                        }
-                    } else if (opikContent.type() == OpikContentType.IMAGE_URL) {                     
-                        anthropicContents
-                                .add(AnthropicImageContent.fromUrl(opikContent.imageUrl().getUrl()));
-                    } else if (opikContent.type() == OpikContentType.VIDEO_URL) {
-                        // Videos are not supported by Anthropic, convert to text representation
-                        anthropicContents
-                                .add(new AnthropicTextContent("[Video: " + opikContent.videoUrl().url() + "]"));
-                    }
-                    // Other types (AUDIO, FILE) are not supported by Anthropic
-                }
-            }
-            return anthropicContents;
+            return contentList.stream()
+                    .filter(OpikContent.class::isInstance)
+                    .map(OpikContent.class::cast)
+                    .map(opikContent -> switch (opikContent.type()) {
+                        case TEXT -> new AnthropicTextContent(opikContent.text());
+                        case IMAGE_URL -> AnthropicImageContent.fromUrl(opikContent.imageUrl().getUrl());
+                        case VIDEO_URL -> new AnthropicTextContent("[Video: " + opikContent.videoUrl().url() + "]");
+                        default -> null;
+                    })
+                    .filter(Objects::nonNull)
+                    .toList();
         }
 
         // Fallback: flatten to string
