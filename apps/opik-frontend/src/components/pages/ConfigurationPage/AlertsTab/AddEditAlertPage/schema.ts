@@ -6,10 +6,45 @@ export const HeaderSchema = z.object({
   value: z.string().min(1, { message: "Header value is required" }),
 });
 
-export const TriggerSchema = z.object({
-  eventType: z.nativeEnum(ALERT_EVENT_TYPE),
-  projectIds: z.array(z.string()).default([]),
-});
+export const TriggerSchema = z
+  .object({
+    eventType: z.nativeEnum(ALERT_EVENT_TYPE),
+    projectIds: z.array(z.string()).default([]),
+    threshold: z.string().optional(),
+    window: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Validate threshold for cost and latency triggers
+    if (
+      data.eventType === ALERT_EVENT_TYPE.trace_cost ||
+      data.eventType === ALERT_EVENT_TYPE.trace_latency
+    ) {
+      if (!data.threshold || data.threshold.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Threshold is required",
+          path: ["threshold"],
+        });
+      } else {
+        const thresholdNum = parseFloat(data.threshold);
+        if (isNaN(thresholdNum) || thresholdNum <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Threshold must be greater than 0",
+            path: ["threshold"],
+          });
+        }
+      }
+
+      if (!data.window || data.window.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Window is required",
+          path: ["window"],
+        });
+      }
+    }
+  });
 
 export const AlertFormSchema = z
   .object({
