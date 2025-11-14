@@ -12,12 +12,7 @@ import { Tag } from "@/components/ui/tag";
 import { CircleX } from "lucide-react";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import {
-  isImageBase64String,
-  isVideoBase64String,
-  IMAGE_URL_EXTENSIONS,
-  VIDEO_URL_EXTENSIONS,
-} from "@/lib/images";
+import { isImageBase64String, isVideoBase64String } from "@/lib/images";
 /* TODO: Temporarily disabled - restore when base64 support is re-enabled */
 // import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
 // import { useBase64InputHandler } from "@/hooks/useBase64InputHandler";
@@ -119,30 +114,6 @@ const PromptMessageMediaTags: React.FunctionComponent<
         return { valid: true };
       }
       return { valid: false, error: "Please enter a valid HTTP or HTTPS URL" };
-    }
-
-    // Define valid extensions by media type using imported constants
-    const validExtensions: Record<MediaType, readonly string[]> = {
-      image: IMAGE_URL_EXTENSIONS,
-      video: VIDEO_URL_EXTENSIONS,
-    };
-
-    // Extract the path from the URL (without query parameters)
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname.toLowerCase();
-
-    // Check if URL has a valid file extension
-    const hasValidExtension = validExtensions[type].some((ext) =>
-      pathname.endsWith(`.${ext}`),
-    );
-
-    if (!hasValidExtension) {
-      return {
-        valid: false,
-        error: `URL must end with a valid ${type} extension (.${validExtensions[
-          type
-        ].join(", .")})`,
-      };
     }
 
     return { valid: true };
