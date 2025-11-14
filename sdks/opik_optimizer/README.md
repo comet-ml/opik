@@ -16,7 +16,7 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 
 ## 🎯 Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()`methods
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
 - **Optimizer Chaining**: Results from one optimizer can be used as input for another
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
