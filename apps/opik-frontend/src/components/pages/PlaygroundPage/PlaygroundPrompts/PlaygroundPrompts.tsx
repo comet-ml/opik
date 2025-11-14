@@ -1,16 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Plus, RotateCcw } from "lucide-react";
-import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
+import {
+  PLAYGROUND_LAST_PICKED_MODEL,
+  PLAYGROUND_SELECTED_DATASET_KEY,
+} from "@/constants/llm";
 import {
   useAddPrompt,
   usePromptCount,
   usePromptIds,
   useSetPromptMap,
+  useClearCreatedExperiments,
+  useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -33,6 +39,8 @@ const PlaygroundPrompts = ({
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
+  const clearCreatedExperiments = useClearCreatedExperiments();
+  const setSelectedRuleIds = useSetSelectedRuleIds();
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
@@ -44,6 +52,13 @@ const PlaygroundPrompts = ({
   });
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
+
+  const [, setDatasetId] = useLocalStorageState<string | null>(
+    PLAYGROUND_SELECTED_DATASET_KEY,
+    {
+      defaultValue: null,
+    },
+  );
 
   const handleAddPrompt = () => {
     const newPrompt = generateDefaultPrompt({
@@ -64,6 +79,9 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
+    setDatasetId(null);
+    setSelectedRuleIds(null);
+    clearCreatedExperiments();
     onResetHeight();
   }, [
     providerKeys,
@@ -71,6 +89,9 @@ const PlaygroundPrompts = ({
     calculateModelProvider,
     calculateDefaultModel,
     setPromptMap,
+    setDatasetId,
+    setSelectedRuleIds,
+    clearCreatedExperiments,
     onResetHeight,
   ]);
 
