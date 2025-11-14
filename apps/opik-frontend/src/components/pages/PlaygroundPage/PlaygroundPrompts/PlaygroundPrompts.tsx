@@ -28,6 +28,7 @@ interface PlaygroundPromptsState {
   providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
   onResetHeight: () => void;
+  hasDataset: boolean;
 }
 
 const PlaygroundPrompts = ({
@@ -35,6 +36,7 @@ const PlaygroundPrompts = ({
   providerKeys,
   isPendingProviderKeys,
   onResetHeight,
+  hasDataset,
 }: PlaygroundPromptsState) => {
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
@@ -46,7 +48,6 @@ const PlaygroundPrompts = ({
   const [open, setOpen] = useState<boolean>(false);
 
   const promptIds = usePromptIds();
-
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
@@ -103,7 +104,7 @@ const PlaygroundPrompts = ({
   }, [promptCount, isPendingProviderKeys, resetPlayground]);
 
   return (
-    <>
+    <div className="flex h-full flex-col">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-1">
           <h1 className="comet-title-l">Playground</h1>
@@ -132,7 +133,11 @@ const PlaygroundPrompts = ({
         </div>
       </div>
 
-      <div className="flex size-full gap-[var(--item-gap)]">
+      <div
+        className={`flex size-full gap-[var(--item-gap)] ${
+          hasDataset ? "h-auto min-h-0 flex-1 overflow-x-auto" : ""
+        }`}
+      >
         {promptIds.map((promptId, idx) => (
           <PlaygroundPrompt
             workspaceName={workspaceName}
@@ -153,10 +158,10 @@ const PlaygroundPrompts = ({
         setOpen={setOpen}
         onConfirm={resetPlayground}
         title="Reset playground"
-        description="Resetting the Playground will discard all unsaved prompts. This action can’t be undone. Are you sure you want to continue?"
+        description="Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?"
         confirmText="Reset playground"
       />
-    </>
+    </div>
   );
 };
 
