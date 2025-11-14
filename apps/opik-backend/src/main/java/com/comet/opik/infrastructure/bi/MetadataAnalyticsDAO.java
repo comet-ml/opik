@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import io.r2dbc.spi.Result;
@@ -8,7 +9,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import lombok.NonNull;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.List;

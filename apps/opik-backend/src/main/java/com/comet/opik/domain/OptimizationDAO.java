@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;

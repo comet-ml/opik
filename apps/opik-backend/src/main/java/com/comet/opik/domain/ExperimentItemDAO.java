@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -15,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;

@@ -17,6 +17,7 @@ import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;

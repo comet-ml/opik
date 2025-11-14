@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -19,7 +20,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;

@@ -3,6 +3,7 @@ package com.comet.opik.domain.alerts;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.LogItem;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
