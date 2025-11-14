@@ -41,11 +41,10 @@ def test_tracked_function__regexp_rules_anonymization__happy_flow(
     # Setup
     ID_STORAGE = {}
 
-    """
-    Email: john.doe@example.com
-    Credit Card: 1234 5678 9012 3456
-    SSN: 123-45-6789
-    """
+    # Example PII values used in this test:
+    # Email: john.doe@example.com
+    # Credit Card: 1234 5678 9012 3456
+    # SSN: 123-45-6789
 
     @opik.track(
         tags=["outer-tag1", "outer-tag2"],

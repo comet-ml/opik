@@ -1,13 +1,15 @@
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, List
 
 import opik.hooks
 
 from .. import jsonable_encoder
+from ..anonymizer import anonymizer
 
 
 def encode_and_anonymize(
     kwargs_dict: Dict[str, Any],
     fields_to_anonymize: Set[str],
+    object_type: Any,
 ) -> Dict[str, Any]:
     """
     Encodes and anonymizes the data in the given dictionary based on the specified
@@ -19,16 +21,37 @@ def encode_and_anonymize(
             and anonymize.
         fields_to_anonymize: The set of fields within the dictionary to
             anonymize.
+        object_type: The type of object that was used to create the kwargs_dict.
+            This is passed to anonymizers to provide context about the source object.
 
     Returns:
         A dictionary that has been encoded and, if applicable, anonymized.
     """
     # check if any anonymizer was registered
+    encoded_obj = jsonable_encoder.encode(kwargs_dict)
     if not opik.hooks.has_anonymizers():
-        return jsonable_encoder.encode(kwargs_dict)
+        return encoded_obj
 
-    return jsonable_encoder.encode_and_anonymize(
-        obj=kwargs_dict,
-        anonymizers=opik.hooks.get_anonymizers(),
-        fields_to_anonymize=fields_to_anonymize,
+    anonymizers = opik.hooks.get_anonymizers()
+    return anonymize_encoded_obj(
+        encoded_obj, fields_to_anonymize, anonymizers, object_type
     )
+
+
+def anonymize_encoded_obj(
+    obj: Dict[str, Any],
+    fields_to_anonymize: Set[str],
+    anonymizers: List[anonymizer.Anonymizer],
+    object_type: Any,
+) -> Dict[str, Any]:
+    if isinstance(obj, dict):
+        for field_name in fields_to_anonymize:
+            if field_name in obj:
+                for anonymizer_instance in anonymizers:
+                    obj[field_name] = anonymizer_instance.anonymize(
+                        obj[field_name],
+                        field_name=field_name,
+                        object_type=object_type,
+                    )
+
+    return obj
