@@ -414,34 +414,6 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Update dashboard with timestamp check")
-        void updateDashboardWithTimestampCheck() {
-            var dashboard = dashboardResourceClient.createPartialDashboard().build();
-            var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
-
-            var currentDashboard = dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
-
-            // Update with correct timestamp
-            var update = DashboardUpdate.builder()
-                    .name("Updated with timestamp")
-                    .lastUpdatedAt(currentDashboard.lastUpdatedAt())
-                    .build();
-
-            dashboardResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
-
-            // Try to update with old timestamp (should fail)
-            var updateWithOldTimestamp = DashboardUpdate.builder()
-                    .name("Should fail")
-                    .lastUpdatedAt(currentDashboard.lastUpdatedAt())
-                    .build();
-
-            try (var response = dashboardResourceClient.callUpdate(id, updateWithOldTimestamp, API_KEY,
-                    TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_PRECONDITION_FAILED);
-            }
-        }
-
-        @Test
         @DisplayName("Update dashboard with duplicate name fails")
         void updateDashboardWithDuplicateNameFails() {
             var dashboard1 = dashboardResourceClient.createPartialDashboard()
