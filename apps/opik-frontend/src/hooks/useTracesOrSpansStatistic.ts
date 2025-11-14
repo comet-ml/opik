@@ -15,6 +15,8 @@ type UseTracesOrSpansStatisticParams = {
   type: TRACE_DATA_TYPE;
   filters?: Filters;
   search?: string;
+  fromTime?: string;
+  toTime?: string;
 };
 
 type UseTracesOrSpansStatisticResponse = {

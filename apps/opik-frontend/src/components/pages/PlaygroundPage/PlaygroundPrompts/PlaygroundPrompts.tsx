@@ -14,6 +14,7 @@ import {
   useAddPrompt,
   usePromptCount,
   usePromptIds,
+  useSetIsRunning,
   useSetPromptMap,
   useClearCreatedExperiments,
   useSetSelectedRuleIds,
@@ -43,6 +44,7 @@ const PlaygroundPrompts = ({
   const setPromptMap = useSetPromptMap();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const setSelectedRuleIds = useSetSelectedRuleIds();
+  const setIsRunning = useSetIsRunning();
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
@@ -83,6 +85,7 @@ const PlaygroundPrompts = ({
     setDatasetId(null);
     setSelectedRuleIds(null);
     clearCreatedExperiments();
+    setIsRunning(false);
     onResetHeight();
   }, [
     providerKeys,
@@ -93,6 +96,7 @@ const PlaygroundPrompts = ({
     setDatasetId,
     setSelectedRuleIds,
     clearCreatedExperiments,
+    setIsRunning,
     onResetHeight,
   ]);
 

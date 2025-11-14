@@ -23,8 +23,8 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.TemplateUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.google.common.base.Preconditions;
@@ -72,7 +72,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
 
 @ImplementedBy(TraceDAOImpl.class)
@@ -785,7 +785,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -1001,7 +1002,8 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
@@ -1419,7 +1421,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id BETWEEN :uuid_from_time AND :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -1533,7 +1536,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -1815,7 +1819,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -2923,10 +2928,9 @@ class TraceDAOImpl implements TraceDAO {
 
         // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
         Optional.ofNullable(traceSearchCriteria.uuidFromTime())
-                .ifPresent(uuid_from_time -> {
-                    template.add("uuid_from_time", uuid_from_time);
-                    template.add("uuid_to_time", traceSearchCriteria.uuidToTime());
-                });
+                .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         return template;
     }
 
@@ -2944,10 +2948,10 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
 
         // Bind UUID BETWEEN bounds for time-based filtering
-        if (traceSearchCriteria.uuidFromTime() != null) {
-            statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
-            statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
-        }
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
     }
 
     @Override

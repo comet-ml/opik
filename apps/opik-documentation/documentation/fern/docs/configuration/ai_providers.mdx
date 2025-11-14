@@ -282,10 +282,31 @@ Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, e
 2. **URL**: Enter your server URL, for example: `http://host.docker.internal:8000/v1`
 3. **API Key** (optional): If your model access requires authentication, enter the API key. Otherwise, leave this field blank.
 4. **Models**: List all models available on your server. You'll be able to select one of them for use later.
+5. **Custom Headers** (optional): Add any additional HTTP headers required by your custom endpoint as key-value pairs.
 
 <Tip>
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
+
+##### Custom Headers
+
+Some custom providers may require additional HTTP headers beyond the API key for authentication or routing purposes. You can configure these headers using the "Custom headers" section:
+
+- Click **"+ Add header"** to add a new header
+- Enter the header name (e.g., `X-Custom-Auth`, `X-Request-ID`)
+- Enter the header value
+- Add multiple headers as needed
+- Use the trash icon to remove headers
+
+**Common use cases for custom headers:**
+- **Custom authentication**: Additional authentication tokens or headers required by your infrastructure
+- **Request routing**: Headers for routing requests to specific model versions or deployments
+- **Metadata tracking**: Custom headers for tracking or logging purposes
+- **Enterprise features**: Headers required for enterprise proxy configurations
+
+<Note>
+  Custom headers are sent with every request to your custom provider endpoint. Ensure header values are kept secure and not exposed in logs or error messages.
+</Note>
 
 ##### Managing Multiple Custom Providers
 
