@@ -130,7 +130,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_create_span_kwargs = encoder_helpers.encode_and_anonymize(
             cleaned_create_span_kwargs,
             fields_to_anonymize=message.fields_to_anonymize(),
-            object_type=type(message),
+            object_type="span",
         )
 
         LOGGER.debug("Create span request: %s", cleaned_create_span_kwargs)
@@ -147,7 +147,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_create_trace_kwargs = encoder_helpers.encode_and_anonymize(
             cleaned_create_trace_kwargs,
             fields_to_anonymize=message.fields_to_anonymize(),
-            object_type=type(message),
+            object_type="trace",
         )
 
         LOGGER.debug("Create trace request: %s", cleaned_create_trace_kwargs)
@@ -165,7 +165,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_update_span_kwargs = encoder_helpers.encode_and_anonymize(
             cleaned_update_span_kwargs,
             fields_to_anonymize=message.fields_to_anonymize(),
-            object_type=type(message),
+            object_type="span",
         )
 
         LOGGER.debug("Update span request: %s", cleaned_update_span_kwargs)
@@ -183,7 +183,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_update_trace_kwargs = encoder_helpers.encode_and_anonymize(
             cleaned_update_trace_kwargs,
             fields_to_anonymize=message.fields_to_anonymize(),
-            object_type=type(message),
+            object_type="trace",
         )
 
         LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)

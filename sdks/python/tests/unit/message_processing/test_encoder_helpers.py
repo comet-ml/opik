@@ -23,7 +23,7 @@ class TestEncodeAndAnonymize:
         obj = {"name": "John Doe", "email": "john@example.com"}
 
         result = encoder_helpers.anonymize_encoded_obj(
-            obj=obj, anonymizers=[], fields_to_anonymize=set(), object_type=dict
+            obj=obj, anonymizers=[], fields_to_anonymize=set(), object_type="span"
         )
 
         expected = {"name": "John Doe", "email": "john@example.com"}
@@ -38,7 +38,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=set(),
-            object_type=dict,
+            object_type="span",
         )
 
         expected = {"name": "John Doe"}
@@ -59,7 +59,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         expected = {
@@ -80,7 +80,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         expected = {"name": "John Doe", "age": 30}
@@ -96,7 +96,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         expected = {"name": "John Doe", "email": "[ANONYMIZED]", "age": 30}
@@ -112,7 +112,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=list,
+            object_type="trace",
         )
 
         # Should return an encoded list without anonymization
@@ -128,7 +128,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=str,
+            object_type="trace",
         )
 
         assert result == "This is a sensitive string"
@@ -158,7 +158,7 @@ class TestEncodeAndAnonymize:
             obj=encoded_person,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=Person,
+            object_type="trace",
         )
 
         expected = {
@@ -186,7 +186,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         expected = {
@@ -209,7 +209,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         assert result == {}
@@ -224,7 +224,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         # No fields should be anonymized
@@ -254,7 +254,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[prefix_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         expected = {
@@ -287,7 +287,7 @@ class TestEncodeAndAnonymize:
             obj=encoded_obj,
             anonymizers=[mock_anonymizer],
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         # Should have encoded datetime and anonymized email
@@ -318,7 +318,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[ApiKeyAnonymizer()],
             fields_to_anonymize={"metadata"},
-            object_type=dict,
+            object_type="span",
         )
 
         # should remove api_key
@@ -330,10 +330,10 @@ class TestEncodeAndAnonymize:
         class ApiKeyAnonymizer(anonymizer.Anonymizer):
             def anonymize(self, data, **kwargs):
                 field_name = kwargs.get("field_name")
-                object_type = kwargs.get("object_type").__name__
+                object_type = kwargs.get("object_type")
                 if (
                     field_name == "metadata"
-                    and object_type == "dict"
+                    and object_type == "span"
                     and "api_key" in data
                 ):
                     del data["api_key"]
@@ -343,8 +343,8 @@ class TestEncodeAndAnonymize:
             def anonymize_text(
                 self, data: str, field_name: Optional[str] = None, **kwargs: Any
             ) -> str:
-                object_type = kwargs.get("object_type").__name__
-                if field_name == "input.ssn" and object_type == "dict":
+                object_type = kwargs.get("object_type")
+                if field_name == "input.ssn" and object_type == "span":
                     return "[SSN_REMOVED]"
 
                 return data
@@ -367,7 +367,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=[ApiKeyAnonymizer(), SSNAnonymizer()],
             fields_to_anonymize={"metadata", "input"},
-            object_type=dict,
+            object_type="span",
         )
 
         # should remove api_key from metadata
@@ -402,7 +402,7 @@ class TestEncodeAndAnonymize:
             obj=obj,
             anonymizers=anonymizers,
             fields_to_anonymize=fields_to_anonymize,
-            object_type=dict,
+            object_type="span",
         )
 
         # Should apply both anonymizers in order: first prefix, then suffix

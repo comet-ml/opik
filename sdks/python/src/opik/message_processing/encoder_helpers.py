@@ -1,4 +1,4 @@
-from typing import Dict, Any, Set, List
+from typing import Dict, Any, Set, List, Literal
 
 import opik.hooks
 
@@ -9,7 +9,7 @@ from ..anonymizer import anonymizer
 def encode_and_anonymize(
     kwargs_dict: Dict[str, Any],
     fields_to_anonymize: Set[str],
-    object_type: Any,
+    object_type: Literal["span", "trace"],
 ) -> Dict[str, Any]:
     """
     Encodes and anonymizes the data in the given dictionary based on the specified
@@ -21,8 +21,9 @@ def encode_and_anonymize(
             and anonymize.
         fields_to_anonymize: The set of fields within the dictionary to
             anonymize.
-        object_type: The type of object that was used to create the kwargs_dict.
-            This is passed to anonymizers to provide context about the source object.
+        object_type: A string indicating the type of object ('span' or 'trace')
+            that was used to create the kwargs_dict. This is passed to anonymizers
+            to provide context about the source object.
 
     Returns:
         A dictionary that has been encoded and, if applicable, anonymized.
@@ -34,7 +35,10 @@ def encode_and_anonymize(
 
     anonymizers = opik.hooks.get_anonymizers()
     return anonymize_encoded_obj(
-        encoded_obj, fields_to_anonymize, anonymizers, object_type
+        obj=encoded_obj,
+        fields_to_anonymize=fields_to_anonymize,
+        anonymizers=anonymizers,
+        object_type=object_type,
     )
 
 
@@ -42,7 +46,7 @@ def anonymize_encoded_obj(
     obj: Dict[str, Any],
     fields_to_anonymize: Set[str],
     anonymizers: List[anonymizer.Anonymizer],
-    object_type: Any,
+    object_type: Literal["span", "trace"],
 ) -> Dict[str, Any]:
     """
     Anonymizes specified fields in an encoded dictionary using the provided anonymizers.
@@ -56,7 +60,8 @@ def anonymize_encoded_obj(
         obj: The encoded dictionary whose fields are to be anonymized.
         fields_to_anonymize: A set of field names within the dictionary to anonymize.
         anonymizers: A list of anonymizer instances to apply to each field.
-        object_type: The type of the original object, providing context for anonymization.
+        object_type: A string indicating the type of object ('span' or 'trace'),
+            providing context for anonymization.
 
     Returns:
         The dictionary with specified fields anonymized using the provided anonymizers.

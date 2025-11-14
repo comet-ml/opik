@@ -21,7 +21,7 @@ class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
             cleaned_span_write_kwargs = encoder_helpers.encode_and_anonymize(
                 cleaned_span_write_kwargs,
                 fields_to_anonymize=messages.CreateSpansBatchMessage.fields_to_anonymize(),
-                object_type=messages.CreateSpansBatchMessage,
+                object_type="span",
             )
             rest_spans.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
@@ -57,7 +57,7 @@ class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
             cleaned_trace_write_kwargs = encoder_helpers.encode_and_anonymize(
                 cleaned_trace_write_kwargs,
                 fields_to_anonymize=messages.CreateTraceBatchMessage.fields_to_anonymize(),
-                object_type=messages.CreateTraceBatchMessage,
+                object_type="trace",
             )
             rest_traces.append(trace_write.TraceWrite(**cleaned_trace_write_kwargs))
 

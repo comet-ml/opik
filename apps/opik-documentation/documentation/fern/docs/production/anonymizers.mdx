@@ -122,7 +122,7 @@ def anonymize(self, data, **kwargs):
 The `anonymize()` method also receives additional context through `**kwargs`:
 
 - **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, `"metadata"`, or nested field names in dots notation such as `"metadata.email"`)
-- **`object_type`**: The type of the object being processed (`opik.message_processing.messages.CreateSpanMessage`, `opik.message_processing.messages.CreateTraceMessage`, `opik.message_processing.messages.UpdateTraceMessage`, `opik.message_processing.messages.UpdateSpanMessage`, `opik.message_processing.messages.CreateSpansBatchMessage`, or `opik.message_processing.messages.CreateTracesBatchMessage`)
+- **`object_type`**: The type of the object being processed (`"span"`, `"trace"`)
 
 **When are kwargs available?**
 
