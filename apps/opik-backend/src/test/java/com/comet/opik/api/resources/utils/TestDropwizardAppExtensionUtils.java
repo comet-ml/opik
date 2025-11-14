@@ -123,7 +123,7 @@ public class TestDropwizardAppExtensionUtils {
         if (appContextConfig.runtimeInfo() != null) {
             configs.add("authentication.enabled: true");
             configs.add("authentication.reactService.url: "
-                    + appContextConfig.runtimeInfo().getHttpsBaseUrl());
+                    + appContextConfig.runtimeInfo().getHttpBaseUrl());
 
             if (appContextConfig.authCacheTtlInSeconds() != null) {
                 configs.add(

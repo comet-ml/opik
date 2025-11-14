@@ -36,7 +36,8 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
                 )
 
             for key, value in kwargs.items():
-                template = template.replace(f"{{{{{key}}}}}", str(value))
+                replacement = "" if value is None else str(value)
+                template = template.replace(f"{{{{{key}}}}}", replacement)
 
         elif self._type == prompt_types.PromptType.JINJA2:
             template = jinja2.Template(self._template).render(**kwargs)

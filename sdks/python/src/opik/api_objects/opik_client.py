@@ -847,8 +847,13 @@ class Opik:
             self._rest_client, dataset_name
         )
 
+        experiments_client = self.get_experiments_client()
         experiments = dataset_rest_operations.get_dataset_experiments(
-            self._rest_client, dataset_id, max_results, streamer=self._streamer
+            rest_client=self._rest_client,
+            dataset_id=dataset_id,
+            max_results=max_results,
+            streamer=self._streamer,
+            experiments_client=experiments_client,
         )
 
         return experiments
@@ -961,6 +966,7 @@ class Opik:
             dataset_name=dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
             prompts=checked_prompts,
         )
 
@@ -989,6 +995,7 @@ class Opik:
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
         )
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
@@ -1013,6 +1020,7 @@ class Opik:
                 dataset_name=public_experiment.dataset_name,
                 rest_client=self._rest_client,
                 streamer=self._streamer,
+                experiments_client=self.get_experiments_client(),
             )
             result.append(experiment_)
 
@@ -1045,6 +1053,7 @@ class Opik:
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
         )
 
     def end(self, timeout: Optional[int] = None) -> None:

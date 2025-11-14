@@ -1,6 +1,7 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.domain.alerts;
 
 import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
@@ -14,16 +15,16 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfigType.SCOPE_PROJECT;
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AlertEventEvaluationService {
-
-    public static final String PROJECT_SCOPE_CONFIG_KEY = "project_ids";
 
     private final @NonNull AlertService alertService;
     private final @NonNull AlertBucketService alertBucketService;
@@ -31,7 +32,7 @@ public class AlertEventEvaluationService {
 
     public void evaluateAlertEvent(@NonNull AlertEvent alertEvent) {
         log.debug("Evaluating alert event {}", alertEvent);
-        alertService.findAllByWorkspaceAndEventType(alertEvent.workspaceId(), alertEvent.eventType())
+        alertService.findAllByWorkspaceAndEventTypes(alertEvent.workspaceId(), Set.of(alertEvent.eventType()))
                 .forEach(alert -> {
                     if (isValidForAlert(alertEvent, alert.triggers())) {
                         log.debug("Alert {} matches event {}", alert.id(), alertEvent);
@@ -74,10 +75,11 @@ public class AlertEventEvaluationService {
             return true;
         }
 
-        // For now, we assume there is max one config per trigger, related to project scope
-        var config = trigger.triggerConfigs().getFirst();
-        var projectIdsString = Optional.ofNullable(config.configValue())
-                .map(v -> v.get(PROJECT_SCOPE_CONFIG_KEY))
+        var projectIdsString = trigger.triggerConfigs().stream()
+                .filter(c -> c.type() == SCOPE_PROJECT)
+                .findFirst()
+                .map(AlertTriggerConfig::configValue)
+                .map(v -> v.get(PROJECT_IDS_CONFIG_KEY))
                 .orElse(null);
 
         if (projectIdsString == null) {

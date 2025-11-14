@@ -1,4 +1,5 @@
 import copy
+<<<<<<< HEAD:sdks/python/src/opik/api_objects/prompt/string/prompt.py
 from typing import Any, Dict, Optional
 from typing_extensions import override
 from opik.rest_api import types as rest_api_types
@@ -6,6 +7,18 @@ from . import prompt_template
 from .. import types as prompt_types
 from .. import client as prompt_client
 from .. import base_prompt
+=======
+import json
+import logging
+from typing import Any, Dict, Optional, Union, List
+
+from opik.rest_api.types import PromptVersionDetail
+from .prompt_template import PromptTemplate
+from .types import PromptType
+from opik.api_objects.prompt import client as prompt_client
+>>>>>>> main:sdks/python/src/opik/api_objects/prompt/prompt.py
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Prompt(base_prompt.BasePrompt):
@@ -84,8 +97,12 @@ class Prompt(base_prompt.BasePrompt):
         """The prompt type of the prompt."""
         return self._type
 
+<<<<<<< HEAD:sdks/python/src/opik/api_objects/prompt/string/prompt.py
     @override
     def format(self, **kwargs: Any) -> str:
+=======
+    def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
+>>>>>>> main:sdks/python/src/opik/api_objects/prompt/prompt.py
         """
         Replaces placeholders in the template with provided keyword arguments.
 
@@ -96,7 +113,23 @@ class Prompt(base_prompt.BasePrompt):
         Returns:
             A string with all placeholders replaced by their corresponding values from kwargs.
         """
-        return self._template.format(**kwargs)
+        is_playground_chat_prompt = (
+            self._metadata is not None
+            and self._metadata.get("created_from") == "opik_ui"
+            and self._metadata.get("type") == "messages_json"
+        )
+        formatted_string = self._template.format(**kwargs)
+
+        if is_playground_chat_prompt:
+            try:
+                return json.loads(formatted_string)
+            except json.JSONDecodeError:
+                LOGGER.error(
+                    f"Failed to parse JSON string: {formatted_string}. Make sure chat prompt is valid JSON. Returning the raw string."
+                )
+                return formatted_string
+
+        return formatted_string
 
     @override
     def __internal_api__to_info_dict__(self) -> Dict[str, Any]:

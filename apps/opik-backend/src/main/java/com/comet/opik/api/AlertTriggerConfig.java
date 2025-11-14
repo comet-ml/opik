@@ -36,4 +36,7 @@ public record AlertTriggerConfig(
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
 
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+    public static final String PROJECT_IDS_CONFIG_KEY = "project_ids";
+    public static final String THRESHOLD_CONFIG_KEY = "threshold";
+    public static final String WINDOW_CONFIG_KEY = "window";
 }

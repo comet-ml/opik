@@ -113,6 +113,14 @@ from .batch_delete import BatchDelete
 from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
+from .boolean_feedback_definition import BooleanFeedbackDefinition
+from .boolean_feedback_definition_create import BooleanFeedbackDefinitionCreate
+from .boolean_feedback_definition_public import BooleanFeedbackDefinitionPublic
+from .boolean_feedback_definition_update import BooleanFeedbackDefinitionUpdate
+from .boolean_feedback_detail import BooleanFeedbackDetail
+from .boolean_feedback_detail_create import BooleanFeedbackDetailCreate
+from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
+from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -202,15 +210,26 @@ from .experiment_public_type import ExperimentPublicType
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
 from .export_trace_service_request import ExportTraceServiceRequest
-from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
-from .feedback_create import FeedbackCreate, FeedbackCreate_Categorical, FeedbackCreate_Numerical
+from .feedback import Feedback, Feedback_Boolean, Feedback_Categorical, Feedback_Numerical
+from .feedback_create import (
+    FeedbackCreate,
+    FeedbackCreate_Boolean,
+    FeedbackCreate_Categorical,
+    FeedbackCreate_Numerical,
+)
 from .feedback_definition_page_public import FeedbackDefinitionPagePublic
 from .feedback_object_public import (
     FeedbackObjectPublic,
+    FeedbackObjectPublic_Boolean,
     FeedbackObjectPublic_Categorical,
     FeedbackObjectPublic_Numerical,
 )
-from .feedback_public import FeedbackPublic, FeedbackPublic_Categorical, FeedbackPublic_Numerical
+from .feedback_public import (
+    FeedbackPublic,
+    FeedbackPublic_Boolean,
+    FeedbackPublic_Categorical,
+    FeedbackPublic_Numerical,
+)
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
@@ -228,7 +247,12 @@ from .feedback_score_names import FeedbackScoreNames
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
-from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
+from .feedback_update import (
+    FeedbackUpdate,
+    FeedbackUpdate_Boolean,
+    FeedbackUpdate_Categorical,
+    FeedbackUpdate_Numerical,
+)
 from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
@@ -513,6 +537,14 @@ __all__ = [
     "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
+    "BooleanFeedbackDefinition",
+    "BooleanFeedbackDefinitionCreate",
+    "BooleanFeedbackDefinitionPublic",
+    "BooleanFeedbackDefinitionUpdate",
+    "BooleanFeedbackDetail",
+    "BooleanFeedbackDetailCreate",
+    "BooleanFeedbackDetailPublic",
+    "BooleanFeedbackDetailUpdate",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -602,13 +634,16 @@ __all__ = [
     "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
+    "FeedbackCreate_Boolean",
     "FeedbackCreate_Categorical",
     "FeedbackCreate_Numerical",
     "FeedbackDefinitionPagePublic",
     "FeedbackObjectPublic",
+    "FeedbackObjectPublic_Boolean",
     "FeedbackObjectPublic_Categorical",
     "FeedbackObjectPublic_Numerical",
     "FeedbackPublic",
+    "FeedbackPublic_Boolean",
     "FeedbackPublic_Categorical",
     "FeedbackPublic_Numerical",
     "FeedbackScore",
@@ -629,8 +664,10 @@ __all__ = [
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
     "FeedbackUpdate",
+    "FeedbackUpdate_Boolean",
     "FeedbackUpdate_Categorical",
     "FeedbackUpdate_Numerical",
+    "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
     "Function",

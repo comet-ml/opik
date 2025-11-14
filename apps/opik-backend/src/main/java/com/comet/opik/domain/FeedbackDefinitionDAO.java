@@ -23,6 +23,7 @@ import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
 @RegisterRowMapper(FeedbackDefinitionRowMapper.class)
 @RegisterConstructorMapper(NumericalFeedbackDefinitionDefinitionModel.class)
 @RegisterConstructorMapper(CategoricalFeedbackDefinitionDefinitionModel.class)
+@RegisterConstructorMapper(BooleanFeedbackDefinitionDefinitionModel.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 public interface FeedbackDefinitionDAO {
 
