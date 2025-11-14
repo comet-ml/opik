@@ -2463,7 +2463,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildInsertTemplate(Trace trace) {
-        ST template = new ST(INSERT);
+        var template = TemplateUtils.newST(INSERT);
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
@@ -2531,7 +2531,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
-        ST template = new ST(update);
+        var template = TemplateUtils.newST(update);
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2579,7 +2579,7 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Deleting traces, count '{}'{}", ids.size(),
                 projectId != null ? " for project id '" + projectId + "'" : "");
 
-        var template = new ST(DELETE_BY_ID);
+        var template = TemplateUtils.newST(DELETE_BY_ID);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template.add("project_id", id));
 
@@ -2899,7 +2899,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST newFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
@@ -2989,7 +2989,7 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
 
-            var template = new ST(BATCH_INSERT)
+            var template = TemplateUtils.newST(BATCH_INSERT)
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -3053,7 +3053,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3091,7 +3091,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_DAILY_BI_INFORMATION);
+        var template = TemplateUtils.newST(TRACE_DAILY_BI_INFORMATION);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3146,7 +3146,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3186,7 +3186,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
-                    ST template = new ST(SELECT_TRACES_STATS);
+                    var template = TemplateUtils.newST(SELECT_TRACES_STATS);
 
                     template.add("project_stats", true);
 
@@ -3433,7 +3433,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Mono<TraceThread> findThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = new ST(SELECT_TRACES_THREAD_BY_ID);
+            var template = TemplateUtils.newST(SELECT_TRACES_THREAD_BY_ID);
             template.add("truncate", truncate);
 
             var statement = connection.createStatement(template.render())

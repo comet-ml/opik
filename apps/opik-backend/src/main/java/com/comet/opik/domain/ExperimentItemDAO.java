@@ -378,7 +378,7 @@ class ExperimentItemDAO {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
-        var template = new ST(INSERT)
+        var template = TemplateUtils.newST(INSERT)
                 .add("items", queryItems);
 
         String sql = template.render();
@@ -444,7 +444,7 @@ class ExperimentItemDAO {
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
 
-        var template = new ST(STREAM);
+        var template = TemplateUtils.newST(STREAM);
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
         }

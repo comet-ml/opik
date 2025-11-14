@@ -364,7 +364,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Mono<Optimization> getById(@NonNull UUID id) {
-        var template = new ST(FIND);
+        var template = TemplateUtils.newST(FIND);
         template.add("id", id.toString());
 
         return Mono.from(connectionFactory.create())
@@ -381,7 +381,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = new ST(FIND_OPTIMIZATIONS_DATASET_IDS);
+                    var template = TemplateUtils.newST(FIND_OPTIMIZATIONS_DATASET_IDS);
                     template.add("experiment_ids", ids);
                     var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids);
@@ -481,7 +481,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Mono<Long> getCount(OptimizationSearchCriteria searchCriteria) {
-        var template = new ST(COUNT);
+        var template = TemplateUtils.newST(COUNT);
 
         bindTemplateParams(template, searchCriteria);
 
@@ -499,7 +499,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private Mono<Optimization.OptimizationPage> find(int page, int size, long total,
             OptimizationSearchCriteria searchCriteria) {
-        var template = new ST(FIND);
+        var template = TemplateUtils.newST(FIND);
 
         bindTemplateParams(template, searchCriteria);
 
@@ -634,7 +634,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private ST buildUpdateTemplate(OptimizationUpdate update) {
-        ST template = new ST(UPDATE_BY_ID);
+        var template = TemplateUtils.newST(UPDATE_BY_ID);
 
         Optional.ofNullable(update.name())
                 .ifPresent(name -> template.add("name", name));

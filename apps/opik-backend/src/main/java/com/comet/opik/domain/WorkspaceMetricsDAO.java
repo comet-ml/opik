@@ -281,7 +281,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     private Mono<? extends Result> getMetricsSummary(Connection connection,
             WorkspaceMetricsSummaryRequest request,
             String query) {
-        ST template = new ST(query);
+        var template = TemplateUtils.newST(query);
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
             template.add("project_ids", request.projectIds());

@@ -86,7 +86,7 @@ class MetadataAnalyticsDAOImpl implements MetadataAnalyticsDAO {
 
     private Mono<? extends Result> fetchUsers(String tableName, boolean daily) {
         return template.nonTransaction(connection -> {
-            ST template = new ST(DAILY_REPORT_USERS);
+            var template = TemplateUtils.newST(DAILY_REPORT_USERS);
 
             template.add("table_name", tableName);
             template.add("daily", daily);

@@ -149,7 +149,7 @@ class CommentDAOImpl implements CommentDAO {
     public Mono<Comment> findById(UUID entityId, @NonNull UUID commentId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var template = new ST(SELECT_COMMENT_BY_ID);
+            var template = TemplateUtils.newST(SELECT_COMMENT_BY_ID);
             if (entityId != null) {
                 template.add("entity_id", entityId);
             }

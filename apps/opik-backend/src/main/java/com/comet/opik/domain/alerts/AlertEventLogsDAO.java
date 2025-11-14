@@ -84,7 +84,7 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
 
                     log.info("Finding alert logs with criteria: {}", criteria);
 
-                    var template = new ST(FIND_ALL);
+                    var template = TemplateUtils.newST(FIND_ALL);
 
                     bindTemplateParameters(criteria, template);
 
@@ -169,7 +169,7 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(INSERT_STATEMENT);
+                    var template = TemplateUtils.newST(INSERT_STATEMENT);
 
                     List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
                     template.add("items", queryItems);

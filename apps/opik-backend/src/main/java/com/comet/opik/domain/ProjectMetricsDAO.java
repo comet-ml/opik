@@ -724,7 +724,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime,
             @NonNull Instant endTime) {
         return template.nonTransaction(connection -> {
-            var stTemplate = new ST(GET_TOTAL_COST);
+            var stTemplate = TemplateUtils.newST(GET_TOTAL_COST);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -757,7 +757,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds,
             @NonNull Instant startTime, @NonNull Instant endTime) {
         return template.nonTransaction(connection -> {
-            var stTemplate = new ST(GET_AVERAGE_DURATION);
+            var stTemplate = TemplateUtils.newST(GET_AVERAGE_DURATION);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -788,7 +788,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
-        var template = new ST(query)
+        var template = TemplateUtils.newST(query)
                 .add("step", intervalToSql(request.interval()))
                 .add("bucket", wrapWeekly(request.interval(),
                         "toStartOfInterval(trace_time, %s)".formatted(intervalToSql(request.interval()))))

@@ -95,7 +95,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
     }
 
     private Mono<ScopeMetadata> getMetadata(String workspaceId, UUID projectId) {
-        var template = new ST(CALCULATE_METADATA);
+        var template = TemplateUtils.newST(CALCULATE_METADATA);
         if (projectId != null) {
             template.add("project_id", projectId);
         }

@@ -1008,7 +1008,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
-        var template = new ST(sqlTemplate)
+        var template = TemplateUtils.newST(sqlTemplate)
                 .add("items", queryItems);
 
         String sql = template.render();
@@ -1066,7 +1066,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
                 datasetId, limit, lastRetrievedId);
 
-        ST template = new ST(SELECT_DATASET_ITEMS_STREAM);
+        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_STREAM);
 
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
@@ -1139,7 +1139,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     public Mono<List<Column>> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID);
+            var template = TemplateUtils.newST(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", experimentIds);
@@ -1186,7 +1186,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1368,7 +1368,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
                 experimentIds, filters);
 
-        ST template = new ST(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS);
+        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS);
         template.add("dataset_id", datasetId);
         if (!experimentIds.isEmpty()) {
             template.add("experiment_ids", true);
