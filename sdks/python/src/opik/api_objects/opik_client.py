@@ -1477,9 +1477,7 @@ class Opik:
 
         # First, validate that this is a string prompt by trying to get the latest version
         # This will return None if it's a chat prompt (backend validates template_structure)
-        latest_version = prompt_client_.get_prompt(
-            name=name, template_structure="text"
-        )
+        latest_version = prompt_client_.get_prompt(name=name, template_structure="text")
         if latest_version is None:
             return []
 
