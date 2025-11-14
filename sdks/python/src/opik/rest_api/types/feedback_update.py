@@ -6,6 +6,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
 
@@ -56,4 +57,18 @@ class FeedbackUpdate_Categorical(Base):
             extra = pydantic.Extra.allow
 
 
-FeedbackUpdate = typing.Union[FeedbackUpdate_Numerical, FeedbackUpdate_Categorical]
+class FeedbackUpdate_Boolean(Base):
+    type: typing.Literal["boolean"] = "boolean"
+    details: typing.Optional[BooleanFeedbackDetailUpdate] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
+FeedbackUpdate = typing.Union[FeedbackUpdate_Numerical, FeedbackUpdate_Categorical, FeedbackUpdate_Boolean]
