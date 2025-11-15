@@ -20,10 +20,16 @@ public class CustomLlmProvider implements LlmProviderService {
     // assume that the provider is compatible with OpenAI API, so we use the OpenAiClient to interact with it
     private final @NonNull OpenAiClient openAiClient;
     private final Map<String, String> configuration;
+    private final Map<String, Object> extraBody;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         ChatCompletionRequest cleanedRequest = cleanModelName(request);
+        if (extraBody != null && !extraBody.isEmpty()) {
+            log.info("Extra body parameters configured for custom LLM provider: '{}'", extraBody);
+            // Note: extra_body parameters are currently stored but not yet fully integrated with LangChain4j's ChatCompletionRequest
+            // Future enhancement: implement custom HTTP client to support extra_body at the request level
+        }
         return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
@@ -35,6 +41,11 @@ public class CustomLlmProvider implements LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
         ChatCompletionRequest cleanedRequest = cleanModelName(request);
+        if (extraBody != null && !extraBody.isEmpty()) {
+            log.info("Extra body parameters configured for custom LLM provider (streaming): '{}'", extraBody);
+            // Note: extra_body parameters are currently stored but not yet fully integrated with LangChain4j's ChatCompletionRequest
+            // Future enhancement: implement custom HTTP client to support extra_body at the request level
+        }
         openAiClient.chatCompletion(cleanedRequest)
                 .onPartialResponse(handleMessage)
                 .onComplete(handleClose)

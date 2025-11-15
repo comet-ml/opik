@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -273,6 +274,38 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                 key. Add them here as key-value pairs.
               </Description>
               <FormMessage />
+            </FormItem>
+          );
+        }}
+      />
+
+      <FormField
+        control={form.control}
+        name="extraBody"
+        render={({ field, formState }) => {
+          const validationErrors = get(formState.errors, ["extraBody"]);
+
+          return (
+            <FormItem>
+              <Label htmlFor="extraBody">Extra body parameters (optional)</Label>
+              <FormControl>
+                <Textarea
+                  id="extraBody"
+                  placeholder='{"key1": {"key2": 2, "key3": true}}'
+                  value={field.value || ""}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  rows={4}
+                  className={cn({
+                    "border-destructive": Boolean(validationErrors?.message),
+                  })}
+                />
+              </FormControl>
+              <FormMessage />
+              <Description>
+                Additional parameters to be sent in the request body to the
+                custom LLM provider. Enter valid JSON format. These parameters
+                are provider-specific and will be merged into each API request.
+              </Description>
             </FormItem>
           );
         }}

@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
+import com.comet.opik.infrastructure.db.MapObjectArgumentFactory;
 import lombok.NonNull;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
 
     private final MapFlatArgumentFactory mapMapper = new MapFlatArgumentFactory();
+    private final MapObjectArgumentFactory mapObjectMapper = new MapObjectArgumentFactory();
 
     @Override
     public ProviderApiKey map(@NonNull ResultSet rs, @NonNull StatementContext ctx) throws SQLException {
@@ -37,6 +39,7 @@ public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
                 .headers(mapMapper.map(rs, "headers", ctx))
                 .configuration(mapMapper.map(rs, "configuration", ctx))
                 .baseUrl(rs.getString("base_url"))
+                .extraBody(mapObjectMapper.map(rs, "extra_body", ctx))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .createdBy(rs.getString("created_by"))
                 .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())

@@ -143,6 +143,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               id: crypto.randomUUID(),
             }))
           : [],
+      extraBody:
+        providerKey?.extra_body
+          ? JSON.stringify(providerKey.extra_body, null, 2)
+          : "",
     } as AIProviderFormType,
   });
 
@@ -170,6 +174,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const location = form.getValues("location");
     const providerName = form.getValues("providerName");
     const headersArray = form.getValues("headers");
+    const extraBodyString = form.getValues("extraBody");
     const composedProviderType = buildComposedProviderKey(
       provider!,
       providerName,
@@ -194,6 +199,23 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       isCustom && !!(providerKey || calculatedProviderKey);
     const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
 
+    // Parse extra_body from JSON string
+    let extraBody: Record<string, unknown> | null | undefined;
+    if (isCustom) {
+      if (extraBodyString && extraBodyString.trim() !== "") {
+        try {
+          extraBody = JSON.parse(extraBodyString);
+        } catch (error) {
+          // Validation should catch this, but handle gracefully
+          console.error("Failed to parse extra_body JSON:", error);
+          extraBody = undefined;
+        }
+      } else {
+        // Explicitly set to null to clear the field
+        extraBody = null;
+      }
+    }
+
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
@@ -202,6 +224,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustom ? url : undefined,
           ...(configuration && { configuration }),
           ...(isCustom && headers !== undefined && { headers }),
+          ...(isCustom && { extra_body: extraBody }),
         },
       });
     } else if (provider) {
@@ -217,6 +240,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           provider_name: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
           ...(isCustom && headers !== undefined && { headers }),
+          ...(isCustom && { extra_body: extraBody }),
         },
       });
     }
@@ -346,6 +370,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                                     }),
                                   )
                                 : [],
+                            );
+                            form.setValue(
+                              "extraBody",
+                              providerData?.extra_body
+                                ? JSON.stringify(providerData.extra_body, null, 2)
+                                : "",
                             );
 
                             form.setValue(

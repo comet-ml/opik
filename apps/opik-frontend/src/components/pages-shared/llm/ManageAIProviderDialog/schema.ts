@@ -66,6 +66,21 @@ export const createCustomProviderDetailsFormSchema = (
           }),
         )
         .optional(),
+      extraBody: z
+        .string()
+        .optional()
+        .refine(
+          (value) => {
+            if (!value || value.trim() === "") return true;
+            try {
+              JSON.parse(value);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { message: "Must be valid JSON format" },
+        ),
     })
     .superRefine((data, ctx) => {
       // Validate headers: if a header has any content, both key and value must be non-empty

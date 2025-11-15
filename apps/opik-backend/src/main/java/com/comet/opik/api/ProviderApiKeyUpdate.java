@@ -27,7 +27,9 @@ public record ProviderApiKeyUpdate(
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) Map<String, String> headers,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) Map<String, String> configuration,
-        @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String baseUrl){
+        @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String baseUrl,
+        @JsonView({ProviderApiKey.View.Public.class,
+                ProviderApiKey.View.Write.class}) @Schema(description = "Additional parameters to be sent in the request body to the custom LLM provider", requiredMode = Schema.RequiredMode.NOT_REQUIRED) Map<String, Object> extraBody){
 
     @Override
     public String toString() {

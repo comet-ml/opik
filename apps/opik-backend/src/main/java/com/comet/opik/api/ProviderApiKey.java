@@ -41,6 +41,10 @@ public record ProviderApiKey(
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
         @JsonView({View.Public.class,
                 View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String baseUrl,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Schema(description = "Additional parameters to be sent in the request body to the custom LLM provider (e.g., {'mm_processor_kwargs': {'fps': 2}}). "
+                        +
+                        "These parameters are provider-specific and will be merged into the API request.", example = "{\"key1\": {\"key2\": 2, \"key3\": true}}", requiredMode = Schema.RequiredMode.NOT_REQUIRED) Map<String, Object> extraBody,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
@@ -56,6 +60,7 @@ public record ProviderApiKey(
                 ", providerName='" + providerName + '\'' +
                 ", headers=" + headers +
                 ", baseUrl='" + baseUrl + '\'' +
+                ", extraBody=" + extraBody +
                 ", createdAt=" + createdAt +
                 ", createdBy='" + createdBy + '\'' +
                 ", lastUpdatedAt=" + lastUpdatedAt +

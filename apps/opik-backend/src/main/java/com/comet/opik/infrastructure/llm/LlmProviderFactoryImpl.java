@@ -67,6 +67,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
                 .configuration(configuration)
+                .extraBody(providerConfig.extraBody())
                 .build();
     }
 

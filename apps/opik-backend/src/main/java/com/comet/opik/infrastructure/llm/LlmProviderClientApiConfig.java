@@ -7,7 +7,7 @@ import java.util.Map;
 
 @Builder
 public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<String, String> headers, String baseUrl,
-        Map<String, String> configuration) {
+        Map<String, String> configuration, Map<String, Object> extraBody) {
 
     @Override
     public String toString() {
@@ -16,6 +16,7 @@ public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<St
                 ", headers=" + headers +
                 ", baseUrl='" + baseUrl + '\'' +
                 ", configuration=" + configuration +
+                ", extraBody=" + extraBody +
                 '}';
     }
 }

@@ -28,6 +28,7 @@ const useProviderKeysUpdateMutation = () => {
             configuration: providerKey.configuration,
           }),
           ...(providerKey?.headers && { headers: providerKey.headers }),
+          ...(providerKey?.extra_body !== undefined && { extra_body: providerKey.extra_body }),
         },
       );
       return data;
