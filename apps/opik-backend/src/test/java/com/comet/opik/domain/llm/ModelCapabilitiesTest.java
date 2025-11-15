@@ -82,4 +82,17 @@ class ModelCapabilitiesTest {
         assertThat(ModelCapabilities.supportsVision("openai/gpt-3.5-turbo")).isFalse();
         assertThat(ModelCapabilities.supportsVision("GPT-3.5-TURBO")).isFalse();
     }
+
+    @Test
+    void supportsVideoReturnsTrueForKnownVideoModels() {
+        assertThat(ModelCapabilities.supportsVideo("qwen/qwen2.5-vl-32b-instruct")).isTrue();
+        assertThat(ModelCapabilities.supportsVideo("qwen3-vl-72b-instruct")).isTrue();
+    }
+
+    @Test
+    void supportsVideoReturnsFalseForUnknownModels() {
+        assertThat(ModelCapabilities.supportsVideo("some-random-model")).isFalse();
+        assertThat(ModelCapabilities.supportsVideo(null)).isFalse();
+        assertThat(ModelCapabilities.supportsVideo("   ")).isFalse();
+    }
 }
