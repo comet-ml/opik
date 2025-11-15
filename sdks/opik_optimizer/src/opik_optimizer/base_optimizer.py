@@ -132,7 +132,11 @@ class BaseOptimizer(ABC):
         return self._opik_client
 
     def _validate_optimization_inputs(
-        self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: "Dataset",
+        metric: Callable,
+        support_content_parts: bool = False,
     ) -> None:
         """
         Validate common optimization inputs.
@@ -154,6 +158,11 @@ class BaseOptimizer(ABC):
         if not callable(metric):
             raise ValueError(
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
+
+        if prompt._has_content_parts() and not support_content_parts:
+            raise ValueError(
+                "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
             )
 
     def _setup_agent_class(

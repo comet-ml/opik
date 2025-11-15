@@ -31,6 +31,57 @@ class MessageDiffItem:
     optimized_content: str | None
 
 
+def _content_to_string(content: str | list[dict[str, Any]]) -> str:
+    """
+    Convert message content to string representation for diff display.
+    Handles both string content and multimodal content parts.
+
+    Args:
+        content: Message content, either a string or a list of content parts
+
+    Returns:
+        String representation of the content
+    """
+    if isinstance(content, str):
+        return content
+
+    # Handle multimodal content (list of parts)
+    parts: list[str] = []
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            text_content = part.get("text", "")
+            if text_content:
+                parts.append(f"[text] {text_content}")
+        elif part_type == "image_url":
+            image_url_data = part.get("image_url", {})
+            url = (
+                image_url_data.get("url", "")
+                if isinstance(image_url_data, dict)
+                else ""
+            )
+            if url:
+                # Truncate long URLs or base64 data
+                if url.startswith("data:image"):
+                    if "," in url:
+                        base64_part = url.split(",", 1)[1]
+                        preview = (
+                            base64_part[:20] + "..."
+                            if len(base64_part) > 20
+                            else base64_part
+                        )
+                        parts.append(f"[image_url] data:image/...;base64,{preview}")
+                    else:
+                        parts.append(f"[image_url] {url[:50]}...")
+                else:
+                    display_url = url[:80] + "..." if len(url) > 80 else url
+                    parts.append(f"[image_url] {display_url}")
+            else:
+                parts.append("[image_url] <no URL>")
+
+    return "\n".join(parts) if parts else "(empty content)"
+
+
 def compute_message_diff_order(
     initial_messages: list[dict[str, str]],
     optimized_messages: list[dict[str, str]],
@@ -95,10 +146,22 @@ def compute_message_diff_order(
             change_type: Literal["added", "removed", "unchanged", "changed"] = "added"
         elif initial_content is not None and optimized_content is None:
             change_type = "removed"
-        elif initial_content == optimized_content:
-            change_type = "unchanged"
         else:
-            change_type = "changed"
+            # Normalize content to strings for comparison to handle both string and multimodal content
+            initial_str = (
+                _content_to_string(initial_content)
+                if initial_content is not None
+                else ""
+            )
+            optimized_str = (
+                _content_to_string(optimized_content)
+                if optimized_content is not None
+                else ""
+            )
+            if initial_str == optimized_str:
+                change_type = "unchanged"
+            else:
+                change_type = "changed"
 
         diff_items.append(
             MessageDiffItem(
@@ -778,7 +841,8 @@ def display_optimized_prompt_diff(
                 Text("│     ").append(Text(f"{item.role}: (added)", style="green bold"))
             )
             assert item.optimized_content is not None
-            for line in item.optimized_content.splitlines():
+            optimized_str = _content_to_string(item.optimized_content)
+            for line in optimized_str.splitlines():
                 console.print(Text("│       ").append(Text(f"+{line}", style="green")))
             console.print(Text("│"))
         elif item.change_type == "removed":
@@ -787,7 +851,8 @@ def display_optimized_prompt_diff(
                 Text("│     ").append(Text(f"{item.role}: (removed)", style="red bold"))
             )
             assert item.initial_content is not None
-            for line in item.initial_content.splitlines():
+            initial_str = _content_to_string(item.initial_content)
+            for line in initial_str.splitlines():
                 console.print(Text("│       ").append(Text(f"-{line}", style="red")))
             console.print(Text("│"))
         elif item.change_type == "unchanged":
@@ -806,17 +871,22 @@ def display_optimized_prompt_diff(
             assert item.initial_content is not None
             assert item.optimized_content is not None
 
+            # Convert content to strings for diffing
+            initial_str = _content_to_string(item.initial_content)
+            optimized_str = _content_to_string(item.optimized_content)
+
             # Generate unified diff
             diff_lines = list(
                 difflib.unified_diff(
-                    item.initial_content.splitlines(keepends=False),
-                    item.optimized_content.splitlines(keepends=False),
+                    initial_str.splitlines(keepends=False),
+                    optimized_str.splitlines(keepends=False),
                     lineterm="",
                     n=3,  # 3 lines of context
                 )
             )
 
-            if diff_lines:
+            # Check if there are actual diff lines (more than just the header)
+            if len(diff_lines) > 3:
                 # Create diff content
                 diff_content = Text()
                 for line in diff_lines[3:]:  # Skip first 3 lines (---, +++, @@)
@@ -831,4 +901,18 @@ def display_optimized_prompt_diff(
                         diff_content.append("│       " + line + "\n", style="dim")
 
                 console.print(diff_content)
+            elif initial_str != optimized_str:
+                # Content changed but diff is empty (might be whitespace or formatting)
+                # Show both versions for clarity
+                console.print(
+                    Text("│       ").append(
+                        Text("(content changed but diff unavailable)", style="dim")
+                    )
+                )
+                console.print(
+                    Text("│       ").append(Text(f"-{initial_str}", style="red"))
+                )
+                console.print(
+                    Text("│       ").append(Text(f"+{optimized_str}", style="green"))
+                )
             console.print(Text("│"))

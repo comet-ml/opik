@@ -76,8 +76,8 @@ def dummy_prompt() -> ChatPrompt:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "query": {"type": "string", "description": "Search query"},
+                    "limit": {"type": "integer", "description": "Max results"},
                 },
                 "required": ["query"],
             },

@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel
 
+from ..optimization_config import types
+
 
 class FailureMode(BaseModel):
     """Model for a single failure mode identified in evaluation."""
@@ -35,15 +37,8 @@ class HierarchicalRootCauseAnalysis(BaseModel):
     synthesis_notes: str
 
 
-class PromptMessage(BaseModel):
-    """Model for a single prompt message."""
-
-    role: str
-    content: str
-
-
 class ImprovedPrompt(BaseModel):
     """Model for improved prompt response."""
 
     reasoning: str
-    messages: list[PromptMessage]
+    messages: list[types.Message]

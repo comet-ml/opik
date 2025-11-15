@@ -5,6 +5,21 @@ description: "Run optimizations for prompts that combine text, images, and other
 
 Multimodal agents often juggle text instructions, image references, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for images or videos (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
 
+### Optimizer multimodal support
+
+Use optimizers that can forward OpenAI-style content parts (string or an array of `{ type: "text" | "image_url" }` parts) to a vision-capable LLM. Current support:
+
+| Optimizer | Multimodal (text+image) | Notes |
+|---|---|---|
+| Hierarchical Reflective Optimizer | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
+| MetaPrompt Optimizer | ✗ | Planned |
+| Evolutionary Optimizer | ✗ | Planned |
+| Few-shot Bayesian Optimizer | ✗ | Planned |
+| Parameter Optimizer | ✗ | Not applicable (tunes parameters only) |
+| GEPA Optimizer | ✗ | Planned |
+
+See also: [Evaluate multimodal](/evaluation/evaluate_multimodal) for model-family guidance and content block format.
+
 ## Dataset design
 
 - Store image or audio references as signed URLs in your dataset items (`metadata["image_url"]`).

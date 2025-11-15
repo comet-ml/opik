@@ -9,8 +9,16 @@ from .rag_hallucinations import rag_hallucinations
 from .ragbench import ragbench_sentence_relevance
 from .tiny_test import tiny_test
 from .truthful_qa import truthful_qa
+from .driving_hazard import (
+    driving_hazard_50,
+    driving_hazard_100,
+    driving_hazard_test_split,
+)
 
 __all__ = [
+    "driving_hazard_50",
+    "driving_hazard_100",
+    "driving_hazard_test_split",
     "hotpot_300",
     "hotpot_500",
     "halu_eval_300",

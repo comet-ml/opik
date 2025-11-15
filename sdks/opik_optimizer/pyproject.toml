@@ -22,6 +22,7 @@ dependencies = [
     "pyrate-limiter",
     "tqdm",
     "rich",
+    "pillow"
 ]
 
 [project.optional-dependencies]

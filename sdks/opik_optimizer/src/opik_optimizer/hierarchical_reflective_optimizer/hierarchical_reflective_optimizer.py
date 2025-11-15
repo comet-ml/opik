@@ -343,10 +343,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             improvement_reporter.set_reasoning(improved_prompt_response.reasoning)
 
         # Convert to chat prompt
-        messages_as_dicts = [
-            {"role": msg.role, "content": msg.content}
-            for msg in improved_prompt_response.messages
-        ]
+        messages_as_dicts = [x.model_dump() for x in improved_prompt_response.messages]
 
         improved_chat_prompt = chat_prompt.ChatPrompt(
             name=prompt.name,
@@ -421,6 +418,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             max_retries: Maximum retries allowed for addressing a failure mode.
         """
         # Reset counters at the start of optimization
+        self._validate_optimization_inputs(
+            prompt, dataset, metric, support_content_parts=True
+        )
+
         self._reset_counters()
         self._should_stop_optimization = False  # Reset stop flag
 
