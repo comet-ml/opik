@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
 
+import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
@@ -29,9 +30,11 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { buildDocsUrl } from "@/lib/utils";
 import { validateCsvFile } from "@/lib/file";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { attachmentUploadClient } from "@/api/attachments/attachmentUploadClient";
 
 const ACCEPTED_TYPE = ".csv";
-const FILE_SIZE_LIMIT_IN_MB = 20;
+const FILE_SIZE_LIMIT_IN_MB = 20; // Direct processing limit
+const MAX_FILE_SIZE_IN_MB = 2000; // Maximum upload size (2GB)
 const MAX_ITEMS_COUNT_LIMIT = 1000;
 
 type AddEditDatasetDialogProps = {
@@ -66,6 +69,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
     undefined,
   );
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
+  const [selectedFile, setSelectedFile] = useState<File | undefined>(undefined);
+  const [isLargeFile, setIsLargeFile] = useState<boolean>(false);
 
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
   const [description, setDescription] = useState<string>(
@@ -79,6 +84,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
       setIsOverlayShown(false);
       setCsvData(undefined);
       setCsvError(undefined);
+      setSelectedFile(undefined);
+      setIsLargeFile(false);
       setConfirmOpen(false);
       if (!dataset) {
         setName("");
@@ -97,15 +104,75 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const isEdit = Boolean(dataset);
   const hasValidCsvData = csvData && csvData.length > 0;
+  const hasValidLargeFile = isLargeFile && selectedFile && !csvError;
   // Validation: name is required, and CSV is required only if csvRequired is true
   const isValid =
     Boolean(name.length) &&
-    (isEdit || hideUpload || !csvRequired || hasValidCsvData);
+    (isEdit ||
+      hideUpload ||
+      !csvRequired ||
+      hasValidCsvData ||
+      hasValidLargeFile);
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
   const onCreateSuccessHandler = useCallback(
-    (newDataset: Dataset) => {
+    async (newDataset: Dataset) => {
+      // Handle large file upload to S3/MinIO
+      if (isLargeFile && selectedFile && newDataset.id) {
+        try {
+          await attachmentUploadClient.uploadFile({
+            file: selectedFile,
+            entityType: "trace", // Using trace as entity type
+            entityId: newDataset.id,
+            projectName: newDataset.name,
+            onProgress: (progress) => {
+              console.log(`Upload progress: ${progress.percentage}%`);
+            },
+          });
+
+          // Trigger backend CSV processing
+          try {
+            await api.post(
+              `${DATASETS_REST_ENDPOINT}${newDataset.id}/process-csv`,
+              {
+                file_path: selectedFile.name, // Pass just the filename, backend will reconstruct full path
+              },
+            );
+
+            toast({
+              title: "Dataset file uploaded",
+              description:
+                "Your CSV file has been uploaded and is being processed. You'll see the items appear shortly.",
+            });
+          } catch (error) {
+            console.error("Error triggering CSV processing:", error);
+            toast({
+              title: "Processing error",
+              description:
+                "File uploaded but processing failed to start. Please try again or contact support.",
+              variant: "destructive",
+            });
+          }
+
+          setOpen(false);
+          if (onDatasetCreated) {
+            onDatasetCreated(newDataset);
+          }
+        } catch (error) {
+          console.error("Error uploading CSV file:", error);
+          toast({
+            title: "Upload failed",
+            description:
+              "Failed to upload CSV file. Please try again or use the SDK for very large files.",
+            variant: "destructive",
+          });
+          setOpen(false);
+        }
+        return;
+      }
+
+      // Handle small file direct processing (existing flow)
       if (hasValidCsvData && newDataset.id) {
         // Prepare items with manual source and data fields
         const headers = Object.keys(csvData[0]);
@@ -153,6 +220,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
       createItemsMutate,
       csvData,
       hasValidCsvData,
+      isLargeFile,
+      selectedFile,
       onDatasetCreated,
       setOpen,
       toast,
@@ -183,7 +252,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
       );
     }
-    if (hasValidCsvData) {
+    if (hasValidCsvData || isLargeFile) {
       setIsOverlayShown(true);
     } else {
       setOpen(false);
@@ -191,6 +260,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   }, [
     isEdit,
     hasValidCsvData,
+    isLargeFile,
     updateMutate,
     dataset,
     name,
@@ -203,7 +273,28 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const handleFileSelect = useCallback(async (file?: File) => {
     setCsvError(undefined);
     setCsvData(undefined);
+    setSelectedFile(file);
+    setIsLargeFile(false);
 
+    if (!file) {
+      return;
+    }
+
+    // Check if file exceeds maximum size
+    if (file.size > MAX_FILE_SIZE_IN_MB * 1024 * 1024) {
+      setCsvError(
+        `File exceeds maximum size (${MAX_FILE_SIZE_IN_MB}MB). Please use a smaller file.`,
+      );
+      return;
+    }
+
+    // If file is larger than direct processing limit, mark as large file
+    if (file.size > FILE_SIZE_LIMIT_IN_MB * 1024 * 1024) {
+      setIsLargeFile(true);
+      return; // Don't parse large files in frontend
+    }
+
+    // For small files, validate and parse as before
     const { data, error } = await validateCsvFile(
       file,
       FILE_SIZE_LIMIT_IN_MB,
@@ -235,11 +326,22 @@ const AddEditDatasetDialog: React.FunctionComponent<
                   message={
                     <div>
                       <div className="comet-body-s-accented text-center">
-                        Processing the CSV
+                        {isLargeFile
+                          ? "Uploading CSV file"
+                          : "Processing the CSV"}
                       </div>
                       <div className="comet-body-s mt-2 text-center text-light-slate">
-                        This should take less than a minute. <br /> You can
-                        safely close this popup while we work.
+                        {isLargeFile ? (
+                          <>
+                            Uploading your file to storage. <br /> This may take
+                            a few minutes depending on file size.
+                          </>
+                        ) : (
+                          <>
+                            This should take less than a minute. <br /> You can
+                            safely close this popup while we work.
+                          </>
+                        )}
                       </div>
                       <div className="mt-4 flex items-center justify-center">
                         <Button onClick={() => setOpen(false)}>Close</Button>
@@ -281,8 +383,19 @@ const AddEditDatasetDialog: React.FunctionComponent<
             <div className="flex flex-col gap-2 pb-4">
               <Label>Upload a CSV</Label>
               <Description className="tracking-normal">
-                Your CSV file can contain up to 1,000 rows, for larger datasets
-                use the SDK instead.
+                {isLargeFile ? (
+                  <>
+                    Large file detected (
+                    {Math.round(selectedFile!.size / 1024 / 1024)}MB). This file
+                    will be uploaded to storage and processed asynchronously.
+                  </>
+                ) : (
+                  <>
+                    Files up to 20MB (max 1,000 rows) are processed immediately.
+                    Larger files (up to {MAX_FILE_SIZE_IN_MB}MB) are processed
+                    asynchronously.
+                  </>
+                )}
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
@@ -301,7 +414,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
                 onFileSelect={handleFileSelect}
                 errorText={csvError}
                 successText={
-                  csvData && !csvError ? "Valid CSV format" : undefined
+                  isLargeFile
+                    ? `Ready to upload (${Math.round(
+                        selectedFile!.size / 1024 / 1024,
+                      )}MB)`
+                    : csvData && !csvError
+                      ? "Valid CSV format"
+                      : undefined
                 }
               />
             </div>

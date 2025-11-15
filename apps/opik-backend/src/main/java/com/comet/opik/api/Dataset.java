@@ -46,7 +46,15 @@ public record Dataset(
         @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant mostRecentOptimizationAt,
         @JsonView({
-                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastCreatedOptimizationAt){
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastCreatedOptimizationAt,
+        @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) CsvProcessingStatus csvProcessingStatus,
+        @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String csvProcessingError,
+        @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant csvProcessedAt,
+        @JsonView({
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String csvFilePath){
 
     public static class View {
 

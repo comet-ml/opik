@@ -27,6 +27,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -94,6 +95,8 @@ public interface DatasetService {
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
 
     long getDailyCreatedCount();
+
+    Mono<Void> processDatasetCsv(UUID datasetId, String filePath);
 }
 
 @Singleton
@@ -115,6 +118,8 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
+    private final @NonNull DatasetCsvProcessorService datasetCsvProcessorService;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public Dataset save(@NonNull Dataset dataset) {
@@ -670,6 +675,50 @@ class DatasetServiceImpl implements DatasetService {
             });
         }
         return Mono.error(throwable);
+    }
+
+    @Override
+    public Mono<Void> processDatasetCsv(@NonNull UUID datasetId, @NonNull String fileName) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Starting CSV processing for dataset '{}', workspace '{}', file '{}'", datasetId, workspaceId,
+                fileName);
+
+        // Verify dataset exists
+        var dataset = getById(datasetId, workspaceId)
+                .orElseThrow(() -> {
+                    log.warn("Dataset not found: '{}'", datasetId);
+                    return newNotFoundException();
+                });
+
+        // Get or create project for the dataset
+        var project = projectService.getOrCreate(dataset.name())
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+
+        if (project == null) {
+            log.error("Failed to get project for dataset '{}'", datasetId);
+            throw new InternalServerErrorException("Failed to get project for dataset");
+        }
+
+        // Construct the S3 file path using the same format as AttachmentService
+        // Format: opik/attachment/workspaces/{workspaceId}/projects/{projectId}/traces/{entity_id}/files/{file_name}
+        String filePath = "opik/attachment/workspaces/" + workspaceId + "/projects/" + project.id()
+                + "/traces/" + datasetId + "/files/" + fileName;
+
+        log.info("Constructed file path for dataset '{}': '{}'", datasetId, filePath);
+
+        // Mark processing as started
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            dao.startCsvProcessing(datasetId, workspaceId, filePath, userName);
+            return null;
+        });
+
+        // Process CSV asynchronously
+        return datasetCsvProcessorService.processCsvAsync(datasetId, filePath, workspaceId, userName);
     }
 
 }

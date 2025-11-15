@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
+import com.comet.opik.api.CsvProcessingStatus;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
@@ -15,6 +16,8 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.ProcessDatasetCsvRequest;
+import com.comet.opik.api.ProcessDatasetCsvResponse;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.DatasetFilter;
 import com.comet.opik.api.filter.DatasetItemFilter;
@@ -595,5 +598,36 @@ public class DatasetsResource {
                 datasetId, experimentIds, workspaceId);
 
         return Response.ok(columns).build();
+    }
+
+    @POST
+    @Path("/{dataset_id}/process-csv")
+    @Operation(operationId = "processDatasetCsv", summary = "Process dataset CSV file", description = "Trigger async processing of a large CSV file uploaded to S3/MinIO", responses = {
+            @ApiResponse(responseCode = "200", description = "CSV processing started", content = @Content(schema = @Schema(implementation = ProcessDatasetCsvResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response processDatasetCsv(
+            @PathParam("dataset_id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ProcessDatasetCsvRequest.class))) @NotNull @Valid ProcessDatasetCsvRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Processing CSV for dataset '{}', file_path '{}', workspace_id '{}'", datasetId, request.filePath(),
+                workspaceId);
+
+        service.processDatasetCsv(datasetId, request.filePath())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .subscribe();
+
+        log.info("CSV processing started for dataset '{}', workspace_id '{}'", datasetId, workspaceId);
+
+        var response = ProcessDatasetCsvResponse.builder()
+                .status(CsvProcessingStatus.PROCESSING)
+                .message("CSV processing started. You will be notified when processing is complete.")
+                .build();
+
+        return Response.ok(response).build();
     }
 }

@@ -488,8 +488,11 @@ s3Config:
   s3BucketName: ${S3_BUCKET:-'public'}
   # Description: AWS S3 presign url timeout
   preSignUrlTimeoutSec: ${S3_PRESIGN_URL_TIMEOUT:-3600}
-  # Description: Url for local MinIO or Aws
+  # Description: Url for local MinIO or Aws (for backend-to-storage communication)
   s3Url: ${S3_URL:-http://localhost:9001}
+  # Description: Public URL for presigned URLs (for browser-to-storage communication)
+  # If not set, falls back to s3Url. For local MinIO with Docker, use http://localhost:9001
+  s3PublicUrl: ${S3_PUBLIC_URL:-}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
 

@@ -61,7 +61,10 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
                 .serviceConfiguration(s3Configuration);
 
         if (config.isMinIO()) {
-            builder.endpointOverride(URI.create(config.getS3Url()));
+            // Use s3PublicUrl if configured (for browser-accessible presigned URLs),
+            // otherwise fall back to s3Url (for internal Docker communication)
+            String presignerEndpoint = config.getS3PublicUrl() != null ? config.getS3PublicUrl() : config.getS3Url();
+            builder.endpointOverride(URI.create(presignerEndpoint));
         }
 
         return builder.build();

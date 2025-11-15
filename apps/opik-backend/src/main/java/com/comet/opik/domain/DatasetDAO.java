@@ -212,4 +212,16 @@ public interface DatasetDAO {
 
     @SqlQuery("SELECT id FROM datasets WHERE id IN (SELECT id FROM experiment_dataset_ids_<table_name>) and workspace_id = :workspace_id")
     Set<UUID> existsByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName);
+
+    @SqlUpdate("UPDATE datasets SET csv_file_path = :filePath, csv_processing_status = 'processing', last_updated_by = :lastUpdatedBy WHERE id = :id AND workspace_id = :workspace_id")
+    int startCsvProcessing(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId,
+            @Bind("filePath") String filePath, @Bind("lastUpdatedBy") String lastUpdatedBy);
+
+    @SqlUpdate("UPDATE datasets SET csv_processing_status = 'ready', csv_processed_at = NOW(), csv_processing_error = NULL, last_updated_by = :lastUpdatedBy WHERE id = :id AND workspace_id = :workspace_id")
+    int completeCsvProcessing(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId,
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
+
+    @SqlUpdate("UPDATE datasets SET csv_processing_status = 'failed', csv_processing_error = :error, last_updated_by = :lastUpdatedBy WHERE id = :id AND workspace_id = :workspace_id")
+    int failCsvProcessing(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId, @Bind("error") String error,
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
 }

@@ -21,5 +21,8 @@ public class S3Config {
     private String s3Url;
 
     @Valid @JsonProperty
+    private String s3PublicUrl; // Public URL for presigned URLs (used by browsers)
+
+    @Valid @JsonProperty
     private boolean isMinIO;
 }

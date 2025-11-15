@@ -101,10 +101,8 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
             @NonNull String workspaceId, @NonNull String userName) {
-        if (config.getS3Config().isMinIO()) {
-            return prepareMinIOUploadResponse(startUploadRequest);
-        }
-
+        // MinIO is S3-compatible and supports multipart uploads with presigned URLs
+        // Use the same flow for both S3 and MinIO
         startUploadRequest = startUploadRequest.toBuilder()
                 .containerId(getProjectIdByName(startUploadRequest.projectName(), workspaceId, userName))
                 .build();
@@ -125,12 +123,8 @@ class AttachmentServiceImpl implements AttachmentService {
     public void completeMultiPartUpload(@NonNull CompleteMultipartUploadRequest completeUploadRequest,
             @NonNull String workspaceId,
             @NonNull String userName) {
-        // In case of MinIO complete is not needed, file is uploaded directly via BE
-        if (config.getS3Config().isMinIO()) {
-            log.info("Skipping completeMultiPartUpload for MinIO");
-            return;
-        }
-
+        // MinIO is S3-compatible and supports multipart upload completion
+        // Use the same flow for both S3 and MinIO
         completeUploadRequest = completeUploadRequest.toBuilder()
                 .containerId(getProjectIdByName(completeUploadRequest.projectName(), workspaceId, userName))
                 .build();
