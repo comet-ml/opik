@@ -51,17 +51,15 @@ def dummy_prompt() -> ChatPrompt:
 
     tool_schema = {
         "type": "function",
-        "function": {
-            "name": "sample_tool",
-            "description": "Lookup data",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "limit": {"type": "integer"},
-                },
-                "required": ["query"],
+        "name": "sample_tool",
+        "description": "Lookup data",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "limit": {"type": "integer", "description": "Max results"},
             },
+            "required": ["query"],
         },
     }
 
