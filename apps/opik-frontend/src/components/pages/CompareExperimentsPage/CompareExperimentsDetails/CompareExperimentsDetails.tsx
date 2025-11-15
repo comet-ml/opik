@@ -8,7 +8,10 @@ import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScore
 import { Experiment } from "@/types/datasets";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import {
+  RESOURCE_MAP,
+  RESOURCE_TYPE,
+} from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
@@ -81,24 +84,40 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
   const renderSubSection = () => {
     if (isCompare) {
+      const { color } = RESOURCE_MAP[RESOURCE_TYPE.experiment];
+
       const tag =
         experimentsIds.length === 2 ? (
-          <Tag size="md" variant="gray" className="flex items-center gap-2">
-            <FlaskConical className="size-4 shrink-0" />
-            <div className="truncate">{experiments[1]?.name}</div>
+          <Tag
+            size="md"
+            variant="transparent"
+            className="flex items-center gap-1"
+          >
+            <FlaskConical className="size-4 shrink-0" style={{ color }} />
+            <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
+              {experiments[1]?.name}
+            </div>
           </Tag>
         ) : (
-          <Tag size="md" variant="gray">
-            {`${experimentsIds.length - 1} experiments`}
+          <Tag size="md" variant="transparent">
+            <div className="comet-body-s-accented text-muted-slate">
+              {`${experimentsIds.length - 1} experiments`}
+            </div>
           </Tag>
         );
 
       return (
         <div className="flex h-11 items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
-          <Tag size="md" variant="gray" className="flex items-center gap-2">
-            <FlaskConical className="size-4 shrink-0" />
-            <div className="truncate">{experiment?.name}</div>
+          <Tag
+            size="md"
+            variant="transparent"
+            className="flex items-center gap-1"
+          >
+            <FlaskConical className="size-4 shrink-0" style={{ color }} />
+            <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
+              {experiment?.name}
+            </div>
           </Tag>
           <span className="text-nowrap">compared against</span>
           {tag}
@@ -110,7 +129,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           <TooltipWrapper content="Feedback scores">
             <PenLine className="size-4 shrink-0" />
           </TooltipWrapper>
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto">
             {sortBy(experiment?.feedback_scores ?? [], "name").map(
               (feedbackScore) => {
                 return (
@@ -173,7 +192,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         <h1 className="comet-title-l truncate break-words">{title}</h1>
         {renderCompareFeedbackScoresButton()}
       </div>
-      <div className="mb-1 flex gap-4 overflow-x-auto">
+      <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (
           <DateTag
             date={experiment?.created_at}

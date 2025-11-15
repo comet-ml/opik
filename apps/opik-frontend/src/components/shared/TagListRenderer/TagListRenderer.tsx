@@ -51,7 +51,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   };
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-1.5 overflow-x-hidden">
+    <div className="flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden">
       <TooltipWrapper content="Tags list">
         <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
       </TooltipWrapper>

@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import capitalize from "lodash/capitalize";
 import sortBy from "lodash/sortBy";
 import { PenLine } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tag } from "@/components/ui/tag";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL";
@@ -23,6 +21,7 @@ import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/Ed
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ScopeTag from "@/components/pages/AnnotationQueuePage/ScopeTag";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -92,7 +91,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         direction="horizontal"
         limitWidth
       >
-        <div className="mb-1 flex gap-4 overflow-x-auto">
+        <div className="mb-1 flex gap-2 overflow-x-auto">
           {annotationQueue?.created_at && (
             <DateTag
               date={annotationQueue.created_at}
@@ -101,9 +100,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           )}
           {annotationQueue?.scope && (
             <TooltipWrapper content="Annotation queue scope">
-              <Tag variant="blue" size="md">
-                {capitalize(annotationQueue.scope)}
-              </Tag>
+              <ScopeTag scope={annotationQueue.scope} />
             </TooltipWrapper>
           )}
           {annotationQueue?.project_id && (
@@ -121,7 +118,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           <TooltipWrapper content="Feedback scores">
             <PenLine className="size-4 shrink-0" />
           </TooltipWrapper>
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto">
             {allocatedFeedbackScores.map((feedbackScore) => (
               <FeedbackScoreTag
                 key={feedbackScore.name + feedbackScore.value}

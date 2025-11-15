@@ -19,6 +19,7 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
       turquoise:
         "bg-[var(--tag-turquoise-bg)] text-[var(--tag-turquoise-text)]",
       blue: "bg-[var(--tag-blue-bg)] text-[var(--tag-blue-text)]",
+      transparent: "border border-border bg-transparent",
     },
     size: {
       default: "comet-body-xs-accented h-5 px-2 leading-5",
@@ -50,7 +51,10 @@ const Tag = React.forwardRef<HTMLDivElement, TagProps>(
 );
 Tag.displayName = "Tag";
 
-export const TAG_VARIANTS: Exclude<TagProps["variant"], "red">[] = [
+export const TAG_VARIANTS: Exclude<
+  TagProps["variant"],
+  "red" | "transparent"
+>[] = [
   "primary",
   "gray",
   "purple",
@@ -64,7 +68,7 @@ export const TAG_VARIANTS: Exclude<TagProps["variant"], "red">[] = [
 ];
 
 export const TAG_VARIANTS_COLOR_MAP: Record<
-  Exclude<TagProps["variant"], null | undefined | "red">,
+  Exclude<TagProps["variant"], null | undefined | "red" | "transparent">,
   string
 > = {
   default: "var(--color-gray)",

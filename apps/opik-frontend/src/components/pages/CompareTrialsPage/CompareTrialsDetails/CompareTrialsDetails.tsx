@@ -7,7 +7,10 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { Tag } from "@/components/ui/tag";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import {
+  RESOURCE_MAP,
+  RESOURCE_TYPE,
+} from "@/components/shared/ResourceLink/ResourceLink";
 import { formatNumericData } from "@/lib/utils";
 import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
 import NavigationTag from "@/components/shared/NavigationTag";
@@ -73,24 +76,44 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   const renderSubSection = () => {
     if (!isCompare) return null;
 
+    const { color } = RESOURCE_MAP[RESOURCE_TYPE.experiment];
+
     const tag =
       experimentsIds.length === 2 ? (
-        <Tag size="md" variant="gray" className="flex items-center gap-2">
-          <FlaskConical className="size-4 shrink-0" />
-          <div className="truncate">{experiments[1]?.name}</div>
+        <Tag
+          size="md"
+          variant="transparent"
+          className="flex items-center gap-1"
+        >
+          <FlaskConical className="size-4 shrink-0" style={{ color }} />
+          <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
+            {experiments[1]?.name}
+          </div>
         </Tag>
       ) : (
-        <Tag size="md" variant="gray">
-          {`${experimentsIds.length - 1} experiments`}
+        <Tag
+          size="md"
+          variant="transparent"
+          className="flex items-center gap-1"
+        >
+          <div className="comet-body-s-accented text-muted-slate">
+            {`${experimentsIds.length - 1} experiments`}
+          </div>
         </Tag>
       );
 
     return (
       <div className="flex h-11 items-center gap-2">
         <span className="text-nowrap">Baseline of</span>
-        <Tag size="md" variant="gray" className="flex items-center gap-2">
-          <FlaskConical className="size-4 shrink-0" />
-          <div className="truncate">{experiment?.name}</div>
+        <Tag
+          size="md"
+          variant="transparent"
+          className="flex items-center gap-1"
+        >
+          <FlaskConical className="size-4 shrink-0" style={{ color }} />
+          <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
+            {experiment?.name}
+          </div>
         </Tag>
         <span className="text-nowrap">compared against</span>
         {tag}
@@ -103,7 +126,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
       <div className="mb-4 flex min-h-8 items-center justify-between">
         <h1 className="comet-title-l truncate break-words">{title}</h1>
       </div>
-      <div className="mb-1 flex gap-4 overflow-x-auto">
+      <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (
           <DateTag
             date={experiment?.created_at}
