@@ -175,25 +175,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String SELECT_DATASET_ITEMS_COUNT = """
             SELECT
-                count(id) AS count,
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
-                ) AS columns
+                count(id) AS count
             FROM (
                 SELECT
-                    id,
-                    data
+                    id
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
@@ -229,6 +214,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+                LIMIT 1000
             )
             ;
             """;
@@ -1188,27 +1174,36 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
         var template = new ST(query);
 
-        Optional.ofNullable(datasetItemSearchCriteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+        // Always set filter attributes (even if null) to prevent StringTemplate errors
+        template.add("dataset_item_filters",
+                Optional.ofNullable(datasetItemSearchCriteria.filters())
+                        .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                                FilterStrategy.DATASET_ITEM))
+                        .orElse(null));
 
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM)
-                            .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
-                                    experimentItemFilters));
+        template.add("experiment_item_filters",
+                Optional.ofNullable(datasetItemSearchCriteria.filters())
+                        .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                                FilterStrategy.EXPERIMENT_ITEM))
+                        .orElse(null));
 
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                            .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+        template.add("feedback_scores_filters",
+                Optional.ofNullable(datasetItemSearchCriteria.filters())
+                        .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                                FilterStrategy.FEEDBACK_SCORES))
+                        .orElse(null));
 
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                            .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                    feedbackScoreIsEmptyFilters));
-                });
+        template.add("feedback_scores_empty_filters",
+                Optional.ofNullable(datasetItemSearchCriteria.filters())
+                        .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                                FilterStrategy.FEEDBACK_SCORES_IS_EMPTY))
+                        .orElse(null));
 
-        Optional.ofNullable(datasetItemSearchCriteria.search())
-                .filter(s -> !s.isBlank())
-                .ifPresent(searchText -> template.add("search_filter",
-                        filterQueryBuilder.buildDatasetItemSearchFilter(searchText)));
+        template.add("search_filter",
+                Optional.ofNullable(datasetItemSearchCriteria.search())
+                        .filter(s -> !s.isBlank())
+                        .map(filterQueryBuilder::buildDatasetItemSearchFilter)
+                        .orElse(null));
 
         return template;
     }

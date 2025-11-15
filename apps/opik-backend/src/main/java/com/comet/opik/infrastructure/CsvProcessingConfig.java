@@ -17,31 +17,22 @@ public class CsvProcessingConfig {
      * Number of threads in the CSV processing pool.
      * Default: 4 threads (suitable for I/O-bound CSV processing with DB writes)
      */
-    @Valid
-    @JsonProperty
-    @NotNull
-    @Min(1)
-    private Integer threadPoolSize = 4;
+    @Valid @JsonProperty
+    @NotNull @Min(1) private Integer threadPoolSize = 4;
 
     /**
      * Maximum number of CSV processing tasks that can be queued.
      * Default: 100 tasks (prevents memory exhaustion)
      * When queue is full, new tasks will be rejected with an error.
      */
-    @Valid
-    @JsonProperty
-    @NotNull
-    @Min(1)
-    private Integer queueCapacity = 100;
+    @Valid @JsonProperty
+    @NotNull @Min(1) private Integer queueCapacity = 100;
 
     /**
      * Prefix for thread names in the CSV processing pool.
      * Default: "csv-processor-"
      * Threads will be named: csv-processor-1, csv-processor-2, etc.
      */
-    @Valid
-    @JsonProperty
-    @NotNull
-    private String threadNamePrefix = "csv-processor-";
+    @Valid @JsonProperty
+    @NotNull private String threadNamePrefix = "csv-processor-";
 }
-

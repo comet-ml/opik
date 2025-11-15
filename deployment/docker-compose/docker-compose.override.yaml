@@ -11,6 +11,20 @@ services:
     ports:
       - "8123:8123" # Exposing ClickHouse HTTP port to host
       - "9000:9000" # Exposing ClickHouse Native Protocol port to host
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    environment:
+      # Increase memory limits for local development with large datasets (700k+ rows)
+      CLICKHOUSE_MAX_MEMORY_USAGE: 7516192768  # 7GB in bytes
+      CLICKHOUSE_MAX_MEMORY_USAGE_FOR_USER: 7516192768  # 7GB in bytes
+      # Increase query timeouts for large dataset operations
+      CLICKHOUSE_HTTP_RECEIVE_TIMEOUT: 300  # 5 minutes
+      CLICKHOUSE_HTTP_SEND_TIMEOUT: 300  # 5 minutes
+      CLICKHOUSE_MAX_EXECUTION_TIME: 300  # 5 minutes for query execution
 
   zookeeper:
     ports:

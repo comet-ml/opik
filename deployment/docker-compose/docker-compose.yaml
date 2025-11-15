@@ -146,6 +146,9 @@ services:
       ANALYTICS_DB_DATABASE_NAME: opik
       ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_PASS: opik
+      # Increase ClickHouse client timeouts for large dataset queries
+      ANALYTICS_DB_CONNECTION_TIMEOUT: 300000  # 5 minutes in milliseconds
+      ANALYTICS_DB_SOCKET_TIMEOUT: 300000  # 5 minutes in milliseconds
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       OPIK_OTEL_SDK_ENABLED: false
