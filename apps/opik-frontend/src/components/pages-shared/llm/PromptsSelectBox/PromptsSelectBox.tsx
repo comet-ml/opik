@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Database, FileTerminal, Plus, X } from "lucide-react";
+import { Database, Plus, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import useAppStore from "@/store/AppStore";
@@ -21,6 +21,7 @@ interface PromptsSelectBoxProps {
   clearable?: boolean;
   refetchOnMount?: boolean;
   asNewOption?: boolean;
+  filterByTemplateStructure?: "text" | "chat";
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
@@ -30,6 +31,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   clearable = true,
   refetchOnMount = false,
   asNewOption = false,
+  filterByTemplateStructure,
 }) => {
   const [open, setOpen] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -53,11 +55,17 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   );
 
   const promptsOptions = useMemo(() => {
-    return prompts.map(({ name, id }) => ({
+    const filteredPrompts = filterByTemplateStructure
+      ? prompts.filter(
+          (p) => p.template_structure === filterByTemplateStructure,
+        )
+      : prompts;
+
+    return filteredPrompts.map(({ name, id }) => ({
       label: name,
       value: id,
     }));
-  }, [prompts]);
+  }, [prompts, filterByTemplateStructure]);
 
   const promptsTotal = promptsData?.total ?? 0;
 
@@ -82,12 +90,25 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         </div>
       ) : (
         <div className="flex w-full items-center text-light-slate">
-          <FileTerminal className="mr-2 size-4" />
-          <span className="truncate font-normal">Load a prompt</span>
+          <Database className="mr-2 size-4" />
+          <span className="truncate font-normal">
+            {filterByTemplateStructure === "chat"
+              ? "Load chat prompt"
+              : "Load a prompt"}
+          </span>
         </div>
       ),
-    [asNewOption],
+    [asNewOption, filterByTemplateStructure],
   );
+
+  const searchPlaceholder = useMemo(() => {
+    if (filterByTemplateStructure === "chat") {
+      return "Search chat prompt";
+    } else if (filterByTemplateStructure === "text") {
+      return "Search text prompt";
+    }
+    return "Search";
+  }, [filterByTemplateStructure]);
 
   const actionPanel = useMemo(() => {
     return asNewOption ? (
@@ -113,6 +134,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         options={promptsOptions}
         value={value ?? (asNewOption ? NEW_PROMPT_VALUE : "")}
         placeholder={placeholder}
+        searchPlaceholder={searchPlaceholder}
         onChange={onValueChange}
         open={open}
         onOpenChange={onOpenChangeHandler}

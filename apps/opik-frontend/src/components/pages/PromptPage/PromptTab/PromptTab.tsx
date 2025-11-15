@@ -20,6 +20,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { parseContentWithImages } from "@/lib/llm";
+import ChatPromptView from "./ChatPromptView";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -71,10 +72,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   };
 
   useEffect(() => {
-    if (prompt?.latest_version?.id && !activeVersionId) {
-      setActiveVersionId(prompt.latest_version.id, "replaceIn");
+    if (versions && versions.length > 0 && !activeVersionId) {
+      setActiveVersionId(versions[0].id, "replaceIn");
     }
-  }, [prompt?.latest_version?.id, activeVersionId, setActiveVersionId]);
+  }, [versions, activeVersionId, setActiveVersionId]);
 
   useEffect(() => {
     return () => {
@@ -85,6 +86,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const { text: displayText, images: extractedImages } = useMemo(() => {
     return parseContentWithImages(activeVersion?.template || "");
   }, [activeVersion?.template]);
+
+  const isChatPrompt = useMemo(() => {
+    return prompt?.template_structure === "chat";
+  }, [prompt?.template_structure]);
 
   if (!prompt) {
     return <Loader />;
@@ -101,8 +106,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
-        <TryInPlaygroundButton prompt={prompt} />
-        <ImproveInPlaygroundButton prompt={prompt} />
+        <TryInPlaygroundButton prompt={prompt} activeVersion={activeVersion} />
+        <ImproveInPlaygroundButton
+          prompt={prompt}
+          activeVersion={activeVersion}
+        />
         <Button
           className="ml-auto"
           size="sm"
@@ -114,23 +122,31 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       </div>
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
-        <div className="flex grow flex-col gap-2">
-          <p className="comet-body-s-accented text-foreground">Prompt</p>
-          <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-            {displayText}
-          </code>
-          {extractedImages.length > 0 && (
+        <div className="flex grow flex-col gap-0.5">
+          <p className="comet-body-s-accented text-foreground">
+            {isChatPrompt ? "Chat messages" : "Prompt"}
+          </p>
+          {isChatPrompt ? (
+            <ChatPromptView template={activeVersion?.template || ""} />
+          ) : (
             <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Images
-              </p>
-              <PromptMessageImageTags
-                images={extractedImages}
-                setImages={() => {}}
-                editable={false}
-                preview={true}
-                align="start"
-              />
+              <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+                {displayText}
+              </code>
+              {extractedImages.length > 0 && (
+                <>
+                  <p className="comet-body-s-accented mt-4 text-foreground">
+                    Images
+                  </p>
+                  <PromptMessageImageTags
+                    images={extractedImages}
+                    setImages={() => {}}
+                    editable={false}
+                    preview={true}
+                    align="start"
+                  />
+                </>
+              )}
             </>
           )}
           {activeVersion?.metadata && (
@@ -177,6 +193,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openUseThisPrompt}
         setOpen={setOpenUseThisPrompt}
         promptName={prompt.name}
+        templateStructure={prompt.template_structure}
       />
 
       <EditPromptVersionDialog
@@ -186,6 +203,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
+        templateStructure={prompt.template_structure}
         onSetActiveVersionId={setActiveVersionId}
       />
 

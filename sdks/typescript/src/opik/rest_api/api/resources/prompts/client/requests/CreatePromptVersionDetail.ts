@@ -16,4 +16,5 @@ import * as OpikApi from "../../../../index";
 export interface CreatePromptVersionDetail {
     name: string;
     version: OpikApi.PromptVersionDetail;
+    templateStructure?: OpikApi.CreatePromptVersionDetailTemplateStructure;
 }

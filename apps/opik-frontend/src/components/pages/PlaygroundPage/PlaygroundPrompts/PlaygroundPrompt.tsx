@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef } from "react";
-import { CopyPlus, Trash } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { CopyPlus, Trash, Save } from "lucide-react";
 import last from "lodash/last";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
@@ -36,6 +37,10 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
+import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
+import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import usePromptVersionById from "@/api/prompts/usePromptVersionById";
+import usePromptByIdApi from "@/api/prompts/usePromptById";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -59,6 +64,7 @@ const PlaygroundPrompt = ({
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
   const datasetVariables = useDatasetVariables();
@@ -74,6 +80,34 @@ const PlaygroundPrompt = ({
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
+
+  const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
+    useState(false);
+  const [lastImportedPromptName, setLastImportedPromptName] =
+    useState<string>("");
+
+  // Get the loaded chat prompt ID from the prompt data
+  const selectedChatPromptId = prompt?.loadedChatPromptId;
+
+  // Fetch chat prompt data when selected
+  const { data: chatPromptData } = usePromptByIdApi(
+    {
+      promptId: selectedChatPromptId!,
+    },
+    {
+      enabled: !!selectedChatPromptId,
+    },
+  );
+
+  // Fetch chat prompt version when chat prompt is loaded
+  const { data: chatPromptVersionData } = usePromptVersionById(
+    {
+      versionId: chatPromptData?.latest_version?.id || "",
+    },
+    {
+      enabled: !!chatPromptData?.latest_version?.id,
+    },
+  );
 
   const provider = providerResolver(model);
 
@@ -203,6 +237,58 @@ const PlaygroundPrompt = ({
     model,
   ]);
 
+  // Handler for importing chat prompt
+  const handleImportChatPrompt = useCallback(
+    (loadedPromptId?: string) => {
+      if (loadedPromptId) {
+        updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
+      }
+    },
+    [promptId, updatePrompt],
+  );
+
+  // Effect to populate messages when chat prompt data is loaded
+  useEffect(() => {
+    if (
+      chatPromptVersionData?.template &&
+      selectedChatPromptId &&
+      chatPromptData
+    ) {
+      try {
+        // Parse the JSON string from template
+        const parsedMessages = JSON.parse(chatPromptVersionData.template);
+
+        // Convert to LLMMessage format - this will OVERWRITE existing messages
+        const newMessages: LLMMessage[] = parsedMessages.map(
+          (msg: { role: string; content: string }) =>
+            generateDefaultLLMPromptMessage({
+              role: msg.role as LLM_MESSAGE_ROLE,
+              content: msg.content,
+            }),
+        );
+
+        // Save the imported prompt name for later use when saving
+        setLastImportedPromptName(chatPromptData.name);
+
+        // Update the prompt with new messages (overwrites existing)
+        updatePrompt(promptId, { messages: newMessages });
+      } catch (error) {
+        console.error("Failed to parse chat prompt:", error);
+      }
+    }
+  }, [
+    chatPromptVersionData,
+    promptId,
+    updatePrompt,
+    selectedChatPromptId,
+    chatPromptData,
+  ]);
+
+  // Handler for saving chat prompt
+  const handleSaveChatPrompt = useCallback(() => {
+    setShowSaveChatPromptDialog(true);
+  }, []);
+
   const setRef = useCallback(
     (element: HTMLDivElement | null) => {
       if (element && scrollToPromptRef.current === promptId) {
@@ -230,7 +316,27 @@ const PlaygroundPrompt = ({
           {name} {getAlphabetLetter(index)}
         </p>
 
-        <div className="flex h-full items-center justify-center gap-2">
+        <div className="flex h-full flex-1 items-center justify-end gap-1">
+          <TooltipWrapper content={chatPromptData?.name || "Load chat prompt"}>
+            <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
+              <PromptsSelectBox
+                value={selectedChatPromptId}
+                onValueChange={handleImportChatPrompt}
+                clearable={false}
+                filterByTemplateStructure="chat"
+              />
+            </div>
+          </TooltipWrapper>
+          <TooltipWrapper content="Save as chat prompt">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={handleSaveChatPrompt}
+            >
+              <Save />
+            </Button>
+          </TooltipWrapper>
+          <Separator orientation="vertical" className="h-6" />
           <div className="h-full w-80">
             <PromptModelSelect
               value={model}
@@ -288,6 +394,23 @@ const PlaygroundPrompt = ({
             );
             updatePrompt(promptId, { messages: updatedMessages });
           },
+        }}
+      />
+
+      <AddNewPromptVersionDialog
+        open={showSaveChatPromptDialog}
+        setOpen={setShowSaveChatPromptDialog}
+        prompt={chatPromptData}
+        template={JSON.stringify(
+          messages.map((msg) => ({ role: msg.role, content: msg.content })),
+        )}
+        templateStructure="chat"
+        defaultName={lastImportedPromptName}
+        onSave={() => {
+          setShowSaveChatPromptDialog(false);
+          // Invalidate prompt queries to ensure the latest version is selected
+          queryClient.invalidateQueries({ queryKey: ["prompts"] });
+          queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
         }}
       />
     </div>

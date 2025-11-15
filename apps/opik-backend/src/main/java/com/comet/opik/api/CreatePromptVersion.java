@@ -14,5 +14,6 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CreatePromptVersion(@JsonView( {
         PromptVersion.View.Detail.class}) @NotBlank String name,
-        @JsonView({PromptVersion.View.Detail.class}) @NotNull @Valid PromptVersion version){
+        @JsonView({PromptVersion.View.Detail.class}) @NotNull @Valid PromptVersion version,
+        @JsonView({PromptVersion.View.Detail.class}) TemplateStructure templateStructure){
 }

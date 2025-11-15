@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 import opik
-from opik import Attachment, Prompt, synchronization
+from opik import Attachment, Prompt, ChatPrompt, synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
 from opik.rest_api.types import (
@@ -561,3 +561,34 @@ def verify_prompt_version(
         prompt_id == prompt.__internal_api__prompt_id__
     ), f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
     assert commit == prompt.commit, f"{prompt.commit} != {commit}"
+
+
+def verify_chat_prompt_version(
+    chat_prompt: ChatPrompt,
+    *,
+    name: Any = mock.ANY,  # type: ignore
+    messages: Any = mock.ANY,  # type: ignore
+    type: Any = mock.ANY,  # type: ignore
+    metadata: Any = mock.ANY,  # type: ignore
+    version_id: Any = mock.ANY,  # type: ignore
+    prompt_id: Any = mock.ANY,  # type: ignore
+    commit: Any = mock.ANY,  # type: ignore
+) -> None:
+    """
+    Verifies that a ChatPrompt has the expected properties.
+
+    This verifier checks all the same fields as verify_prompt_version but adapted for ChatPrompt:
+    - messages instead of template
+    - template_structure field is always verified to be "chat"
+    """
+    testlib.assert_equal(name, chat_prompt.name)
+    testlib.assert_equal(messages, chat_prompt.messages)
+    testlib.assert_equal(type, chat_prompt.type)
+    testlib.assert_equal(metadata, chat_prompt.metadata)
+    assert (
+        version_id == chat_prompt.__internal_api__version_id__
+    ), f"{chat_prompt.__internal_api__version_id__} != {version_id}"
+    assert (
+        prompt_id == chat_prompt.__internal_api__prompt_id__
+    ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
+    assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
