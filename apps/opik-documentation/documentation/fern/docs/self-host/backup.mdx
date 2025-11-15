@@ -276,6 +276,81 @@ spec:
           restartPolicy: OnFailure
 ```
 
+### Automated Restore with Kubernetes Job
+
+Opik helm chart provides a Kubernetes Job for automated backup restoration. This job handles the complete restore process, including downloading backups from S3 (if needed) and restoring them to ClickHouse.
+
+#### Configuration
+<Warning>
+Note that backup server must be enabled before and backup created using it and not by using default Clickhouse backup
+</Warning>
+To create the restore job, configure the following values in your Helm chart:
+
+```yaml
+clickhouse:
+  backupServer:
+    enabled: true  # Required: backup server must be enabled and configured 
+    REMOTE_STORAGE: s3
+    S3_BUCKET: YOURBUCKET
+    S3_PATH: YOURPATH
+  backup:
+    restore:
+      createJob: true
+      backupName: "202501010"  # Name of the backup to restore
+      image: "amazon/aws-cli:2.27.49"  # Image with curl and jq
+```
+
+#### How the Restore Job Works
+
+The restore job automatically:
+
+1. **Checks local availability**: Determines if the backup exists locally in ClickHouse
+2. **Chooses restore method**:
+   - If backup exists locally: Uses `restore` command (faster)
+   - If backup not local: Uses `restore_remote` command (downloads and restores in one step)
+3. **Monitors progress**: Polls the backup server API every 15 minutes to check restore status
+4. **Reports completion**: Logs success or failure with detailed status information
+
+#### Creating the Restore Job
+
+1. **Update your Helm values** with the restore configuration 
+
+   ```bash
+   # Create or update values file
+   cat > restore-values.yaml <<EOF
+   clickhouse:
+     backupServer:
+       enabled: true
+     backup:
+       restore:
+         createJob: true
+         backupName: "backup-20240101-120000"
+   EOF
+   ```
+2. ** Run the job
+   apply Helm upgrade 
+   ```bash
+   helm upgrade opik opik/opik -f values.yaml
+   ```
+   or use this job template as an example and apply the job manually:
+   ```bash
+   helm template opik opik/opik -f values.yaml > opik.yaml
+   ```
+   copy the clickhouse-restore job from opik.yaml into separate file clickhouse-restore-job.yaml and apply
+   ```bash
+   kubectl apply -f clickhouse-restore-job.yaml
+   ```
+
+  
+3. **Monitor the restore job**:
+
+   ```bash
+   # Check job status
+   kubectl get jobs -l app=clickhouse-restore
+   
+   # Watch job logs
+   kubectl logs -f job/opik-clickhouse-restore
+   ```
 ## Comparison
 
 | Feature                 | SQL-based Backup | ClickHouse Backup Tool |
