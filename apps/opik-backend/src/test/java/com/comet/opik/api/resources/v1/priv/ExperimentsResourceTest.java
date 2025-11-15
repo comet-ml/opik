@@ -2015,7 +2015,7 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"feedback_scores", "feedback_score.dsfsdfd", "feedback_scores."})
-        void whenSortingByFeedbackScores__thenReturnPage(String field) {
+        void whenSortingByInvalidFeedbackScoresPattern__thenIgnoreAndReturnPage(String field) {
 
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -2036,7 +2036,7 @@ class ExperimentsResourceTest {
                     null,
                     null,
                     null)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
         }
 

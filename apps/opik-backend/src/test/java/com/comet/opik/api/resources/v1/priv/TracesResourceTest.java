@@ -5062,12 +5062,9 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("when sorting by invalid field, then return 400")
-        void getTraceThreads__whenSortingByInvalidField__thenReturn400() {
+        @DisplayName("when sorting by invalid field, then ignore and return success")
+        void getTraceThreads__whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
-                    "Invalid sorting fields '%s'".formatted(field));
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
@@ -5076,10 +5073,11 @@ class TracesResourceTest {
             var actualResponse = traceResourceClient.callGetTraceThreadsWithSorting(projectId, sortingFields, API_KEY,
                     TEST_WORKSPACE);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
+            var actualEntity = actualResponse.readEntity(Trace.TracePage.class);
+            assertThat(actualEntity).isNotNull();
         }
 
     }

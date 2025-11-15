@@ -47,13 +47,6 @@ export const isColumnSortable = (id: string, sortableColumns: string[]) => {
     return true;
   }
 
-  // Legacy field match: single field name matching wildcard pattern
-  // e.g., "expected_answer" matches when "data.*" is sortable
-  if (keys.length === 1 && sortableColumns.includes("data.*")) {
-    return true;
-  }
-
-  // Prefix match: e.g., "output.output" sortable if "output" is sortable
   if (keys.length > 1 && sortableColumns.includes(keys[0])) {
     return true;
   }

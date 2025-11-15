@@ -5830,8 +5830,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when sorting with invalid field, then return bad request")
-        void findDatasetItemsWithExperimentItems__whenSortingWithInvalidField__thenReturnBadRequest() {
+        @DisplayName("when sorting with invalid field, then ignore and return success")
+        void findDatasetItemsWithExperimentItems__whenSortingWithInvalidField__thenIgnoreAndReturnSuccess() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -5870,12 +5870,11 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
-                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(errorMessage.getMessage()).contains("Invalid sorting fields");
-                assertThat(errorMessage.getMessage()).contains("invalid_field");
+                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualEntity).isNotNull();
             }
         }
 
