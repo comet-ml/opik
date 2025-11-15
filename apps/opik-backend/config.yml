@@ -502,6 +502,18 @@ attachmentsConfig:
   # Default: 256000 (256KB)
   stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
+# CSV processing configuration
+csvProcessingConfig:
+  # Default: 4
+  # Description: Number of threads in the dedicated CSV processing pool
+  threadPoolSize: ${CSV_PROCESSING_THREADS:-4}
+  # Default: 100
+  # Description: Maximum number of CSV processing tasks that can be queued
+  queueCapacity: ${CSV_PROCESSING_QUEUE:-100}
+  # Default: csv-processor-
+  # Description: Prefix for thread names in the CSV processing pool (threads will be named: csv-processor-1, csv-processor-2, etc.)
+  threadNamePrefix: ${CSV_PROCESSING_THREAD_NAME_PREFIX:-csv-processor-}
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000

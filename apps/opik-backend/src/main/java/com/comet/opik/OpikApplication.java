@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.cache.CacheModule;
+import com.comet.opik.infrastructure.csv.CsvProcessingModule;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
@@ -94,7 +95,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
-                        new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule())
+                        new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
+                        new CsvProcessingModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()

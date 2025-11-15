@@ -437,6 +437,61 @@ WHERE id = '{dataset-id}';
 ⚠️ **Notifications** - WebSocket/email notifications not yet implemented (optional enhancement)  
 ⚠️ **Testing** - End-to-end testing with large CSV files recommended  
 
+## Thread Pool Architecture
+
+### Dedicated CSV Processing Scheduler
+
+The CSV processing uses a **dedicated Reactor Scheduler** with its own thread pool, isolated from other background tasks.
+
+#### Configuration
+
+```yaml
+# apps/opik-backend/config.yml
+csvProcessingConfig:
+  threadPoolSize: 4           # Number of threads for CSV processing
+  queueCapacity: 100          # Maximum queued tasks
+  threadNamePrefix: csv-processor-  # Thread naming for monitoring
+```
+
+#### Benefits
+
+1. **Isolation**: CSV processing doesn't compete with attachment operations or other tasks
+2. **Observability**: Dedicated thread naming (`csv-processor-1`, `csv-processor-2`, etc.) makes monitoring easier
+3. **Tunable**: Thread count can be adjusted independently based on CSV workload
+4. **Fail-Fast**: Queue capacity prevents memory exhaustion from excessive queued files
+5. **No Starvation**: Other services (attachment processing, etc.) run on separate thread pools
+
+#### Implementation Details
+
+**CsvProcessingModule** (`apps/opik-backend/src/main/java/com/comet/opik/infrastructure/csv/CsvProcessingModule.java`):
+- Creates a `Scheduler` using `Schedulers.newBoundedElastic()` with custom configuration
+- Registers a lifecycle manager to ensure proper shutdown
+- Injects the scheduler as `@Named("csvProcessingScheduler")`
+
+**DatasetCsvProcessorService** (`apps/opik-backend/src/main/java/com/comet/opik/domain/DatasetCsvProcessorService.java`):
+- Injects the dedicated scheduler via `@Named("csvProcessingScheduler")`
+- Uses `.subscribeOn(csvProcessingScheduler)` instead of `Schedulers.boundedElastic()`
+
+#### Thread Pool Comparison
+
+| Service | Thread Pool | Configuration | Purpose |
+|---------|-------------|---------------|---------|
+| **CSV Processing** | Dedicated `csvProcessingScheduler` | 4 threads, 100 queue capacity | Long-running CSV parsing and DB writes |
+| **Attachment Stripping** | Shared `boundedElastic` | Reactor default | Fast base64 extraction |
+| **Attachment Reinjection** | Shared `boundedElastic` | Reactor default | S3 downloads and reinjection |
+
+#### Tuning Guidelines
+
+- **Default (4 threads)**: Suitable for typical workloads with occasional CSV uploads
+- **High-volume (8-16 threads)**: For deployments with frequent concurrent CSV uploads
+- **Low-resource (2 threads)**: For resource-constrained environments
+
+Environment variables:
+```bash
+CSV_PROCESSING_THREADS=8        # Increase for high-volume workloads
+CSV_PROCESSING_QUEUE=200        # Increase queue capacity if needed
+```
+
 ## Next Steps
 
 1. **Frontend Integration:**
@@ -448,16 +503,18 @@ WHERE id = '{dataset-id}';
    - Test with various CSV sizes (1MB, 10MB, 100MB, 1GB)
    - Test error scenarios (malformed CSV, missing file, etc.)
    - Load testing with concurrent uploads
+   - Verify thread pool isolation under load
 
 3. **Monitoring:**
    - Add metrics for processing time
    - Add metrics for success/failure rates
    - Add alerts for failed processing
+   - Monitor thread pool utilization (`csv-processor-*` threads)
 
 4. **Documentation:**
    - Update API documentation
    - Update user guide with large file upload instructions
    - Create troubleshooting guide
 
-The backend is fully implemented and ready for integration! 🎉
+The backend is fully implemented with dedicated thread pool for optimal performance! 🎉
 

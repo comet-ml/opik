@@ -8,16 +8,16 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import com.google.inject.name.Named;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvValidationException;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
+import reactor.core.scheduler.Scheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.io.IOException;
@@ -41,16 +41,29 @@ public interface DatasetCsvProcessorService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class DatasetCsvProcessorServiceImpl implements DatasetCsvProcessorService {
 
     private static final int BATCH_SIZE = 1000;
-    private static final int MAX_CSV_SIZE_MB = 2000; // 2GB
 
     private final @NonNull FileService fileService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull Scheduler csvProcessingScheduler;
+
+    @Inject
+    public DatasetCsvProcessorServiceImpl(
+            @NonNull FileService fileService,
+            @NonNull DatasetItemDAO datasetItemDAO,
+            @NonNull TransactionTemplate template,
+            @NonNull IdGenerator idGenerator,
+            @NonNull @Named("csvProcessingScheduler") Scheduler csvProcessingScheduler) {
+        this.fileService = fileService;
+        this.datasetItemDAO = datasetItemDAO;
+        this.template = template;
+        this.idGenerator = idGenerator;
+        this.csvProcessingScheduler = csvProcessingScheduler;
+    }
 
     @Override
     public Mono<Void> processCsvAsync(@NonNull UUID datasetId, @NonNull String filePath, @NonNull String workspaceId,
@@ -66,7 +79,7 @@ class DatasetCsvProcessorServiceImpl implements DatasetCsvProcessorService {
                 throw exception;
             }
         })
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(csvProcessingScheduler)
                 .then();
     }
 
