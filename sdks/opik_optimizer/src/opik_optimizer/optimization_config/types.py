@@ -8,25 +8,29 @@ class PropertySchema(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(extra="allow")
 
-    type: Any
-    description: str
+    description: str | None = None
+    type: Any | None = None
     properties: dict[str, "PropertySchema"] | None = None
 
 
 class ToolParameters(pydantic.BaseModel):
     """JSON Schema for tool/function parameters (OpenAI function calling format)."""
 
-    type: Literal["object"]
-    properties: dict[str, PropertySchema]
+    type: Literal["object"] | None = None
+    properties: dict[str, PropertySchema] | None = None
     required: list[str] | None = None
     additionalProperties: bool | dict[str, Any] | None = None
 
 
-class Tool(pydantic.BaseModel):
-    type: Literal["function"]
+class FunctionTool(pydantic.BaseModel):
     name: str
     description: str
     parameters: ToolParameters
+
+
+class Tool(pydantic.BaseModel):
+    type: Literal["function"]
+    function: FunctionTool
 
 
 class ImageURL(pydantic.BaseModel):
