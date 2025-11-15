@@ -23,6 +23,8 @@ public interface PreSignerService {
     List<String> generatePresignedUrls(String key, Integer totalParts, String uploadId);
 
     String presignDownloadUrl(String key);
+
+    long getPresignedUrlExpirationSeconds();
 }
 
 @Slf4j
@@ -74,10 +76,15 @@ class PreSignerServiceImpl implements PreSignerService {
 
         // Generate the pre-signed URL
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofSeconds(s3Config.getPreSignUrlTimeoutSec())) // URL expires in 10 minutes
+                .signatureDuration(Duration.ofSeconds(s3Config.getPreSignUrlTimeoutSec()))
                 .getObjectRequest(getObjectRequest)
                 .build();
 
         return preSigner.presignGetObject(presignRequest).url().toString();
+    }
+
+    @Override
+    public long getPresignedUrlExpirationSeconds() {
+        return s3Config.getPreSignUrlTimeoutSec();
     }
 }

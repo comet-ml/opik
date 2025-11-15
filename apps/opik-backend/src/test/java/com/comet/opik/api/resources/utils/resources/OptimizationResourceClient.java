@@ -63,8 +63,16 @@ public class OptimizationResourceClient {
     }
 
     public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        return get(id, apiKey, workspaceName, expectedStatus, false);
+    }
+
+    public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus,
+            boolean includeStudioConfig) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
+                .queryParam("include_studio_config", includeStudioConfig);
+
+        try (var response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -81,6 +89,11 @@ public class OptimizationResourceClient {
 
     public Optimization.OptimizationPage find(String apiKey, String workspaceName, int page, int size,
             UUID datasetId, String name, Boolean datasetDeleted, int expectedStatus) {
+        return find(apiKey, workspaceName, page, size, datasetId, name, datasetDeleted, null, expectedStatus);
+    }
+
+    public Optimization.OptimizationPage find(String apiKey, String workspaceName, int page, int size,
+            UUID datasetId, String name, Boolean datasetDeleted, Boolean studioOnly, int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -95,6 +108,10 @@ public class OptimizationResourceClient {
 
         if (datasetDeleted != null) {
             webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+        }
+
+        if (studioOnly != null) {
+            webTarget = webTarget.queryParam("studio_only", studioOnly);
         }
 
         try (var response = webTarget
@@ -129,6 +146,27 @@ public class OptimizationResourceClient {
                 .put(Entity.json(update))) {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public com.comet.opik.api.OptimizationStudioLog getStudioLogs(UUID id, String apiKey, String workspaceName,
+            int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .path(id.toString())
+                .path("logs")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(com.comet.opik.api.OptimizationStudioLog.class);
+            }
+
+            return null;
         }
     }
 }
