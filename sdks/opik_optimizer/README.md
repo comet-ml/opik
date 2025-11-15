@@ -16,8 +16,9 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 
 ## 🎯 Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
 - **Optimizer Chaining**: Results from one optimizer can be used as input for another
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 - **Type Safety**: Full type hints and validation for robust development
@@ -163,7 +164,17 @@ The `result` object contains the optimized prompt, evaluation scores, and other 
 
 The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
 
-## Agent Function Calling
+## Tool Optimization (MCP) - Beta
+
+The Opik Agent Optimizer supports **true tool optimization** for MCP (Model Context Protocol) tools. This feature is currently in **Beta** and supported by the **MetaPrompt Optimizer**.
+
+### Key Features
+
+- **MCP Tool Optimization** - Optimize MCP tool descriptions and usage patterns (Beta)
+- **Tool-Aware Analysis** - The optimizer understands MCP tool schemas and usage patterns
+- **Multi-step Workflow Support** - Optimize complex agent workflows involving MCP tools
+
+### Agent Function Calling (Not Tool Optimization)
 
 Many optimizers can optimize **agents that use function calling**, but this is different from true tool optimization. Here's an example with GEPA:
 
@@ -199,6 +210,19 @@ prompt = ChatPrompt(
 optimizer = GepaOptimizer(model="gpt-4o-mini")
 result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric)
 ```
+
+### True Tool Optimization (MCP) - Beta
+
+```python
+from opik_optimizer import MetaPromptOptimizer
+
+# MCP tool optimization is currently in Beta
+# See scripts/litellm_metaprompt_context7_mcp_example.py for working examples
+optimizer = MetaPromptOptimizer(model="gpt-4")
+# MCP tools are configured through mcp.json manifests
+```
+
+For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
 
 ## Deprecation Warnings
 
@@ -239,6 +263,24 @@ To suppress deprecation warnings during development:
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 ```
+
+### MCP Integration (Beta)
+
+The optimizer includes utilities for MCP tool integration:
+
+```bash
+# Install MCP Python SDK
+pip install mcp
+
+# Run MCP examples (Beta)
+python scripts/litellm_metaprompt_context7_mcp_example.py
+```
+
+Underlying utilities are available in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`.
+
+<Note>
+  **Important:** True tool optimization (MCP) is currently in **Beta**. Most examples show **agent optimization** (optimizing prompts for agents that use tools), which is different from optimizing the tools themselves.
+</Note>
 
 ## Development
 

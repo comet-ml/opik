@@ -1,38 +1,28 @@
 import { useQueryParam, withDefault, StringParam } from "use-query-params";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 import {
   useMetricDateRangeCore,
   UseMetricDateRangeOptions,
 } from "./useMetricDateRangeCore";
-import { serializeDateRange } from "./utils";
-import { DEFAULT_METRICS_DATE_RANGE } from "./constants";
+import { DEFAULT_DATE_PRESET, DEFAULT_DATE_URL_KEY } from "./constants";
 
 type UseMetricDateRangeWithQueryOptions = UseMetricDateRangeOptions & {
-  key: string;
-  defaultDateRange?: DateRangeValue;
+  key?: string;
 };
 
 export const useMetricDateRangeWithQuery = (
-  options: UseMetricDateRangeWithQueryOptions,
+  options: UseMetricDateRangeWithQueryOptions = {},
 ) => {
-  const {
-    key,
-    defaultDateRange = DEFAULT_METRICS_DATE_RANGE,
-    ...rest
-  } = options;
-
-  const defaultSerialized = serializeDateRange(defaultDateRange);
+  const { key = DEFAULT_DATE_URL_KEY, ...rest } = options;
 
   const [value, setValue] = useQueryParam(
     key,
-    withDefault(StringParam, defaultSerialized),
+    withDefault(StringParam, DEFAULT_DATE_PRESET),
     { updateType: "replaceIn" },
   );
 
   return useMetricDateRangeCore({
     value,
     setValue,
-    defaultDateRange,
     ...rest,
   });
 };
