@@ -102,14 +102,14 @@ class ChatPrompt:
     def _merge_messages(
         system: str | None, user: str | None, messages: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        messages = []
+        merged_messages = []
         if system is not None:
-            messages.append({"role": "system", "content": system})
+            merged_messages.append({"role": "system", "content": system})
         if user is not None:
-            messages.append({"role": "user", "content": user})
+            merged_messages.append({"role": "user", "content": user})
         if messages is not None:
-            messages.extend(messages)
-        return messages
+            merged_messages.extend(messages)
+        return merged_messages
 
     def _has_content_parts(self) -> bool:
         messages = self._standardize_prompts()
