@@ -42,25 +42,6 @@ class _StubOptimizer(BaseOptimizer):
     ) -> Any:
         raise NotImplementedError
 
-    def optimize_mcp(  # type: ignore[override]
-        self,
-        prompt: ChatPrompt,
-        dataset: Any,
-        metric: Callable,
-        *,
-        tool_name: str,
-        second_pass: Any,
-        experiment_config: dict[str, Any] | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
-        fallback_invoker: Any | None = None,
-        fallback_arguments: Any | None = None,
-        allow_tool_use_on_second_pass: bool = False,
-        **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError
-
 
 @pytest.fixture()
 def dummy_prompt() -> ChatPrompt:

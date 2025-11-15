@@ -6,7 +6,6 @@ import logging
 import random
 
 from . import prompts as evo_prompts
-from .mcp import EvolutionaryMCPContext, tool_description_mutation
 from ..optimization_config import chat_prompt
 from .. import utils
 from . import reporting
@@ -23,7 +22,6 @@ class MutationOps:
         output_style_guidance: str
         _get_task_description_for_llm: Any
         _call_model: Any
-        _mcp_context: EvolutionaryMCPContext | None
         _update_individual_with_prompt: Callable[[Any, chat_prompt.ChatPrompt], Any]
 
     def _deap_mutation(
@@ -35,16 +33,6 @@ class MutationOps:
             tools=initial_prompt.tools,
             function_map=initial_prompt.function_map,
         )
-
-        mcp_context = getattr(self, "_mcp_context", None)
-        if mcp_context is not None:
-            mutated_prompt = tool_description_mutation(self, prompt, mcp_context)
-            if mutated_prompt is not None:
-                reporting.display_success(
-                    "      Mutation successful, tool description updated (MCP mutation).",
-                    verbose=self.verbose,
-                )
-                return self._update_individual_with_prompt(individual, mutated_prompt)
 
         # Choose mutation strategy based on current diversity
         diversity = self._calculate_population_diversity()
