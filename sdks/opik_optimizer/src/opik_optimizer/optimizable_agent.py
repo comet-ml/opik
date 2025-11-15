@@ -1,7 +1,7 @@
 from typing import Any, TYPE_CHECKING
 import json
 import os
-
+import copy
 
 from opik.opik_context import get_current_span_data
 
@@ -65,9 +65,15 @@ class OptimizableAgent:
         litellm.callbacks = [self.opik_logger]
 
     def init_agent(self, prompt: "ChatPrompt") -> None:
-        """Initialize the agent with the provided configuration."""
+        """Bind the runtime prompt and snapshot its model configuration."""
         # Register the tools, if any, for default LiteLLM Agent use:
         self.prompt = prompt
+        if getattr(prompt, "model", None) is not None:
+            self.model = prompt.model
+        if getattr(prompt, "model_kwargs", None) is not None:
+            self.model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
+        else:
+            self.model_kwargs = {}
 
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
@@ -127,6 +133,10 @@ class OptimizableAgent:
             while count < 20:
                 count += 1
                 response = self._llm_complete(all_messages, self.prompt.tools, seed)
+                if hasattr(self, "optimizer") and hasattr(
+                    self.optimizer, "_increment_llm_counter"
+                ):
+                    self.optimizer._increment_llm_counter()
                 msg = response.choices[0].message
                 all_messages.append(msg.to_dict())
                 if msg.tool_calls:
@@ -161,6 +171,10 @@ class OptimizableAgent:
             result = final_response
         else:
             response = self._llm_complete(all_messages, None, seed)
+            if hasattr(self, "optimizer") and hasattr(
+                self.optimizer, "_increment_llm_counter"
+            ):
+                self.optimizer._increment_llm_counter()
             result = response.choices[0].message.content
         return result
 
