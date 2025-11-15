@@ -28,7 +28,7 @@ class ChatPrompt:
         name: str = "chat-prompt",
         system: str | None = None,
         user: str | None = None,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         tools: list[dict[str, Any]] | None = None,
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",
