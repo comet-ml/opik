@@ -9,6 +9,7 @@ import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -458,7 +459,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(DELETE_ITEMS_BY_IDS);
+                    var template = TemplateUtils.newST(DELETE_ITEMS_BY_IDS);
 
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", projectId.toString())
@@ -489,7 +490,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {
-        var template = new ST(FIND);
+        var template = TemplateUtils.newST(FIND);
         template.add("id", id.toString());
 
         var statement = connection
@@ -509,7 +510,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     private Mono<? extends Result> createBatch(List<AnnotationQueue> annotationQueues, Connection connection) {
         var queryItems = getQueryItemPlaceHolder(annotationQueues.size());
-        var template = new ST(BATCH_INSERT).add("items", queryItems);
+        var template = TemplateUtils.newST(BATCH_INSERT).add("items", queryItems);
 
         Statement statement = connection.createStatement(template.render());
 
@@ -537,7 +538,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     private Publisher<? extends Result> createItems(UUID queueId, Set<UUID> itemIds, UUID projectId,
             Connection connection) {
         var queryItems = getQueryItemPlaceHolder(itemIds.size());
-        var template = new ST(BATCH_ITEMS_INSERT).add("items", queryItems);
+        var template = TemplateUtils.newST(BATCH_ITEMS_INSERT).add("items", queryItems);
 
         var statement = connection.createStatement(template.render());
         statement.bind("queue_id", queueId.toString())
@@ -658,7 +659,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private ST newFindTemplate(String query, AnnotationQueueSearchCriteria searchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
@@ -670,7 +671,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private ST newUpdateTemplate(AnnotationQueueUpdate update, String sql) {
-        var template = new ST(sql);
+        var template = TemplateUtils.newST(sql);
 
         Optional.ofNullable(update.name())
                 .ifPresent(name -> template.add("name", update.name()));
