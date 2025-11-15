@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -20,16 +21,23 @@ public class CustomLlmProvider implements LlmProviderService {
     // assume that the provider is compatible with OpenAI API, so we use the OpenAiClient to interact with it
     private final @NonNull OpenAiClient openAiClient;
     private final Map<String, String> configuration;
-    private final Map<String, Object> extraBody;
+    private final Map<String, Object> providerExtraBody;
 
     @Override
-    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody) {
         ChatCompletionRequest cleanedRequest = cleanModelName(request);
-        if (extraBody != null && !extraBody.isEmpty()) {
-            log.info("Extra body parameters configured for custom LLM provider: '{}'", extraBody);
+
+        // Merge provider-level and request-level extra_body
+        Map<String, Object> mergedExtraBody = mergeExtraBody(requestExtraBody);
+        logExtraBody(requestExtraBody, false);
+
+        if (mergedExtraBody != null && !mergedExtraBody.isEmpty()) {
+            log.info("Total merged extra_body parameters for custom LLM provider: '{}'", mergedExtraBody);
             // Note: extra_body parameters are currently stored but not yet fully integrated with LangChain4j's ChatCompletionRequest
             // Future enhancement: implement custom HTTP client to support extra_body at the request level
         }
+
         return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
@@ -37,20 +45,62 @@ public class CustomLlmProvider implements LlmProviderService {
     public void generateStream(
             @NonNull ChatCompletionRequest request,
             @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody,
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
         ChatCompletionRequest cleanedRequest = cleanModelName(request);
-        if (extraBody != null && !extraBody.isEmpty()) {
-            log.info("Extra body parameters configured for custom LLM provider (streaming): '{}'", extraBody);
+
+        // Merge provider-level and request-level extra_body
+        Map<String, Object> mergedExtraBody = mergeExtraBody(requestExtraBody);
+        logExtraBody(requestExtraBody, true);
+
+        if (mergedExtraBody != null && !mergedExtraBody.isEmpty()) {
+            log.info("Total merged extra_body parameters for custom LLM provider (streaming): '{}'", mergedExtraBody);
             // Note: extra_body parameters are currently stored but not yet fully integrated with LangChain4j's ChatCompletionRequest
             // Future enhancement: implement custom HTTP client to support extra_body at the request level
         }
+
         openAiClient.chatCompletion(cleanedRequest)
                 .onPartialResponse(handleMessage)
                 .onComplete(handleClose)
                 .onError(handleError)
                 .execute();
+    }
+
+    /**
+     * Merge request-level extra_body with provider-level extra_body.
+     * Request-level parameters take precedence over provider-level.
+     */
+    private Map<String, Object> mergeExtraBody(Map<String, Object> requestExtraBody) {
+        Map<String, Object> merged = new HashMap<>();
+
+        // Start with provider-level extra_body
+        if (providerExtraBody != null && !providerExtraBody.isEmpty()) {
+            merged.putAll(providerExtraBody);
+        }
+
+        // Override with request-level extra_body (playground parameters)
+        if (requestExtraBody != null && !requestExtraBody.isEmpty()) {
+            merged.putAll(requestExtraBody);
+        }
+
+        return merged.isEmpty() ? null : merged;
+    }
+
+    /**
+     * Log extra_body parameters from both sources
+     */
+    private void logExtraBody(Map<String, Object> requestExtraBody, boolean streaming) {
+        String streamingLabel = streaming ? " (streaming)" : "";
+
+        if (providerExtraBody != null && !providerExtraBody.isEmpty()) {
+            log.info("Provider-level extra_body parameters{}: '{}'", streamingLabel, providerExtraBody);
+        }
+
+        if (requestExtraBody != null && !requestExtraBody.isEmpty()) {
+            log.info("Playground extra_body parameters{}: '{}'", streamingLabel, requestExtraBody);
+        }
     }
 
     @Override

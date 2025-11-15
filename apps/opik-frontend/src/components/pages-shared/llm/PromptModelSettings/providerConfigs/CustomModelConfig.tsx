@@ -5,6 +5,8 @@ import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/Pro
 import { LLMCustomConfigsType } from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import isUndefined from "lodash/isUndefined";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
@@ -12,6 +14,28 @@ interface CustomModelConfigProps {
 }
 
 const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
+  const [extraBodyError, setExtraBodyError] = React.useState<string>("");
+
+  const handleExtraBodyChange = (value: string) => {
+    // Clear error when value is empty
+    if (!value || value.trim() === "") {
+      setExtraBodyError("");
+      onChange({ extraBody: value });
+      return;
+    }
+
+    // Validate JSON
+    try {
+      JSON.parse(value);
+      setExtraBodyError("");
+      onChange({ extraBody: value });
+    } catch (error) {
+      setExtraBodyError("Must be valid JSON format");
+      // Still update the value to allow editing
+      onChange({ extraBody: value });
+    }
+  };
+
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -93,6 +117,26 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
           }
         />
       )}
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="extraBody">Extra body parameters</Label>
+          <PromptModelSettingsTooltipContent text="Provider-specific JSON parameters sent with each request" />
+        </div>
+        <Textarea
+          id="extraBody"
+          placeholder='{"key1": {"key2": 2, "key3": true}}'
+          value={configs.extraBody || ""}
+          onChange={(e) => handleExtraBodyChange(e.target.value)}
+          rows={4}
+          className={extraBodyError ? "border-destructive" : ""}
+        />
+        {extraBodyError && (
+          <p className="text-sm font-medium text-destructive">
+            {extraBodyError}
+          </p>
+        )}
+      </div>
     </div>
   );
 };

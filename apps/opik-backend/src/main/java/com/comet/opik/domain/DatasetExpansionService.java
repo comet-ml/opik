@@ -184,7 +184,7 @@ public class DatasetExpansionService {
                     .build();
 
             // Call LLM
-            var response = chatCompletionService.create(chatRequest, workspaceId);
+            var response = chatCompletionService.create(chatRequest, workspaceId, null);
 
             var generatedContent = response.choices().get(0).message().content();
             log.debug("LLM generated content length: '{}' characters", generatedContent.length());

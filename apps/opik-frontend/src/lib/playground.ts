@@ -96,6 +96,7 @@ export const getDefaultConfigByProvider = (
       topP: DEFAULT_CUSTOM_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY,
       presencePenalty: DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY,
+      extraBody: "",
     } as LLMCustomConfigsType;
   }
 

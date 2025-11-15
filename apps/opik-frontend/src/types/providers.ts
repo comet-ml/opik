@@ -515,6 +515,7 @@ export interface LLMCustomConfigsType {
   frequencyPenalty: number;
   presencePenalty: number;
   seed?: number | null;
+  extraBody?: string;
 }
 
 export type LLMPromptConfigsType =

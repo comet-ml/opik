@@ -58,6 +58,22 @@ const getCompletionProxyStream = async ({
   configs,
   workspaceName,
 }: GetCompletionProxyStreamParams) => {
+  // Process configs to parse extraBody JSON string
+  const processedConfigs = { ...configs };
+  
+  // If extraBody exists and is a string, parse it to an object
+  if (processedConfigs.extraBody && typeof processedConfigs.extraBody === 'string' && processedConfigs.extraBody.trim() !== '') {
+    try {
+      processedConfigs.extraBody = JSON.parse(processedConfigs.extraBody);
+    } catch (error) {
+      // If parsing fails, remove extraBody to avoid sending invalid data
+      delete processedConfigs.extraBody;
+    }
+  } else if (!processedConfigs.extraBody || processedConfigs.extraBody.trim() === '') {
+    // Remove empty extraBody
+    delete processedConfigs.extraBody;
+  }
+
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
@@ -69,7 +85,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...snakeCaseObj(configs),
+      ...snakeCaseObj(processedConfigs),
     }),
     credentials: "include",
     signal,

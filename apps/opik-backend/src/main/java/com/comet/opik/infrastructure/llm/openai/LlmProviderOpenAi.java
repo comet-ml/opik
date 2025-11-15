@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -19,7 +20,8 @@ public class LlmProviderOpenAi implements LlmProviderService {
     private final @NonNull OpenAiClient openAiClient;
 
     @Override
-    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody) {
         return openAiClient.chatCompletion(request).execute();
     }
 
@@ -27,6 +29,7 @@ public class LlmProviderOpenAi implements LlmProviderService {
     public void generateStream(
             @NonNull ChatCompletionRequest request,
             @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody,
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {

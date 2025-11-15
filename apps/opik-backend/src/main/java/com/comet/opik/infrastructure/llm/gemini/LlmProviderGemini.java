@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -23,7 +24,8 @@ public class LlmProviderGemini implements LlmProviderService {
     private final @NonNull LlmProviderClientApiConfig config;
 
     @Override
-    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody) {
         var mapper = LlmProviderLangChainMapper.INSTANCE;
         var response = llmProviderClientGenerator.generate(config, request).chat(mapper.mapMessages(request));
         return mapper.toChatCompletionResponse(request, response);
@@ -31,6 +33,7 @@ public class LlmProviderGemini implements LlmProviderService {
 
     @Override
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
 

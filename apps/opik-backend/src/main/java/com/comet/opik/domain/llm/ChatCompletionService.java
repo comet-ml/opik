@@ -20,6 +20,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -45,7 +46,8 @@ public class ChatCompletionService {
         this.retryPolicy = newRetryPolicy();
     }
 
-    public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
+    public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody) {
         // must be final or effectively final for lambda
         var request = MessageContentNormalizer.normalizeRequest(rawRequest);
 
@@ -55,7 +57,8 @@ public class ChatCompletionService {
         ChatCompletionResponse chatCompletionResponse;
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-            chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+            chatCompletionResponse = retryPolicy
+                    .withRetry(() -> llmProviderClient.generate(request, workspaceId, requestExtraBody));
         } catch (RuntimeException runtimeException) {
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
@@ -73,6 +76,7 @@ public class ChatCompletionService {
     public void createAndStreamResponse(
             @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody,
             @NonNull ChunkedOutputHandlers handlers) {
         var request = MessageContentNormalizer.normalizeRequest(rawRequest);
 
@@ -83,6 +87,7 @@ public class ChatCompletionService {
         llmProviderClient.generateStream(
                 request,
                 workspaceId,
+                requestExtraBody,
                 handlers::handleMessage,
                 handlers::handleClose,
                 getErrorHandler(handlers, llmProviderClient));

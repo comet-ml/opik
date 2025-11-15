@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -31,7 +32,8 @@ class LlmProviderAnthropic implements LlmProviderService {
     private final @NonNull AnthropicClient anthropicClient;
 
     @Override
-    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody) {
         var response = anthropicClient
                 .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
 
@@ -42,6 +44,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     public void generateStream(
             @NonNull ChatCompletionRequest request,
             @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody,
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {

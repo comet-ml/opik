@@ -18,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -29,13 +30,15 @@ public class LlmProviderVertexAI implements LlmProviderService {
     private final @NonNull LlmProviderClientApiConfig config;
 
     @Override
-    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+    public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody) {
         ChatResponse response = llmProviderClientGenerator.generate(config, request).chat(getChatMessages(request));
         return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
     @Override
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
+            Map<String, Object> requestExtraBody,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
 
