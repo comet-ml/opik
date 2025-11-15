@@ -3,7 +3,7 @@ import JsonView from "react18-json-view";
 import isObject from "lodash/isObject";
 import isUndefined from "lodash/isUndefined";
 
-import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
+import { SPAN_TYPE, Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import LikeFeedback from "@/components/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
@@ -13,6 +13,7 @@ import { prettifyMessage } from "@/lib/traces";
 import { cn, toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import isFunction from "lodash/isFunction";
+import BaseTraceDataTypeIcon from "../TraceDetailsPanel/BaseTraceDataTypeIcon";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -79,11 +80,21 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
+          {trace.has_tool_spans && (
+            <div className="absolute -left-6 top-2">
+              <BaseTraceDataTypeIcon type={SPAN_TYPE.tool} />
+            </div>
+          )}
           {input}
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2 dark:bg-secondary">
+          {trace.has_tool_spans && (
+            <div className="absolute -left-6 top-2">
+              <BaseTraceDataTypeIcon type={SPAN_TYPE.tool} />
+            </div>
+          )}
           {output}
         </div>
       </div>
