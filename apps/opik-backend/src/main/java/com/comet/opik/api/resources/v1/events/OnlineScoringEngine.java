@@ -4,9 +4,10 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
-import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -19,6 +20,7 @@ import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.validation.constraints.NotNull;
@@ -56,22 +58,20 @@ public class OnlineScoringEngine {
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
-    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile(
-            Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_START) + "(.*?)"
-                    + Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_END),
-            Pattern.DOTALL);
 
     /**
-     * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
+     * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
+     * the template messages with
      * Trace variables and with the proper structured output format.
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
      * @param trace         the sampled Trace to be scored
-     * @return a request to trigger to any supported provider with a ChatLanguageModel
+     * @return a request to trigger to any supported provider with a
+     *         ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
             @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
@@ -82,12 +82,14 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
+     * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
+     * the template messages with
      * Trace variables and with the proper structured output format.
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
      * @param traces        the sampled traces from the trace threads to be scored
-     * @return a request to trigger to any supported provider with a ChatLanguageModel
+     * @return a request to trigger to any supported provider with a
+     *         ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
             @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
@@ -122,30 +124,64 @@ public class OnlineScoringEngine {
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
-                    var renderedMessage = TemplateParseUtils.render(
-                            templateMessage.content(), replacements, PromptType.MUSTACHE);
-                    return switch (templateMessage.role()) {
-                        case USER -> buildUserMessage(renderedMessage);
-                        case SYSTEM -> SystemMessage.from(renderedMessage);
-                        default -> {
-                            log.info("No mapping for message role type {}", templateMessage.role());
-                            yield null;
-                        }
-                    };
+                    // Check if content is string (text) or array (multimodal)
+                    if (templateMessage.isStringContent()) {
+                        // String format: plain text content
+                        var renderedMessage = TemplateParseUtils.render(
+                                templateMessage.asString(), replacements, PromptType.MUSTACHE);
+                        return switch (templateMessage.role()) {
+                            case USER -> UserMessage.from(renderedMessage);
+                            case SYSTEM -> SystemMessage.from(renderedMessage);
+                            default -> {
+                                log.info("No mapping for message role type {}", templateMessage.role());
+                                yield null;
+                            }
+                        };
+                    } else if (templateMessage.isStructuredContent()) {
+                        // Array format: structured content parts
+                        return switch (templateMessage.role()) {
+                            case USER -> buildUserMessageFromContentParts(
+                                    templateMessage.asContentList(), replacements);
+                            case SYSTEM -> {
+                                // For SYSTEM messages with array content, extract first text part
+                                var textContent = templateMessage.asContentList().stream()
+                                        .filter(part -> "text".equals(part.type()))
+                                        .map(LlmAsJudgeMessageContent::text)
+                                        .filter(Objects::nonNull)
+                                        .map(text -> TemplateParseUtils.render(text, replacements, PromptType.MUSTACHE))
+                                        .findFirst()
+                                        .orElse("");
+                                yield SystemMessage.from(textContent);
+                            }
+                            default -> {
+                                log.info("No mapping for message role type {}", templateMessage.role());
+                                yield null;
+                            }
+                        };
+                    } else {
+                        log.warn("Unknown content type for message role {}", templateMessage.role());
+                        return null;
+                    }
                 })
                 .filter(Objects::nonNull)
                 .toList();
     }
 
     /**
-     * Render the rule evaluator message template using the values from an actual trace.
+     * Render the rule evaluator message template using the values from an actual
+     * trace.
      * <p>
-     * As the rule may consist in multiple messages, we check each one of them for variables to fill.
-     * Then we go through every variable template to replace them for the value from the trace.
+     * As the rule may consist in multiple messages, we check each one of them for
+     * variables to fill.
+     * Then we go through every variable template to replace them for the value from
+     * the trace.
      *
-     * @param templateMessages a list of messages with variables to fill with a Trace value
-     * @param variablesMap     a map of template variable to a path to a value into a Trace
-     * @param trace            the trace with value to use to replace template variables
+     * @param templateMessages a list of messages with variables to fill with a
+     *                         Trace value
+     * @param variablesMap     a map of template variable to a path to a value into
+     *                         a Trace
+     * @param trace            the trace with value to use to replace template
+     *                         variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
@@ -155,17 +191,44 @@ public class OnlineScoringEngine {
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
-                    // will convert all '{{key}}' into 'value'
-                    var renderedMessage = TemplateParseUtils.render(
-                            templateMessage.content(), replacements, PromptType.MUSTACHE);
-                    return switch (templateMessage.role()) {
-                        case USER -> buildUserMessage(renderedMessage);
-                        case SYSTEM -> SystemMessage.from(renderedMessage);
-                        default -> {
-                            log.info("No mapping for message role type {}", templateMessage.role());
-                            yield null;
-                        }
-                    };
+                    // Check if content is string (text) or array (multimodal)
+                    if (templateMessage.isStringContent()) {
+                        // String format: plain text content
+                        var txtContent = templateMessage.asString();
+                        var renderedMessage = TemplateParseUtils.render(txtContent, replacements, PromptType.MUSTACHE);
+                        return switch (templateMessage.role()) {
+                            case USER -> UserMessage.from(renderedMessage);
+                            case SYSTEM -> SystemMessage.from(renderedMessage);
+                            default -> {
+                                log.info("No mapping for message role type {}", templateMessage.role());
+                                yield null;
+                            }
+                        };
+                    } else if (templateMessage.isStructuredContent()) {
+                        // Array format: structured content parts
+                        return switch (templateMessage.role()) {
+                            case USER -> buildUserMessageFromContentParts(
+                                    templateMessage.asContentList(), replacements);
+                            case SYSTEM -> {
+                                // For SYSTEM messages with array content, extract first text part
+                                var textContent = templateMessage.asContentList().stream()
+                                        .filter(part -> "text".equals(part.type()))
+                                        .map(LlmAsJudgeMessageContent::text)
+                                        .filter(Objects::nonNull)
+                                        .map(text -> TemplateParseUtils.render(text, replacements, PromptType.MUSTACHE))
+                                        .findFirst()
+                                        .orElse("");
+                                yield SystemMessage.from(textContent);
+                            }
+                            default -> {
+                                log.info("No mapping for message role type {}", templateMessage.role());
+                                yield null;
+                            }
+                        };
+                    } else {
+                        log.warn("Unknown content type for message role {}", templateMessage.role());
+                        return null;
+                    }
                 })
                 .filter(Objects::nonNull)
                 .toList();
@@ -196,7 +259,8 @@ public class OnlineScoringEngine {
     /**
      * Parse evaluator's variable mapper into a usable list of mappings.
      *
-     * @param evaluatorVariables a map with variables and a path into a trace input/output/metadata to replace
+     * @param evaluatorVariables a map with variables and a path into a trace
+     *                           input/output/metadata to replace
      * @return a parsed list of mappings, easier to use for the template rendering
      */
     static List<MessageVariableMapping> toVariableMapping(Map<String, String> evaluatorVariables) {
@@ -220,55 +284,50 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    private UserMessage buildUserMessage(String content) {
-        var matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
-        var foundAny = false;
-
+    /**
+     * Build a UserMessage from structured content parts (array format).
+     * Supports text, image_url, and video_url content types.
+     */
+    private UserMessage buildUserMessageFromContentParts(
+            List<LlmAsJudgeMessageContent> contentParts, Map<String, String> replacements) {
         var builder = UserMessage.builder();
-        var lastIndex = 0;
 
-        while (matcher.find()) {
-            foundAny = true;
-
-            if (matcher.start() > lastIndex) {
-                var textSegment = content.substring(lastIndex, matcher.start());
-                appendTextContent(builder, textSegment);
+        for (var part : contentParts) {
+            switch (part.type()) {
+                case "text" -> {
+                    if (part.text() != null) {
+                        var renderedText = TemplateParseUtils.render(part.text(), replacements, PromptType.MUSTACHE);
+                        if (StringUtils.isNotBlank(renderedText)) {
+                            builder.addContent(TextContent.from(renderedText));
+                        }
+                    }
+                }
+                case "image_url" -> {
+                    if (part.imageUrl() != null && part.imageUrl().url() != null) {
+                        var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, PromptType.MUSTACHE);
+                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
+                        builder.addContent(ImageContent.from(unescapedUrl));
+                    }
+                }
+                case "video_url" -> {
+                    if (part.videoUrl() != null && part.videoUrl().url() != null) {
+                        var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, PromptType.MUSTACHE);
+                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
+                        builder.addContent(VideoContent.from(unescapedUrl));
+                    }
+                }
+                default -> log.warn("Unknown content type: {}", part.type());
             }
-
-            var url = matcher.group(1).trim();
-            if (!url.isEmpty()) {
-                // Unescape HTML entities for backward compatibility with templates using {{variable}}
-                // RECOMMENDED: Use {{{variable}}} (triple braces) or {{&variable}} in Mustache templates
-                // to prevent HTML escaping of URLs in the first place
-                var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
-                builder.addContent(ImageContent.from(unescapedUrl));
-            }
-
-            lastIndex = matcher.end();
-        }
-
-        if (!foundAny) {
-            return UserMessage.from(content);
-        }
-
-        if (lastIndex < content.length()) {
-            var trailingText = content.substring(lastIndex);
-            appendTextContent(builder, trailingText);
         }
 
         return builder.build();
     }
 
-    private void appendTextContent(UserMessage.Builder builder, String textSegment) {
-        if (StringUtils.isNotBlank(textSegment)) {
-            builder.addContent(TextContent.from(textSegment));
-        }
-    }
-
     private static String extractFromJson(JsonNode json, String path) {
         Map<String, Object> forcedObject;
         try {
-            // JsonPath didn't work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
+            // JsonPath didn't work with JsonNode, even explicitly using
+            // JacksonJsonProvider, so we convert to a Map
             forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
             });
         } catch (InvalidArgumentException e) {

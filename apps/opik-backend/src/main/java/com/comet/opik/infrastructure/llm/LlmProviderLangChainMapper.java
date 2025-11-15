@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
@@ -7,6 +9,10 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.Content;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.TextContent;
+import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
@@ -57,6 +63,8 @@ public interface LlmProviderLangChainMapper {
                 if (message instanceof UserMessage userMessage) {
                     validateMessageContent(userMessage.content().toString());
                     return dev.langchain4j.data.message.UserMessage.from(userMessage.content().toString());
+                } else if (message instanceof OpikUserMessage opikUserMessage) {
+                    return convertOpikUserMessage(opikUserMessage);
                 }
             }
             case SYSTEM -> {
@@ -75,6 +83,51 @@ public interface LlmProviderLangChainMapper {
         if (StringUtils.isBlank(content)) {
             throw new BadRequestException(CANNOT_BE_NULL_OR_EMPTY);
         }
+    }
+
+    /**
+     * Convert OpikUserMessage to public API UserMessage.
+     * OpikUserMessage supports multimodal content (text, images, videos, etc.)
+     * and its content can be either a String or a List<OpikContent>.
+     */
+    private dev.langchain4j.data.message.UserMessage convertOpikUserMessage(OpikUserMessage opikUserMessage) {
+        if (opikUserMessage.content() instanceof String stringContent) {
+            validateMessageContent(stringContent);
+            return dev.langchain4j.data.message.UserMessage.from(stringContent);
+        } else if (opikUserMessage.content() instanceof List<?> contentList) {
+            // Convert OpikContent list to public API Content list
+            List<Content> publicApiContents = new java.util.ArrayList<>();
+            for (Object item : contentList) {
+                if (item instanceof OpikContent opikContent) {
+                    publicApiContents.add(convertOpikContent(opikContent));
+                }
+            }
+            return dev.langchain4j.data.message.UserMessage.from(publicApiContents);
+        }
+        throw new BadRequestException("Invalid OpikUserMessage content type");
+    }
+
+    /**
+     * Convert OpikContent to public API Content.
+     */
+    private Content convertOpikContent(OpikContent opikContent) {
+        return switch (opikContent.type()) {
+            case TEXT -> TextContent.from(opikContent.text());
+            case IMAGE_URL -> {
+                if (opikContent.imageUrl() != null) {
+                    yield ImageContent.from(opikContent.imageUrl().getUrl());
+                }
+                throw new BadRequestException("Image URL is null");
+            }
+            case VIDEO_URL -> {
+                if (opikContent.videoUrl() != null) {
+                    yield VideoContent.from(opikContent.videoUrl().url());
+                }
+                throw new BadRequestException("Video URL is null");
+            }
+            case AUDIO -> throw new BadRequestException("Audio content not yet supported in conversion");
+            case FILE -> throw new BadRequestException("File content not yet supported in conversion");
+        };
     }
 
     @Mapping(expression = "java(request.model())", target = "model")

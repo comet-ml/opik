@@ -21,9 +21,14 @@ export interface LLMJudgeSchema {
   unsaved: boolean;
 }
 
+export type TextPart = { type: "text"; text: string };
+export type ImagePart = { type: "image_url"; image_url: { url: string } };
+export type VideoPart = { type: "video_url"; video_url: { url: string } };
+export type MessageContent = string | Array<TextPart | ImagePart | VideoPart>;
+
 export interface LLMMessage {
   id: string;
-  content: string;
+  content: MessageContent;
   role: LLM_MESSAGE_ROLE;
   promptId?: string;
   promptVersionId?: string;
@@ -31,6 +36,12 @@ export interface LLMMessage {
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id">;
+
+export interface PlaygroundPromptMetadata {
+  created_from: "opik_ui";
+  type: "messages_json";
+  [key: string]: unknown; // Allow additional metadata fields
+}
 
 export enum LLM_JUDGE {
   custom = "custom",
