@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Any
 
 from . import recursive_anonymizer, rules
 
@@ -20,7 +20,7 @@ class RulesAnonymizer(recursive_anonymizer.RecursiveAnonymizer):
         super().__init__(max_depth)
         self.rules = anonymizer_rules
 
-    def anonymize_text(self, data: str) -> str:
+    def anonymize_text(self, data: str, **kwargs: Any) -> str:
         """Apply all rules sequentially to the input text.
 
         Args:
