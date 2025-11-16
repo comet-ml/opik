@@ -12,8 +12,8 @@ from types import SimpleNamespace
 import pytest
 
 from opik_optimizer import ChatPrompt
-from opik_optimizer.evolutionary_optimizer import reporting as evo_reporting
-from opik_optimizer.evolutionary_optimizer.mcp import (
+from opik_optimizer.algorithms.evolutionary_optimizer import reporting as evo_reporting
+from opik_optimizer.algorithms.evolutionary_optimizer.mcp import (
     EvolutionaryMCPContext,
     finalize_mcp_result,
     generate_tool_description_variations,
@@ -41,7 +41,7 @@ from opik_optimizer.mcp_utils.mcp_workflow import (
     make_similarity_metric,
     preview_dataset_tool_invocation,
 )
-from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
+from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     _sync_tool_description_in_system,
 )
 from opik_optimizer.optimization_result import OptimizationResult

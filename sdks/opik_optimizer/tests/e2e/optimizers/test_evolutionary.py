@@ -4,8 +4,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any
 
-from opik_optimizer import EvolutionaryOptimizer, datasets
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
 
 
 def test_evolutionary_optimizer() -> None:
@@ -13,7 +12,7 @@ def test_evolutionary_optimizer() -> None:
     if not os.getenv("OPENAI_API_KEY"):
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric and task configuration (see docs for more options)
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -21,12 +20,12 @@ def test_evolutionary_optimizer() -> None:
             reference=dataset_item["label"], output=llm_output
         )
 
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         system="Provide an answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with reduced parameters for faster testing
-    optimizer = EvolutionaryOptimizer(
+    optimizer = opik_optimizer.EvolutionaryOptimizer(
         model="openai/gpt-4o",
         model_parameters={"temperature": 0.1, "max_tokens": 500000},
         infer_output_style=True,

@@ -4,11 +4,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any
 
-from opik_optimizer import (
-    HierarchicalReflectiveOptimizer,
-    datasets,
-)
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
 
 
 def test_hierarchical_reflective_optimizer() -> None:
@@ -18,7 +14,7 @@ def test_hierarchical_reflective_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
 
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric with reason field for hierarchical analysis
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -29,12 +25,12 @@ def test_hierarchical_reflective_optimizer() -> None:
         return result
 
     # Create initial prompt
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         system="Provide a concise answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with minimal parameters for faster testing
-    optimizer = HierarchicalReflectiveOptimizer(
+    optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
         model="openai/gpt-4o-mini",
         n_threads=1,
         max_parallel_batches=2,
