@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
@@ -34,6 +35,7 @@ import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -68,14 +70,25 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -440,6 +453,89 @@ public class DatasetsResource {
                 datasetId, request.spanIds().size(), workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/items/from-csv")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row.", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromCsv(
+            @FormDataParam("file") @NotNull InputStream fileInputStream,
+            @FormDataParam("dataset_id") @NotNull UUID datasetId,
+            @FormDataParam("workspace_name") String workspaceName) throws IOException {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items from CSV for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+
+        try (InputStreamReader reader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
+                CSVParser parser = CSVFormat.DEFAULT
+                        .builder()
+                        .setHeader()
+                        .setSkipHeaderRecord(true)
+                        .setIgnoreHeaderCase(true)
+                        .setTrim(true)
+                        .setIgnoreEmptyLines(true)
+                        .build()
+                        .parse(reader)) {
+
+            List<String> headers = parser.getHeaderNames();
+            if (headers.isEmpty()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(new ErrorMessage("CSV file must contain headers"))
+                        .build();
+            }
+
+            List<DatasetItem> items = new ArrayList<>();
+            for (CSVRecord record : parser) {
+                Map<String, JsonNode> dataMap = headers.stream()
+                        .collect(Collectors.toMap(
+                                header -> header,
+                                header -> {
+                                    String value = record.get(header);
+                                    return value != null && !value.isEmpty()
+                                            ? JsonUtils.valueToTree(value)
+                                            : JsonUtils.valueToTree("");
+                                }));
+
+                DatasetItem item = DatasetItem.builder()
+                        .id(idGenerator.generateId())
+                        .source(DatasetItemSource.MANUAL)
+                        .data(dataMap)
+                        .build();
+
+                items.add(item);
+            }
+
+            if (items.isEmpty()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(new ErrorMessage("CSV file contains no data rows"))
+                        .build();
+            }
+
+            log.info("Parsed '{}' items from CSV for dataset '{}' on workspaceId '{}'", items.size(), datasetId,
+                    workspaceId);
+
+            DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
+            itemService.save(batch)
+                    .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                    .retryWhen(RetryUtils.handleConnectionError())
+                    .block();
+
+            log.info("Created '{}' dataset items from CSV for dataset '{}' on workspaceId '{}'", items.size(),
+                    datasetId, workspaceId);
+
+            return Response.noContent().build();
+        } catch (Exception e) {
+            log.error("Error processing CSV file for dataset '{}' on workspaceId '{}'", datasetId, workspaceId, e);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage("Failed to process CSV file: " + e.getMessage()))
+                    .build();
+        }
     }
 
     @POST
