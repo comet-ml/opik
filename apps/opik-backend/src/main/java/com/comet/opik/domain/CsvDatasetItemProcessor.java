@@ -59,39 +59,42 @@ public class CsvDatasetItemProcessor {
 
     /**
      * Processes uploaded CSV file by buffering to temp storage and processing asynchronously.
-     * This method handles the complete lifecycle: buffering, validation, processing, and cleanup.
+     * This method buffers the stream synchronously (to avoid connection timeout issues),
+     * then processes the file asynchronously with automatic cleanup.
      *
      * @param inputStream CSV file input stream from upload
      * @param datasetId Dataset ID
      * @param workspaceId Workspace UUID
      * @param userName User name
      * @param visibility Visibility setting
+     * @throws BadRequestException if buffering fails
      */
     public void processUploadedCsv(InputStream inputStream, UUID datasetId, String workspaceId,
             String userName, Visibility visibility) {
         log.info("Processing CSV upload for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
 
+        // Buffer the stream to a temporary file BEFORE returning HTTP response
+        // This ensures the stream is fully read before the connection times out
+        Path tempFile;
         try {
-            // Buffer the stream to a temporary file to avoid it being closed by Jersey
-            Path tempFile = bufferToTempFile(inputStream);
-
-            // Process asynchronously with automatic cleanup
-            validateAndProcessCsvFromFile(tempFile, datasetId, workspaceId, userName, visibility)
-                    .doOnError(error -> {
-                        log.error("CSV processing failed for dataset '{}'", datasetId, error);
-                        deleteTempFile(tempFile);
-                    })
-                    .doOnSuccess(totalItems -> {
-                        log.info("CSV processing completed for dataset '{}', total items: '{}'",
-                                datasetId, totalItems);
-                        deleteTempFile(tempFile);
-                    })
-                    .subscribe();
-
+            tempFile = bufferToTempFile(inputStream);
         } catch (IOException e) {
             log.error("Failed to buffer CSV file to temp storage for dataset '{}'", datasetId, e);
             throw new BadRequestException("Failed to process CSV file: " + e.getMessage());
         }
+
+        // Now process asynchronously with automatic cleanup
+        validateAndProcessCsvFromFile(tempFile, datasetId, workspaceId, userName, visibility)
+                .doOnError(error -> {
+                    log.error("CSV processing failed for dataset '{}'", datasetId, error);
+                    deleteTempFile(tempFile);
+                })
+                .doOnSuccess(totalItems -> {
+                    log.info("CSV processing completed for dataset '{}', total items: '{}'",
+                            datasetId, totalItems);
+                    deleteTempFile(tempFile);
+                })
+                .subscribe();
     }
 
     /**
