@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
@@ -39,11 +40,20 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class CsvDatasetItemProcessor {
 
-    private static final int BATCH_SIZE = 1000;
+    private static final int LOG_FREQUENCY_MULTIPLIER = 10;
 
     private final @NonNull DatasetItemService datasetItemService;
     private final @NonNull DatasetService datasetService;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull BatchOperationsConfig batchOperationsConfig;
+
+    private int getBatchSize() {
+        return batchOperationsConfig.getDatasets().getCsvBatchSize();
+    }
+
+    private int getLogFrequency() {
+        return getBatchSize() * LOG_FREQUENCY_MULTIPLIER;
+    }
 
     /**
      * Validates CSV file format and structure.
@@ -111,7 +121,10 @@ public class CsvDatasetItemProcessor {
                     CSVParser parser = createCsvParser(reader)) {
 
                 List<String> headers = parser.getHeaderNames();
-                List<DatasetItem> batch = new ArrayList<>(BATCH_SIZE);
+                int batchSize = getBatchSize();
+                int logFrequency = getLogFrequency();
+                
+                List<DatasetItem> batch = new ArrayList<>(batchSize);
                 long totalProcessed = 0;
                 int batchNumber = 0;
                 long recordCount = 0;
@@ -119,7 +132,7 @@ public class CsvDatasetItemProcessor {
                 for (CSVRecord record : parser) {
                     recordCount++;
 
-                    if (recordCount % 10000 == 0) {
+                    if (recordCount % logFrequency == 0) {
                         log.debug("Processing record '{}' for dataset '{}'", recordCount, datasetId);
                     }
 
@@ -141,7 +154,7 @@ public class CsvDatasetItemProcessor {
 
                     batch.add(item);
 
-                    if (batch.size() >= BATCH_SIZE) {
+                    if (batch.size() >= batchSize) {
                         batchNumber++;
                         log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'", 
                                 batchNumber, datasetId, batch.size());
