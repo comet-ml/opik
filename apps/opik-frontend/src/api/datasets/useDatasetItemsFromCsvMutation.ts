@@ -7,7 +7,6 @@ import { useToast } from "@/components/ui/use-toast";
 type UseDatasetItemsFromCsvMutationParams = {
   datasetId: string;
   csvFile: File;
-  workspaceName: string;
 };
 
 const useDatasetItemsFromCsvMutation = () => {
@@ -18,12 +17,10 @@ const useDatasetItemsFromCsvMutation = () => {
     mutationFn: async ({
       datasetId,
       csvFile,
-      workspaceName,
     }: UseDatasetItemsFromCsvMutationParams) => {
       const formData = new FormData();
       formData.append("file", csvFile);
       formData.append("dataset_id", datasetId);
-      formData.append("workspace_name", workspaceName);
 
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}items/from-csv`,

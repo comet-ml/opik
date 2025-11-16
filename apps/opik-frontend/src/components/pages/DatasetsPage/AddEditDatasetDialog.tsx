@@ -110,7 +110,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
           {
             datasetId: newDataset.id,
             csvFile,
-            workspaceName,
           },
           {
             onSuccess: () => {
@@ -152,7 +151,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
       onDatasetCreated,
       setOpen,
       toast,
-      workspaceName,
     ],
   );
 
