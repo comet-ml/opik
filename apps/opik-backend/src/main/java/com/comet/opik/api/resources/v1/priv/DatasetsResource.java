@@ -33,6 +33,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -56,6 +57,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -103,6 +105,7 @@ public class DatasetsResource {
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
+    private final @NonNull OpikConfiguration config;
 
     @GET
     @Path("/{id}")
@@ -453,11 +456,17 @@ public class DatasetsResource {
     @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.", responses = {
             @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - CSV upload feature is disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
     public Response createDatasetItemsFromCsv(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
             @FormDataParam("dataset_id") @NotNull UUID datasetId) throws IOException {
+
+        if (!config.getServiceToggles().isCsvUploadEnabled()) {
+            log.warn("CSV upload feature is disabled, returning 404");
+            throw new NotFoundException("CSV upload feature is not enabled");
+        }
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -467,14 +476,7 @@ public class DatasetsResource {
 
         byte[] csvBytes = fileInputStream.readAllBytes();
 
-        try {
-            csvProcessor.validateCsv(csvBytes);
-        } catch (jakarta.ws.rs.BadRequestException e) {
-            log.warn("CSV validation failed for dataset '{}': {}", datasetId, e.getMessage());
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(e.getMessage()))
-                    .build();
-        }
+        csvProcessor.validateCsv(csvBytes);
 
         // Start async processing
         csvProcessor.processCsvInBatches(csvBytes, datasetId, workspaceId, userName, visibility)
@@ -484,9 +486,7 @@ public class DatasetsResource {
                                 datasetId, totalItems),
                         error -> log.error("CSV processing error for dataset '{}'", datasetId, error));
 
-        return Response.status(Response.Status.ACCEPTED)
-                .entity(new ErrorMessage("CSV upload accepted, processing in background"))
-                .build();
+        return Response.status(Response.Status.ACCEPTED).build();
     }
 
     @POST

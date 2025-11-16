@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,7 +22,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -92,20 +92,16 @@ public class CsvDatasetItemProcessor {
      * @return Mono that completes when processing is done
      */
     public Mono<Long> processCsvInBatches(byte[] csvBytes, UUID datasetId, String workspaceId,
-            String userName, com.comet.opik.api.Visibility visibility) {
+            String userName, Visibility visibility) {
         log.info("Starting CSV batch processing for dataset '{}', file size: '{}' bytes", datasetId, csvBytes.length);
 
         // Verify dataset exists before processing
         return verifyDatasetExists(datasetId, workspaceId, visibility)
-                .then(Mono.defer(() ->
-                // Add delay to ensure dataset creation transaction has committed
-                Mono.delay(Duration.ofMillis(500))
-                        .then(processFile(csvBytes, datasetId, workspaceId, userName, visibility))))
+                .then(Mono.defer(() -> processFile(csvBytes, datasetId, workspaceId, userName, visibility)))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<Void> verifyDatasetExists(UUID datasetId, String workspaceId,
-            com.comet.opik.api.Visibility visibility) {
+    private Mono<Void> verifyDatasetExists(UUID datasetId, String workspaceId, Visibility visibility) {
         return Mono.fromCallable(() -> {
             datasetService.findById(datasetId, workspaceId, visibility);
             log.debug("Dataset '{}' verified", datasetId);
@@ -113,8 +109,8 @@ public class CsvDatasetItemProcessor {
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    private Mono<Long> processFile(byte[] csvBytes, UUID datasetId, String workspaceId,
-            String userName, com.comet.opik.api.Visibility visibility) {
+    private Mono<Long> processFile(byte[] csvBytes, UUID datasetId, String workspaceId, String userName,
+            Visibility visibility) {
         return Mono.fromCallable(() -> {
             try (InputStreamReader reader = new InputStreamReader(
                     new ByteArrayInputStream(csvBytes), StandardCharsets.UTF_8);
@@ -179,7 +175,7 @@ public class CsvDatasetItemProcessor {
     }
 
     private long saveBatch(List<DatasetItem> items, UUID datasetId, String workspaceId,
-            String userName, com.comet.opik.api.Visibility visibility) {
+            String userName, Visibility visibility) {
         datasetItemService.saveBatch(datasetId, items)
                 .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility))
                 .block();
