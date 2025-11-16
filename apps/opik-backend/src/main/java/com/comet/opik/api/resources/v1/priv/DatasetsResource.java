@@ -480,7 +480,7 @@ public class DatasetsResource {
         csvProcessor.processCsvInBatches(csvBytes, datasetId, workspaceId, userName, visibility)
                 .doOnError(error -> log.error("CSV processing failed for dataset '{}'", datasetId, error))
                 .subscribe(
-                        totalItems -> log.info("CSV processing completed for dataset '{}', total items: '{}'", 
+                        totalItems -> log.info("CSV processing completed for dataset '{}', total items: '{}'",
                                 datasetId, totalItems),
                         error -> log.error("CSV processing error for dataset '{}'", datasetId, error)
                 );
