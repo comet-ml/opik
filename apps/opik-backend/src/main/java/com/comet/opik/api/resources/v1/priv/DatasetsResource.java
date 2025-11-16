@@ -31,6 +31,7 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -75,12 +76,15 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -458,8 +462,8 @@ public class DatasetsResource {
     @POST
     @Path("/items/from-csv")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row.", responses = {
-            @ApiResponse(responseCode = "204", description = "No content"),
+    @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
@@ -468,11 +472,39 @@ public class DatasetsResource {
             @FormDataParam("dataset_id") @NotNull UUID datasetId,
             @FormDataParam("workspace_name") String workspaceName) throws IOException {
 
-        String workspaceId = requestContext.get().getWorkspaceId();
+        final String contextWorkspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
-        log.info("Creating dataset items from CSV for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+        // Handle default workspace: ensure we use the UUID, not "admin"
+        final String workspaceId;
+        if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName) ||
+                ProjectService.DEFAULT_USER.equalsIgnoreCase(contextWorkspaceId)) {
+            workspaceId = ProjectService.DEFAULT_WORKSPACE_ID;
+            log.info("Using default workspace UUID: '{}'", workspaceId);
+        } else {
+            workspaceId = contextWorkspaceId;
+        }
 
-        try (InputStreamReader reader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8);
+        // Validate that workspaceId is a UUID, not a workspace name
+        // If it's not a valid UUID format, it means the context has the wrong value
+        if (!isValidUUID(workspaceId)) {
+            log.error("Invalid workspaceId format: '{}'. Expected UUID but got non-UUID value. " +
+                    "workspace_name parameter: '{}', userName: '{}'", workspaceId, workspaceName, userName);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage("Invalid workspace ID in request context. Please contact support."))
+                    .build();
+        }
+
+        log.info("Starting CSV upload for dataset '{}' on workspaceId '{}', workspaceName '{}', userName '{}'",
+                datasetId, workspaceId, workspaceName, userName);
+
+        // Read the entire stream into memory for async processing
+        // For very large files, consider streaming or temporary file storage
+        byte[] fileBytes = fileInputStream.readAllBytes();
+
+        // Validate CSV headers quickly before returning
+        try (InputStreamReader reader = new InputStreamReader(
+                new java.io.ByteArrayInputStream(fileBytes), StandardCharsets.UTF_8);
                 CSVParser parser = CSVFormat.DEFAULT
                         .builder()
                         .setHeader()
@@ -490,51 +522,216 @@ public class DatasetsResource {
                         .build();
             }
 
-            List<DatasetItem> items = new ArrayList<>();
-            for (CSVRecord record : parser) {
-                Map<String, JsonNode> dataMap = headers.stream()
-                        .collect(Collectors.toMap(
-                                header -> header,
-                                header -> {
-                                    String value = record.get(header);
-                                    return value != null && !value.isEmpty()
-                                            ? JsonUtils.valueToTree(value)
-                                            : JsonUtils.valueToTree("");
-                                }));
-
-                DatasetItem item = DatasetItem.builder()
-                        .id(idGenerator.generateId())
-                        .source(DatasetItemSource.MANUAL)
-                        .data(dataMap)
-                        .build();
-
-                items.add(item);
-            }
-
-            if (items.isEmpty()) {
+            // Check if there's at least one data row
+            boolean hasData = parser.iterator().hasNext();
+            if (!hasData) {
                 return Response.status(Response.Status.BAD_REQUEST)
                         .entity(new ErrorMessage("CSV file contains no data rows"))
                         .build();
             }
 
-            log.info("Parsed '{}' items from CSV for dataset '{}' on workspaceId '{}'", items.size(), datasetId,
-                    workspaceId);
+            log.info("CSV validation passed for dataset '{}' on workspaceId '{}', file size: '{}' bytes, headers: '{}', starting async processing",
+                    datasetId, workspaceId, fileBytes.length, headers);
 
+            // Verify dataset exists before starting async processing
+            try {
+                Dataset dataset = service.findById(datasetId, workspaceId, requestContext.get().getVisibility());
+                log.info("Dataset verified before async processing, datasetId: '{}', workspaceId: '{}', dataset name: '{}'",
+                        datasetId, workspaceId, dataset.name());
+            } catch (Exception e) {
+                log.error("Dataset not found before starting async processing, datasetId: '{}', workspaceId: '{}', error: '{}'",
+                        datasetId, workspaceId, e.getMessage(), e);
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(new ErrorMessage("Dataset not found. Please ensure the dataset was created successfully."))
+                        .build();
+            }
+
+            // Capture RequestContext for async processing
+            RequestContext capturedContext = requestContext.get();
+
+            // Process CSV asynchronously in batches
+            // Add a small delay to ensure dataset creation transaction has committed
+            log.info("Scheduling async CSV processing for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+            Mono.delay(Duration.ofMillis(500))
+                    .then(processCsvInBatches(fileBytes, datasetId, workspaceId, userName, headers, capturedContext))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .doOnSubscribe(subscription -> log.info("Async CSV processing started for dataset '{}' on workspaceId '{}'",
+                            datasetId, workspaceId))
+                    .doOnNext(totalItems -> log.info("Completed CSV processing for dataset '{}' on workspaceId '{}', total items: '{}'",
+                            datasetId, workspaceId, totalItems))
+                    .doOnError(error -> log.error("Error processing CSV file for dataset '{}' on workspaceId '{}', error: '{}'",
+                            datasetId, workspaceId, error.getMessage(), error))
+                    .subscribe(
+                            totalItems -> log.info("CSV processing subscription completed for dataset '{}' on workspaceId '{}', total items: '{}'",
+                                    datasetId, workspaceId, totalItems),
+                            error -> {
+                                log.error("CSV processing failed for dataset '{}' on workspaceId '{}', error: '{}'",
+                                        datasetId, workspaceId, error.getMessage(), error);
+                                // Log full stack trace
+                                log.error("Full stack trace for CSV processing error", error);
+                            }
+                    );
+
+            // Return immediately - processing happens in background
+            return Response.status(Response.Status.ACCEPTED)
+                    .entity(new ErrorMessage("CSV upload accepted, processing in background"))
+                    .build();
+        } catch (Exception e) {
+            log.error("Error validating CSV file for dataset '{}' on workspaceId '{}'", datasetId, workspaceId, e);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage("Failed to validate CSV file: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    private Mono<Long> processCsvInBatches(byte[] fileBytes, UUID datasetId, String workspaceId,
+                                          String userName, List<String> headers, RequestContext context) {
+        log.info("Starting CSV batch processing for dataset '{}' on workspaceId '{}', file size: '{}' bytes",
+                datasetId, workspaceId, fileBytes.length);
+
+        return Mono.fromCallable(() -> {
+            log.info("Inside Mono.fromCallable for CSV processing, dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+
+            try (InputStreamReader reader = new InputStreamReader(
+                    new java.io.ByteArrayInputStream(fileBytes), StandardCharsets.UTF_8);
+                    CSVParser parser = CSVFormat.DEFAULT
+                            .builder()
+                            .setHeader()
+                            .setSkipHeaderRecord(true)
+                            .setIgnoreHeaderCase(true)
+                            .setTrim(true)
+                            .setIgnoreEmptyLines(true)
+                            .build()
+                            .parse(reader)) {
+
+                log.info("CSV parser created for dataset '{}' on workspaceId '{}', starting to iterate records",
+                        datasetId, workspaceId);
+
+                final int BATCH_SIZE = 1000;
+                List<DatasetItem> batch = new ArrayList<>(BATCH_SIZE);
+                long totalProcessed = 0;
+                int batchNumber = 0;
+                long recordCount = 0;
+
+                for (CSVRecord record : parser) {
+                    recordCount++;
+
+                    if (recordCount % 10000 == 0) {
+                        log.info("Processing record '{}' for dataset '{}' on workspaceId '{}'",
+                                recordCount, datasetId, workspaceId);
+                    }
+
+                    Map<String, JsonNode> dataMap = headers.stream()
+                            .collect(Collectors.toMap(
+                                    header -> header,
+                                    header -> {
+                                        String value = record.get(header);
+                                        return value != null && !value.isEmpty()
+                                                ? JsonUtils.valueToTree(value)
+                                                : JsonUtils.valueToTree("");
+                                    }));
+
+                    DatasetItem item = DatasetItem.builder()
+                            .id(idGenerator.generateId())
+                            .source(DatasetItemSource.MANUAL)
+                            .data(dataMap)
+                            .build();
+
+                    batch.add(item);
+
+                    // Save batch when it reaches BATCH_SIZE
+                    if (batch.size() >= BATCH_SIZE) {
+                        batchNumber++;
+                        log.info("Batch '{}' ready to save for dataset '{}' on workspaceId '{}', batch size: '{}', total records processed: '{}'",
+                                batchNumber, datasetId, workspaceId, batch.size(), recordCount);
+                        totalProcessed += saveBatchSync(batch, datasetId, workspaceId, userName, batchNumber, context);
+                        batch.clear();
+                        log.info("Batch '{}' saved successfully for dataset '{}' on workspaceId '{}', continuing with next batch",
+                                batchNumber, datasetId, workspaceId);
+                    }
+                }
+
+                log.info("Finished iterating CSV records for dataset '{}' on workspaceId '{}', total records: '{}', batches saved: '{}', remaining batch size: '{}'",
+                        datasetId, workspaceId, recordCount, batchNumber, batch.size());
+
+                // Save remaining items
+                if (!batch.isEmpty()) {
+                    batchNumber++;
+                    log.info("Saving final batch '{}' for dataset '{}' on workspaceId '{}', batch size: '{}'",
+                            batchNumber, datasetId, workspaceId, batch.size());
+                    totalProcessed += saveBatchSync(batch, datasetId, workspaceId, userName, batchNumber, context);
+                    log.info("Final batch '{}' saved successfully for dataset '{}' on workspaceId '{}'",
+                            batchNumber, datasetId, workspaceId);
+                }
+
+                log.info("Finished processing CSV for dataset '{}' on workspaceId '{}', total batches: '{}', total items: '{}', total records: '{}'",
+                        datasetId, workspaceId, batchNumber, totalProcessed, recordCount);
+                return totalProcessed;
+            } catch (Exception e) {
+                log.error("Exception in processCsvInBatches for dataset '{}' on workspaceId '{}'",
+                        datasetId, workspaceId, e);
+                throw e;
+            }
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .doOnError(error -> log.error("Error in Mono.fromCallable for CSV processing, dataset '{}' on workspaceId '{}'",
+                datasetId, workspaceId, error))
+        .flatMap(total -> {
+            log.info("Mono.flatMap called for CSV processing, dataset '{}' on workspaceId '{}', total: '{}'",
+                    datasetId, workspaceId, total);
+            return Mono.just(total);
+        });
+    }
+
+    private long saveBatchSync(List<DatasetItem> items, UUID datasetId, String workspaceId,
+                              String userName, int batchNumber, RequestContext context) {
+        log.info("Starting to save batch '{}' for dataset '{}' on workspaceId '{}', items count: '{}'",
+                batchNumber, datasetId, workspaceId, items.size());
+
+        try {
             DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
+            log.info("Created DatasetItemBatch for batch '{}', dataset '{}', calling itemService.save()",
+                    batchNumber, datasetId);
+
             itemService.save(batch)
-                    .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                    .contextWrite(ctx -> {
+                        log.debug("Setting request context for batch '{}', dataset '{}', workspaceId: '{}', userName: '{}'",
+                                batchNumber, datasetId, workspaceId, userName);
+                        return setRequestContext(ctx, workspaceId, userName, context.getVisibility());
+                    })
                     .retryWhen(RetryUtils.handleConnectionError())
+                    .doOnSubscribe(sub -> log.info("Subscribed to save operation for batch '{}', dataset '{}'",
+                            batchNumber, datasetId))
+                    .doOnSuccess(unused -> log.info("Save operation succeeded for batch '{}', dataset '{}'",
+                            batchNumber, datasetId))
+                    .doOnError(error -> log.error("Save operation failed for batch '{}', dataset '{}', error: '{}'",
+                            batchNumber, datasetId, error.getMessage(), error))
                     .block();
 
-            log.info("Created '{}' dataset items from CSV for dataset '{}' on workspaceId '{}'", items.size(),
-                    datasetId, workspaceId);
-
-            return Response.noContent().build();
+            log.info("Successfully saved batch '{}' for dataset '{}' on workspaceId '{}', items: '{}'",
+                    batchNumber, datasetId, workspaceId, items.size());
+            return items.size();
         } catch (Exception e) {
-            log.error("Error processing CSV file for dataset '{}' on workspaceId '{}'", datasetId, workspaceId, e);
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage("Failed to process CSV file: " + e.getMessage()))
-                    .build();
+            log.error("Exception saving batch '{}' for dataset '{}' on workspaceId '{}', error: '{}'",
+                    batchNumber, datasetId, workspaceId, e.getMessage(), e);
+            log.error("Full stack trace for batch save error", e);
+            throw new RuntimeException("Failed to save batch " + batchNumber + " for dataset " + datasetId, e);
+        }
+    }
+
+    /**
+     * Validates if a string is a valid UUID format.
+     * UUIDs have the format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36 characters with dashes)
+     */
+    private boolean isValidUUID(String str) {
+        if (str == null || str.length() != 36) {
+            return false;
+        }
+        try {
+            UUID.fromString(str);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 
