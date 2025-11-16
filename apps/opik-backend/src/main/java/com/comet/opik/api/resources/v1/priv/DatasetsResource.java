@@ -74,7 +74,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
@@ -461,7 +460,7 @@ public class DatasetsResource {
     @RateLimited
     public Response createDatasetItemsFromCsv(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
-            @FormDataParam("dataset_id") @NotNull UUID datasetId) throws IOException {
+            @FormDataParam("dataset_id") @NotNull UUID datasetId) {
 
         if (!config.getServiceToggles().isCsvUploadEnabled()) {
             log.warn("CSV upload feature is disabled, returning 404");
@@ -474,17 +473,7 @@ public class DatasetsResource {
 
         log.info("CSV upload request for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
 
-        byte[] csvBytes = fileInputStream.readAllBytes();
-
-        csvProcessor.validateCsv(csvBytes);
-
-        // Start async processing
-        csvProcessor.processCsvInBatches(csvBytes, datasetId, workspaceId, userName, visibility)
-                .doOnError(error -> log.error("CSV processing failed for dataset '{}'", datasetId, error))
-                .subscribe(
-                        totalItems -> log.info("CSV processing completed for dataset '{}', total items: '{}'",
-                                datasetId, totalItems),
-                        error -> log.error("CSV processing error for dataset '{}'", datasetId, error));
+        csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
 
         return Response.status(Response.Status.ACCEPTED).build();
     }
