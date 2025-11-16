@@ -385,7 +385,7 @@ public class DatasetsResource {
 
         log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
                 batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+        itemService.verifyDatasetExistsAndSave(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
