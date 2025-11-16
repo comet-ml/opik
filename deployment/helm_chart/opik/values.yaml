@@ -102,7 +102,7 @@ component:
       # CSV upload configuration (OPIK-3077)
       SERVER_IDLE_TIMEOUT: "5m"
       BATCH_OPERATIONS_CSV_BATCH_SIZE: "1000"
-      TOGGLE_CSV_UPLOAD_ENABLED: "false"
+      TOGGLE_CSV_UPLOAD_ENABLED: "true"
     envFrom:
       - configMapRef:
           name: opik-backend
