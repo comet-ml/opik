@@ -99,6 +99,10 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      # CSV upload configuration (OPIK-3077)
+      SERVER_IDLE_TIMEOUT: "5m"
+      BATCH_OPERATIONS_CSV_BATCH_SIZE: "1000"
+      TOGGLE_CSV_UPLOAD_ENABLED: "false"
     envFrom:
       - configMapRef:
           name: opik-backend
