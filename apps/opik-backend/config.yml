@@ -189,9 +189,6 @@ server:
       # Description: The port on which the application HTTP connector listens
       port: ${SERVER_APPLICATION_PORT:-8080}
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
-      # Default: 5 minutes
-      # Description: Maximum idle time for a connection before timing out. Increased for large CSV uploads.
-      idleTimeout: ${SERVER_IDLE_TIMEOUT:-5 minutes}
   adminConnectors:
     - type: http
       # Default: 8081

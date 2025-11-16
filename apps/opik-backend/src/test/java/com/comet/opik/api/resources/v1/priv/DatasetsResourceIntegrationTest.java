@@ -14,6 +14,7 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
@@ -54,13 +55,15 @@ class DatasetsResourceIntegrationTest {
     private static final RequestContext requestContext = mock(RequestContext.class);
     private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
     private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
+    private static final OpikConfiguration config = mock(OpikConfiguration.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
                     service, itemService, expansionService, () -> requestContext,
                     new FiltersFactory(new FilterQueryBuilder()),
-                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor))
+                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
+                    config))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();
