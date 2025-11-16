@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
@@ -52,13 +53,14 @@ class DatasetsResourceIntegrationTest {
     private static final DatasetExpansionService expansionService = mock(DatasetExpansionService.class);
     private static final RequestContext requestContext = mock(RequestContext.class);
     private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
+    private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
                     service, itemService, expansionService, () -> requestContext,
                     new FiltersFactory(new FilterQueryBuilder()),
-                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService))
+                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();
