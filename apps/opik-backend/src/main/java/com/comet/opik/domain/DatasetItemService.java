@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
@@ -174,23 +173,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
 
-            return Mono.fromCallable(() -> {
+            // If we already have a dataset ID, return it directly without any lookup
+            // This avoids transaction isolation issues when the dataset was just created
+            if (batch.datasetId() != null) {
+                log.info("Using provided dataset ID: '{}' for batch, skipping lookup", batch.datasetId());
+                return Mono.just(batch.datasetId());
+            }
 
-                if (batch.datasetId() == null) {
-                    return datasetService.getOrCreate(workspaceId, batch.datasetName(), userName);
-                }
-
-                Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId, visibility);
-
-                if (dataset == null) {
-                    throw newConflict(
-                            "workspace_name from dataset item batch and dataset_id from item does not match");
-                }
-
-                return dataset.id();
-            }).subscribeOn(Schedulers.boundedElastic());
+            // Only look up/create dataset if we don't have an ID (using dataset name)
+            log.info("Dataset ID is null, using getOrCreate with datasetName: '{}'", batch.datasetName());
+            return Mono.fromCallable(() -> 
+                    datasetService.getOrCreate(workspaceId, batch.datasetName(), userName))
+                    .subscribeOn(Schedulers.boundedElastic());
         });
     }
 

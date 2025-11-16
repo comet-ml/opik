@@ -113,6 +113,12 @@ const AddEditDatasetDialog: React.FunctionComponent<
             workspaceName,
           },
           {
+            onSuccess: () => {
+              toast({
+                title: "CSV upload accepted",
+                description: "Your CSV file is being processed in the background. Dataset items will appear shortly.",
+              });
+            },
             onError: (error: unknown) => {
               console.error("Error uploading CSV file:", error);
               const errorMessage =
