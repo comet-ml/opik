@@ -540,6 +540,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not CSV upload feature is enabled for dataset items
+  csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

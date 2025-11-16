@@ -57,7 +57,7 @@ public class CsvDatasetItemProcessor {
 
     /**
      * Validates CSV file format and structure.
-     * 
+     *
      * @param csvBytes CSV file content
      * @throws BadRequestException if CSV is invalid
      */
@@ -84,7 +84,7 @@ public class CsvDatasetItemProcessor {
 
     /**
      * Processes CSV file asynchronously in batches.
-     * 
+     *
      * @param csvBytes CSV file content
      * @param datasetId Dataset ID
      * @param workspaceId Workspace UUID
@@ -92,20 +92,21 @@ public class CsvDatasetItemProcessor {
      * @param visibility Visibility setting
      * @return Mono that completes when processing is done
      */
-    public Mono<Long> processCsvInBatches(byte[] csvBytes, UUID datasetId, String workspaceId, 
-                                          String userName, com.comet.opik.api.Visibility visibility) {
+    public Mono<Long> processCsvInBatches(byte[] csvBytes, UUID datasetId, String workspaceId,
+            String userName, com.comet.opik.api.Visibility visibility) {
         log.info("Starting CSV batch processing for dataset '{}', file size: '{}' bytes", datasetId, csvBytes.length);
 
         // Verify dataset exists before processing
         return verifyDatasetExists(datasetId, workspaceId, visibility)
-                .then(Mono.defer(() -> 
-                        // Add delay to ensure dataset creation transaction has committed
-                        Mono.delay(Duration.ofMillis(500))
-                                .then(processFile(csvBytes, datasetId, workspaceId, userName, visibility))))
+                .then(Mono.defer(() ->
+                // Add delay to ensure dataset creation transaction has committed
+                Mono.delay(Duration.ofMillis(500))
+                        .then(processFile(csvBytes, datasetId, workspaceId, userName, visibility))))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<Void> verifyDatasetExists(UUID datasetId, String workspaceId, com.comet.opik.api.Visibility visibility) {
+    private Mono<Void> verifyDatasetExists(UUID datasetId, String workspaceId,
+            com.comet.opik.api.Visibility visibility) {
         return Mono.fromCallable(() -> {
             datasetService.findById(datasetId, workspaceId, visibility);
             log.debug("Dataset '{}' verified", datasetId);
@@ -113,8 +114,8 @@ public class CsvDatasetItemProcessor {
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    private Mono<Long> processFile(byte[] csvBytes, UUID datasetId, String workspaceId, 
-                                    String userName, com.comet.opik.api.Visibility visibility) {
+    private Mono<Long> processFile(byte[] csvBytes, UUID datasetId, String workspaceId,
+            String userName, com.comet.opik.api.Visibility visibility) {
         return Mono.fromCallable(() -> {
             try (InputStreamReader reader = new InputStreamReader(
                     new ByteArrayInputStream(csvBytes), StandardCharsets.UTF_8);
@@ -123,7 +124,7 @@ public class CsvDatasetItemProcessor {
                 List<String> headers = parser.getHeaderNames();
                 int batchSize = getBatchSize();
                 int logFrequency = getLogFrequency();
-                
+
                 List<DatasetItem> batch = new ArrayList<>(batchSize);
                 long totalProcessed = 0;
                 int batchNumber = 0;
@@ -156,7 +157,7 @@ public class CsvDatasetItemProcessor {
 
                     if (batch.size() >= batchSize) {
                         batchNumber++;
-                        log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'", 
+                        log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'",
                                 batchNumber, datasetId, batch.size());
                         totalProcessed += saveBatch(batch, datasetId, workspaceId, userName, visibility);
                         batch.clear();
@@ -166,7 +167,7 @@ public class CsvDatasetItemProcessor {
                 // Save remaining items
                 if (!batch.isEmpty()) {
                     batchNumber++;
-                    log.debug("Saving final batch '{}' for dataset '{}', batch size: '{}'", 
+                    log.debug("Saving final batch '{}' for dataset '{}', batch size: '{}'",
                             batchNumber, datasetId, batch.size());
                     totalProcessed += saveBatch(batch, datasetId, workspaceId, userName, visibility);
                 }
@@ -178,8 +179,8 @@ public class CsvDatasetItemProcessor {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private long saveBatch(List<DatasetItem> items, UUID datasetId, String workspaceId, 
-                          String userName, com.comet.opik.api.Visibility visibility) {
+    private long saveBatch(List<DatasetItem> items, UUID datasetId, String workspaceId,
+            String userName, com.comet.opik.api.Visibility visibility) {
         DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
 
         datasetItemService.save(batch)
@@ -201,4 +202,3 @@ public class CsvDatasetItemProcessor {
                 .parse(reader);
     }
 }
-

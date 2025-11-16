@@ -482,8 +482,7 @@ public class DatasetsResource {
                 .subscribe(
                         totalItems -> log.info("CSV processing completed for dataset '{}', total items: '{}'",
                                 datasetId, totalItems),
-                        error -> log.error("CSV processing error for dataset '{}'", datasetId, error)
-                );
+                        error -> log.error("CSV processing error for dataset '{}'", datasetId, error));
 
         return Response.status(Response.Status.ACCEPTED)
                 .entity(new ErrorMessage("CSV upload accepted, processing in background"))
