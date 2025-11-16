@@ -17,7 +17,7 @@ from opik import Dataset, opik_context
 from pydantic import BaseModel
 
 from . import _throttle, optimization_result
-from .optimization_config import chat_prompt, mappers
+from .api_objects import chat_prompt
 from .optimizable_agent import OptimizableAgent
 from .utils import create_litellm_agent_class
 from . import task_evaluator
@@ -764,7 +764,7 @@ class BaseOptimizer(ABC):
                 )
 
             result = {
-                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+                "llm_output": cleaned_model_output,
             }
             return result
 

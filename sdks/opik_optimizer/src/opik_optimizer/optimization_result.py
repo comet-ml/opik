@@ -308,7 +308,7 @@ class OptimizationResult(pydantic.BaseModel):
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
-            chat_group_items = []
+            chat_group_items: list[rich.console.RenderableType] = []
             for msg in self.prompt:
                 role = msg.get("role", "unknown")
                 content = msg.get("content", "")
@@ -328,7 +328,9 @@ class OptimizationResult(pydantic.BaseModel):
                     rich.console.Group(role_text, formatted_content)
                 )
                 chat_group_items.append(rich.text.Text("---", style="dim"))  # Separator
-            prompt_renderable = rich.console.Group(*chat_group_items)
+            prompt_renderable: rich.console.RenderableType = rich.console.Group(
+                *chat_group_items
+            )
 
         except Exception:
             # Fallback to simple text prompt
