@@ -40,7 +40,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
 
-    Mono<Void> save(DatasetItemBatch batch);
+    Mono<Void> verifyDatasetExistsAndSave(DatasetItemBatch batch);
+
+    Mono<Long> saveBatch(UUID datasetId, List<DatasetItem> items);
 
     Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
 
@@ -78,7 +80,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> save(@NonNull DatasetItemBatch batch) {
+    public Mono<Void> verifyDatasetExistsAndSave(@NonNull DatasetItemBatch batch) {
         if (batch.datasetId() == null && batch.datasetName() == null) {
             return Mono.error(failWithError("dataset_id or dataset_name must be provided"));
         }
@@ -234,6 +236,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dao.getOutputColumns(datasetId, experimentIds)
                 .map(columns -> PageColumns.builder().columns(columns).build())
                 .switchIfEmpty(Mono.just(PageColumns.empty()));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> saveBatch(@NonNull UUID datasetId, @NonNull List<DatasetItem> items) {
+        if (items.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        // Create a batch with the items and save it
+        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
+        return saveBatch(batch, datasetId);
     }
 
     private Mono<Long> saveBatch(DatasetItemBatch batch, UUID id) {

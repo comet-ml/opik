@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -181,9 +180,7 @@ public class CsvDatasetItemProcessor {
 
     private long saveBatch(List<DatasetItem> items, UUID datasetId, String workspaceId,
             String userName, com.comet.opik.api.Visibility visibility) {
-        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
-
-        datasetItemService.save(batch)
+        datasetItemService.saveBatch(datasetId, items)
                 .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility))
                 .block();
 
