@@ -18,10 +18,13 @@ import org.apache.commons.csv.CSVRecord;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -55,49 +58,96 @@ public class CsvDatasetItemProcessor {
     }
 
     /**
-     * Validates CSV file format and structure.
+     * Processes uploaded CSV file by buffering to temp storage and processing asynchronously.
+     * This method handles the complete lifecycle: buffering, validation, processing, and cleanup.
      *
-     * @param csvBytes CSV file content
-     * @throws BadRequestException if CSV is invalid
+     * @param inputStream CSV file input stream from upload
+     * @param datasetId Dataset ID
+     * @param workspaceId Workspace UUID
+     * @param userName User name
+     * @param visibility Visibility setting
      */
-    public void validateCsv(byte[] csvBytes) {
-        try (InputStreamReader reader = new InputStreamReader(
-                new ByteArrayInputStream(csvBytes), StandardCharsets.UTF_8);
-                CSVParser parser = createCsvParser(reader)) {
+    public void processUploadedCsv(InputStream inputStream, UUID datasetId, String workspaceId,
+            String userName, Visibility visibility) {
+        log.info("Processing CSV upload for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
 
-            List<String> headers = parser.getHeaderNames();
-            if (headers.isEmpty()) {
-                throw new BadRequestException("CSV file must contain headers");
-            }
+        try {
+            // Buffer the stream to a temporary file to avoid it being closed by Jersey
+            Path tempFile = bufferToTempFile(inputStream);
 
-            if (!parser.iterator().hasNext()) {
-                throw new BadRequestException("CSV file contains no data rows");
-            }
+            // Process asynchronously with automatic cleanup
+            validateAndProcessCsvFromFile(tempFile, datasetId, workspaceId, userName, visibility)
+                    .doOnError(error -> {
+                        log.error("CSV processing failed for dataset '{}'", datasetId, error);
+                        deleteTempFile(tempFile);
+                    })
+                    .doOnSuccess(totalItems -> {
+                        log.info("CSV processing completed for dataset '{}', total items: '{}'",
+                                datasetId, totalItems);
+                        deleteTempFile(tempFile);
+                    })
+                    .subscribe();
 
-            log.debug("CSV validation passed, headers: '{}'", headers);
         } catch (IOException e) {
-            log.warn("Failed to validate CSV file", e);
-            throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+            log.error("Failed to buffer CSV file to temp storage for dataset '{}'", datasetId, e);
+            throw new BadRequestException("Failed to process CSV file: " + e.getMessage());
         }
     }
 
     /**
-     * Processes CSV file asynchronously in batches.
+     * Buffers input stream to a temporary file.
      *
-     * @param csvBytes CSV file content
+     * @param inputStream Input stream to buffer
+     * @return Path to temporary file
+     * @throws IOException if buffering fails
+     */
+    private Path bufferToTempFile(InputStream inputStream) throws IOException {
+        Path tempFile = Files.createTempFile("csv-upload-", ".csv");
+        try {
+            Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+            log.debug("CSV file buffered to temp file: '{}', size: '{}' bytes",
+                    tempFile, Files.size(tempFile));
+            return tempFile;
+        } catch (IOException e) {
+            deleteTempFile(tempFile);
+            throw e;
+        }
+    }
+
+    /**
+     * Deletes temporary file with error handling.
+     *
+     * @param tempFile Path to temporary file
+     */
+    private void deleteTempFile(Path tempFile) {
+        try {
+            Files.deleteIfExists(tempFile);
+            log.debug("Deleted temp file: '{}'", tempFile);
+        } catch (IOException e) {
+            log.warn("Failed to delete temp file: '{}'", tempFile, e);
+        }
+    }
+
+    /**
+     * Validates and processes CSV file from a temporary file.
+     * The file is streamed and processed in batches to minimize memory usage.
+     * Only one batch is kept in memory at a time.
+     *
+     * @param tempFile Temporary file containing CSV data
      * @param datasetId Dataset ID
      * @param workspaceId Workspace UUID
      * @param userName User name
      * @param visibility Visibility setting
      * @return Mono that completes when processing is done
      */
-    public Mono<Long> processCsvInBatches(byte[] csvBytes, UUID datasetId, String workspaceId,
+    private Mono<Long> validateAndProcessCsvFromFile(Path tempFile, UUID datasetId, String workspaceId,
             String userName, Visibility visibility) {
-        log.info("Starting CSV batch processing for dataset '{}', file size: '{}' bytes", datasetId, csvBytes.length);
+        log.debug("Starting CSV validation and batch processing for dataset '{}' from temp file: '{}'",
+                datasetId, tempFile);
 
         // Verify dataset exists before processing
         return verifyDatasetExists(datasetId, workspaceId, visibility)
-                .then(Mono.defer(() -> processFile(csvBytes, datasetId, workspaceId, userName, visibility)))
+                .then(Mono.defer(() -> processFileFromPath(tempFile, datasetId, workspaceId, userName, visibility)))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -109,14 +159,18 @@ public class CsvDatasetItemProcessor {
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    private Mono<Long> processFile(byte[] csvBytes, UUID datasetId, String workspaceId, String userName,
+    private Mono<Long> processFileFromPath(Path tempFile, UUID datasetId, String workspaceId, String userName,
             Visibility visibility) {
         return Mono.fromCallable(() -> {
             try (InputStreamReader reader = new InputStreamReader(
-                    new ByteArrayInputStream(csvBytes), StandardCharsets.UTF_8);
+                    Files.newInputStream(tempFile), StandardCharsets.UTF_8);
                     CSVParser parser = createCsvParser(reader)) {
 
                 List<String> headers = parser.getHeaderNames();
+                if (headers.isEmpty()) {
+                    throw new BadRequestException("CSV file must contain headers");
+                }
+
                 int batchSize = getBatchSize();
                 int logFrequency = getLogFrequency();
 
@@ -124,8 +178,10 @@ public class CsvDatasetItemProcessor {
                 long totalProcessed = 0;
                 int batchNumber = 0;
                 long recordCount = 0;
+                boolean hasDataRows = false;
 
                 for (CSVRecord record : parser) {
+                    hasDataRows = true;
                     recordCount++;
 
                     if (recordCount % logFrequency == 0) {
@@ -159,6 +215,10 @@ public class CsvDatasetItemProcessor {
                     }
                 }
 
+                if (!hasDataRows) {
+                    throw new BadRequestException("CSV file contains no data rows");
+                }
+
                 // Save remaining items
                 if (!batch.isEmpty()) {
                     batchNumber++;
@@ -170,6 +230,9 @@ public class CsvDatasetItemProcessor {
                 log.info("Completed CSV processing for dataset '{}', total items: '{}', batches: '{}'",
                         datasetId, totalProcessed, batchNumber);
                 return totalProcessed;
+            } catch (IOException e) {
+                log.warn("Failed to process CSV file for dataset '{}'", datasetId, e);
+                throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }
