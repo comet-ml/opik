@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 def infer_output_style_from_dataset(
     dataset: opik.Dataset,
+    model: str,
     model_parameters: dict[str, Any],
     n_examples: int = 5,
     verbose: int = 1,
@@ -63,6 +64,7 @@ def infer_output_style_from_dataset(
                     },
                     {"role": "user", "content": user_prompt_for_style_inference},
                 ],
+                model=model,
                 model_parameters=model_parameters,
                 is_reasoning=True,
             )

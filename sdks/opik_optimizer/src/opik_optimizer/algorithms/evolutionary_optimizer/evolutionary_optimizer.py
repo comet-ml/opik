@@ -302,6 +302,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                             c1,
                             c2,
                             output_style_guidance=self.output_style_guidance,
+                            model=self.model,
                             model_parameters=self.model_parameters,
                             verbose=self.verbose,
                         )
@@ -329,6 +330,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     current_population=self._current_population,
                     output_style_guidance=self.output_style_guidance,
                     initial_prompt=prompt,
+                    model=self.model,
                     model_parameters=self.model_parameters,
                     diversity_threshold=DEFAULT_DIVERSITY_THRESHOLD,
                     mcp_context=self._mcp_context,
@@ -547,6 +549,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # If user wants inference AND hasn't provided a specific custom guidance
             inferred_style = style_ops.infer_output_style_from_dataset(
                 dataset=dataset,
+                model=self.model,
                 model_parameters=self.model_parameters,
                 verbose=self.verbose,
             )
@@ -571,6 +574,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 prompt=prompt,
                 output_style_guidance=effective_output_style_guidance,
                 mcp_context=self._mcp_context,
+                model=self.model,
                 model_parameters=self.model_parameters,
                 optimization_id=self.current_optimization_id,
                 population_size=self.population_size,

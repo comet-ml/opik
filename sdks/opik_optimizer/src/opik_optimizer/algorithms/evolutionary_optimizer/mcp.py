@@ -45,6 +45,7 @@ def generate_tool_description_variations(
     base_prompt: chat_prompt.ChatPrompt,
     context: EvolutionaryMCPContext,
     num_variations: int,
+    model: str,
     model_parameters: dict[str, Any],
     optimization_id: str | None,
 ) -> list[chat_prompt.ChatPrompt]:
@@ -73,8 +74,9 @@ def generate_tool_description_variations(
                 {"role": "user", "content": instruction},
             ],
             is_reasoning=True,
-            optimization_id=optimization_id,
+            model=model,
             model_parameters=model_parameters,
+            optimization_id=optimization_id,
         )
 
         payload = _extract_json_payload(response)
@@ -113,6 +115,7 @@ def generate_tool_description_variations(
 def initialize_population_mcp(
     prompt: chat_prompt.ChatPrompt,
     context: EvolutionaryMCPContext,
+    model: str,
     model_parameters: dict[str, Any],
     optimization_id: str | None,
     population_size: int,
@@ -125,11 +128,12 @@ def initialize_population_mcp(
         num_to_generate = max(0, population_size - 1)
         if num_to_generate > 0:
             candidates = generate_tool_description_variations(
-                prompt,
-                context,
-                num_to_generate,
-                model_parameters,
-                optimization_id,
+                base_prompt=prompt,
+                context=context,
+                num_variations=num_to_generate,
+                model=model,
+                model_parameters=model_parameters,
+                optimization_id=optimization_id,
             )
             population.extend(candidates[:num_to_generate])
 
@@ -152,6 +156,7 @@ def initialize_population_mcp(
 def tool_description_mutation(
     prompt: chat_prompt.ChatPrompt,
     context: EvolutionaryMCPContext,
+    model: str,
     model_parameters: dict[str, Any],
     optimization_id: str | None,
 ) -> chat_prompt.ChatPrompt | None:
@@ -159,6 +164,7 @@ def tool_description_mutation(
         base_prompt=prompt,
         context=context,
         num_variations=1,
+        model=model,
         model_parameters=model_parameters,
         optimization_id=optimization_id,
     )

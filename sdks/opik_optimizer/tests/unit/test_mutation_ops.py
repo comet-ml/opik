@@ -48,11 +48,12 @@ def test_semantic_mutation_invalid_json_response(
     )
 
     result = mutation_ops._semantic_mutation(
-        original_prompt,
-        original_prompt,
+        prompt=original_prompt,
+        initial_prompt=original_prompt,
+        output_style_guidance="Keep answers brief.",
+        model="openai/gpt-4o-mini",
         model_parameters={},
         verbose=1,
-        output_style_guidance="Keep answers brief.",
     )
 
     assert result is not original_prompt

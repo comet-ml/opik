@@ -76,7 +76,7 @@ class OptimizableAgent:
         self,
         messages: list[dict[str, str]],
         tools: list[dict[str, str]] | None,
-        seed: int,
+        seed: int | None = None,
     ) -> Any:
         response = litellm.completion(
             model=self.model,
