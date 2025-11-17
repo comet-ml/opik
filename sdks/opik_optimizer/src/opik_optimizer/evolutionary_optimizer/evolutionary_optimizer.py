@@ -134,6 +134,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_threads: int = DEFAULT_NUM_THREADS,
         verbose: int = 1,
         seed: int = DEFAULT_SEED,
+        name: str | None = None,
     ) -> None:
         # Initialize base class first
         if sys.version_info >= (3, 13):
@@ -144,7 +145,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
 
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters, name=name
         )
         self.population_size = population_size
         self.num_generations = num_generations
@@ -551,7 +552,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
             opik_optimization_run = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
-                metadata={"optimizer": self.__class__.__name__},
+                name=self.name,
+                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = opik_optimization_run.id
