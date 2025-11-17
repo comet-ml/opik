@@ -118,7 +118,9 @@ const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
-    content: processedContent,
+    // Convert to backend format with separate fields
+    content: typeof processedContent === "string" ? processedContent : null,
+    content_array: Array.isArray(processedContent) ? processedContent : null,
   };
 };
 

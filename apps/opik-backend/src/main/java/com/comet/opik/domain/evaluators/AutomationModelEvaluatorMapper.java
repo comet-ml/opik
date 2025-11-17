@@ -136,11 +136,13 @@ interface AutomationModelEvaluatorMapper {
             return null;
         }
 
-        Object content;
         String contentString = codeMessage.content();
+        ChatMessageType role = ChatMessageType.valueOf(codeMessage.role());
 
         if (contentString == null) {
-            content = null;
+            return LlmAsJudgeMessage.builder()
+                    .role(role)
+                    .build();
         } else if (contentString.trim().startsWith("[")) {
             // It's a JSON array, deserialize to List<LlmAsJudgeMessageContent>
             try {
@@ -152,20 +154,24 @@ interface AutomationModelEvaluatorMapper {
                                 Object.class));
 
                 // Convert each element to LlmAsJudgeMessageContent
-                content = rawList.stream()
+                List<LlmAsJudgeMessageContent> contentArray = rawList.stream()
                         .map(this::convertToMessageContent)
                         .toList();
+
+                return LlmAsJudgeMessage.builder()
+                        .role(role)
+                        .contentArray(contentArray)
+                        .build();
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("Failed to deserialize message content from JSON", e);
             }
         } else {
             // It's a plain string
-            content = contentString;
+            return LlmAsJudgeMessage.builder()
+                    .role(role)
+                    .content(contentString)
+                    .build();
         }
-
-        return new LlmAsJudgeMessage(
-                ChatMessageType.valueOf(codeMessage.role()),
-                content);
     }
 
     /**
