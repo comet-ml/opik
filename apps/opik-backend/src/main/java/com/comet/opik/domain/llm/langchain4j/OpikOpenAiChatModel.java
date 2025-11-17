@@ -1,5 +1,8 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
@@ -19,6 +22,7 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static dev.langchain4j.internal.RetryUtils.withRetryMappingExceptions;
@@ -45,9 +49,22 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
     private final Boolean strictJsonSchema = false;
     private final Boolean returnThinking = false;
 
-    // Constructor that takes the parent's builder
-    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder) {
+    // Custom parameters to inject at request time (stored as JsonNode, converted to Map when needed)
+    private final JsonNode customParameters;
+    private static final ObjectMapper objectMapper = JsonUtils.getMapper();
+
+    /**
+     * Constructor that takes the parent's builder and custom parameters.
+     * We bypass the builder pattern for custom parameters because Java builder inheritance
+     * doesn't allow clean method chaining when parent methods return the parent builder type.
+     *
+     * @param builder The OpenAI chat model builder with standard parameters
+     * @param customParameters Additional parameters as JsonNode (will be converted to Map<String,Object> at request time)
+     */
+    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters) {
         super(builder);
+        this.customParameters = customParameters;
+
         // Extract client via reflection since it's private in parent
         try {
             var clientField = OpenAiChatModel.class.getDeclaredField("client");
@@ -59,17 +76,13 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
         }
     }
 
-    // Provide our own builder method that returns our custom builder
+    /**
+     * Factory method to get a builder instance.
+     * Note: Use the constructor directly with customParameters since builder chaining
+     * doesn't work cleanly with inherited builders.
+     */
     public static OpenAiChatModel.OpenAiChatModelBuilder builder() {
-        return new OpikBuilder();
-    }
-
-    // Custom builder that creates OpikOpenAiChatModel instances instead of OpenAiChatModel
-    private static class OpikBuilder extends OpenAiChatModel.OpenAiChatModelBuilder {
-        @Override
-        public OpikOpenAiChatModel build() {
-            return new OpikOpenAiChatModel(this);
-        }
+        return OpenAiChatModel.builder();
     }
 
     @Override
@@ -101,7 +114,11 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                 .metadata(parameters.metadata())
                 .serviceTier(parameters.serviceTier())
                 .reasoningEffort(parameters.reasoningEffort())
-                .customParameters(parameters.customParameters())
+                // Use our stored custom parameters instead of parameters.customParameters()
+                // This allows us to inject custom parameters from LlmAsJudgeModelParameters
+                // without relying on LangChain4j's builder which doesn't support them
+                // Convert JsonNode to Map<String, Object> for the request
+                .customParameters(convertCustomParameters())
                 .build();
 
         ParsedAndRawResponse<ChatCompletionResponse> parsedAndRawResponse = withRetryMappingExceptions(
@@ -184,5 +201,24 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
         }
 
         return builder.build();
+    }
+
+    /**
+     * Convert JsonNode custom parameters to Map<String, Object> for ChatCompletionRequest.
+     * Returns null if customParameters is null, otherwise converts using Jackson ObjectMapper.
+     */
+    private Map<String, Object> convertCustomParameters() {
+        if (customParameters == null || customParameters.isNull()) {
+            return null;
+        }
+
+        try {
+            // Convert JsonNode to Map<String, Object>
+            return objectMapper.convertValue(customParameters,
+                    objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
+        } catch (IllegalArgumentException e) {
+            log.error("Failed to convert custom parameters from JsonNode to Map", e);
+            return null;
+        }
     }
 }
