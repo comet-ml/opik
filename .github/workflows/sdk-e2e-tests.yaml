@@ -22,7 +22,7 @@ env:
 jobs:
     run-e2e:
         name: SDK E2E Tests ${{matrix.python_version}}
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-latest-m
         timeout-minutes: 30   
         strategy:
             fail-fast: false
@@ -49,8 +49,7 @@ jobs:
             OPIK_USAGE_REPORT_ENABLED: false
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --build
-#            ./opik.sh --build --guardrails
+            ./opik.sh --build --guardrails
         
         - name: Check Opik server availability
           shell: bash

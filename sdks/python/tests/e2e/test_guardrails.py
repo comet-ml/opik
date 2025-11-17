@@ -8,11 +8,6 @@ import pytest
 
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
 
-pytest.skip(
-    allow_module_level=True,
-    reason="Guardrails are not enabled due to issues with GitHub runners going out of space",
-)
-
 
 def find_guardrail_span(opik_client, trace_id, project_name):
     # We cannot easily access the created span id from the test so we need to query it dynamically
