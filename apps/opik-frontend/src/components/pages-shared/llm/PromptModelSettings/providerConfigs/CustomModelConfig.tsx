@@ -25,14 +25,14 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
 
   const handleExtraBodyParametersChange = useCallback(
     (value: Record<string, unknown> | null) => {
-      onChange({ customParameters: value });
+      onChange({ custom_parameters: value });
     },
     [onChange],
   );
 
   const { jsonString, showInvalidJSON, handleJsonChange, handleJsonBlur } =
     useJsonInput({
-      value: configs.customParameters,
+      value: configs.custom_parameters,
       onChange: handleExtraBodyParametersChange,
     });
 
@@ -119,7 +119,7 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
       )}
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="customParameters" className="flex items-center gap-1">
+        <Label htmlFor="custom_parameters" className="flex items-center gap-1">
           Extra body parameters (Optional)
           <TooltipWrapper
             content={
@@ -131,7 +131,7 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
         </Label>
         <div className="max-h-52 overflow-y-auto rounded-md border">
           <CodeMirror
-            id="customParameters"
+            id="custom_parameters"
             theme={theme}
             value={jsonString}
             onChange={handleJsonChange}

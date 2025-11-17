@@ -23,7 +23,7 @@ export interface LLMJudgeModel {
   name: PROVIDER_MODEL_TYPE;
   temperature: number;
   seed?: number | null;
-  customParameters?: Record<string, unknown> | null;
+  custom_parameters?: Record<string, unknown> | null;
 }
 
 export interface LLMJudgeObject {

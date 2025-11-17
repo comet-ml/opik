@@ -93,7 +93,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     config: {
       temperature: 0.0,
       seed: null,
-      customParameters: null,
+      custom_parameters: null,
     },
     template: LLM_JUDGE.custom,
     messages: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.messages,
@@ -105,7 +105,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     config: {
       temperature: 0.0,
       seed: null,
-      customParameters: null,
+      custom_parameters: null,
     },
     template: LLM_JUDGE.custom,
     messages: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.messages,

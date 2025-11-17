@@ -513,7 +513,7 @@ export interface LLMCustomConfigsType {
   frequencyPenalty: number;
   presencePenalty: number;
   seed?: number | null;
-  customParameters?: Record<string, unknown> | null;
+  custom_parameters?: Record<string, unknown> | null;
 }
 
 export type LLMPromptConfigsType =
