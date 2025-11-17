@@ -6,7 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -25,12 +25,6 @@ import {
   getTextFromMessageContent,
   hasVideosInContent,
 } from "@/lib/llm";
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
-
-const isOpenAIModel = (modelName: string): boolean => {
-  const openAIModels = PROVIDER_MODELS[PROVIDER_TYPE.OPEN_AI] || [];
-  return openAIModels.some((model) => model.value === modelName);
-};
 
 const RuleNameSchema = z
   .string({
