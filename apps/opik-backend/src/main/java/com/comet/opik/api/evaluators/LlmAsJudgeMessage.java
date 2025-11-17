@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Represents a message in an LLM-as-Judge evaluator.
  * Follows OpenAI's message format where content can be either:
- * - A string (for simple text messages, may contain placeholders like <<<video>>>URL<<</video>>>)
+ * - A string (for simple text messages
  * - An array of content parts (for multimodal messages with text, images, videos)
  *
  * This matches the OpenAI API format: UserContent = string | Array<TextPart | ImagePart | VideoPart>
