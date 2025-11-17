@@ -39,10 +39,15 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v4.1.1
             
-        - name: Setup Python ${{matrix.python_version}}
-          uses: actions/setup-python@v5
+#        - name: Setup Python ${{matrix.python_version}}
+#          uses: actions/setup-python@v5
+#          with:
+#            python-version: ${{matrix.python_version}}
+
+        - name: Install uv and set the Python version ${{ matrix.python_version }}
+          uses: astral-sh/setup-uv@v5
           with:
-            python-version: ${{matrix.python_version}}
+            python-version: ${{ matrix.python_version }}
       
         - name: Run latest Opik server
           env:
@@ -63,8 +68,13 @@ jobs:
 
         - name: Install opik SDK
           run: |
+            # create virtual environment
+            uv venv ${{ inputs.library_name }}-env --python ${{ inputs.python_version }}
+            source ${{ inputs.library_name }}-env/bin/activate
+        
+        
             cd ${{ github.workspace }}/sdks/python
-            pip install .
+            uv pip install .
 
         - name: Run smoke tests
           run: |
@@ -74,8 +84,8 @@ jobs:
         - name: Install test requirements
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pip install -r tests/test_requirements.txt
-            pip list
+            uv pip install -r tests/test_requirements.txt
+            uv pip list
 
         - name: Run tests
           run: |
