@@ -9,12 +9,15 @@ import { DatasetItem } from "@/types/datasets";
 
 const getDatasetItemById = async (
   { signal }: QueryFunctionContext,
-  { datasetItemId }: UseDatasetItemByIdParams,
+  { datasetItemId, truncate = false }: UseDatasetItemByIdParams,
 ) => {
   const { data } = await api.get(
     `${DATASETS_REST_ENDPOINT}items/${datasetItemId}`,
     {
       signal,
+      params: {
+        truncate,
+      },
     },
   );
 
@@ -23,6 +26,7 @@ const getDatasetItemById = async (
 
 type UseDatasetItemByIdParams = {
   datasetItemId: string;
+  truncate?: boolean;
 };
 
 export default function useDatasetItemById(

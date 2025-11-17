@@ -7,6 +7,42 @@ import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
 
+const stripBase64MediaFromContent = (content: string): string => {
+  let strippedContent = content;
+
+  strippedContent = strippedContent.replace(
+    /<{3}image>{3}(data:image\/[^;]+;base64,[^<]+)<{3}\/image>{3}/g,
+    "",
+  );
+
+  strippedContent = strippedContent.replace(
+    /<{3}video>{3}(data:video\/[^;]+;base64,[^<]+)<{3}\/video>{3}/g,
+    "",
+  );
+
+  return strippedContent;
+};
+
+const partializeState = (state: PlaygroundStore): Partial<PlaygroundStore> => {
+  const clonedPromptMap: Record<string, PlaygroundPromptType> = {};
+
+  Object.keys(state.promptMap).forEach((promptId) => {
+    const prompt = state.promptMap[promptId];
+    clonedPromptMap[promptId] = {
+      ...prompt,
+      messages: prompt.messages.map((message) => ({
+        ...message,
+        content: stripBase64MediaFromContent(message.content),
+      })),
+    };
+  });
+
+  return {
+    ...state,
+    promptMap: clonedPromptMap,
+  };
+};
+
 interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
@@ -273,6 +309,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
     }),
     {
       name: "PLAYGROUND_STATE",
+      partialize: partializeState,
     },
   ),
 );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { combineContentWithImages, parseContentWithImages } from "@/lib/llm";
+import { combineContentWithMedia, parseContentWithMedia } from "@/lib/llm";
 import { OnChangeFn } from "@/types/shared";
 
 interface UseMessageContentProps {
@@ -10,7 +10,9 @@ interface UseMessageContentProps {
 interface UseMessageContentReturn {
   localText: string;
   images: string[];
+  videos: string[];
   setImages: OnChangeFn<string[]>;
+  setVideos: OnChangeFn<string[]>;
   handleContentChange: (newText: string) => void;
 }
 
@@ -19,45 +21,57 @@ export const useMessageContent = ({
   onChangeContent,
 }: UseMessageContentProps): UseMessageContentReturn => {
   const lastProcessedContentRef = useRef<string>(content);
-  const { text: initText, images: initImages } =
-    parseContentWithImages(content);
+  const {
+    text: initText,
+    images: initImages,
+    videos: initVideos,
+  } = parseContentWithMedia(content);
   const [localText, setLocalText] = useState(initText);
   const [images, setImages] = useState<string[]>(initImages);
+  const [videos, setVideos] = useState<string[]>(initVideos);
 
   useEffect(() => {
     if (content !== lastProcessedContentRef.current) {
-      const { text, images: parsedImages } = parseContentWithImages(content);
+      const {
+        text,
+        images: parsedImages,
+        videos: parsedVideos,
+      } = parseContentWithMedia(content);
       setLocalText(text);
       setImages(parsedImages);
-      lastProcessedContentRef.current = combineContentWithImages(
+      setVideos(parsedVideos);
+      lastProcessedContentRef.current = combineContentWithMedia(
         text,
         parsedImages,
+        parsedVideos,
       );
     }
   }, [content]);
 
   useEffect(() => {
-    const newContent = combineContentWithImages(localText, images);
+    const newContent = combineContentWithMedia(localText, images, videos);
     if (newContent !== lastProcessedContentRef.current) {
       lastProcessedContentRef.current = newContent;
       onChangeContent(newContent);
     }
-  }, [images, localText, onChangeContent]);
+  }, [images, videos, localText, onChangeContent]);
 
   const handleContentChange = useCallback(
     (newText: string) => {
       setLocalText(newText);
-      const newContent = combineContentWithImages(newText, images);
+      const newContent = combineContentWithMedia(newText, images, videos);
       lastProcessedContentRef.current = newContent;
       onChangeContent(newContent);
     },
-    [images, onChangeContent],
+    [images, videos, onChangeContent],
   );
 
   return {
     localText,
     images,
+    videos,
     setImages,
+    setVideos,
     handleContentChange,
   };
 };

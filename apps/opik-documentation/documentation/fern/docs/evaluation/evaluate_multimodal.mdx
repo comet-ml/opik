@@ -1,23 +1,26 @@
 ---
-subtitle: Evaluate prompts that include images
+subtitle: Evaluate prompts that include images and video
 ---
 
-Opik lets you evaluate multimodal prompts that combine text and images. You can run these experiments straight from the UI, or by using the SDKs. This page covers both flows, clarifies which models support image inputs, and explains how to customise model detection.
+Opik lets you evaluate multimodal prompts that combine text with images and video. You can run these experiments straight from the UI, or by using the SDKs. This page covers both flows, clarifies which models support multimedia inputs, and explains how to customise model detection.
 
 ## Online evaluation in the UI
 
-LLM-as-a-Judge experiments in the Opik UI accept image attachments on both the dataset rows and the prompt messages. When you configure an evaluation:
+LLM-as-a-Judge experiments in the Opik UI accept image and video attachments on both the dataset rows and the prompt messages. When you configure an evaluation:
 
 1. Open **Evaluations → LLM-as-a-Judge** and click **New evaluation**.
-2. Choose a vision-capable model (for example, `gpt-4o` or `claude-3-5-sonnet`).
-3. Add image URLs or upload files in either the **Dataset** rows or the **Prompt** builder.
-4. Launch the evaluation. Opik automatically keeps the images in the judge prompt when the selected model supports them. If the model does not support images, the UI surfaces a warning and flattens the image reference into a text placeholder so the run still completes.
+2. Choose a multimodal-capable model (for example, `gpt-4o`, `claude-3-5-sonnet`, or `qwen/qwen2.5-vl-32b-instruct`).
+3. Add image or video URLs (or upload files) in either the **Dataset** rows or the **Prompt** builder. Uploaded videos are converted to base64 data URLs automatically.
+4. Launch the evaluation. Opik keeps the multimedia blocks in the judge prompt when the selected model supports them. If the model does not support images/videos, the UI surfaces a warning and flattens the reference into a text placeholder with the filename (for example, `<<<video>>>video_123.mp4<<</video>>>`) so the run still completes.
 
 All multimodal traces appear in the evaluation results, so you can inspect exactly what the judge model received.
 
 ## Using the SDKs
 
-Both the Python and TypeScript SDKs accept OpenAI-style message payloads. Each message can contain either a string or a list of content blocks. Image blocks use the `image_url` type and can point to an `https://` URL or a `data:image/...;base64,` payload.
+Both the Python and TypeScript SDKs accept OpenAI-style message payloads. Each message can contain either a string or a list of content blocks.
+
+- Image blocks use the `image_url` type and can point to an `https://` URL or a `data:image/...;base64,` payload.
+- Video blocks use the `video_url` type and support `https://` URLs, `data:video/...;base64,` payloads, or OpenAI file references (`type: "file"` with `file_id`, `file_data`, and `format`).
 
 ### Python example
 
@@ -69,7 +72,57 @@ evaluate_prompt(
 )
 ```
 
-The evaluator uses LiteLLM-style model identifiers. Opik recognises popular multimodal families (OpenAI GPT-4o, Anthropic Claude 3+, Google Gemini 1.5, Meta Llama 3.2 Vision, Mistral Pixtral, etc.) and treats any model whose name ends with `-vision` or `-vl` as vision-capable. Provider prefixes such as `anthropic/` are stripped automatically. When a model is not recognised as vision-capable, Opik logs a warning and replaces image blocks with placeholders before making the API call.
+#### Adding video content
+
+```python
+VIDEO_PROMPT = [
+    {
+        "role": "system",
+        "content": "Score the attached clip for artistic quality from 0-10.",
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Explain your score in one sentence."},
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://download.samplelib.com/mp4/sample-5s.mp4",
+                },
+            },
+        ],
+    },
+]
+
+evaluate_prompt(
+    dataset=dataset,
+    messages=VIDEO_PROMPT,
+    model="qwen/qwen2.5-vl-32b-instruct",
+    scoring_metrics=[metrics.Equals()],
+)
+```
+
+You can substitute the `video_url` value with a `data:video/...;base64,` string or an OpenAI file reference:
+
+```python
+{
+    "role": "user",
+    "content": [
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "data:video/mp4;base64,AAAA...",
+            },
+        },
+        {
+            "type": "text",
+            "text": "Call out any notable colours from the clip.",
+        },
+    ],
+}
+```
+
+The evaluator uses LiteLLM-style model identifiers. Opik recognises popular multimodal families (OpenAI GPT-4o, Anthropic Claude 3+, Google Gemini 1.5, Meta Llama 3.2 Vision, Mistral Pixtral, Qwen VL, etc.) and treats any model whose name ends with `-vision` or `-vl` as multimodal-capable. Provider prefixes such as `anthropic/` are stripped automatically. When a model is not recognised as supporting images or video, Opik logs a warning and replaces those blocks with placeholders before making the API call.
 
 ### TypeScript note
 
@@ -83,21 +136,23 @@ If you are experimenting with a new provider, you can extend the registry at run
 from opik.evaluation.models import ModelCapabilities
 
 ModelCapabilities.add_vision_model("my-provider/sparrow-vision-beta")
+ModelCapabilities.add_video_model("my-provider/videotron-beta")
 ```
 
-Any subsequent evaluations in that process will treat the custom model as vision-capable.
+Any subsequent evaluations in that process will treat the custom model as multimodal-capable.
 
 ## FAQ
 
-### How do I confirm whether a model supports images?
+### How do I confirm whether a model supports images or video?
 
 ```python
 from opik.evaluation.models import ModelCapabilities
 
 ModelCapabilities.supports_vision("anthropic/claude-3-opus")
+ModelCapabilities.supports_video("qwen/qwen2.5-vl-32b-instruct")
 ```
 
-If the call returns `False`, Opik will log a warning and flatten image blocks. The data is inserted as text and truncated to the first 500 characters to keep prompts manageable.
+If the call returns `False`, Opik will log a warning and flatten the corresponding media blocks. The data is inserted as text and truncated to the first 500 characters to keep prompts manageable.
 
 ### What kind of image sources can I use?
 
@@ -105,9 +160,15 @@ If the call returns `False`, Opik will log a warning and flatten image blocks. T
 - Base64 data URLs such as `data:image/png;base64,iVBORw0...`.
 - Optional OpenAI `detail` fields (`"low"`, `"high"`) are preserved and forwarded when present.
 
+### What kind of video sources can I use?
+
+- Direct `https://` URLs (publicly accessible).
+- Base64 data URLs such as `data:video/mp4;base64,AAAA...`.
+- OpenAI file references (`type: "file"` with `file_id`, `file_data`, and `format` metadata).
+
 ### Does this work with LangChain integrations?
 
-Yes. Opik forwards the same OpenAI-style content blocks that LangChain expects, so structured messages with `image_url` dictionaries continue to work. A simple validation script is shown below:
+Yes. Opik forwards the same OpenAI-style content blocks that LangChain expects, so structured messages with `image_url` or `video_url` dictionaries continue to work. A simple validation script is shown below:
 
 ```python
 from langchain_core.messages import messages_to_dict
