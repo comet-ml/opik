@@ -14,7 +14,7 @@ from typing_extensions import override
 
 import opik.exceptions as exceptions
 
-from ..string import prompt_template
+from ..text import prompt_template
 from .. import types as prompt_types
 from .. import base_prompt_template
 from . import content_renderer_registry
