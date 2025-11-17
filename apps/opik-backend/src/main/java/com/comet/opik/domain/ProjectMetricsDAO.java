@@ -7,6 +7,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -18,7 +19,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -725,7 +725,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
         return template.nonTransaction(connection -> {
-            var stTemplate = new ST(GET_TOTAL_COST);
+            var stTemplate = TemplateUtils.newST(GET_TOTAL_COST);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -766,7 +766,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
         return template.nonTransaction(connection -> {
-            var stTemplate = new ST(GET_AVERAGE_DURATION);
+            var stTemplate = TemplateUtils.newST(GET_AVERAGE_DURATION);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -806,7 +806,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
-        var template = new ST(query)
+        var template = TemplateUtils.newST(query)
                 .add("step", intervalToSql(request.interval()))
                 .add("bucket", wrapWeekly(request.interval(),
                         "toStartOfInterval(trace_time, %s)".formatted(intervalToSql(request.interval()))))
