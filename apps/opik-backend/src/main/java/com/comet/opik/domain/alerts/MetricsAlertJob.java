@@ -92,8 +92,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .onErrorContinue((throwable, alert) -> log.error("Failed to process metrics alert '{}': {}",
                         alert, throwable.getMessage(), throwable))
                 .doOnComplete(() -> log.debug("MetricsAlertJob finished processing all alerts"))
-                .then()
-                .block();
+                .subscribe();
     }
 
     @Override
