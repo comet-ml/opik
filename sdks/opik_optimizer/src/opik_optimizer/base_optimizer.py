@@ -183,7 +183,7 @@ class BaseOptimizer(ABC):
         if agent_class is None:
             return create_litellm_agent_class(prompt, optimizer_ref=self)
         if not issubclass(agent_class, OptimizableAgent):
-            raise TypeError("agent_class must inherit from OptimizableAgent")
+            raise TypeError(f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}")
         # Always refresh optimizer binding so reused agent classes track the current optimizer.
         # If same agent is used across more than one optimizer this ensures handover.
         agent_class.optimizer = self  # type: ignore[attr-defined]
