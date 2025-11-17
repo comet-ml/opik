@@ -353,9 +353,7 @@ def create_litellm_agent_class(
         if not segments:
             return "LiteLLMAgent"
 
-        camel = "".join(
-            segment[0].upper() + segment[1:] for segment in segments
-        )
+        camel = "".join(segment[0].upper() + segment[1:] for segment in segments)
 
         # Remove any leading digits so the identifier remains valid.
         camel = camel.lstrip(string.digits)
