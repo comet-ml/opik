@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Wand2 } from "lucide-react";
 
-import { PromptWithLatestVersion } from "@/types/prompts";
+import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -9,10 +9,12 @@ import useLoadPlayground from "@/hooks/useLoadPlayground";
 
 type ImproveInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
+  activeVersion?: PromptVersion;
 };
 
 const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
   prompt,
+  activeVersion,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
@@ -22,12 +24,14 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
 
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
-      promptContent: prompt?.latest_version?.template ?? "",
+      promptContent:
+        activeVersion?.template ?? prompt?.latest_version?.template ?? "",
       promptId: prompt?.id,
-      promptVersionId: prompt?.latest_version?.id,
+      promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
       autoImprove: true,
+      templateStructure: prompt?.template_structure,
     });
-  }, [loadPlayground, prompt]);
+  }, [loadPlayground, prompt, activeVersion]);
 
   return (
     <>

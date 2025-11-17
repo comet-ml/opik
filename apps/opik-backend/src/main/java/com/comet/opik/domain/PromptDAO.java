@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
+import com.comet.opik.infrastructure.db.TemplateStructureArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
@@ -26,11 +27,13 @@ import java.util.UUID;
 @RegisterConstructorMapper(Prompt.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
+@RegisterArgumentFactory(TemplateStructureArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 interface PromptDAO {
 
-    @SqlUpdate("INSERT INTO prompts (id, name, description, created_by, last_updated_by, workspace_id, tags) " +
-            "VALUES (:bean.id, :bean.name, :bean.description, :bean.createdBy, :bean.lastUpdatedBy, :workspace_id, :bean.tags)")
+    @SqlUpdate("INSERT INTO prompts (id, name, description, created_by, last_updated_by, workspace_id, tags, template_structure) "
+            +
+            "VALUES (:bean.id, :bean.name, :bean.description, :bean.createdBy, :bean.lastUpdatedBy, :workspace_id, :bean.tags, :bean.templateStructure)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") Prompt prompt);
 
     @SqlQuery("""
