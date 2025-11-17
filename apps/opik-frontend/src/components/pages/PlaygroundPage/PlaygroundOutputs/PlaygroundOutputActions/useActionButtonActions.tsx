@@ -68,6 +68,7 @@ const useActionButtonActions = ({
   }, [resetOutputMap, clearCreatedExperiments, setIsRunning]);
 
   const stopAll = useCallback(() => {
+    setIsRunning(false);
     // nothing to stop
     if (abortControllersRef.current.size === 0) {
       return;
@@ -76,7 +77,6 @@ const useActionButtonActions = ({
     isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
     abortControllersRef.current.clear();
-    setIsRunning(false);
   }, [setIsRunning]);
 
   const storeExperiments = useCallback(

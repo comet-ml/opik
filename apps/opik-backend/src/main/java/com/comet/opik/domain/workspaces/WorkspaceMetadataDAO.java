@@ -1,13 +1,13 @@
 package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.infrastructure.WorkspaceSettings;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.Optional;
@@ -95,7 +95,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
     }
 
     private Mono<ScopeMetadata> getMetadata(String workspaceId, UUID projectId) {
-        var template = new ST(CALCULATE_METADATA);
+        var template = TemplateUtils.newST(CALCULATE_METADATA);
         if (projectId != null) {
             template.add("project_id", projectId);
         }
