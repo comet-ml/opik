@@ -2,7 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -14,7 +14,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -79,7 +78,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = TemplateUtils.getBatchSql(BULK_INSERT_GUARDRAILS, guardrails.size());
+            var template = TemplateUtils.getBatchSql(BULK_INSERT_GUARDRAILS, guardrails.size());
 
             var statement = connection.createStatement(template.render());
 

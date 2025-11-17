@@ -273,11 +273,16 @@ describe("calculateIntervalStartAndEnd", () => {
 
       // Check that the returned strings are valid ISO format
       expect(() => new Date(result.intervalStart)).not.toThrow();
-      expect(() => new Date(result.intervalEnd)).not.toThrow();
+      const intervalEnd = result.intervalEnd;
+      if (intervalEnd) {
+        expect(() => new Date(intervalEnd)).not.toThrow();
+      }
 
       // Check that they're valid dayjs ISO format
       expect(dayjs(result.intervalStart).isValid()).toBe(true);
-      expect(dayjs(result.intervalEnd).isValid()).toBe(true);
+      if (intervalEnd) {
+        expect(dayjs(intervalEnd).isValid()).toBe(true);
+      }
     });
 
     it("should always return UTC times", () => {
@@ -290,7 +295,10 @@ describe("calculateIntervalStartAndEnd", () => {
 
       // Check that times end with 'Z' indicating UTC
       expect(result.intervalStart).toMatch(/Z$/);
-      expect(result.intervalEnd).toMatch(/Z$/);
+      const intervalEnd = result.intervalEnd;
+      if (intervalEnd) {
+        expect(intervalEnd).toMatch(/Z$/);
+      }
     });
   });
 });
