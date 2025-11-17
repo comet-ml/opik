@@ -41,11 +41,10 @@ def test_tracked_function__regexp_rules_anonymization__happy_flow(
     # Setup
     ID_STORAGE = {}
 
-    """
-    Email: john.doe@example.com
-    Credit Card: 1234 5678 9012 3456
-    SSN: 123-45-6789
-    """
+    # Example PII values used in this test:
+    # Email: john.doe@example.com
+    # Credit Card: 1234 5678 9012 3456
+    # SSN: 123-45-6789
 
     @opik.track(
         tags=["outer-tag1", "outer-tag2"],
@@ -141,8 +140,12 @@ def test_tracked_function__rules_anonymization_remove_sensitive_key__happy_flow(
     class ApiKeyAnonymizer(anonymizer.Anonymizer):
         def anonymize(self, data, **kwargs):
             field_name = kwargs.get("field_name")
-            object_type = kwargs.get("object_type").__name__
-            if field_name == "metadata" and object_type == "dict" and "api_key" in data:
+            object_type = kwargs.get("object_type")
+            if (
+                field_name == "metadata"
+                and object_type in ["span", "trace"]
+                and "api_key" in data
+            ):
                 del data["api_key"]
             return data
 

@@ -6,6 +6,7 @@ RulesType = Union[
     List[Dict[str, str]],
     List[Tuple[str, str]],
     List[Callable[[str], str]],
+    List[Union[Dict[str, str], Tuple[str, str], Callable[[str], str]]],
     Dict[str, str],
     Tuple[str, str],
     Callable[[str], str],

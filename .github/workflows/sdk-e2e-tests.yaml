@@ -49,7 +49,8 @@ jobs:
             OPIK_USAGE_REPORT_ENABLED: false
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --build --guardrails
+            ./opik.sh --build
+#            ./opik.sh --build --guardrails
         
         - name: Check Opik server availability
           shell: bash

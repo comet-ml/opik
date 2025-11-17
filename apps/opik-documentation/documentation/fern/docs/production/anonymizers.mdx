@@ -121,8 +121,8 @@ def anonymize(self, data, **kwargs):
 
 The `anonymize()` method also receives additional context through `**kwargs`:
 
-- **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, or `"metadata"`)
-- **`object_type`**: The type of the object being processed (typically `dict` for trace/span data)
+- **`field_name`**: Indicates which field is being anonymized (`"input"`, `"output"`, `"metadata"`, or nested field names in dots notation such as `"metadata.email"`)
+- **`object_type`**: The type of the object being processed (`"span"`, `"trace"`)
 
 **When are kwargs available?**
 
@@ -160,6 +160,27 @@ opik.hooks.add_anonymizer(FieldAwareAnonymizer())
 <Tip>
   The `field_name` and `object_type` kwargs are primarily useful for implementing context-aware anonymization logic. If you don't need field-specific behavior, you can safely ignore these kwargs.
 </Tip>
+
+**Example: Anonymization of nested data structures**
+
+Also, you can extend the `RecursiveAnonymizer` base class to work with nested data structures.
+This allows you to apply the same anonymization logic to all nested fields. In this case you
+need to implement the `anonymize_text()` method instead of `anonymize()`.
+
+```python
+from typing import Any, Optional
+
+from opik.anonymizer import RecursiveAnonymizer
+import opik.hooks
+
+class SSNAnonymizer(RecursiveAnonymizer):
+    def anonymize_text(self, data: str, field_name: Optional[str] = None, **kwargs: Any) -> str:
+        if field_name == "metadata.ssn":
+            return "[SSN_REMOVED]"
+
+        return data
+
+```
 
 ### Advanced Custom Anonymizer Example
 
@@ -302,6 +323,79 @@ def remove_internal_identifiers(text):
 opik.hooks.add_anonymizer(create_anonymizer(remove_internal_identifiers))
 ```
 
+## Using third-party PII libraries
+In addition to regex and custom Python functions, you can reuse existing PII detection / redaction tools such as Microsoft Presidio or cloud APIs (AWS Comprehend, Google Cloud DLP, Azure AI Language).
+These tools can be wrapped inside an Opik anonymizer so that **all trace data is pre-redacted** before it’s logged.
+You typically integrate third-party tools in one of two ways:
+1. **Local open-source libraries** running inside your app or self-hosted Opik deployment
+   (e.g. Microsoft Presidio, `scrubadub`).
+2. **Managed cloud services** called via their SDKs from your anonymizer
+   (e.g. AWS Comprehend PII, Google Cloud DLP, Azure AI Language PII).
+<Tip>
+  Third-party anonymizers are just custom anonymizers under the hood. You call the
+  external engine inside <code>anonymize()</code> or a function rule, then return the
+  redacted data back to Opik.
+</Tip>
+---
+### Example: Microsoft Presidio (open source, runs locally)
+First, install Presidio in your environment:
+```bash
+pip install presidio-analyzer presidio-anonymizer
+```
+Then create an Anonymizer that delegates to Presidio:
+
+```python
+from typing import Any
+
+import opik.hooks
+from opik.anonymizer import RecursiveAnonymizer
+
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
+from presidio_anonymizer.entities import OperatorConfig
+
+class PresidioPIIAnonymizer(RecursiveAnonymizer):
+    """Use Microsoft Presidio to detect and anonymize PII in text.
+    This anonymizer is a simple wrapper around Presidio's built-in anonymizer engine.
+    It extends the RecursiveAnonymizer base class to support nested data structures.
+    """
+    def __init__(self, language: str="en",  max_depth: int=10):
+        super().__init__(max_depth=max_depth)
+        self.language = language
+        self.analyzer = AnalyzerEngine()
+        self.anonymizer = AnonymizerEngine()
+
+    def anonymize_text(self, data: str, **kwargs: Any) -> str:
+        # 1) Detect PII entities in the text
+        results = self.analyzer.analyze(
+            text=data,
+            language=self.language,
+            entities=None,  # detect all supported entities
+        )
+        if not results:
+            return data
+
+        # 2) Apply Presidio anonymization
+        operators = {
+            "DEFAULT": OperatorConfig("replace", {"new_value": "[PII]"}),
+            # You can customize per entity type if needed, for example:
+            # "PHONE_NUMBER": OperatorConfig("mask", {"masking_char": "*", "chars_to_mask": 8}),
+        }
+        anon_result = self.anonymizer.anonymize(
+            text=data,
+            analyzer_results=results,
+            operators=operators,
+        )
+        return anon_result.text
+
+# Register the Presidio-based anonymizer globally
+opik.hooks.add_anonymizer(PresidioPIIAnonymizer())
+```
+
+<Tip>
+You can combine a Presidio anonymizer with existing regex/function rules by registering multiple anonymizers; they will be applied in sequence.
+</Tip>
+
 ## Integration with Frameworks
 
 Anonymizers work seamlessly with all Opik integrations:
@@ -432,7 +526,7 @@ rules = [
 
 ## Performance Considerations
 
-- Use precompiled regex patterns for improved performance on large datasets when implementing custom anonymization functions. (OPIK automatically compiles regex patterns when an anonymizer is registered using a regex pattern.)
+- Use precompiled regex patterns for improved performance on large datasets when implementing custom anonymization functions. Note: Opik's `RegexRule` automatically compiles patterns when the rule is created.
 - Keep the number of rules reasonable to avoid performance impacts
 - Consider using more specific patterns to reduce false positives
 
