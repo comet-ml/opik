@@ -26,8 +26,8 @@ def test_evolutionary_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.EvolutionaryOptimizer(
-        model="openai/gpt-4o",
-        model_parameters={"temperature": 0.1, "max_tokens": 500000},
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 128000},
         infer_output_style=True,
         population_size=2,
         num_generations=2,
@@ -122,8 +122,8 @@ def test_evolutionary_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4o", (
-        f"Expected openai/gpt-4o, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-mini", (
+        f"Expected openai/gpt-5-mini, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"

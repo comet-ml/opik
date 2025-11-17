@@ -295,6 +295,7 @@ def test_generate_tool_description_variations(monkeypatch: pytest.MonkeyPatch) -
         base_prompt=prompt,
         context=context,
         num_variations=2,
+        model="openai/gpt-4o-mini",
         model_parameters={},
         optimization_id="opt-id",
     )
@@ -351,6 +352,7 @@ def test_tool_description_mutation_and_finalize(
     mutated = tool_description_mutation(
         prompt=prompt,
         context=context,
+        model="openai/gpt-4o-mini",
         model_parameters={},
         optimization_id="opt-id",
     )

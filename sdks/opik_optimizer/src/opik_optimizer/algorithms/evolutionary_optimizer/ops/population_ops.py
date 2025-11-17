@@ -46,6 +46,7 @@ def restart_population(
         prompt=seed_prompt,
         output_style_guidance=optimizer.output_style_guidance,
         mcp_context=optimizer._mcp_context,
+        model=optimizer.model,
         model_parameters=optimizer.model_parameters,
         optimization_id=optimizer.current_optimization_id,
         population_size=optimizer.population_size,
@@ -64,6 +65,7 @@ def initialize_population(
     prompt: chat_prompt.ChatPrompt,
     output_style_guidance: str,
     mcp_context: mcp.EvolutionaryMCPContext | None,
+    model: str,
     model_parameters: dict[str, Any],
     optimization_id: str | None,
     population_size: int,
@@ -77,6 +79,7 @@ def initialize_population(
         return initialize_population_mcp(
             prompt=prompt,
             context=mcp_context,
+            model=model,
             model_parameters=model_parameters,
             optimization_id=optimization_id,
             population_size=population_size,
@@ -113,6 +116,7 @@ def initialize_population(
                         },
                         {"role": "user", "content": fresh_start_user_prompt},
                     ],
+                    model=model,
                     model_parameters=model_parameters,
                     is_reasoning=True,
                 )
@@ -184,6 +188,7 @@ def initialize_population(
                         },
                         {"role": "user", "content": user_prompt_for_variation},
                     ],
+                    model=model,
                     model_parameters=model_parameters,
                     is_reasoning=True,
                 )

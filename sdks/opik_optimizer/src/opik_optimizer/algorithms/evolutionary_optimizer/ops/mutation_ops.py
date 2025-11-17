@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # TODO: Check if we need to pass the model name here
-def _get_synonym(word: str, model_parameters: dict[str, Any]) -> str:
+def _get_synonym(word: str, model: str, model_parameters: dict[str, Any]) -> str:
     """Get a synonym for a word using LLM."""
     try:
         response = _llm_calls.call_model(
@@ -27,6 +27,7 @@ def _get_synonym(word: str, model_parameters: dict[str, Any]) -> str:
                     ),
                 },
             ],
+            model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
         )
@@ -36,8 +37,7 @@ def _get_synonym(word: str, model_parameters: dict[str, Any]) -> str:
         return word
 
 
-# TODO: Check if we need to pass the model name here
-def _modify_phrase(phrase: str, model_parameters: dict[str, Any]) -> str:
+def _modify_phrase(phrase: str, model: str, model_parameters: dict[str, Any]) -> str:
     """Modify a phrase while preserving meaning using LLM."""
     try:
         response = _llm_calls.call_model(
@@ -50,6 +50,7 @@ def _modify_phrase(phrase: str, model_parameters: dict[str, Any]) -> str:
                     ),
                 },
             ],
+            model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
         )
@@ -59,7 +60,9 @@ def _modify_phrase(phrase: str, model_parameters: dict[str, Any]) -> str:
         return phrase
 
 
-def _word_level_mutation(msg_content: str, model_parameters: dict[str, Any]) -> str:
+def _word_level_mutation(
+    msg_content: str, model: str, model_parameters: dict[str, Any]
+) -> str:
     """Perform word-level mutation."""
     words = msg_content.split()
     if len(words) <= 1:
@@ -68,27 +71,35 @@ def _word_level_mutation(msg_content: str, model_parameters: dict[str, Any]) -> 
     mutation_type = random.random()
     if mutation_type < 0.3:
         idx = random.randint(0, len(words) - 1)
-        words[idx] = _get_synonym(words[idx], model_parameters)
+        words[idx] = _get_synonym(
+            word=words[idx], model=model, model_parameters=model_parameters
+        )
     elif mutation_type < 0.6:
         if len(words) > 2:
             i, j = random.sample(range(len(words)), 2)
             words[i], words[j] = words[j], words[i]
     else:
         idx = random.randint(0, len(words) - 1)
-        words[idx] = _modify_phrase(words[idx], model_parameters)
+        words[idx] = _modify_phrase(
+            phrase=words[idx], model=model, model_parameters=model_parameters
+        )
 
     return " ".join(words)
 
 
 def _word_level_mutation_prompt(
-    prompt: chat_prompt.ChatPrompt, model_parameters: dict[str, Any]
+    prompt: chat_prompt.ChatPrompt, model: str, model_parameters: dict[str, Any]
 ) -> chat_prompt.ChatPrompt:
     mutated_messages: list[dict[str, str]] = []
     for message in prompt.get_messages():
         mutated_messages.append(
             {
                 "role": message["role"],
-                "content": _word_level_mutation(message["content"], model_parameters),
+                "content": _word_level_mutation(
+                    msg_content=message["content"],
+                    model=model,
+                    model_parameters=model_parameters,
+                ),
             }
         )
     return chat_prompt.ChatPrompt(
@@ -100,6 +111,7 @@ def _word_level_mutation_prompt(
 
 def _structural_mutation(
     prompt: chat_prompt.ChatPrompt,
+    model: str,
     model_parameters: dict[str, Any],
 ) -> chat_prompt.ChatPrompt:
     """Perform structural mutation (reordering, combining, splitting)."""
@@ -114,7 +126,11 @@ def _structural_mutation(
             mutated_messages.append(
                 {
                     "role": role,
-                    "content": _word_level_mutation(content, model_parameters),
+                    "content": _word_level_mutation(
+                        msg_content=content,
+                        model=model,
+                        model_parameters=model_parameters,
+                    ),
                 }
             )
             continue
@@ -161,6 +177,7 @@ def _structural_mutation(
 def _semantic_mutation(
     prompt: chat_prompt.ChatPrompt,
     initial_prompt: chat_prompt.ChatPrompt,
+    model: str,
     model_parameters: dict[str, Any],
     verbose: int,
     output_style_guidance: str,
@@ -169,7 +186,11 @@ def _semantic_mutation(
     current_output_style_guidance = output_style_guidance
     if random.random() < 0.1:
         return _radical_innovation_mutation(
-            prompt, initial_prompt, model_parameters, output_style_guidance
+            prompt=prompt,
+            initial_prompt=initial_prompt,
+            model=model,
+            model_parameters=model_parameters,
+            output_style_guidance=output_style_guidance,
         )
 
     try:
@@ -188,10 +209,10 @@ def _semantic_mutation(
             current_output_style_guidance
         )
         user_prompt_for_semantic_mutation = evo_prompts.semantic_mutation_user_prompt(
-            prompt.get_messages(),
-            helpers.get_task_description_for_llm(initial_prompt),
-            current_output_style_guidance,
-            strategy_prompts[strategy],
+            prompt_messages=prompt.get_messages(),
+            task_description=helpers.get_task_description_for_llm(initial_prompt),
+            output_style_guidance=current_output_style_guidance,
+            strategy_instruction=strategy_prompts[strategy],
         )
         response = _llm_calls.call_model(
             messages=[
@@ -203,6 +224,7 @@ def _semantic_mutation(
                 },
                 {"role": "user", "content": user_prompt_for_semantic_mutation},
             ],
+            model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
         )
@@ -230,6 +252,7 @@ def _semantic_mutation(
 def _radical_innovation_mutation(
     prompt: chat_prompt.ChatPrompt,
     initial_prompt: chat_prompt.ChatPrompt,
+    model: str,
     model_parameters: dict[str, Any],
     output_style_guidance: str,
 ) -> chat_prompt.ChatPrompt:
@@ -254,6 +277,7 @@ def _radical_innovation_mutation(
                 },
                 {"role": "user", "content": user_prompt_for_radical_innovation},
             ],
+            model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
         )
@@ -284,6 +308,7 @@ def deap_mutation(
     current_population: list[Any] | None,
     output_style_guidance: str,
     initial_prompt: chat_prompt.ChatPrompt,
+    model: str,
     model_parameters: dict[str, Any],
     diversity_threshold: float,
     mcp_context: mcp.EvolutionaryMCPContext | None,
@@ -302,6 +327,7 @@ def deap_mutation(
         mutated_prompt = mcp.tool_description_mutation(
             prompt=prompt,
             context=mcp_context,
+            model=model,
             model_parameters=model_parameters,
             optimization_id=optimization_id,
         )
@@ -328,14 +354,20 @@ def deap_mutation(
     mutation_choice = random.random()
 
     if mutation_choice > structural_threshold:
-        mutated_prompt = _word_level_mutation_prompt(prompt, model_parameters)
+        mutated_prompt = _word_level_mutation_prompt(
+            prompt=prompt, model=model, model_parameters=model_parameters
+        )
         reporting.display_success(
             "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
             verbose=verbose,
         )
         return helpers.update_individual_with_prompt(individual, mutated_prompt)
     elif mutation_choice > semantic_threshold:
-        mutated_prompt = _structural_mutation(prompt, model_parameters)
+        mutated_prompt = _structural_mutation(
+            prompt=prompt,
+            model=model,
+            model_parameters=model_parameters,
+        )
         reporting.display_success(
             "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
             verbose=verbose,
@@ -343,7 +375,12 @@ def deap_mutation(
         return helpers.update_individual_with_prompt(individual, mutated_prompt)
     else:
         mutated_prompt = _semantic_mutation(
-            prompt, initial_prompt, model_parameters, verbose, output_style_guidance
+            prompt=prompt,
+            initial_prompt=initial_prompt,
+            model=model,
+            model_parameters=model_parameters,
+            verbose=verbose,
+            output_style_guidance=output_style_guidance,
         )
         reporting.display_success(
             "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",

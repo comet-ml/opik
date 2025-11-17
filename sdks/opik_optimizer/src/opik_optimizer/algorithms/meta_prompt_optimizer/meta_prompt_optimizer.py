@@ -955,10 +955,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    optimization_id=optimization_id,
+                    model=self.model,
                     model_parameters=self.model_parameters,
-                    project_name=self.project_name,
                     metadata=metadata_for_call,
+                    optimization_id=optimization_id,
                 )
                 logger.debug(f"Raw response from reasoning model: {content}")
 
@@ -1130,10 +1130,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": instruction},
                     ],
-                    optimization_id=optimization_id,
+                    model=self.model,
                     model_parameters=self.model_parameters,
-                    project_name=self.project_name,
                     metadata=metadata_for_call_tools,
+                    optimization_id=optimization_id,
                 )
 
                 try:

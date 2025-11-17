@@ -133,6 +133,7 @@ def llm_deap_crossover(
     ind1: Any,
     ind2: Any,
     output_style_guidance: str,
+    model: str,
     model_parameters: dict[str, Any],
     verbose: int = 1,
 ) -> tuple[Any, Any]:
@@ -162,6 +163,7 @@ def llm_deap_crossover(
                 },
                 {"role": "user", "content": user_prompt_for_llm_crossover},
             ],
+            model=model,
             model_parameters=model_parameters,
             is_reasoning=True,
         )

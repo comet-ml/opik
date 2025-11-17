@@ -177,10 +177,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
         response_content = _llm_calls.call_model(
-            messages,
+            messages=messages,
             model=model,
             seed=self.seed,
-            project_name=self.project_name,
             model_parameters=self.model_parameters,
         )
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")

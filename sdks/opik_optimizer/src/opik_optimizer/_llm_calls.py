@@ -133,7 +133,7 @@ def _parse_response(
 @_throttle.rate_limited(_limiter)
 def call_model(
     messages: list[dict[str, str]],
-    model: str | None = None,
+    model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
     response_model: type[BaseModel] | None = None,
@@ -207,7 +207,7 @@ def call_model(
 @_throttle.rate_limited(_limiter)
 async def call_model_async(
     messages: list[dict[str, str]],
-    model: str | None = None,
+    model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
     project_name: str | None = None,
@@ -229,8 +229,8 @@ async def call_model_async(
 
     Args:
         messages: List of message dictionaries with 'role' and 'content' keys
-        model: The model to use (defaults to self.model)
-        seed: Random seed for reproducibility (defaults to self.seed)
+        model: The model to use
+        seed: Random seed for reproducibility
         response_model: Optional Pydantic model for structured output
         is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
         temperature: Sampling temperature (0-2)

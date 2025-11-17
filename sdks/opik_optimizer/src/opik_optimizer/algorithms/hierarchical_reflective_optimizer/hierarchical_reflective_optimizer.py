@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import opik
 from opik import opik_context
@@ -258,11 +259,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             model=self.model,
             seed=attempt_seed,
             model_parameters=self.model_parameters,
-            project_name=self.project_name,
             response_model=ImprovedPrompt,
         )
 
-        return improve_prompt_response
+        return cast(ImprovedPrompt, improve_prompt_response)
 
     def _generate_and_evaluate_improvement(
         self,
