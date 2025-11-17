@@ -13,10 +13,10 @@ def test_few_shot_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = opik_optimizer.FewShotBayesianOptimizer(
-        model="openai/gpt-4",
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 128000},
         min_examples=1,
         max_examples=2,
-        model_parameters={"temperature": 0.1, "max_tokens": 5000},
     )
 
     # Prepare dataset (using tiny_test for faster execution)
@@ -121,8 +121,8 @@ def test_few_shot_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4", (
-        f"Expected openai/gpt-4, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-mini", (
+        f"Expected openai/gpt-5-mini, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"

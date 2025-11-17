@@ -28,6 +28,6 @@ repos:
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
-        exclude: '(sdks/opik_optimizer/src/opik_optimizer/mipro_optimizer/|sdks/opik_optimizer/scripts/)'
+        exclude: '(sdks/opik_optimizer/scripts/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]

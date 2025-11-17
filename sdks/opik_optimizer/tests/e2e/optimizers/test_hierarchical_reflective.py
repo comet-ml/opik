@@ -31,17 +31,14 @@ def test_hierarchical_reflective_optimizer() -> None:
 
     # Initialize optimizer with minimal parameters for faster testing
     optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
-        model="openai/gpt-4o-mini",
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 128000},
         n_threads=1,
         max_parallel_batches=2,
         batch_size=10,
         convergence_threshold=0.01,
         verbose=1,
         seed=42,
-        model_parameters={
-            "temperature": 0.7,
-            "max_tokens": 2000,
-        },
     )
 
     # Run optimization with minimal trials and samples
@@ -119,8 +116,8 @@ def test_hierarchical_reflective_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4o-mini", (
-        f"Expected openai/gpt-4o-mini, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-mini", (
+        f"Expected openai/gpt-5-mini, got {results.details['model']}"
     )
 
     # Validate hierarchical-specific details

@@ -54,7 +54,9 @@ def restart_population(
     )
     new_pop = [optimizer._create_individual_from_prompt(p) for p in prompt_variants]
 
-    for ind, fit in zip(new_pop, map(optimizer.toolbox.evaluate, new_pop)):
+    for ind, fit in zip(
+        new_pop, map(optimizer._deap_evaluate_individual_fitness, new_pop)
+    ):
         ind.fitness.values = fit
 
     optimizer._gens_since_pop_improvement = 0

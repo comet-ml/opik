@@ -1,5 +1,7 @@
 from typing import Any
 from pydantic import BaseModel
+import sys
+from types import FrameType
 
 import litellm
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
@@ -7,6 +9,28 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from . import _throttle
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+
+
+def _increment_llm_counter_if_needed() -> None:
+    """
+    Walk up the call stack and increment the first optimizer's counter if found.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            optimizer_candidate._increment_llm_counter()
+            break
+        frame = frame.f_back
 
 
 def _build_call_time_params(
@@ -171,6 +195,8 @@ def call_model(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
+    _increment_llm_counter_if_needed()
+
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
         temperature=temperature,
@@ -246,6 +272,8 @@ async def call_model_async(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
+    _increment_llm_counter_if_needed()
+
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
         temperature=temperature,

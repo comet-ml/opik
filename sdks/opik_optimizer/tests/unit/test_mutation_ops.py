@@ -1,5 +1,5 @@
 import pytest
-
+from typing import Any
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
 import opik_optimizer
 
@@ -7,7 +7,13 @@ import opik_optimizer
 def test_semantic_mutation_invalid_json_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_call_model(*, messages: list[dict[str, str]], is_reasoning: bool) -> str:
+    def fake_call_model(
+        *,
+        messages: list[dict[str, str]],
+        is_reasoning: bool,
+        model: str,
+        model_parameters: dict[str, Any],
+    ) -> str:
         # Model responded with a Python repr instead of strict JSON
         return "[{'role': 'system', 'content': 'Provide a brief and direct answer to the question.'}, {'role': 'user', 'content': '{question}'}]"
 
@@ -17,7 +23,7 @@ def test_semantic_mutation_invalid_json_response(
     )
 
     monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.mutation_ops.random.random",
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
         lambda: 0.5,
     )
     monkeypatch.setattr(
@@ -25,7 +31,7 @@ def test_semantic_mutation_invalid_json_response(
         lambda initial_prompt: "Summarize task",
     )
     monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.mutation_ops.random.choice",
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.choice",
         lambda seq: seq[0],
     )
 
@@ -36,7 +42,7 @@ def test_semantic_mutation_invalid_json_response(
         captured["verbose"] = verbose
 
     monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.mutation_ops.reporting.display_error",
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.reporting.display_error",
         fake_display_error,
     )
 
@@ -51,7 +57,7 @@ def test_semantic_mutation_invalid_json_response(
         prompt=original_prompt,
         initial_prompt=original_prompt,
         output_style_guidance="Keep answers brief.",
-        model="openai/gpt-4o-mini",
+        model="openai/gpt-5-mini",
         model_parameters={},
         verbose=1,
     )
