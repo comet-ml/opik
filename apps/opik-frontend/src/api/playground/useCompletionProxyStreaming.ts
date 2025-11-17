@@ -14,7 +14,7 @@ import {
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { ProviderMessageType } from "@/types/llm";
+import { ChatCompletionMessageType } from "@/types/llm";
 
 const DATA_PREFIX = "data:";
 
@@ -24,7 +24,7 @@ const getNowUtcTimeISOString = (): string => {
 
 interface GetCompletionProxyStreamParams {
   model: PROVIDER_MODEL_TYPE | "";
-  messages: ProviderMessageType[];
+  messages: ChatCompletionMessageType[];
   signal: AbortSignal;
   configs: LLMPromptConfigsType;
   workspaceName: string;
@@ -78,7 +78,7 @@ const getCompletionProxyStream = async ({
 
 export interface RunStreamingArgs {
   model: PROVIDER_MODEL_TYPE | "";
-  messages: ProviderMessageType[];
+  messages: ChatCompletionMessageType[];
   configs: LLMPromptConfigsType;
   onAddChunk: (accumulatedValue: string) => void;
   signal: AbortSignal;

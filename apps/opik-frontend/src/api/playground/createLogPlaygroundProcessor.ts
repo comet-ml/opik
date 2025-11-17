@@ -24,7 +24,7 @@ import {
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
-import { ProviderMessageType } from "@/types/llm";
+import { ChatCompletionMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
@@ -34,7 +34,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   datasetName: string | null;
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
-  providerMessages: ProviderMessageType[];
+  providerMessages: ChatCompletionMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;

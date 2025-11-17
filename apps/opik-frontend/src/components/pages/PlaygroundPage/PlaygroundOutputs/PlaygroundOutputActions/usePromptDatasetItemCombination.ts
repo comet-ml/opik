@@ -10,7 +10,7 @@ import {
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import {
   LLMMessage,
-  ProviderMessageType,
+  ChatCompletionMessageType,
   MessageContent,
   TextPart,
   ImagePart,
@@ -46,7 +46,7 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
 const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
-): ProviderMessageType => {
+): ChatCompletionMessageType => {
   // Extract mustache tags from text content
   const messageTags = getPromptMustacheTags(
     getTextFromMessageContent(message.content),

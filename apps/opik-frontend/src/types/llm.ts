@@ -36,13 +36,22 @@ export interface LLMMessage {
   autoImprove?: boolean;
 }
 
-// Backend API format has separate fields for different contexts:
-// - For LlmAsJudgeMessage (online scoring): uses content and content_array as separate fields
-// - For Chat Completions API (playground): uses polymorphic content field
+// Backend API format for LlmAsJudgeMessage (online scoring/automation rules)
+// Uses separate fields: content (string) and content_array (array)
 export type ProviderMessageType = {
   role: LLM_MESSAGE_ROLE;
   content?: string | null;
   content_array?: MessageContentPart[] | null;
+  promptId?: string;
+  promptVersionId?: string;
+  autoImprove?: boolean;
+};
+
+// Chat Completions API format (playground)
+// Uses polymorphic content field matching OpenAI spec
+export type ChatCompletionMessageType = {
+  role: LLM_MESSAGE_ROLE;
+  content?: MessageContent | null;
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;
