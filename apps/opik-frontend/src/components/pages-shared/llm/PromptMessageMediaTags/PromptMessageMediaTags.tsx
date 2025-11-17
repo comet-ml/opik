@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Tag } from "@/components/ui/tag";
 import { CircleX } from "lucide-react";
-import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { isImageBase64String, isVideoBase64String } from "@/lib/images";
 /* TODO: Temporarily disabled - restore when base64 support is re-enabled */
@@ -21,7 +20,7 @@ type MediaType = "image" | "video";
 
 export type PromptMessageMediaTagsProps = {
   items: string[];
-  setItems: OnChangeFn<string[]>;
+  setItems: (newItems: string[]) => void;
   type: MediaType;
   align?: "start" | "end";
   preview?: boolean;
@@ -30,8 +29,8 @@ export type PromptMessageMediaTagsProps = {
 };
 
 const DEFAULT_MAX_ITEMS: Record<MediaType, number> = {
-  image: 3,
-  video: 1,
+  image: Infinity,
+  video: Infinity,
 };
 const MAX_DISPLAY_LENGTH = 40;
 

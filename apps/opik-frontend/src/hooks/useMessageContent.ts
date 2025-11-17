@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
 import { MessageContent, TextPart, ImagePart, VideoPart } from "@/types/llm";
-import { OnChangeFn } from "@/types/shared";
 import { parseLLMMessageContent } from "@/lib/llm";
 
 interface UseMessageContentProps {
@@ -12,8 +11,8 @@ interface UseMessageContentReturn {
   localText: string;
   images: string[];
   videos: string[];
-  setImages: OnChangeFn<string[]>;
-  setVideos: OnChangeFn<string[]>;
+  setImages: (newImages: string[]) => void;
+  setVideos: (newVideos: string[]) => void;
   handleContentChange: (newText: string) => void;
 }
 
@@ -21,67 +20,68 @@ export const useMessageContent = ({
   content,
   onChangeContent,
 }: UseMessageContentProps): UseMessageContentReturn => {
-  // Parse content (string or array)
-  const {
-    text: textContent,
-    images: imageUrls,
-    videos: videoUrls,
-  } = useMemo(() => parseLLMMessageContent(content), [content]);
+  // Parse content directly from prop - no state
+  const { text, images, videos } = parseLLMMessageContent(content);
 
-  const [localText, setLocalText] = useState(textContent);
-  const [images, setImages] = useState<string[]>(imageUrls);
-  const [videos, setVideos] = useState<string[]>(videoUrls);
-  const lastProcessedContentRef = useRef<MessageContent>(content);
-
-  // Sync external changes to local state
-  useEffect(() => {
-    setLocalText(textContent);
-    setImages(imageUrls);
-    setVideos(videoUrls);
-  }, [textContent, imageUrls, videoUrls]);
-
-  // Rebuild content when text, images, or videos change
-  useEffect(() => {
-    let newContent: MessageContent;
-
-    if (images.length === 0 && videos.length === 0) {
-      // Text-only: use plain string
-      newContent = localText;
-    } else {
-      // With images or videos: use array format
-      const parts: Array<TextPart | ImagePart | VideoPart> = [];
-      if (localText.trim()) {
-        parts.push({ type: "text", text: localText });
+  // Helper to rebuild MessageContent from parts
+  const buildMessageContent = useCallback(
+    (
+      newText: string,
+      newImages: string[],
+      newVideos: string[],
+    ): MessageContent => {
+      if (newImages.length === 0 && newVideos.length === 0) {
+        return newText;
       }
-      images.forEach((url) => {
+
+      const parts: Array<TextPart | ImagePart | VideoPart> = [];
+      if (newText.trim()) {
+        parts.push({ type: "text", text: newText });
+      }
+      newImages.forEach((url) => {
         parts.push({ type: "image_url", image_url: { url } });
       });
-      videos.forEach((url) => {
+      newVideos.forEach((url) => {
         parts.push({ type: "video_url", video_url: { url } });
       });
-      newContent = parts;
-    }
+      return parts;
+    },
+    [],
+  );
 
-    // Only update if content actually changed
-    if (
-      JSON.stringify(newContent) !==
-      JSON.stringify(lastProcessedContentRef.current)
-    ) {
-      lastProcessedContentRef.current = newContent;
+  // Handler for text changes
+  const handleContentChange = useCallback(
+    (newText: string) => {
+      const newContent = buildMessageContent(newText, images, videos);
       onChangeContent(newContent);
-    }
-  }, [localText, images, videos, onChangeContent]);
+    },
+    [images, videos, buildMessageContent, onChangeContent],
+  );
 
-  const handleContentChange = useCallback((newText: string) => {
-    setLocalText(newText);
-  }, []);
+  // Handler for images changes
+  const handleSetImages = useCallback(
+    (newImages: string[]) => {
+      const newContent = buildMessageContent(text, newImages, videos);
+      onChangeContent(newContent);
+    },
+    [text, videos, buildMessageContent, onChangeContent],
+  );
+
+  // Handler for videos changes
+  const handleSetVideos = useCallback(
+    (newVideos: string[]) => {
+      const newContent = buildMessageContent(text, images, newVideos);
+      onChangeContent(newContent);
+    },
+    [text, images, buildMessageContent, onChangeContent],
+  );
 
   return {
-    localText,
+    localText: text,
     images,
     videos,
-    setImages,
-    setVideos,
+    setImages: handleSetImages,
+    setVideos: handleSetVideos,
     handleContentChange,
   };
 };
