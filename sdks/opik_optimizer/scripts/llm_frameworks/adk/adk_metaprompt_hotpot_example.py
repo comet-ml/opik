@@ -52,4 +52,3 @@ optimization_result = optimizer.optimize_prompt(
 )
 
 optimization_result.display()
-

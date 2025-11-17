@@ -64,4 +64,3 @@ optimization_result = optimizer.optimize_parameter(
 )
 
 optimization_result.display()
-
