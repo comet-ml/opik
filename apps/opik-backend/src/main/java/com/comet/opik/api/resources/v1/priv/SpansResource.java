@@ -93,7 +93,6 @@ public class SpansResource {
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
-    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull ProjectService projectService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
@@ -125,18 +124,7 @@ public class SpansResource {
         validateTimeRangeParameters(startTime, endTime);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var sortingFields = sortingFactory.newSorting(sorting);
-
         var workspaceId = requestContext.get().getWorkspaceId();
-
-        var workspaceMetadata = workspaceMetadataService
-                .getProjectMetadata(workspaceId, projectId, projectName)
-                // Context is required for resolving project ID
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        if (!sortingFields.isEmpty() && workspaceMetadata.cannotUseDynamicSorting()) {
-            sortingFields = List.of();
-        }
 
         var spanSearchCriteria = SpanSearchCriteria.builder()
                 .projectName(projectName)
@@ -154,13 +142,6 @@ public class SpansResource {
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
-                .map(it -> {
-                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (workspaceMetadata.cannotUseDynamicSorting()) {
-                        return it.toBuilder().sortableBy(List.of()).build();
-                    }
-                    return it;
-                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found spans by '{}', count '{}' on workspaceId '{}'", spanSearchCriteria, spans.size(), workspaceId);

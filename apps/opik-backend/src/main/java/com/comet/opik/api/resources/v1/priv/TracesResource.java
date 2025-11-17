@@ -38,7 +38,6 @@ import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
-import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
@@ -107,7 +106,6 @@ public class TracesResource {
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
-    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -137,18 +135,7 @@ public class TracesResource {
         validateTimeRangeParameters(startTime, endTime);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceSortingFactory.newSorting(sorting);
-
         var workspaceId = requestContext.get().getWorkspaceId();
-
-        var metadata = workspaceMetadataService
-                .getProjectMetadata(workspaceId, projectId, projectName)
-                // Context is required for resolving project ID
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
-            sortingFields = List.of();
-        }
 
         var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
@@ -165,13 +152,6 @@ public class TracesResource {
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TracePage tracePage = service.find(page, size, searchCriteria)
-                .map(it -> {
-                    // Remove sortableBy fields if dynamic sorting is disabled due to size
-                    if (metadata.cannotUseDynamicSorting()) {
-                        return it.toBuilder().sortableBy(List.of()).build();
-                    }
-                    return it;
-                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -597,16 +577,6 @@ public class TracesResource {
 
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        var metadata = workspaceMetadataService
-                .getProjectMetadata(workspaceId, projectId, projectName)
-                // Context is required for resolving project ID
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
-            sortingFields = List.of();
-        }
-
         var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
@@ -621,13 +591,6 @@ public class TracesResource {
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TraceThreadPage traceThreadPage = service.getTraceThreads(page, size, searchCriteria)
-                .map(it -> {
-                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (metadata.cannotUseDynamicSorting()) {
-                        return it.toBuilder().sortableBy(List.of()).build();
-                    }
-                    return it;
-                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
