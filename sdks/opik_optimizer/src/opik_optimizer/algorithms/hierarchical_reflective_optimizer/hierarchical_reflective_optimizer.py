@@ -5,10 +5,9 @@ from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
 
-from typing import Any, TypeVar
+from typing import Any
 from collections.abc import Callable
-from pydantic import BaseModel
-from ... import _throttle
+from ... import _llm_calls, helpers
 from ...base_optimizer import BaseOptimizer
 from ...api_objects import chat_prompt
 from ...optimizable_agent import OptimizableAgent
@@ -26,11 +25,6 @@ from .prompts import IMPROVE_PROMPT_TEMPLATE
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
-
-_rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
-
-# Type variable for generic structured output
-T = TypeVar("T", bound=BaseModel)
 
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
@@ -87,48 +81,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
-            call_model_fn=self._call_model_async,
             reasoning_model=self.model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
             batch_size=self.batch_size,
             verbose=self.verbose,
-        )
-
-    @_throttle.rate_limited(_rate_limiter)
-    async def _call_model_async(
-        self,
-        model: str,
-        messages: list[dict[str, str]],
-        seed: int,
-        model_kwargs: dict[str, Any],
-        response_model: type[T] | None = None,
-    ) -> T | str:
-        """
-        Adapter for async LLM calls with HierarchicalRootCauseAnalyzer signature.
-
-        This adapter translates the analyzer's expected signature to the base class
-        _call_model_async signature, ensuring project_name and tags are properly set.
-
-        Args:
-            model: The model to use for the call
-            messages: List of message dictionaries with 'role' and 'content' keys
-            seed: Random seed for reproducibility
-            model_kwargs: Additional model parameters
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        # Call the base class async method which properly handles project_name and tags
-        return await super()._call_model_async(
-            messages=messages,
-            model=model,
-            seed=seed,
-            response_model=response_model,
-            is_reasoning=True,
-            **model_kwargs,
+            model_parameters=self.model_parameters,
         )
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -181,8 +139,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         logger.debug("Using full dataset for evaluation")
 
-        configuration_updates = self._drop_none({"n_samples": n_samples})
-        meta_metadata = self._drop_none(
+        configuration_updates = helpers.drop_none({"n_samples": n_samples})
+        meta_metadata = helpers.drop_none(
             {"optimization_id": optimization_id, "stage": "trial_evaluation"}
         )
         experiment_config = self._prepare_experiment_config(
@@ -265,7 +223,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             HierarchicalRootCauseAnalysis containing batch analyses and overall synthesis
         """
         logger.debug("Performing hierarchical root cause analysis...")
-        return self._hierarchical_analyzer.analyze(evaluation_result)
+        return self._hierarchical_analyzer.analyze(
+            evaluation_result, project_name=self.project_name
+        )
 
     def _improve_prompt(
         self, prompt: chat_prompt.ChatPrompt, root_cause: FailureMode, attempt: int = 1
@@ -298,10 +258,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Retry attempt {attempt}: Using seed {attempt_seed} (base seed: {self.seed})"
             )
 
-        improve_prompt_response = self._call_model(
+        improve_prompt_response = _llm_calls.call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.model,
             seed=attempt_seed,
+            model_parameters=self.model_parameters,
+            project_name=self.project_name,
             response_model=ImprovedPrompt,
         )
 

@@ -2,12 +2,11 @@ import copy
 import json
 import logging
 import random
-from typing import Any, cast, TYPE_CHECKING
+from typing import Any, cast
 from collections.abc import Callable
 import sys
 import warnings
 
-import rapidfuzz.distance.Indel
 import numpy as np
 import opik
 
@@ -31,17 +30,16 @@ from opik_optimizer.utils.prompt_segments import extract_prompt_segments
 from .mcp import EvolutionaryMCPContext, finalize_mcp_result
 
 from . import reporting
-from .mutation_ops import MutationOps
-from .crossover_ops import CrossoverOps
-from .population_ops import PopulationOps
-from .evaluation_ops import EvaluationOps
-from .style_ops import StyleOps
+from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
+from . import helpers
 from . import prompts as evo_prompts
 
 logger = logging.getLogger(__name__)
 tqdm = get_tqdm_for_current_environment()
 
 creator = cast(Any, _creator)  # type: ignore[assignment]
+
+DEFAULT_DIVERSITY_THRESHOLD = 0.7
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
@@ -94,7 +92,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_MIN_MUTATION_RATE = 0.1
     DEFAULT_MAX_MUTATION_RATE = 0.4
     DEFAULT_ADAPTIVE_MUTATION = True
-    DEFAULT_DIVERSITY_THRESHOLD = 0.7
     DEFAULT_RESTART_THRESHOLD = 0.01
     DEFAULT_RESTART_GENERATIONS = 3
     DEFAULT_EARLY_STOPPING_GENERATIONS = 5
@@ -105,15 +102,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         "Produce clear, effective, and high-quality responses suitable for the task."
     )
     DEFAULT_MOO_WEIGHTS = (1.0, -1.0)  # (Maximize Score, Minimize Length)
-
-    # Prompt constants moved into prompts.py
-    if TYPE_CHECKING:
-        _llm_deap_crossover: Any
-        _deap_crossover: Any
-        _deap_mutation: Any
-        _initialize_population: Any
-        _evaluate_prompt: Any
-        _infer_output_style_from_dataset: Any
 
     def __init__(
         self,
@@ -204,20 +192,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.toolbox = base.Toolbox()
         # Attach methods from helper mixin modules to this instance to avoid
         # multiple inheritance while preserving behavior.
-        self._attach_helper_methods()
-        if self.enable_llm_crossover:
-            self.toolbox.register("mate", self._llm_deap_crossover)
-        else:
-            self.toolbox.register("mate", self._deap_crossover)
-
-        self.toolbox.register("mutate", self._deap_mutation)
-
-        if self.enable_moo:
-            self.toolbox.register("select", tools.selNSGA2)
-        else:
-            self.toolbox.register(
-                "select", tools.selTournament, tournsize=self.tournament_size
-            )
 
         logger.debug(
             f"Initialized EvolutionaryOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
@@ -229,60 +203,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # (methods already attached above)
         self._mcp_context: EvolutionaryMCPContext | None = None
-
-    def _attach_helper_methods(self) -> None:
-        """Bind selected methods from mixin modules onto this instance."""
-
-        def bind(cls: Any, names: list[str]) -> None:
-            for name in names:
-                func = getattr(cls, name)
-                setattr(self, name, func.__get__(self, self.__class__))
-
-        # LLM calls - now inherited from BaseOptimizer
-        # bind(LlmSupport, ["_call_model"])  # Removed - using BaseOptimizer._call_model
-
-        # Mutations
-        bind(
-            MutationOps,
-            [
-                "_deap_mutation",
-                "_semantic_mutation",
-                "_structural_mutation",
-                "_word_level_mutation_prompt",
-                "_word_level_mutation",
-                "_get_synonym",
-                "_modify_phrase",
-                "_radical_innovation_mutation",
-            ],
-        )
-
-        # Crossover
-        bind(
-            CrossoverOps,
-            [
-                "_deap_crossover_chunking_strategy",
-                "_deap_crossover_word_level",
-                "_deap_crossover",
-                "_llm_deap_crossover",
-                "_extract_json_arrays",
-            ],
-        )
-
-        # Population management
-        bind(
-            PopulationOps,
-            [
-                "_initialize_population",
-                "_should_restart_population",
-                "_restart_population",
-            ],
-        )
-
-        # Evaluation
-        bind(EvaluationOps, ["_evaluate_prompt"])
-
-        # Style inference
-        bind(StyleOps, ["_infer_output_style_from_dataset"])
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
@@ -307,14 +227,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         setattr(individual, "function_map", prompt_candidate.function_map)
         return individual
 
-    def _update_individual_with_prompt(
-        self, individual: Any, prompt_candidate: chat_prompt.ChatPrompt
-    ) -> Any:
-        individual[:] = prompt_candidate.get_messages()
-        setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
-        setattr(individual, "function_map", prompt_candidate.function_map)
-        return individual
-
     def _get_adaptive_mutation_rate(self) -> float:
         """Calculate adaptive mutation rate based on population diversity and progress."""
         if not self.adaptive_mutation or len(self._best_fitness_history) < 2:
@@ -326,7 +238,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         ) / abs(self._best_fitness_history[-2])
 
         # Calculate population diversity
-        current_diversity = self._calculate_population_diversity()
+        current_diversity = helpers.calculate_population_diversity(
+            self._current_population
+        )
 
         # Check for stagnation
         if recent_improvement < self.DEFAULT_RESTART_THRESHOLD:
@@ -340,7 +254,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             return min(self.mutation_rate * 2.5, self.DEFAULT_MAX_MUTATION_RATE)
         elif (
             recent_improvement < 0.01
-            and current_diversity < self.DEFAULT_DIVERSITY_THRESHOLD
+            and current_diversity < DEFAULT_DIVERSITY_THRESHOLD
         ):
             # Both stagnating and low diversity - increase mutation significantly
             return min(self.mutation_rate * 2.0, self.DEFAULT_MAX_MUTATION_RATE)
@@ -351,78 +265,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # Good progress - decrease mutation
             return max(self.mutation_rate * 0.8, self.DEFAULT_MIN_MUTATION_RATE)
         return self.mutation_rate
-
-    def _calculate_population_diversity(self) -> float:
-        """Calculate the diversity of the current population."""
-        if not hasattr(self, "_current_population") or not self._current_population:
-            return 0.0
-
-        # Calculate average Levenshtein using rapidfuzz distance between all pairs
-        total_distance = 0.0
-        count = 0
-        for i in range(len(self._current_population)):
-            for j in range(i + 1, len(self._current_population)):
-                str1 = str(self._current_population[i])
-                str2 = str(self._current_population[j])
-                distance = rapidfuzz.distance.Indel.normalized_similarity(str1, str2)
-                max_len = max(len(str1), len(str2))
-                if max_len > 0:
-                    normalized_distance = distance / max_len
-                    total_distance += normalized_distance
-                    count += 1
-
-        return total_distance / count if count > 0 else 0.0
-
-    # Mutations and helpers are implemented in mixins.
-
-    def _should_restart_population(self, curr_best: float) -> bool:
-        """
-        Update internal counters and decide if we should trigger
-        a population restart based on lack of improvement.
-        """
-        if self._best_primary_score_history:
-            threshold = self._best_primary_score_history[-1] * (
-                1 + self.DEFAULT_RESTART_THRESHOLD
-            )
-            if curr_best < threshold:
-                self._gens_since_pop_improvement += 1
-            else:
-                self._gens_since_pop_improvement = 0
-        self._best_primary_score_history.append(curr_best)
-        return self._gens_since_pop_improvement >= self.DEFAULT_RESTART_GENERATIONS
-
-    def _restart_population(
-        self,
-        hof: tools.HallOfFame,
-        population: list[Any],
-        best_prompt_so_far: chat_prompt.ChatPrompt,
-    ) -> list[Any]:
-        """Return a fresh, evaluated population seeded by elites."""
-        if self.enable_moo:
-            elites = list(hof)
-        else:
-            elites = tools.selBest(population, self.elitism_size)
-
-        if elites:
-            best_elite = max(elites, key=lambda x: x.fitness.values[0])
-            seed_prompt = chat_prompt.ChatPrompt(
-                messages=best_elite,
-                tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
-                function_map=getattr(
-                    best_elite, "function_map", best_prompt_so_far.function_map
-                ),
-            )
-        else:
-            seed_prompt = best_prompt_so_far
-
-        prompt_variants = self._initialize_population(seed_prompt)
-        new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]
-
-        for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
-            ind.fitness.values = fit
-
-        self._gens_since_pop_improvement = 0
-        return new_pop
 
     def _run_generation(
         self,
@@ -438,10 +280,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # --- selection -------------------------------------------------
         if self.enable_moo:
-            offspring = self.toolbox.select(population, self.population_size)
+            offspring = tools.selNSGA2(population, self.population_size)
         else:
             elites = tools.selBest(population, self.elitism_size)
-            rest = self.toolbox.select(population, len(population) - self.elitism_size)
+            rest = tools.selTournament(
+                population,
+                len(population) - self.elitism_size,
+                tournsize=self.tournament_size,
+            )
             offspring = elites + rest
 
         # --- crossover -------------------------------------------------
@@ -451,7 +297,20 @@ class EvolutionaryOptimizer(BaseOptimizer):
             if i + 1 < len(offspring):
                 c1, c2 = offspring[i], offspring[i + 1]
                 if random.random() < self.crossover_rate:
-                    c1_new, c2_new = self.toolbox.mate(c1, c2)
+                    if self.enable_llm_crossover:
+                        c1_new, c2_new = crossover_ops.llm_deap_crossover(
+                            c1,
+                            c2,
+                            output_style_guidance=self.output_style_guidance,
+                            model_parameters=self.model_parameters,
+                            verbose=self.verbose,
+                        )
+                    else:
+                        c1_new, c2_new = crossover_ops.deap_crossover(
+                            c1,
+                            c2,
+                            verbose=self.verbose,
+                        )
                     offspring[i], offspring[i + 1] = c1_new, c2_new
                     del offspring[i].fitness.values, offspring[i + 1].fitness.values
         reporting.display_success(
@@ -465,7 +324,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_mutations = 0
         for i, ind in enumerate(offspring):
             if random.random() < mut_rate:
-                new_ind = self.toolbox.mutate(ind, initial_prompt=prompt)
+                new_ind = mutation_ops.deap_mutation(
+                    individual=ind,
+                    current_population=self._current_population,
+                    output_style_guidance=self.output_style_guidance,
+                    initial_prompt=prompt,
+                    model_parameters=self.model_parameters,
+                    diversity_threshold=DEFAULT_DIVERSITY_THRESHOLD,
+                    mcp_context=self._mcp_context,
+                    optimization_id=self.current_optimization_id,
+                    verbose=self.verbose,
+                )
                 offspring[i] = new_ind
                 del offspring[i].fitness.values
                 n_mutations += 1
@@ -605,7 +474,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
                 trials_used[0] += 1
 
-                primary_fitness_score: float = self._evaluate_prompt(
+                primary_fitness_score = evaluation_ops.evaluate_prompt(
+                    self,
                     prompt,
                     messages,  # type: ignore
                     dataset=dataset,
@@ -633,7 +503,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
                 trials_used[0] += 1
 
-                fitness_score: float = self._evaluate_prompt(
+                fitness_score = evaluation_ops.evaluate_prompt(
+                    self,
                     prompt,
                     messages,  # type: ignore
                     dataset=dataset,
@@ -646,13 +517,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 )
                 return (fitness_score,)
 
-        self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
+        self._deap_evaluate_individual_fitness = _deap_evaluate_individual_fitness
 
         # Step 2. Compute the initial performance of the prompt
         with reporting.baseline_performance(
             verbose=self.verbose
         ) as report_baseline_performance:
-            initial_eval_result = _deap_evaluate_individual_fitness(
+            initial_eval_result = self._deap_evaluate_individual_fitness(
                 prompt.get_messages()
             )  # type: ignore
             initial_primary_score = initial_eval_result[0]
@@ -674,7 +545,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
             or self.output_style_guidance == self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         ):
             # If user wants inference AND hasn't provided a specific custom guidance
-            inferred_style = self._infer_output_style_from_dataset(dataset, prompt)
+            inferred_style = style_ops.infer_output_style_from_dataset(
+                dataset=dataset,
+                model_parameters=self.model_parameters,
+                verbose=self.verbose,
+            )
             if inferred_style:
                 effective_output_style_guidance = inferred_style
                 # Update self.output_style_guidance for this run so dynamic prompt methods use it
@@ -691,8 +566,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
             self.output_style_guidance = self.DEFAULT_OUTPUT_STYLE_GUIDANCE
 
         # Step 4. Initialize population
-        initial_prompts: list[chat_prompt.ChatPrompt] = self._initialize_population(
-            prompt=prompt
+        initial_prompts: list[chat_prompt.ChatPrompt] = (
+            population_ops.initialize_population(
+                prompt=prompt,
+                output_style_guidance=effective_output_style_guidance,
+                mcp_context=self._mcp_context,
+                model_parameters=self.model_parameters,
+                optimization_id=self.current_optimization_id,
+                population_size=self.population_size,
+                verbose=self.verbose,
+            )
         )
 
         deap_population = [
@@ -711,7 +594,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         with reporting.evaluate_initial_population(
             verbose=self.verbose
         ) as report_initial_population:
-            fitnesses: list[Any] = list(map(self.toolbox.evaluate, deap_population))
+            fitnesses: list[Any] = list(
+                map(self._deap_evaluate_individual_fitness, deap_population)
+            )
             _best_score = max(
                 best_primary_score_overall, max([x[0] for x in fitnesses])
             )
@@ -795,12 +680,29 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 curr_best_score = self._population_best_score(deap_population)
 
                 # ---------- restart logic -------------------------------------
-                if self._should_restart_population(curr_best_score):
+                (
+                    should_restart,
+                    gens_since_pop_improvement,
+                    best_primary_score_history,
+                ) = population_ops.should_restart_population(
+                    curr_best=curr_best_score,
+                    best_primary_score_history=self._best_primary_score_history,
+                    gens_since_pop_improvement=self._gens_since_pop_improvement,
+                    default_restart_threshold=self.DEFAULT_RESTART_THRESHOLD,
+                    default_restart_generations=self.DEFAULT_RESTART_GENERATIONS,
+                )
+                self._gens_since_pop_improvement = gens_since_pop_improvement
+                self._best_primary_score_history = best_primary_score_history
+
+                if should_restart:
                     report_evolutionary_algo.restart_population(
                         self.DEFAULT_RESTART_GENERATIONS
                     )
-                    deap_population = self._restart_population(
-                        hof, deap_population, best_prompt_overall
+                    deap_population = population_ops.restart_population(
+                        optimizer=self,
+                        hof=hof,
+                        population=deap_population,
+                        best_prompt_so_far=best_prompt_overall,
                     )
 
                 # ---------- run one generation --------------------------------

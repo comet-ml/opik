@@ -12,6 +12,7 @@ from .types import (
 from . import reporting
 from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 from ...reporting_utils import get_console
+from ... import _llm_calls
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,6 @@ class HierarchicalRootCauseAnalyzer:
     identify the most important failure patterns.
 
     Args:
-        call_model_fn: Function to call the LLM (should match signature of ReflectiveOptimizer._call_model)
         reasoning_model: Name of the reasoning model to use
         seed: Random seed for reproducibility
         max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
@@ -36,30 +36,29 @@ class HierarchicalRootCauseAnalyzer:
 
     def __init__(
         self,
-        call_model_fn: Any,
         reasoning_model: str,
         seed: int,
         max_parallel_batches: int,
         batch_size: int,
+        model_parameters: dict[str, Any],
         verbose: int = 1,
     ) -> None:
         """
         Initialize the hierarchical root cause analyzer.
 
         Args:
-            call_model_fn: Function to call the LLM (should match signature of ReflectiveOptimizer._call_model)
             reasoning_model: Name of the reasoning model to use
             seed: Random seed for reproducibility
             max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
             batch_size: Number of test cases per batch for analysis (default: 25)
             verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         """
-        self.call_model_fn = call_model_fn
         self.reasoning_model = reasoning_model
         self.seed = seed
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
         self.verbose = verbose
+        self.model_parameters = model_parameters
 
     def _format_test_results_batch(
         self,
@@ -110,6 +109,7 @@ Scores:
         batch_number: int,
         batch_start: int,
         batch_end: int,
+        project_name: str | None = None,
     ) -> BatchAnalysis:
         """
         Analyze a single batch of test results asynchronously.
@@ -139,11 +139,13 @@ Scores:
             formatted_batch=formatted_batch,
         )
 
-        root_cause_response = await self.call_model_fn(
+        # TODO: Check if we need to pass optimizer model parameters here
+        root_cause_response = await _llm_calls.call_model_async(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": batch_analysis_prompt}],
             seed=self.seed,
-            model_kwargs={},
+            project_name=project_name,
+            model_parameters=self.model_parameters,
             response_model=RootCauseAnalysis,
         )
 
@@ -158,6 +160,7 @@ Scores:
         self,
         evaluation_result: EvaluationResult,
         batch_analyses: list[BatchAnalysis],
+        project_name: str | None = None,
     ) -> HierarchicalRootCauseAnalysis:
         """
         Synthesize multiple batch analyses into a unified root cause analysis asynchronously.
@@ -193,11 +196,12 @@ Scores:
             batch_summaries=chr(10).join(batch_summaries),
         )
 
-        synthesis_response = await self.call_model_fn(
+        synthesis_response = await _llm_calls.call_model_async(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
             seed=self.seed,
-            model_kwargs={},
+            project_name=project_name,
+            model_parameters=self.model_parameters,
             response_model=HierarchicalRootCauseAnalysis,
         )
 
@@ -234,7 +238,7 @@ Scores:
             )
 
     async def analyze_async(
-        self, evaluation_result: EvaluationResult
+        self, evaluation_result: EvaluationResult, project_name: str | None = None
     ) -> HierarchicalRootCauseAnalysis:
         """
         Perform hierarchical root cause analysis on evaluation results asynchronously.
@@ -274,6 +278,7 @@ Scores:
                 batch_number=batch_number,
                 batch_start=batch_start,
                 batch_end=batch_end,
+                project_name=project_name,
             )
             batch_tasks.append((batch_number, task))
             batch_number += 1
@@ -355,6 +360,7 @@ Scores:
             hierarchical_analysis = await self._synthesize_batch_analyses_async(
                 evaluation_result=evaluation_result,
                 batch_analyses=batch_analyses,
+                project_name=project_name,
             )
 
         logger.info(
@@ -365,7 +371,7 @@ Scores:
         return hierarchical_analysis
 
     def analyze(
-        self, evaluation_result: EvaluationResult
+        self, evaluation_result: EvaluationResult, project_name: str | None = None
     ) -> HierarchicalRootCauseAnalysis:
         """
         Synchronous wrapper for analyze_async() for backward compatibility.
@@ -376,4 +382,6 @@ Scores:
         Returns:
             HierarchicalRootCauseAnalysis with unified failure modes and synthesis notes
         """
-        return asyncio.run(self.analyze_async(evaluation_result))
+        return asyncio.run(
+            self.analyze_async(evaluation_result, project_name=project_name)
+        )

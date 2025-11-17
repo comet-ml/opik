@@ -24,7 +24,7 @@ from ...utils import (
     unique_ordered_by_key,
 )
 from ...task_evaluator import _create_metric_class
-from ... import task_evaluator
+from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
@@ -565,7 +565,7 @@ class GepaOptimizer(BaseOptimizer):
                         )
                     return {"llm_output": raw.strip()}
 
-                configuration_updates = self._drop_none(
+                configuration_updates = helpers.drop_none(
                     {"gepa": {"phase": "final", "selected": True}}
                 )
                 final_experiment_config = self._prepare_experiment_config(
@@ -784,7 +784,7 @@ class GepaOptimizer(BaseOptimizer):
 
             return {"llm_output": raw.strip()}
 
-        configuration_updates = self._drop_none({"gepa": extra_metadata})
+        configuration_updates = helpers.drop_none({"gepa": extra_metadata})
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
             dataset=dataset,

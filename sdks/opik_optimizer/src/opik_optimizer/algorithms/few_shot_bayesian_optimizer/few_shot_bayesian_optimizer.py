@@ -14,7 +14,7 @@ import opik
 from opik import Dataset, opik_context
 from pydantic import BaseModel
 
-from ... import base_optimizer
+from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
 from ...optimizable_agent import OptimizableAgent
 from ... import _throttle, optimization_result, task_evaluator, utils
@@ -179,7 +179,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         ]
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
-        response_content = self._call_model(messages, model=model, seed=self.seed)
+        response_content = _llm_calls.call_model(
+            messages,
+            model=model,
+            seed=self.seed,
+            project_name=self.project_name,
+            model_parameters=self.model_parameters,
+        )
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
         try:
@@ -217,7 +223,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if n_samples is not None and n_samples < len(dataset_items):
             eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
 
-        configuration_updates = self._drop_none(
+        configuration_updates = helpers.drop_none(
             {
                 "n_trials": n_trials,
                 "n_samples": n_samples,
@@ -601,7 +607,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples = min(n_samples, len(all_ids))
             dataset_item_ids = random.sample(all_ids, n_samples)
 
-        configuration_updates = self._drop_none(
+        configuration_updates = helpers.drop_none(
             {
                 "n_samples": n_samples,
                 "dataset_item_ids": dataset_item_ids,

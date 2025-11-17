@@ -1,21 +1,20 @@
 import pytest
 
-from opik_optimizer.algorithms.evolutionary_optimizer.mutation_ops import MutationOps
+from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
 import opik_optimizer
 
 
 def test_semantic_mutation_invalid_json_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mutation_ops = MutationOps()
-    mutation_ops.verbose = 1
-    mutation_ops.output_style_guidance = "Keep answers brief."
-
     def fake_call_model(*, messages: list[dict[str, str]], is_reasoning: bool) -> str:
         # Model responded with a Python repr instead of strict JSON
         return "[{'role': 'system', 'content': 'Provide a brief and direct answer to the question.'}, {'role': 'user', 'content': '{question}'}]"
 
-    mutation_ops._call_model = fake_call_model
+    monkeypatch.setattr(
+        "opik_optimizer._llm_calls.call_model",
+        fake_call_model,
+    )
 
     monkeypatch.setattr(
         "opik_optimizer.algorithms.evolutionary_optimizer.mutation_ops.random.random",
@@ -48,7 +47,13 @@ def test_semantic_mutation_invalid_json_response(
         ]
     )
 
-    result = mutation_ops._semantic_mutation(original_prompt, original_prompt)
+    result = mutation_ops._semantic_mutation(
+        original_prompt,
+        original_prompt,
+        model_parameters={},
+        verbose=1,
+        output_style_guidance="Keep answers brief.",
+    )
 
     assert result is not original_prompt
     assert captured == {}

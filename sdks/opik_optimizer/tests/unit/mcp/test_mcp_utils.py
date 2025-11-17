@@ -45,6 +45,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
     _sync_tool_description_in_system,
 )
 from opik_optimizer.optimization_result import OptimizationResult
+import opik_optimizer
 
 
 def _sample_tool_entry() -> dict[str, Any]:
@@ -275,9 +276,10 @@ def test_generate_tool_description_variations(monkeypatch: pytest.MonkeyPatch) -
         evo_reporting, "display_tool_description", lambda *args, **kwargs: None
     )
 
-    optimizer = SimpleNamespace(
-        _current_optimization_id="opt-id",
-        _call_model=lambda *args, **kwargs: json.dumps(
+    monkeypatch.setattr(
+        opik_optimizer._llm_calls,
+        "call_model",
+        lambda *args, **kwargs: json.dumps(
             {
                 "prompts": [
                     {
@@ -289,7 +291,13 @@ def test_generate_tool_description_variations(monkeypatch: pytest.MonkeyPatch) -
         ),
     )
 
-    candidates = generate_tool_description_variations(optimizer, prompt, context, 2)
+    candidates = generate_tool_description_variations(
+        base_prompt=prompt,
+        context=context,
+        num_variations=2,
+        model_parameters={},
+        optimization_id="opt-id",
+    )
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.tools is not None
@@ -325,9 +333,10 @@ def test_tool_description_mutation_and_finalize(
         evo_reporting, "display_tool_description", lambda *args, **kwargs: None
     )
 
-    optimizer = SimpleNamespace(
-        _current_optimization_id="opt-id",
-        _call_model=lambda *args, **kwargs: json.dumps(
+    monkeypatch.setattr(
+        opik_optimizer._llm_calls,
+        "call_model",
+        lambda *args, **kwargs: json.dumps(
             {
                 "prompts": [
                     {
@@ -339,7 +348,12 @@ def test_tool_description_mutation_and_finalize(
         ),
     )
 
-    mutated = tool_description_mutation(optimizer, prompt, context)
+    mutated = tool_description_mutation(
+        prompt=prompt,
+        context=context,
+        model_parameters={},
+        optimization_id="opt-id",
+    )
     assert mutated is not None
     assert mutated.tools is not None
     assert (

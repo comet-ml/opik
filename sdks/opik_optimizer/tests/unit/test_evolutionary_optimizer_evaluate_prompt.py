@@ -5,6 +5,7 @@ import opik
 from opik_optimizer import EvolutionaryOptimizer
 import opik_optimizer
 from opik_optimizer.optimizable_agent import OptimizableAgent
+from opik_optimizer.algorithms.evolutionary_optimizer.ops import evaluation_ops
 
 
 def test_evaluate_prompt_uses_evolved_prompt_in_experiment_config() -> None:
@@ -52,7 +53,8 @@ def test_evaluate_prompt_uses_evolved_prompt_in_experiment_config() -> None:
         "opik_optimizer.task_evaluator.evaluate",
         side_effect=mock_task_evaluator_evaluate,
     ):
-        result = optimizer._evaluate_prompt(
+        result = evaluation_ops.evaluate_prompt(
+            optimizer=optimizer,
             prompt=original_prompt,
             messages=evolved_prompt_messages,
             dataset=mock_dataset,
