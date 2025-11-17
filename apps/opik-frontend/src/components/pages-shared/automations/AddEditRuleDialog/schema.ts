@@ -364,8 +364,10 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
-const convertLLMToProviderMessages = (messages: LLMMessage[]): ProviderMessageType[] =>
-  messages.map(({ id, content, ...rest }) => ({
+const convertLLMToProviderMessages = (
+  messages: LLMMessage[],
+): ProviderMessageType[] =>
+  messages.map(({ content, ...rest }) => ({
     ...rest,
     role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
     // Convert union type to separate fields for backend
@@ -373,7 +375,9 @@ const convertLLMToProviderMessages = (messages: LLMMessage[]): ProviderMessageTy
     content_array: Array.isArray(content) ? content : null,
   }));
 
-const convertProviderToLLMMessages = (messages: ProviderMessageType[]): LLMMessage[] =>
+const convertProviderToLLMMessages = (
+  messages: ProviderMessageType[],
+): LLMMessage[] =>
   messages.map((m) => ({
     ...m,
     role: m.role.toLowerCase() as LLM_MESSAGE_ROLE,
