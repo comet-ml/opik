@@ -74,7 +74,11 @@ class GepaOptimizer(BaseOptimizer):
             raise ValueError(f"seed must be an integer, got {type(seed).__name__}")
 
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters, name=name
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.n_threads = n_threads
         self._gepa_live_metric_calls = 0

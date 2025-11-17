@@ -94,7 +94,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         seed: int = 42,
         name: str | None = None,
     ) -> None:
-        super().__init__(model, verbose, seed=seed, model_parameters=model_parameters, name=name)
+        super().__init__(
+            model, verbose, seed=seed, model_parameters=model_parameters, name=name
+        )
         self.min_examples = min_examples
         self.max_examples = max_examples
         self.seed = seed

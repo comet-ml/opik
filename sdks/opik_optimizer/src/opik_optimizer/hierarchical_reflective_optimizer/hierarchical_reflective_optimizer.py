@@ -73,7 +73,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         name: str | None = None,
     ):
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters, name=name
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches

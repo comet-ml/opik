@@ -156,7 +156,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         name: str | None = None,
     ) -> None:
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters, name=name
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.prompts_per_round = prompts_per_round
         self.n_threads = n_threads

@@ -60,7 +60,11 @@ class ParameterOptimizer(BaseOptimizer):
         name: str | None = None,
     ) -> None:
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters, name=name
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.default_n_trials = default_n_trials
         self.n_threads = n_threads

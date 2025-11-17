@@ -145,7 +145,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
 
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters, name=name
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.population_size = population_size
         self.num_generations = num_generations
