@@ -93,6 +93,7 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.54.2",
     "react-hotkeys-hook": "^4.5.1",
+    "react-intersection-observer": "^10.0.0",
     "react-markdown": "^9.0.1",
     "react-pdf": "^9.2.1",
     "react-player": "^2.16.0",
