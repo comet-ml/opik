@@ -225,18 +225,11 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
     const modelSupportsVideos = supportsVideoInput(data.model);
     const supportsMultimodal = modelSupportsImages || modelSupportsVideos;
 
-    if (!isOpenAIModel(data.model)) {
+    if (!supportsMultimodal) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "Only OpenAI models are currently supported for Online evaluation with images. Please select an OpenAI model or remove images from messages.",
-        path: ["model"],
-      });
-    } else if (!supportsMultimodal) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
+          "The selected model does not support media input. Please choose a model with vision capabilities or remove images from messages.",
         path: ["model"],
       });
     } else {
