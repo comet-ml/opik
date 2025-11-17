@@ -5841,6 +5841,26 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
             var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
                     .promptVersion(null)
@@ -5849,7 +5869,15 @@ class DatasetsResourceTest {
 
             createAndAssert(experiment, apiKey, workspaceName);
 
-            // Use invalid sorting field
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Use invalid sorting field - should be gracefully ignored
             var invalidSorting = SortingField.builder()
                     .field("invalid_field")
                     .direction(Direction.ASC)
@@ -5870,11 +5898,15 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
+                // Verify graceful degradation: request succeeds with invalid sorting
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-                assertThat(actualEntity).isNotNull();
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage).isNotNull();
+                // Verify data is returned despite invalid sorting field
+                assertThat(actualPage.content()).isNotEmpty();
+                assertThat(actualPage.content()).hasSize(1);
             }
         }
 
