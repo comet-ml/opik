@@ -3868,7 +3868,7 @@ class DatasetsResourceTest {
         }
     }
 
-    private void getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
+    private DatasetItem getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
         var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path("items")
                 .path(expectedDatasetItem.id().toString())
@@ -3887,170 +3887,138 @@ class DatasetsResourceTest {
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
+
+        return actualEntity;
     }
 
     @Nested
-    @DisplayName("Update dataset item:")
+    @DisplayName("Patch dataset item:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class UpdateDatasetItem {
+    class PatchDatasetItem {
 
-        @Test
-        @DisplayName("Success")
-        void updateDatasetItem() {
-            var item = factory.manufacturePojo(DatasetItem.class);
+        private Stream<Arguments> patchFieldScenarios() {
+            return Stream.of(
+                    // Test patching data field only
+                    arguments("data field", (java.util.function.Function<DatasetItem, DatasetItem>) item -> {
+                        var newData = Map.<String, JsonNode>of(
+                                "updated_field", factory.manufacturePojo(JsonNode.class));
+                        return DatasetItem.builder()
+                                .data(newData)
+                                .build();
+                    }),
+                    // Test patching source, traceId and spanId for SPAN source
+                    arguments("source, traceId and spanId to SPAN",
+                            (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                                    .builder()
+                                    .source(DatasetItemSource.SPAN)
+                                    .traceId(GENERATOR.generate())
+                                    .spanId(GENERATOR.generate())
+                                    .build()),
+                    // Test patching traceId only (keeping existing SPAN source and spanId)
+                    arguments("traceId only",
+                            (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                                    .builder()
+                                    .traceId(GENERATOR.generate())
+                                    .build()),
+                    // Test patching spanId only (keeping existing SPAN source and traceId)
+                    arguments("spanId only", (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                            .builder()
+                            .spanId(GENERATOR.generate())
+                            .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("patchFieldScenarios")
+        @DisplayName("Success: patch different fields")
+        void patchDatasetItem(String scenarioName, java.util.function.Function<DatasetItem, DatasetItem> patchBuilder) {
+            // Create initial item with SPAN source
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .source(DatasetItemSource.SPAN)
+                    .traceId(GENERATOR.generate())
+                    .spanId(GENERATOR.generate())
+                    .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
+                    .items(List.of(originalItem))
                     .datasetId(null)
                     .build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             // Verify original item exists
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
+            var retrievedOriginal = getItemAndAssert(originalItem, TEST_WORKSPACE, API_KEY);
 
-            // Create updated item with different data
-            var updatedItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .id(item.id())
-                    .source(item.source())
-                    .traceId(item.traceId())
-                    .spanId(item.spanId())
-                    .build();
+            // Build patch with only the fields we want to update
+            var patchItem = patchBuilder.apply(originalItem);
 
-            // Verify the data is actually different
-            assertThat(updatedItem.data()).isNotEqualTo(item.data());
-
+            // Apply patch
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
-                    .path(item.id().toString())
+                    .path(originalItem.id().toString())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.entity(updatedItem, MediaType.APPLICATION_JSON_TYPE))) {
+                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            // Verify the item was updated with new data
-            getItemAndAssert(updatedItem, TEST_WORKSPACE, API_KEY);
+            // Retrieve patched item
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+
+            // Verify patched fields were updated
+            if (patchItem.data() != null) {
+                assertThat(patchedItem.data()).isEqualTo(patchItem.data());
+            } else {
+                assertThat(patchedItem.data()).isEqualTo(retrievedOriginal.data());
+            }
+
+            if (patchItem.source() != null) {
+                assertThat(patchedItem.source()).isEqualTo(patchItem.source());
+            } else {
+                assertThat(patchedItem.source()).isEqualTo(retrievedOriginal.source());
+            }
+
+            if (patchItem.traceId() != null) {
+                assertThat(patchedItem.traceId()).isEqualTo(patchItem.traceId());
+            } else {
+                assertThat(patchedItem.traceId()).isEqualTo(retrievedOriginal.traceId());
+            }
+
+            if (patchItem.spanId() != null) {
+                assertThat(patchedItem.spanId()).isEqualTo(patchItem.spanId());
+            } else {
+                assertThat(patchedItem.spanId()).isEqualTo(retrievedOriginal.spanId());
+            }
+
+            // Verify read-only fields remain unchanged
+            assertThat(patchedItem.id()).isEqualTo(originalItem.id());
+            assertThat(patchedItem.datasetId()).isEqualTo(retrievedOriginal.datasetId());
+            assertThat(patchedItem.createdBy()).isEqualTo(retrievedOriginal.createdBy());
+            // Note: createdAt and lastUpdatedAt will be updated by ClickHouse on INSERT
         }
 
         @Test
         @DisplayName("when dataset item not found, then return 404")
-        void updateDatasetItem__whenDatasetItemNotFound__thenReturn404() {
-            var nonExistentItemId = GENERATOR.generate();
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .id(nonExistentItemId)
+        void patchDatasetItem__whenDatasetItemNotFound__thenReturn404() {
+            var itemId = GENERATOR.generate();
+            var patchItem = DatasetItem.builder()
+                    .data(Map.of("field", factory.manufacturePojo(JsonNode.class)))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
-                    .path(nonExistentItemId.toString())
+                    .path(itemId.toString())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.entity(item, MediaType.APPLICATION_JSON_TYPE))) {
+                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset item not found");
             }
-        }
-
-        @ParameterizedTest
-        @MethodSource("invalidDatasetItemsForUpdate")
-        @DisplayName("when dataset item is not valid, then return 422")
-        void updateDatasetItem__whenDatasetItemIsNotValid__thenReturn422(DatasetItem item, String errorMessage) {
-            var existingItem = factory.manufacturePojo(DatasetItem.class);
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(existingItem))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
-
-            var invalidItem = item.toBuilder()
-                    .id(existingItem.id())
-                    .build();
-
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(existingItem.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.entity(invalidItem, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(errorMessage);
-            }
-        }
-
-        public Stream<Arguments> invalidDatasetItemsForUpdate() {
-            return Stream.of(
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .data(null)
-                            .build(),
-                            "data must not be empty"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .data(Map.of())
-                            .build(),
-                            "data must not be empty"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(null)
-                            .build(),
-                            "source must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.MANUAL)
-                            .spanId(factory.manufacturePojo(UUID.class))
-                            .traceId(null)
-                            .build(),
-                            "source when it is manual, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.MANUAL)
-                            .spanId(null)
-                            .traceId(factory.manufacturePojo(UUID.class))
-                            .build(),
-                            "source when it is manual, trace_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.SDK)
-                            .spanId(factory.manufacturePojo(UUID.class))
-                            .traceId(null)
-                            .build(),
-                            "source when it is sdk, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.SDK)
-                            .traceId(factory.manufacturePojo(UUID.class))
-                            .spanId(null)
-                            .build(),
-                            "source when it is sdk, trace_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.SPAN)
-                            .spanId(null)
-                            .traceId(factory.manufacturePojo(UUID.class))
-                            .build(),
-                            "source when it is span, span_id must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.SPAN)
-                            .traceId(null)
-                            .spanId(factory.manufacturePojo(UUID.class))
-                            .build(),
-                            "source when it is span, trace_id must not be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.TRACE)
-                            .spanId(factory.manufacturePojo(UUID.class))
-                            .traceId(factory.manufacturePojo(UUID.class))
-                            .build(),
-                            "source when it is trace, span_id must be null"),
-                    arguments(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .source(DatasetItemSource.TRACE)
-                            .spanId(null)
-                            .traceId(null)
-                            .build(),
-                            "source when it is trace, trace_id must not be null"));
         }
     }
 

@@ -5,6 +5,7 @@ import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
+import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.utils.JsonUtils;
@@ -114,6 +115,21 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request));
+    }
+
+    public DatasetItem getDatasetItem(UUID itemId, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path(itemId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetItem.class);
+        }
     }
 
     public DatasetItemPage getDatasetItems(UUID datasetId, Map<String, Object> queryParams, String apiKey,

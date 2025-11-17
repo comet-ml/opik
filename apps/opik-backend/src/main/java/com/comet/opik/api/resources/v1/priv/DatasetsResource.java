@@ -55,6 +55,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -298,25 +299,25 @@ public class DatasetsResource {
         return Response.ok(datasetItem).build();
     }
 
-    @PUT
+    @PATCH
     @Path("/items/{itemId}")
-    @Operation(operationId = "updateDatasetItem", summary = "Update dataset item by id", description = "Update dataset item by id", responses = {
+    @Operation(operationId = "patchDatasetItem", summary = "Partially update dataset item by id", description = "Partially update dataset item by id. Only provided fields will be updated.", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "404", description = "Dataset item not found")
     })
     @RateLimited
-    public Response updateDatasetItem(
+    public Response patchDatasetItem(
             @PathParam("itemId") @NotNull UUID itemId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItem.class))) @JsonView(DatasetItem.View.Write.class) @NotNull @Valid DatasetItem item) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItem.class))) @JsonView(DatasetItem.View.Write.class) @NotNull DatasetItem item) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Updating dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
-        itemService.update(itemId, item)
+        log.info("Patching dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        itemService.patch(itemId, item)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
-        log.info("Updated dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        log.info("Patched dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 
         return Response.noContent().build();
     }

@@ -30,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -49,7 +50,7 @@ public interface DatasetItemService {
 
     Mono<DatasetItem> get(UUID id);
 
-    Mono<Void> update(UUID id, DatasetItem item);
+    Mono<Void> patch(UUID id, DatasetItem item);
 
     Mono<Void> delete(List<UUID> ids);
 
@@ -223,22 +224,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> update(@NonNull UUID id, @NonNull DatasetItem item) {
+    public Mono<Void> patch(@NonNull UUID id, @NonNull DatasetItem item) {
         return get(id)
                 .flatMap(existingItem -> {
-                    // Verify the item ID matches
-                    if (!existingItem.id().equals(id)) {
-                        return Mono.error(failWithNotFound("Dataset item not found"));
-                    }
+                    // Build patched item by merging provided fields with existing item
+                    // Only non-null fields from the patch are applied
+                    var builder = existingItem.toBuilder();
 
-                    // Build updated item preserving read-only fields and dataset ID
-                    DatasetItem updatedItem = item.toBuilder()
-                            .id(id)
-                            .datasetId(existingItem.datasetId())
-                            .build();
+                    // Apply patch fields if provided
+                    Optional.ofNullable(item.data()).ifPresent(builder::data);
+                    Optional.ofNullable(item.source()).ifPresent(builder::source);
+                    Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
+                    Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
 
-                    // Save the updated item (ClickHouse INSERT replaces existing rows with same ID)
-                    DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(), List.of(updatedItem));
+                    DatasetItem patchedItem = builder.build();
+
+                    // Save the patched item (ClickHouse INSERT replaces existing rows with same ID)
+                    DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(), List.of(patchedItem));
                     return saveBatch(batch, existingItem.datasetId());
                 })
                 .then();
