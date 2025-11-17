@@ -29,7 +29,7 @@ import {
   LLMPromptConfigsType,
 } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
-import { parseContentWithImages, combineContentWithImages } from "@/lib/llm";
+import { MessageContent } from "@/types/llm";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import {
@@ -38,6 +38,7 @@ import {
 } from "@/constants/codeMirrorPlugins";
 import { cn } from "@/lib/utils";
 import { parseComposedProviderType } from "@/lib/provider";
+import { parseLLMMessageContent } from "@/lib/llm";
 
 const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
   "Analyzing your instructions...",
@@ -52,12 +53,12 @@ interface PromptImprovementDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   id: string;
-  originalPrompt?: string;
+  originalPrompt?: MessageContent;
   model: string;
   provider: COMPOSED_PROVIDER_TYPE;
   configs: LLMPromptConfigsType;
   workspaceName: string;
-  onAccept: (messageId: string, improvedPrompt: string) => void;
+  onAccept: (messageId: string, improvedPrompt: MessageContent) => void;
 }
 
 const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
@@ -88,10 +89,11 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     intervalMs: 2000,
   });
 
-  const { text: originalPromptText, images: originalImages } = useMemo(
-    () => parseContentWithImages(originalPrompt),
-    [originalPrompt],
-  );
+  const {
+    text: originalPromptText,
+    images: originalImages,
+    videos: originalVideos,
+  } = useMemo(() => parseLLMMessageContent(originalPrompt), [originalPrompt]);
 
   const isGenerateMode = !originalPromptText?.trim();
   const title = isGenerateMode ? "Generate prompt" : "Improve prompt";
@@ -105,7 +107,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       setIsLoading(false);
       setIsEditorFocused(false);
     }
-  }, [open, originalImages]);
+  }, [open, originalImages, originalVideos]);
 
   // Smart auto-scroll: only auto-scroll when user is near the bottom
   // This allows users to scroll up to review content without being forced down
@@ -209,14 +211,35 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
   const handleSuccessClick = useCallback(() => {
     if (hasPrompt) {
-      const finalPrompt = combineContentWithImages(
-        generatedPrompt,
-        originalImages,
-      );
+      // Combine generated text with original images and videos into MessageContent
+      let finalPrompt: MessageContent;
+      if (originalImages.length === 0 && originalVideos.length === 0) {
+        finalPrompt = generatedPrompt;
+      } else {
+        const parts: MessageContent = [];
+        if (generatedPrompt.trim()) {
+          parts.push({ type: "text", text: generatedPrompt });
+        }
+        originalImages.forEach((url) => {
+          parts.push({ type: "image_url", image_url: { url } });
+        });
+        originalVideos.forEach((url) => {
+          parts.push({ type: "video_url", video_url: { url } });
+        });
+        finalPrompt = parts;
+      }
       onAccept(id, finalPrompt);
       setOpen(false);
     }
-  }, [hasPrompt, generatedPrompt, originalImages, onAccept, id, setOpen]);
+  }, [
+    hasPrompt,
+    generatedPrompt,
+    originalImages,
+    originalVideos,
+    onAccept,
+    id,
+    setOpen,
+  ]);
 
   const instructionsPlaceholder = isGenerateMode
     ? "What do you want your AI to do?"

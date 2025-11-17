@@ -8,12 +8,16 @@ import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.validation.InRange;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
 import com.comet.opik.podam.manufacturer.GuardrailCheckTypeManufacturer;
 import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
+import com.comet.opik.podam.manufacturer.LlmAsJudgeMessageContentManufacturer;
+import com.comet.opik.podam.manufacturer.LlmAsJudgeMessageManufacturer;
 import com.comet.opik.podam.manufacturer.NumericalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.ProjectConfigurationTypeManufacturer;
 import com.comet.opik.podam.manufacturer.PromptVersionManufacturer;
@@ -84,6 +88,9 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(VisibilityMode.class, getVisibilityModeManufacturer());
         strategy.addOrReplaceTypeManufacturer(Project.Configuration.class,
                 ProjectConfigurationTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessageContent.class,
+                LlmAsJudgeMessageContentManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessage.class, LlmAsJudgeMessageManufacturer.INSTANCE);
 
         return podamFactory;
     }
