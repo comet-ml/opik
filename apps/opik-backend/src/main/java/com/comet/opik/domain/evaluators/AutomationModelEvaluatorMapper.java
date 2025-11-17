@@ -144,11 +144,17 @@ interface AutomationModelEvaluatorMapper {
         } else if (contentString.trim().startsWith("[")) {
             // It's a JSON array, deserialize to List<LlmAsJudgeMessageContent>
             try {
-                content = JsonUtils.getMapper().readValue(
+                // Deserialize as raw list first to handle potential LinkedHashMap issue
+                List<?> rawList = JsonUtils.getMapper().readValue(
                         contentString,
                         JsonUtils.getMapper().getTypeFactory().constructCollectionType(
                                 List.class,
-                                LlmAsJudgeMessageContent.class));
+                                Object.class));
+
+                // Convert each element to LlmAsJudgeMessageContent
+                content = rawList.stream()
+                        .map(this::convertToMessageContent)
+                        .toList();
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("Failed to deserialize message content from JSON", e);
             }
@@ -160,6 +166,60 @@ interface AutomationModelEvaluatorMapper {
         return new LlmAsJudgeMessage(
                 ChatMessageType.valueOf(codeMessage.role()),
                 content);
+    }
+
+    /**
+     * Convert a deserialized object (either LlmAsJudgeMessageContent or Map) to LlmAsJudgeMessageContent.
+     * This handles the case where Jackson deserializes JSON objects as LinkedHashMap.
+     */
+    private LlmAsJudgeMessageContent convertToMessageContent(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent content) {
+            return content;
+        }
+
+        if (obj instanceof java.util.Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.builder()
+                    .type((String) map.get("type"))
+                    .text((String) map.get("text"))
+                    .imageUrl(map.get("image_url") != null
+                            ? convertToImageUrl(map.get("image_url"))
+                            : null)
+                    .videoUrl(map.get("video_url") != null
+                            ? convertToVideoUrl(map.get("video_url"))
+                            : null)
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected content part type: " + obj.getClass());
+    }
+
+    private LlmAsJudgeMessageContent.ImageUrl convertToImageUrl(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent.ImageUrl imageUrl) {
+            return imageUrl;
+        }
+
+        if (obj instanceof java.util.Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.ImageUrl.builder()
+                    .url((String) map.get("url"))
+                    .detail((String) map.get("detail"))
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected image_url type: " + obj.getClass());
+    }
+
+    private LlmAsJudgeMessageContent.VideoUrl convertToVideoUrl(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent.VideoUrl videoUrl) {
+            return videoUrl;
+        }
+
+        if (obj instanceof java.util.Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.VideoUrl.builder()
+                    .url((String) map.get("url"))
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected video_url type: " + obj.getClass());
     }
 
     /**

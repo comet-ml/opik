@@ -56,10 +56,8 @@ import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.text.StringEscapeUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -67,7 +65,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -735,17 +732,39 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @Disabled("Placeholder parsing not yet implemented for string content")
-    void renderMessagesParsesImagePlaceholder() {
+    @DisplayName("should handle multimodal content with multiple images")
+    void shouldHandleMultimodalContent_whenMultipleImages() {
         var expectedUrl1 = "https://example.com/image1.png";
-        // Simulate a URL that Mustache has HTML-escaped (& becomes &amp; and = becomes &#61; etc.)
         var expectedUrl2 = "https://example.com/image2.png?width=200&height=300";
-        var htmlEscapedUrl2 = StringEscapeUtils.escapeHtml4(expectedUrl2);
+
+        // Use new array-based multimodal format
+        var contentParts = List.of(
+                LlmAsJudgeMessageContent.builder()
+                        .type("text")
+                        .text("First image: ")
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("image_url")
+                        .imageUrl(LlmAsJudgeMessageContent.ImageUrl.builder()
+                                .url(expectedUrl1)
+                                .build())
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("text")
+                        .text("Second image: ")
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("image_url")
+                        .imageUrl(LlmAsJudgeMessageContent.ImageUrl.builder()
+                                .url(expectedUrl2)
+                                .build())
+                        .build());
+
         var messages = List.of(
-                new LlmAsJudgeMessage(
-                        ChatMessageType.USER,
-                        "First image: " + IMAGE_PLACEHOLDER.formatted(expectedUrl1) +
-                                "Second image: " + IMAGE_PLACEHOLDER.formatted(htmlEscapedUrl2)));
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content(contentParts)
+                        .build());
 
         var renderedMessages = OnlineScoringEngine.renderMessages(
                 messages, Map.of(), Trace.builder().build());
@@ -765,20 +784,32 @@ class OnlineScoringEngineTest {
         assertThat(((ImageContent) parts.get(3)).image().url().toString()).isEqualTo(expectedUrl2);
     }
 
-    @ParameterizedTest
-    @Disabled("Placeholder parsing not yet implemented for string content")
-    // HTML Escaped, Unescaped, Unescaped
-    @ValueSource(strings = {"{{%s}}", "{{{%s}}}", "{{&%s}}"})
-    void renderMessagesParsesImagePlaceholderWithMustache(String mustacheTag) {
+    @Test
+    @DisplayName("should render template variables in multimodal content with image URL")
+    void shouldRenderTemplateVariables_whenMultimodalContentWithImageUrl() {
         var expectedUrl = "https://example.com/image.png?width=200&height=300";
-        var placeholder = "image_url";
-        var mustacheVariable = mustacheTag.formatted(placeholder);
+
+        // Use new array-based multimodal format with Mustache variables
+        var contentParts = List.of(
+                LlmAsJudgeMessageContent.builder()
+                        .type("text")
+                        .text("My image: ")
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("image_url")
+                        .imageUrl(LlmAsJudgeMessageContent.ImageUrl.builder()
+                                .url("{{image_url}}")
+                                .build())
+                        .build());
+
         var messages = List.of(
-                new LlmAsJudgeMessage(
-                        ChatMessageType.USER, "My image: " + IMAGE_PLACEHOLDER.formatted(mustacheVariable)));
-        // When using triple braces, Mustache doesn't escape the URL
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content(contentParts)
+                        .build());
+
         var rendered = OnlineScoringEngine.renderMessages(
-                messages, Map.of(placeholder, expectedUrl), Trace.builder().build());
+                messages, Map.of("image_url", expectedUrl), Trace.builder().build());
 
         assertThat(rendered).hasSize(1);
         assertThat(rendered.getFirst()).isInstanceOf(UserMessage.class);
@@ -788,7 +819,6 @@ class OnlineScoringEngineTest {
         assertThat(parts.get(0)).isInstanceOf(TextContent.class);
         assertThat(((TextContent) parts.get(0)).text()).isEqualTo("My image: ");
         assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
-        // With triple braces, URL is not escaped - no HTML entities present
         assertThat(((ImageContent) parts.get(1)).image().url().toString()).isEqualTo(expectedUrl);
     }
 
@@ -1128,9 +1158,8 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @Disabled("Placeholder parsing not yet implemented for string content")
-    @DisplayName("should render template variables in string content with video placeholder")
-    void shouldRenderTemplateVariables_whenStringContentWithVideoPlaceholder() throws JsonProcessingException {
+    @DisplayName("should render template variables in multimodal content with video URL")
+    void shouldRenderTemplateVariables_whenMultimodalContentWithVideoUrl() throws JsonProcessingException {
         // Given
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -1138,9 +1167,22 @@ class OnlineScoringEngineTest {
                 .output(JsonUtils.getJsonNodeFromString(OUTPUT_SIMPLE_VIDEO))
                 .build();
 
+        // Use new array-based multimodal format
+        var contentParts = List.of(
+                LlmAsJudgeMessageContent.builder()
+                        .type("text")
+                        .text("Analyze: {{description}} ")
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("video_url")
+                        .videoUrl(LlmAsJudgeMessageContent.VideoUrl.builder()
+                                .url("{{video_url}}")
+                                .build())
+                        .build());
+
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content("Analyze: {{description}} <<<video>>>{{video_url}}<<</video>>>")
+                .content(contentParts)
                 .build();
 
         var variables = Map.of(
