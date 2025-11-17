@@ -92,8 +92,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_threads: int = 8,
         verbose: int = 1,
         seed: int = 42,
+        name: str | None = None,
     ) -> None:
-        super().__init__(model, verbose, seed=seed, model_parameters=model_parameters)
+        super().__init__(
+            model, verbose, seed=seed, model_parameters=model_parameters, name=name
+        )
         self.min_examples = min_examples
         self.max_examples = max_examples
         self.seed = seed
@@ -485,7 +488,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
-                metadata={"optimizer": self.__class__.__name__},
+                name=self.name,
+                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id

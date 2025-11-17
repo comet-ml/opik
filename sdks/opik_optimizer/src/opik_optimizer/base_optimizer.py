@@ -56,6 +56,7 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         seed: int = 42,
         model_parameters: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> None:
         """
         Base class for optimizers.
@@ -69,12 +70,14 @@ class BaseOptimizer(ABC):
                presence_penalty, frequency_penalty.
                See: https://docs.litellm.ai/docs/completion/input
                Note: These params control the optimizer's reasoning model, NOT the prompt evaluation.
+           name: Optional name for the optimizer instance. This will be used when creating optimizations.
         """
         self.model = model
         self.reasoning_model = model
         self.model_parameters = model_parameters or {}
         self.verbose = verbose
         self.seed = seed
+        self.name = name
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
@@ -589,6 +592,16 @@ class BaseOptimizer(ABC):
             metadata["parameters"] = extra_parameters
 
         return self._drop_none(metadata)
+
+    def _build_optimization_config(self) -> dict[str, Any]:
+        """
+        Build metadata dictionary for optimization creation.
+
+        Returns:
+            Dictionary with 'optimizer' and optionally 'name' keys.
+        """
+        metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
+        return metadata
 
     def _prepare_experiment_config(
         self,
