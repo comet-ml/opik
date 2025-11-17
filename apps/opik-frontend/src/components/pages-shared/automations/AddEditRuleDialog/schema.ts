@@ -147,6 +147,7 @@ const LLMJudgeBaseSchema = z.object({
       .min(0, { message: "Seed must be a non-negative integer" })
       .optional()
       .nullable(),
+    customParameters: z.record(z.string(), z.unknown()).optional().nullable(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -398,6 +399,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     config: {
       temperature: data.model?.temperature ?? 0,
       seed: data.model?.seed ?? null,
+      customParameters: data.model?.customParameters ?? null,
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -410,7 +412,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
 export const convertLLMJudgeDataToLLMJudgeObject = (
   data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
 ) => {
-  const { temperature, seed } = data.config;
+  const { temperature, seed, customParameters } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
     temperature,
@@ -418,6 +420,10 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 
   if (seed != null) {
     model.seed = seed;
+  }
+
+  if (customParameters != null) {
+    model.customParameters = customParameters;
   }
 
   return {

@@ -209,7 +209,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         provider={provider}
                         model={model}
                         configs={field.value}
-                        onChange={field.onChange}
+                        onChange={(partialConfig) => {
+                          field.onChange({ ...field.value, ...partialConfig });
+                        }}
                       />
                     )}
                   ></FormField>
