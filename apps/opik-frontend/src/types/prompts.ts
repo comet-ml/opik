@@ -6,6 +6,7 @@ export interface Prompt {
   created_at: string;
   version_count: number;
   tags: string[];
+  template_structure?: string;
   latest_version?: PromptVersion;
 }
 

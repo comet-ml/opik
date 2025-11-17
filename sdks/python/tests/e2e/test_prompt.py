@@ -1,7 +1,9 @@
 import json
 import uuid
+import pytest
 import opik
 from opik.api_objects.prompt import PromptType
+from opik.rest_api import core as rest_api_core
 from . import verifiers
 
 
@@ -259,7 +261,7 @@ def test_prompt__search_prompts__returns_all_versions(opik_client: opik.Opik):
 
     prompts = opik_client.search_prompts()
 
-    templates = {p.prompt for p in prompts}
+    templates = {p.prompt for p in prompts if isinstance(p, opik.Prompt)}
     assert "new-template-1" in templates
     assert "some-template-2" in templates
 
@@ -307,9 +309,278 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     # Search by name substring via OQL (no additional filters) to retrieve only two matching prompts
     results = opik_client.search_prompts(filter_string='name contains "common-prefix"')
 
-    names = set(p.name for p in results)
+    names = set(p.name for p in results if isinstance(p, opik.Prompt))
     assert len(results) == 2
     assert names == set([prompt_name_1, prompt_name_2])
+
+
+def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
+    """Test that template_structure is immutable after prompt creation."""
+    unique_identifier = str(uuid.uuid4())[-6:]
+    prompt_name = f"test-immutable-structure-{unique_identifier}"
+
+    # Create initial text prompt
+    text_prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt="This is a text prompt: {{variable}}",
+    )
+
+    # Verify text prompt was created
+    verifiers.verify_prompt_version(
+        text_prompt,
+        name=prompt_name,
+        template="This is a text prompt: {{variable}}",
+    )
+
+    # Attempt to create a chat prompt version with the same name should fail
+    with pytest.raises(rest_api_core.ApiError) as exc_info:
+        opik_client.create_chat_prompt(
+            name=prompt_name,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello!"},
+            ],
+        )
+
+    # Verify the error message contains relevant information
+    assert exc_info.value.status_code == 400
+    assert (
+        "template structure mismatch" in str(exc_info.value).lower()
+        or "template_structure" in str(exc_info.value).lower()
+    )
+
+
+def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik):
+    """Test that template_structure is immutable for chat prompts."""
+    unique_identifier = str(uuid.uuid4())[-6:]
+    prompt_name = f"test-immutable-chat-structure-{unique_identifier}"
+
+    # Create initial chat prompt
+    chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
+    )
+
+    # Verify chat prompt was created
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
+    )
+
+    # Attempt to create a text prompt version with the same name should fail
+    with pytest.raises(rest_api_core.ApiError) as exc_info:
+        opik_client.create_prompt(
+            name=prompt_name,
+            prompt="This is a text prompt: {{variable}}",
+        )
+
+    # Verify the error message contains relevant information
+    assert exc_info.value.status_code == 400
+    assert (
+        "template structure mismatch" in str(exc_info.value).lower()
+        or "template_structure" in str(exc_info.value).lower()
+        or "chat prompt" in str(exc_info.value).lower()
+    )
+
+
+def test_get_prompt__string_prompt__returns_prompt(opik_client: opik.Opik):
+    """Test that get_prompt() returns a Prompt object for text prompts."""
+    unique_id = str(uuid.uuid4())[-6:]
+    prompt_name = f"text-prompt-{unique_id}"
+
+    # Create a text prompt
+    created_prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt="Hello {{name}}",
+    )
+
+    # Retrieve it with get_prompt()
+    retrieved_prompt = opik_client.get_prompt(name=prompt_name)
+
+    assert retrieved_prompt is not None
+    assert isinstance(retrieved_prompt, opik.Prompt)
+    assert retrieved_prompt.name == prompt_name
+    assert retrieved_prompt.commit == created_prompt.commit
+
+
+def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
+    """Test that get_prompt() returns None for chat prompts (type mismatch)."""
+    unique_id = str(uuid.uuid4())[-6:]
+    prompt_name = f"chat-prompt-{unique_id}"
+
+    # Create a chat prompt
+    opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are helpful"},
+            {"role": "user", "content": "Hello"},
+        ],
+    )
+
+    # Try to retrieve it with get_prompt() - should return None due to type mismatch
+    retrieved_prompt = opik_client.get_prompt(name=prompt_name)
+    assert retrieved_prompt is None
+
+
+def test_get_prompt_history__string_prompt__returns_prompts(opik_client: opik.Opik):
+    """Test that get_prompt_history() returns Prompt objects for text prompts."""
+    unique_id = str(uuid.uuid4())[-6:]
+    prompt_name = f"text-prompt-history-{unique_id}"
+
+    # Create multiple versions of a text prompt
+    v1 = opik_client.create_prompt(name=prompt_name, prompt="Version 1")
+    v2 = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
+    v3 = opik_client.create_prompt(name=prompt_name, prompt="Version 3")
+
+    # Retrieve history
+    history = opik_client.get_prompt_history(name=prompt_name)
+
+    assert len(history) == 3
+    assert all(isinstance(p, opik.Prompt) for p in history)
+    assert history[0].name == prompt_name
+
+    # Verify commits are in the history
+    commits = {p.commit for p in history}
+    assert v1.commit in commits
+    assert v2.commit in commits
+    assert v3.commit in commits
+
+
+def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.Opik):
+    """Test that get_prompt_history() returns empty list for chat prompts (type mismatch)."""
+    unique_id = str(uuid.uuid4())[-6:]
+    prompt_name = f"chat-prompt-history-{unique_id}"
+
+    # Create a chat prompt
+    opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+
+    # Try to get history with get_prompt_history() - should return empty list
+    history = opik_client.get_prompt_history(name=prompt_name)
+    assert len(history) == 0
+
+
+def test_search_prompts__returns_both_types(opik_client: opik.Opik):
+    """Test that search_prompts() returns both text and chat prompts."""
+    unique_id = str(uuid.uuid4())[-6:]
+
+    # Create text prompts
+    text_prompt_1 = opik_client.create_prompt(
+        name=f"text-search-{unique_id}-1",
+        prompt="Text prompt 1",
+    )
+    text_prompt_2 = opik_client.create_prompt(
+        name=f"text-search-{unique_id}-2",
+        prompt="Text prompt 2",
+    )
+
+    # Create chat prompts with similar names
+    chat_prompt_1 = opik_client.create_chat_prompt(
+        name=f"chat-search-{unique_id}-1",
+        messages=[{"role": "user", "content": "Chat 1"}],
+    )
+    chat_prompt_2 = opik_client.create_chat_prompt(
+        name=f"chat-search-{unique_id}-2",
+        messages=[{"role": "user", "content": "Chat 2"}],
+    )
+
+    # Search for all prompts with the unique_id
+    results = opik_client.search_prompts(filter_string=f'name contains "{unique_id}"')
+
+    # Should return both text and chat prompts
+    assert len(results) == 4
+    text_prompts = [p for p in results if isinstance(p, opik.Prompt)]
+    chat_prompts = [p for p in results if isinstance(p, opik.ChatPrompt)]
+    assert len(text_prompts) == 2
+    assert len(chat_prompts) == 2
+    assert {p.name for p in text_prompts} == {
+        text_prompt_1.name,
+        text_prompt_2.name,
+    }
+    assert {p.name for p in chat_prompts} == {chat_prompt_1.name, chat_prompt_2.name}
+
+
+def test_search_prompts__filter_by_template_structure_text(opik_client: opik.Opik):
+    """Test that search_prompts() can filter by template_structure='text'."""
+    unique_id = str(uuid.uuid4())[-6:]
+
+    # Create text and chat prompts
+    text_prompt = opik_client.create_prompt(
+        name=f"text-search-{unique_id}",
+        prompt="Text prompt",
+    )
+    _ = opik_client.create_chat_prompt(
+        name=f"chat-search-{unique_id}",
+        messages=[{"role": "user", "content": "Chat"}],
+    )
+
+    # Search for only text prompts
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "{unique_id}" AND template_structure = "text"'
+    )
+
+    # Should only return text prompts
+    assert len(results) == 1
+    assert isinstance(results[0], opik.Prompt)
+    assert results[0].name == text_prompt.name
+
+
+def test_search_prompts__filter_by_template_structure_chat(opik_client: opik.Opik):
+    """Test that search_prompts() can filter by template_structure='chat'."""
+    unique_id = str(uuid.uuid4())[-6:]
+
+    # Create text and chat prompts
+    _ = opik_client.create_prompt(
+        name=f"text-search-{unique_id}",
+        prompt="Text prompt",
+    )
+    chat_prompt = opik_client.create_chat_prompt(
+        name=f"chat-search-{unique_id}",
+        messages=[{"role": "user", "content": "Chat"}],
+    )
+
+    # Search for only chat prompts
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "{unique_id}" AND template_structure = "chat"'
+    )
+
+    # Should only return chat prompts
+    assert len(results) == 1
+    assert isinstance(results[0], opik.ChatPrompt)
+    assert results[0].name == chat_prompt.name
+
+
+def test_get_prompt__with_commit__string_prompt(opik_client: opik.Opik):
+    """Test that get_prompt() with commit works for text prompts."""
+    unique_id = str(uuid.uuid4())[-6:]
+    prompt_name = f"string-prompt-commit-{unique_id}"
+
+    # Create multiple versions
+    v1 = opik_client.create_prompt(name=prompt_name, prompt="Version 1")
+    _ = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
+
+    # Retrieve specific version by commit
+    retrieved_v1 = opik_client.get_prompt(name=prompt_name, commit=v1.commit)
+
+    assert retrieved_v1 is not None
+    assert isinstance(retrieved_v1, opik.Prompt)
+    assert retrieved_v1.commit == v1.commit
+    assert retrieved_v1.prompt == "Version 1"
+
+
+def test_get_prompt__nonexistent__returns_none(opik_client: opik.Opik):
+    """Test that get_prompt() returns None for non-existent prompts."""
+    result = opik_client.get_prompt(name="nonexistent-prompt-12345")
+    assert result is None
 
 
 def test_prompt__format_playground_chat_prompt__returns_json(opik_client: opik.Opik):

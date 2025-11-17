@@ -21,6 +21,7 @@ import RestoreVersionDialog from "./RestoreVersionDialog";
 import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
+import ChatPromptView from "./ChatPromptView";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -72,10 +73,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   };
 
   useEffect(() => {
-    if (prompt?.latest_version?.id && !activeVersionId) {
-      setActiveVersionId(prompt.latest_version.id, "replaceIn");
+    if (versions && versions.length > 0 && !activeVersionId) {
+      setActiveVersionId(versions[0].id, "replaceIn");
     }
-  }, [prompt?.latest_version?.id, activeVersionId, setActiveVersionId]);
+  }, [versions, activeVersionId, setActiveVersionId]);
 
   useEffect(() => {
     return () => {
@@ -89,6 +90,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     const content = parsePromptVersionContent(activeVersion);
     return parseLLMMessageContent(content);
   }, [activeVersion]);
+
+  const isChatPrompt = useMemo(() => {
+    return prompt?.template_structure === "chat";
+  }, [prompt?.template_structure]);
 
   if (!prompt) {
     return <Loader />;
@@ -105,8 +110,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
-        <TryInPlaygroundButton prompt={prompt} />
-        <ImproveInPlaygroundButton prompt={prompt} />
+        <TryInPlaygroundButton prompt={prompt} activeVersion={activeVersion} />
+        <ImproveInPlaygroundButton
+          prompt={prompt}
+          activeVersion={activeVersion}
+        />
         <Button
           className="ml-auto"
           size="sm"
@@ -120,44 +128,54 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
           <div className="flex items-center gap-2">
-            <p className="comet-body-s-accented text-foreground">Prompt</p>
-            <CopyButton
-              text={displayText}
-              message="Prompt copied to clipboard"
-              tooltipText="Copy prompt"
-              variant="ghost"
-              size="icon-xs"
-            />
+            <p className="comet-body-s-accented text-foreground">
+              {isChatPrompt ? "Chat messages" : "Prompt"}
+            </p>
+            {!isChatPrompt && (
+              <CopyButton
+                text={displayText}
+                message="Prompt copied to clipboard"
+                tooltipText="Copy prompt"
+                variant="ghost"
+                size="icon-xs"
+              />
+            )}
           </div>
-          <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-            {displayText}
-          </code>
-          {extractedImages.length > 0 && (
+          {isChatPrompt ? (
+            <ChatPromptView template={activeVersion?.template || ""} />
+          ) : (
             <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Images
-              </p>
-              <PromptMessageMediaTags
-                type="image"
-                items={extractedImages}
-                editable={false}
-                preview={true}
-                align="start"
-              />
-            </>
-          )}
-          {extractedVideos.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Videos
-              </p>
-              <PromptMessageMediaTags
-                type="video"
-                items={extractedVideos}
-                editable={false}
-                preview={true}
-                align="start"
-              />
+              <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+                {displayText}
+              </code>
+              {extractedImages.length > 0 && (
+                <>
+                  <p className="comet-body-s-accented mt-4 text-foreground">
+                    Images
+                  </p>
+                  <PromptMessageMediaTags
+                    type="image"
+                    items={extractedImages}
+                    editable={false}
+                    preview={true}
+                    align="start"
+                  />
+                </>
+              )}
+              {extractedVideos.length > 0 && (
+                <>
+                  <p className="comet-body-s-accented mt-4 text-foreground">
+                    Videos
+                  </p>
+                  <PromptMessageMediaTags
+                    type="video"
+                    items={extractedVideos}
+                    editable={false}
+                    preview={true}
+                    align="start"
+                  />
+                </>
+              )}
             </>
           )}
           {activeVersion?.metadata && (
@@ -204,6 +222,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         open={openUseThisPrompt}
         setOpen={setOpenUseThisPrompt}
         promptName={prompt.name}
+        templateStructure={prompt.template_structure}
       />
 
       <EditPromptVersionDialog
@@ -213,6 +232,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
+        templateStructure={prompt.template_structure}
         onSetActiveVersionId={setActiveVersionId}
       />
 
