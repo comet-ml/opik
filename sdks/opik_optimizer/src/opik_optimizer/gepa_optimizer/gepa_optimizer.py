@@ -52,6 +52,7 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: int = 6,
         verbose: int = 1,
         seed: int = 42,
+        name: str | None = None,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -73,7 +74,11 @@ class GepaOptimizer(BaseOptimizer):
             raise ValueError(f"seed must be an integer, got {type(seed).__name__}")
 
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.n_threads = n_threads
         self._gepa_live_metric_calls = 0
@@ -262,7 +267,8 @@ class GepaOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata=self._build_optimization_metadata(agent_class=agent_class),
-                optimization_id=optimization_id,
+                name=self.name,
+\               optimization_id=optimization_id,
             ) as optimization:
                 try:
                     opt_id = optimization.id if optimization is not None else None

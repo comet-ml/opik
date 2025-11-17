@@ -153,9 +153,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_threads: int = 12,
         verbose: int = 1,
         seed: int = 42,
+        name: str | None = None,
     ) -> None:
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.prompts_per_round = prompts_per_round
         self.n_threads = n_threads
@@ -448,6 +453,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata=self._build_optimization_metadata(),
+                name=self.name,
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id

@@ -66,6 +66,7 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
+  CUSTOM_PARAMETERS: null,
 };
 
 // Reasoning models that require temperature = 1.0

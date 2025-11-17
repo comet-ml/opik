@@ -34,6 +34,7 @@ prompt = ChatPrompt(
 
 # Optimize it:
 optimizer = EvolutionaryOptimizer(
+    name="ADK Agent",
     model="openai/gpt-4o-mini",
     enable_moo=False,
     enable_llm_crossover=True,
