@@ -592,22 +592,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         initial_prompt = prompt
 
         current_prompt = prompt
-        configuration_updates = helpers.drop_none(
-            {
-                "max_trials": max_trials,
-                "prompts_per_round": self.prompts_per_round,
-            }
-        )
-        meta_metadata = {"stage": "initial"}
-        experiment_config = self._prepare_experiment_config(
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            experiment_config=experiment_config,
-            configuration_updates=configuration_updates,
-            additional_metadata={"meta_prompt": meta_metadata},
-        )
-
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             initial_score = self._evaluate_prompt(
                 prompt,
