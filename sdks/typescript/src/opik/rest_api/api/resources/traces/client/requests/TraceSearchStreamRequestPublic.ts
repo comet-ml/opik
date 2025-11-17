@@ -15,8 +15,8 @@ export interface TraceSearchStreamRequestPublic {
     truncate?: boolean;
     /** If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments */
     stripAttachments?: boolean;
-    /** Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'. */
+    /** Filter traces created from this time (ISO-8601 format). */
     fromTime?: Date;
-    /** Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'. */
+    /** Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'. */
     toTime?: Date;
 }

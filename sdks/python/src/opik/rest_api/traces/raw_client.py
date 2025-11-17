@@ -1523,10 +1523,10 @@ class RawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter trace threads created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1625,10 +1625,10 @@ class RawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter traces created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3388,10 +3388,10 @@ class AsyncRawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter trace threads created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3491,10 +3491,10 @@ class AsyncRawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter traces created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.

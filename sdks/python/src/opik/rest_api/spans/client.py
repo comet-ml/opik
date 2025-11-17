@@ -798,10 +798,10 @@ class SpansClient:
             Truncate image included in either input, output or metadata
 
         from_time : typing.Optional[dt.datetime]
-            Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter spans created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1693,10 +1693,10 @@ class AsyncSpansClient:
             Truncate image included in either input, output or metadata
 
         from_time : typing.Optional[dt.datetime]
-            Filter spans created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter spans created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter spans created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
