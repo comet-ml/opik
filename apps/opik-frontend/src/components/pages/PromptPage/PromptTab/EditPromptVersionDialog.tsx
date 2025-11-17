@@ -36,7 +36,6 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import {
-  parseContentWithImages,
   generateDefaultLLMPromptMessage,
   getNextMessageType,
   parseLLMMessageContent,
