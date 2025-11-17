@@ -20,7 +20,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import {
-  OPTIMIZATION_AGENT_CLASS_KEY,
   OPTIMIZATION_EXAMPLES_KEY,
   OPTIMIZATION_OPTIMIZER_KEY,
   OPTIMIZATION_PROMPT_KEY,
@@ -282,21 +281,6 @@ const CompareOptimizationsPage: React.FC = () => {
         size: 200,
         accessorFn: (row) => {
           const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
-
-          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
-        },
-      },
-      {
-        id: "agent_class",
-        label: "Agent class",
-        type: COLUMN_TYPE.string,
-        size: 200,
-        accessorFn: (row) => {
-          const val = get(
-            row.metadata ?? {},
-            OPTIMIZATION_AGENT_CLASS_KEY,
-            "-",
-          );
 
           return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
         },

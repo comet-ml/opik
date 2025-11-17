@@ -76,10 +76,7 @@ import {
   DELETED_DATASET_ID,
   GROUPING_COLUMN,
 } from "@/constants/groups";
-import {
-  OPTIMIZATION_OPTIMIZER_KEY,
-  OPTIMIZATION_AGENT_CLASS_KEY,
-} from "@/constants/experiments";
+import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
@@ -127,17 +124,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
       return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
-  },
-  {
-    id: "agent_class",
-    label: "Agent class",
-    type: COLUMN_TYPE.string,
-    size: 200,
-    accessorFn: (row) => {
-      const val = get(row.metadata ?? {}, OPTIMIZATION_AGENT_CLASS_KEY, "-");
-
-      return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
-    },
   },
   {
     id: "objective_name",
