@@ -75,6 +75,9 @@ data:
         # Increased to 2GB to support large CSV uploads (OPIK-3077)
         client_max_body_size 2000M;
         
+        # Add custom header to identify this nginx instance in multi-proxy setups
+        add_header X-Opik-Nginx "frontend" always;
+        
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
 
         location @api {
