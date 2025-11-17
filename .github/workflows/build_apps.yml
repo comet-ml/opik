@@ -91,7 +91,7 @@ jobs:
                     fixedBranchName="${fixedBranchName%?}"
                   done
                 fi
-                VERSION="${BASE_VERSION}.${fixedBranchName}-${{ github.run_number }}"
+                VERSION="${BASE_VERSION}-${fixedBranchName}-${{ github.run_number }}"
               fi
             fi
             echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
