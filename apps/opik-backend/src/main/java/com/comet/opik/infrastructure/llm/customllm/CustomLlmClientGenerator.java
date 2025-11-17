@@ -100,7 +100,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
-        return builder.build();
+        // Pass custom parameters directly to constructor since builder inheritance
+        // doesn't allow us to chain our custom methods cleanly
+        return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
     }
 
     @Override

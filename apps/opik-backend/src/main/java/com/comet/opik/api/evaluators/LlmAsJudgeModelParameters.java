@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.util.Map;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -17,5 +19,7 @@ public record LlmAsJudgeModelParameters(
         @JsonView({AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull Double temperature,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) Integer seed){
+                AutomationRuleEvaluator.View.Write.class}) Integer seed,
+        @JsonView({AutomationRuleEvaluator.View.Public.class,
+                AutomationRuleEvaluator.View.Write.class}) Map<String, Object> customParameters){
 }
