@@ -3359,15 +3359,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter spans created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter spans created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter spans created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter spans created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -3633,15 +3632,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter spans created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter spans created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter spans created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter spans created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -3882,15 +3880,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter traces created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter traces created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter traces created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter traces created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -4168,15 +4165,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter traces created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter traces created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter traces created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter traces created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -4333,14 +4329,13 @@ paths:
         schema:
           type: string
           description: Filter trace threads created from this time (ISO-8601 format).
-            Must be provided together with 'to_time'.
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter trace threads created up to this time (ISO-8601 format).
-            Must be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter trace threads created up to this time (ISO-8601 format).\
+            \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -11636,13 +11631,12 @@ components:
           default: true
         from_time:
           type: string
-          description: Filter spans created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter spans created from this time (ISO-8601 format).
           format: date-time
         to_time:
           type: string
-          description: Filter spans created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter spans created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
     SpanUpdate:
       required:
@@ -12191,12 +12185,11 @@ components:
         from_time:
           type: string
           description: Filter trace threads created from this time (ISO-8601 format).
-            Must be provided together with 'to_time'.
           format: date-time
         to_time:
           type: string
-          description: Filter trace threads created up to this time (ISO-8601 format).
-            Must be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter trace threads created up to this time (ISO-8601 format).\
+            \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
     TraceSearchStreamRequest_Public:
       type: object
@@ -12231,13 +12224,12 @@ components:
           default: false
         from_time:
           type: string
-          description: Filter traces created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter traces created from this time (ISO-8601 format).
           format: date-time
         to_time:
           type: string
-          description: Filter traces created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter traces created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
     TraceUpdate:
       type: object
