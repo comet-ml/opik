@@ -268,7 +268,7 @@ class GepaOptimizer(BaseOptimizer):
                 objective_name=metric.__name__,
                 metadata=self._build_optimization_metadata(agent_class=agent_class),
                 name=self.name,
-\               optimization_id=optimization_id,
+                optimization_id=optimization_id,
             ) as optimization:
                 try:
                     opt_id = optimization.id if optimization is not None else None
