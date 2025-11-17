@@ -23,8 +23,6 @@ data:
     limit_req_log_level info;
     limit_req_status 429;
     map_hash_bucket_size 256;
-    # Increased to 2GB to support large CSV uploads (OPIK-3077)
-    client_max_body_size 2000M;
   {{- with .Values.component.frontend.additionalNginxSettings }}
     {{- . | nindent 4 }}
   {{- end }}
@@ -73,6 +71,9 @@ data:
     server {
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name localhost;
+        
+        # Increased to 2GB to support large CSV uploads (OPIK-3077)
+        client_max_body_size 2000M;
         
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
 
