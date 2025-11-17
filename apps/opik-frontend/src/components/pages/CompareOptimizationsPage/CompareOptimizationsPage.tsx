@@ -292,7 +292,11 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
         size: 200,
         accessorFn: (row) => {
-          const val = get(row.metadata ?? {}, OPTIMIZATION_AGENT_CLASS_KEY, "-");
+          const val = get(
+            row.metadata ?? {},
+            OPTIMIZATION_AGENT_CLASS_KEY,
+            "-",
+          );
 
           return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
         },
