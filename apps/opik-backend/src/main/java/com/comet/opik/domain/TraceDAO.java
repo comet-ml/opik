@@ -1370,7 +1370,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id IN :project_ids
                     AND error_info != ''
-                    AND start_time BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
+                    AND toDateTime(UUIDv7ToDateTime(id)) BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
                     GROUP BY workspace_id, project_id
                 ),
                 error_count_past_period AS (
@@ -1381,7 +1381,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id IN :project_ids
                     AND error_info != ''
-                    AND start_time \\< toStartOfDay(subtractDays(now(), 7))
+                    AND toDateTime(UUIDv7ToDateTime(id)) \\< toStartOfDay(subtractDays(now(), 7))
                     GROUP BY workspace_id, project_id
                 )
             <endif>
