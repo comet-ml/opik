@@ -3,10 +3,10 @@
  */
 
 /**
- * Template structure type: 'string' or 'chat'. Immutable after creation.
+ * Template structure type: 'text' or 'chat'. Immutable after creation.
  */
-export type PromptDetailTemplateStructure = "string" | "chat";
+export type PromptDetailTemplateStructure = "text" | "chat";
 export const PromptDetailTemplateStructure = {
-    String: "string",
+    Text: "text",
     Chat: "chat",
 } as const;

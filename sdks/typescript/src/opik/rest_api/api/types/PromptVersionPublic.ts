@@ -13,7 +13,7 @@ export interface PromptVersionPublic {
     template: string;
     metadata?: OpikApi.JsonNodePublic;
     type?: OpikApi.PromptVersionPublicType;
-    /** Template structure: 'string' or 'chat'. Inherited from parent prompt. */
+    /** Template structure: 'text' or 'chat'. Inherited from parent prompt. */
     templateStructure?: OpikApi.PromptVersionPublicTemplateStructure;
     changeDescription?: string;
     createdAt?: Date;

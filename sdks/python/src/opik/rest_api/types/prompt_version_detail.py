@@ -27,7 +27,7 @@ class PromptVersionDetail(UniversalBaseModel):
     type: typing.Optional[PromptVersionDetailType] = None
     template_structure: typing.Optional[PromptVersionDetailTemplateStructure] = pydantic.Field(default=None)
     """
-    Template structure: 'string' or 'chat'. Inherited from parent prompt.
+    Template structure: 'text' or 'chat'. Inherited from parent prompt.
     """
 
     change_description: typing.Optional[str] = None

@@ -18,7 +18,7 @@ export interface PromptWrite {
     metadata?: OpikApi.JsonNodeWrite;
     changeDescription?: string;
     type?: OpikApi.PromptWriteType;
-    /** Template structure type: 'string' or 'chat'. Immutable after creation. */
+    /** Template structure type: 'text' or 'chat'. Immutable after creation. */
     templateStructure?: OpikApi.PromptWriteTemplateStructure;
     tags?: string[];
 }

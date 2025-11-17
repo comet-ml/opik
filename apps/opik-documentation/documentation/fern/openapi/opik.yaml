@@ -10904,7 +10904,7 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "Template structure: 'string' or 'chat'. Inherited from parent\
+          description: "Template structure: 'text' or 'chat'. Inherited from parent\
             \ prompt."
           enum:
           - text
@@ -10999,7 +10999,7 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "Template structure: 'string' or 'chat'. Inherited from parent\
+          description: "Template structure: 'text' or 'chat'. Inherited from parent\
             \ prompt."
           enum:
           - text
@@ -11143,7 +11143,7 @@ components:
           - jinja2
         template_structure:
           type: string
-          description: "Template structure: 'string' or 'chat'. Inherited from parent\
+          description: "Template structure: 'text' or 'chat'. Inherited from parent\
             \ prompt."
           enum:
           - text

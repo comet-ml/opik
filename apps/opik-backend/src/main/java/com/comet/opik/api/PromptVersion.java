@@ -57,7 +57,7 @@ public record PromptVersion(
                 Prompt.View.Public.class,
                 PromptVersion.View.Public.class,
                 Prompt.View.Detail.class,
-                PromptVersion.View.Detail.class}) @Schema(description = "Template structure: 'string' or 'chat'. Inherited from parent prompt.") @Nullable TemplateStructure templateStructure,
+                PromptVersion.View.Detail.class}) @Schema(description = "Template structure: 'text' or 'chat'. Inherited from parent prompt.") @Nullable TemplateStructure templateStructure,
         @JsonView({
                 Prompt.View.Public.class,
                 PromptVersion.View.Public.class,

@@ -8,7 +8,7 @@ export interface PromptDetail {
     id?: string;
     name: string;
     description?: string;
-    /** Template structure type: 'string' or 'chat'. Immutable after creation. */
+    /** Template structure type: 'text' or 'chat'. Immutable after creation. */
     templateStructure?: OpikApi.PromptDetailTemplateStructure;
     tags?: string[];
     createdAt?: Date;

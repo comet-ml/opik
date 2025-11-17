@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const PromptTemplateStructure: core.serialization.Schema<
     serializers.PromptTemplateStructure.Raw,
     OpikApi.PromptTemplateStructure
-> = core.serialization.enum_(["string", "chat"]);
+> = core.serialization.enum_(["text", "chat"]);
 
 export declare namespace PromptTemplateStructure {
-    export type Raw = "string" | "chat";
+    export type Raw = "text" | "chat";
 }

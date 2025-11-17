@@ -3,10 +3,10 @@
  */
 
 /**
- * Template structure: 'string' or 'chat'. Inherited from parent prompt.
+ * Template structure: 'text' or 'chat'. Inherited from parent prompt.
  */
-export type PromptVersionTemplateStructure = "string" | "chat";
+export type PromptVersionTemplateStructure = "text" | "chat";
 export const PromptVersionTemplateStructure = {
-    String: "string",
+    Text: "text",
     Chat: "chat",
 } as const;
