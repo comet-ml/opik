@@ -785,7 +785,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -1001,7 +1002,8 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
@@ -1419,7 +1421,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id BETWEEN :uuid_from_time AND :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -1533,7 +1536,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -1815,7 +1819,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -2412,7 +2417,7 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
-        ST template = buildInsertTemplate(trace);
+        var template = buildInsertTemplate(trace);
 
         Statement statement = buildInsertStatement(trace, connection, template);
 
@@ -2463,7 +2468,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildInsertTemplate(Trace trace) {
-        ST template = new ST(INSERT);
+        var template = TemplateUtils.newST(INSERT);
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
@@ -2479,7 +2484,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> update(UUID id, TraceUpdate traceUpdate, Connection connection) {
 
-        ST template = buildUpdateTemplate(traceUpdate, UPDATE);
+        var template = buildUpdateTemplate(traceUpdate, UPDATE);
 
         String sql = template.render();
 
@@ -2531,7 +2536,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
-        ST template = new ST(update);
+        var template = TemplateUtils.newST(update);
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2579,7 +2584,7 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Deleting traces, count '{}'{}", ids.size(),
                 projectId != null ? " for project id '" + projectId + "'" : "");
 
-        var template = new ST(DELETE_BY_ID);
+        var template = TemplateUtils.newST(DELETE_BY_ID);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template.add("project_id", id));
 
@@ -2899,7 +2904,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST newFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
@@ -2923,10 +2928,9 @@ class TraceDAOImpl implements TraceDAO {
 
         // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
         Optional.ofNullable(traceSearchCriteria.uuidFromTime())
-                .ifPresent(uuid_from_time -> {
-                    template.add("uuid_from_time", uuid_from_time);
-                    template.add("uuid_to_time", traceSearchCriteria.uuidToTime());
-                });
+                .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         return template;
     }
 
@@ -2944,10 +2948,10 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
 
         // Bind UUID BETWEEN bounds for time-based filtering
-        if (traceSearchCriteria.uuidFromTime() != null) {
-            statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
-            statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
-        }
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
     }
 
     @Override
@@ -2989,7 +2993,7 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
 
-            var template = new ST(BATCH_INSERT)
+            var template = TemplateUtils.newST(BATCH_INSERT)
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -3053,7 +3057,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3091,7 +3095,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_DAILY_BI_INFORMATION);
+        var template = TemplateUtils.newST(TRACE_DAILY_BI_INFORMATION);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3124,7 +3128,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+            var statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_ids", List.of(criteria.projectId()));
@@ -3146,7 +3150,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3186,7 +3190,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
-                    ST template = new ST(SELECT_TRACES_STATS);
+                    var template = TemplateUtils.newST(SELECT_TRACES_STATS);
 
                     template.add("project_stats", true);
 
@@ -3229,7 +3233,7 @@ class TraceDAOImpl implements TraceDAO {
 
                     int offset = (page - 1) * size;
 
-                    ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+                    var template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
@@ -3271,7 +3275,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate.stream(connection -> {
 
-            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            var template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)
@@ -3433,7 +3437,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Mono<TraceThread> findThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = new ST(SELECT_TRACES_THREAD_BY_ID);
+            var template = TemplateUtils.newST(SELECT_TRACES_THREAD_BY_ID);
             template.add("truncate", truncate);
 
             var statement = connection.createStatement(template.render())

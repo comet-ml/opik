@@ -8,6 +8,8 @@ type UseTracesStatisticParams = {
   projectId: string;
   filters?: Filters;
   search?: string;
+  fromTime?: string;
+  toTime?: string;
 };
 
 export type UseTracesStatisticResponse = {
@@ -16,7 +18,7 @@ export type UseTracesStatisticResponse = {
 
 const getTracesStatistic = async (
   { signal }: QueryFunctionContext,
-  { projectId, filters, search }: UseTracesStatisticParams,
+  { projectId, filters, search, fromTime, toTime }: UseTracesStatisticParams,
 ) => {
   const { data } = await api.get<UseTracesStatisticResponse>(
     `${TRACES_REST_ENDPOINT}stats`,
@@ -25,6 +27,8 @@ const getTracesStatistic = async (
       params: {
         project_id: projectId,
         ...processFilters(filters, generateSearchByIDFilters(search)),
+        ...(fromTime && { from_time: fromTime }),
+        ...(toTime && { to_time: toTime }),
       },
     },
   );

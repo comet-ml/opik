@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -11,7 +12,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.Set;
@@ -149,7 +149,7 @@ class CommentDAOImpl implements CommentDAO {
     public Mono<Comment> findById(UUID entityId, @NonNull UUID commentId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var template = new ST(SELECT_COMMENT_BY_ID);
+            var template = TemplateUtils.newST(SELECT_COMMENT_BY_ID);
             if (entityId != null) {
                 template.add("entity_id", entityId);
             }
