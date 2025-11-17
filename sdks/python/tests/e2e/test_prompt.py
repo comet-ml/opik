@@ -319,17 +319,17 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
     prompt_name = f"test-immutable-structure-{unique_identifier}"
 
-    # Create initial string prompt
-    string_prompt = opik_client.create_prompt(
+    # Create initial text prompt
+    text_prompt = opik_client.create_prompt(
         name=prompt_name,
-        prompt="This is a string prompt: {{variable}}",
+        prompt="This is a text prompt: {{variable}}",
     )
 
-    # Verify string prompt was created
+    # Verify text prompt was created
     verifiers.verify_prompt_version(
-        string_prompt,
+        text_prompt,
         name=prompt_name,
-        template="This is a string prompt: {{variable}}",
+        template="This is a text prompt: {{variable}}",
     )
 
     # Attempt to create a chat prompt version with the same name should fail
@@ -374,11 +374,11 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
         ],
     )
 
-    # Attempt to create a string prompt version with the same name should fail
+    # Attempt to create a text prompt version with the same name should fail
     with pytest.raises(rest_api_core.ApiError) as exc_info:
         opik_client.create_prompt(
             name=prompt_name,
-            prompt="This is a string prompt: {{variable}}",
+            prompt="This is a text prompt: {{variable}}",
         )
 
     # Verify the error message contains relevant information
@@ -391,11 +391,11 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
 
 
 def test_get_prompt__string_prompt__returns_prompt(opik_client: opik.Opik):
-    """Test that get_prompt() returns a Prompt object for string prompts."""
+    """Test that get_prompt() returns a Prompt object for text prompts."""
     unique_id = str(uuid.uuid4())[-6:]
-    prompt_name = f"string-prompt-{unique_id}"
+    prompt_name = f"text-prompt-{unique_id}"
 
-    # Create a string prompt
+    # Create a text prompt
     created_prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt="Hello {{name}}",
@@ -430,11 +430,11 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
 
 
 def test_get_prompt_history__string_prompt__returns_prompts(opik_client: opik.Opik):
-    """Test that get_prompt_history() returns Prompt objects for string prompts."""
+    """Test that get_prompt_history() returns Prompt objects for text prompts."""
     unique_id = str(uuid.uuid4())[-6:]
-    prompt_name = f"string-prompt-history-{unique_id}"
+    prompt_name = f"text-prompt-history-{unique_id}"
 
-    # Create multiple versions of a string prompt
+    # Create multiple versions of a text prompt
     v1 = opik_client.create_prompt(name=prompt_name, prompt="Version 1")
     v2 = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
     v3 = opik_client.create_prompt(name=prompt_name, prompt="Version 3")
@@ -470,17 +470,17 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
 
 
 def test_search_prompts__returns_both_types(opik_client: opik.Opik):
-    """Test that search_prompts() returns both string and chat prompts."""
+    """Test that search_prompts() returns both text and chat prompts."""
     unique_id = str(uuid.uuid4())[-6:]
 
-    # Create string prompts
-    string_prompt_1 = opik_client.create_prompt(
-        name=f"string-search-{unique_id}-1",
-        prompt="String prompt 1",
+    # Create text prompts
+    text_prompt_1 = opik_client.create_prompt(
+        name=f"text-search-{unique_id}-1",
+        prompt="Text prompt 1",
     )
-    string_prompt_2 = opik_client.create_prompt(
-        name=f"string-search-{unique_id}-2",
-        prompt="String prompt 2",
+    text_prompt_2 = opik_client.create_prompt(
+        name=f"text-search-{unique_id}-2",
+        prompt="Text prompt 2",
     )
 
     # Create chat prompts with similar names
@@ -496,15 +496,15 @@ def test_search_prompts__returns_both_types(opik_client: opik.Opik):
     # Search for all prompts with the unique_id
     results = opik_client.search_prompts(filter_string=f'name contains "{unique_id}"')
 
-    # Should return both string and chat prompts
+    # Should return both text and chat prompts
     assert len(results) == 4
-    string_prompts = [p for p in results if isinstance(p, opik.Prompt)]
+    text_prompts = [p for p in results if isinstance(p, opik.Prompt)]
     chat_prompts = [p for p in results if isinstance(p, opik.ChatPrompt)]
-    assert len(string_prompts) == 2
+    assert len(text_prompts) == 2
     assert len(chat_prompts) == 2
-    assert {p.name for p in string_prompts} == {
-        string_prompt_1.name,
-        string_prompt_2.name,
+    assert {p.name for p in text_prompts} == {
+        text_prompt_1.name,
+        text_prompt_2.name,
     }
     assert {p.name for p in chat_prompts} == {chat_prompt_1.name, chat_prompt_2.name}
 
@@ -513,35 +513,35 @@ def test_search_prompts__filter_by_template_structure_text(opik_client: opik.Opi
     """Test that search_prompts() can filter by template_structure='text'."""
     unique_id = str(uuid.uuid4())[-6:]
 
-    # Create string and chat prompts
-    string_prompt = opik_client.create_prompt(
-        name=f"string-search-{unique_id}",
-        prompt="String prompt",
+    # Create text and chat prompts
+    text_prompt = opik_client.create_prompt(
+        name=f"text-search-{unique_id}",
+        prompt="Text prompt",
     )
     _ = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}",
         messages=[{"role": "user", "content": "Chat"}],
     )
 
-    # Search for only string prompts
+    # Search for only text prompts
     results = opik_client.search_prompts(
         filter_string=f'name contains "{unique_id}" AND template_structure = "text"'
     )
 
-    # Should only return string prompts
+    # Should only return text prompts
     assert len(results) == 1
     assert isinstance(results[0], opik.Prompt)
-    assert results[0].name == string_prompt.name
+    assert results[0].name == text_prompt.name
 
 
 def test_search_prompts__filter_by_template_structure_chat(opik_client: opik.Opik):
     """Test that search_prompts() can filter by template_structure='chat'."""
     unique_id = str(uuid.uuid4())[-6:]
 
-    # Create string and chat prompts
+    # Create text and chat prompts
     _ = opik_client.create_prompt(
-        name=f"string-search-{unique_id}",
-        prompt="String prompt",
+        name=f"text-search-{unique_id}",
+        prompt="Text prompt",
     )
     chat_prompt = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}",
@@ -560,7 +560,7 @@ def test_search_prompts__filter_by_template_structure_chat(opik_client: opik.Opi
 
 
 def test_get_prompt__with_commit__string_prompt(opik_client: opik.Opik):
-    """Test that get_prompt() with commit works for string prompts."""
+    """Test that get_prompt() with commit works for text prompts."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"string-prompt-commit-{unique_id}"
 

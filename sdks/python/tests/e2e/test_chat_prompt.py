@@ -346,11 +346,11 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
 
 
 def test_get_chat_prompt__string_prompt__returns_none(opik_client: opik.Opik):
-    """Test that get_chat_prompt() returns None for string prompts (type mismatch)."""
+    """Test that get_chat_prompt() returns None for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
-    prompt_name = f"string-prompt-{unique_id}"
+    prompt_name = f"text-prompt-{unique_id}"
 
-    # Create a string prompt
+    # Create a text prompt
     opik_client.create_prompt(
         name=prompt_name,
         prompt="Hello {{name}}",
@@ -402,11 +402,11 @@ def test_get_chat_prompt_history__chat_prompt__returns_chat_prompts(
 def test_get_chat_prompt_history__string_prompt__returns_empty_list(
     opik_client: opik.Opik,
 ):
-    """Test that get_chat_prompt_history() returns empty list for string prompts (type mismatch)."""
+    """Test that get_chat_prompt_history() returns empty list for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
-    prompt_name = f"string-prompt-history-{unique_id}"
+    prompt_name = f"text-prompt-history-{unique_id}"
 
-    # Create a string prompt
+    # Create a text prompt
     opik_client.create_prompt(name=prompt_name, prompt="Hello")
 
     # Try to get history with get_chat_prompt_history() - should return empty list
@@ -418,14 +418,14 @@ def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
     """Test that search_prompts() with template_structure filter returns only ChatPrompt instances."""
     unique_id = str(uuid.uuid4())[-6:]
 
-    # Create string prompts
-    string_prompt_1 = opik_client.create_prompt(
-        name=f"string-search-{unique_id}-1",
-        prompt="String prompt 1",
+    # Create text prompts
+    text_prompt_1 = opik_client.create_prompt(
+        name=f"text-search-{unique_id}-1",
+        prompt="Text prompt 1",
     )
-    string_prompt_2 = opik_client.create_prompt(
-        name=f"string-search-{unique_id}-2",
-        prompt="String prompt 2",
+    text_prompt_2 = opik_client.create_prompt(
+        name=f"text-search-{unique_id}-2",
+        prompt="Text prompt 2",
     )
 
     # Create chat prompts
@@ -443,15 +443,15 @@ def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
         filter_string=f'name contains "{unique_id}" AND template_structure = "chat"'
     )
 
-    # Should only return chat prompts, not string prompts
+    # Should only return chat prompts, not text prompts
     assert len(results) == 2
     assert all(isinstance(p, opik.ChatPrompt) for p in results)
 
     result_names = {p.name for p in results}
     assert chat_prompt_1.name in result_names
     assert chat_prompt_2.name in result_names
-    assert string_prompt_1.name not in result_names
-    assert string_prompt_2.name not in result_names
+    assert text_prompt_1.name not in result_names
+    assert text_prompt_2.name not in result_names
 
 
 def test_get_chat_prompt__with_commit__chat_prompt(opik_client: opik.Opik):

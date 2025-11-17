@@ -1413,9 +1413,9 @@ class Opik:
         commit: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
-        Retrieve a string prompt by name and optional commit version.
+        Retrieve a text prompt by name and optional commit version.
 
-        This method only returns string prompts. If the prompt is a chat prompt,
+        This method only returns text prompts. If the prompt is a chat prompt,
         None will be returned (the backend validates the template_structure).
 
         Parameters:
@@ -1423,7 +1423,7 @@ class Opik:
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            Prompt: The details of the specified string prompt, or None if not found or if it's a chat prompt.
+            Prompt: The details of the specified text prompt, or None if not found or if it's a chat prompt.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
@@ -1442,7 +1442,7 @@ class Opik:
         """
         Retrieve a chat prompt by name and optional commit version.
 
-        This method only returns chat prompts. If the prompt is a string prompt,
+        This method only returns chat prompts. If the prompt is a text prompt,
         None will be returned (the backend validates the template_structure).
 
         Parameters:
@@ -1450,7 +1450,7 @@ class Opik:
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            ChatPrompt: The details of the specified chat prompt, or None if not found or if it's a string prompt.
+            ChatPrompt: The details of the specified chat prompt, or None if not found or if it's a text prompt.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
@@ -1465,23 +1465,23 @@ class Opik:
 
     def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
         """
-        Retrieve all string prompt versions history for a given prompt name.
+        Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of string Prompt instances for the given name.
+            List[Prompt]: A list of text Prompt instances for the given name.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
-        # First, validate that this is a string prompt by trying to get the latest version
+        # First, validate that this is a text prompt by trying to get the latest version
         # This will return None if it's a chat prompt (backend validates template_structure)
         latest_version = prompt_client_.get_prompt(name=name, template_structure="text")
         if latest_version is None:
             return []
 
-        # Now get all versions (we know it's a string prompt)
+        # Now get all versions (we know it's a text prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
 
         result = [
@@ -1562,10 +1562,10 @@ class Opik:
                 - `name contains "summary"` - Filter by name substring
                 - `created_by = "user@example.com"` - Filter by creator
                 - `id starts_with "prompt_"` - Filter by ID prefix
-                - `template_structure = "string"` - Only string prompts
+                - `template_structure = "text"` - Only text prompts
                 - `template_structure = "chat"` - Only chat prompts
 
-                If not provided, all prompts (both string and chat) will be returned.
+                If not provided, all prompts (both text and chat) will be returned.
 
         Returns:
             List[Union[Prompt, ChatPrompt]]: A list of Prompt and/or ChatPrompt instances found.
