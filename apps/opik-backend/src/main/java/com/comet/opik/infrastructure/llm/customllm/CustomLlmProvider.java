@@ -68,32 +68,10 @@ public class CustomLlmProvider implements LlmProviderService {
         log.debug("Cleaned model name from '{}' to '{}' (providerName='{}')",
                 request.model(), actualModelName, providerName);
 
+        // Use .from() to copy all fields, then override the model name
         return ChatCompletionRequest.builder()
+                .from(request)
                 .model(actualModelName)
-                .messages(request.messages())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .n(request.n())
-                .stream(request.stream())
-                .streamOptions(request.streamOptions())
-                .stop(request.stop())
-                .maxTokens(request.maxTokens())
-                .maxCompletionTokens(request.maxCompletionTokens())
-                .presencePenalty(request.presencePenalty())
-                .frequencyPenalty(request.frequencyPenalty())
-                .logitBias(request.logitBias())
-                .user(request.user())
-                .responseFormat(request.responseFormat())
-                .seed(request.seed())
-                .tools(request.tools())
-                .toolChoice(request.toolChoice())
-                .parallelToolCalls(request.parallelToolCalls())
-                .store(request.store())
-                .metadata(request.metadata())
-                .reasoningEffort(request.reasoningEffort())
-                .serviceTier(request.serviceTier())
-                .functions(request.functions())
-                .functionCall(request.functionCall())
                 .build();
     }
 

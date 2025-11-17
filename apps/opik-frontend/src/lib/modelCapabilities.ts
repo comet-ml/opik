@@ -3,6 +3,7 @@ import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 
 type ModelPricingEntry = {
   supports_vision?: boolean;
+  supports_video_input?: boolean;
   [key: string]: unknown;
 };
 
@@ -126,4 +127,16 @@ export const supportsImageInput = (model?: string | null): boolean => {
 
   // Default to false if no match found
   return false;
+};
+
+/**
+ * Checks if a model supports video input.
+ */
+export const supportsVideoInput = (model?: string | null): boolean => {
+  // When model_pricing.json includes a `supports_video_input` field, update this function to:
+  // 1. Build a VIDEO_CAPABILITIES map (like VISION_CAPABILITIES) from the `supports_video_input` field.
+  // 2. Use VIDEO_CAPABILITIES and normalized keys for lookup, similar to supportsImageInput.
+  // 3. Remove or update this fallback to supportsImageInput as appropriate.
+  // For now, video input support is assumed to match image input support.
+  return supportsImageInput(model);
 };

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
+import isEqual from "fast-deep-equal";
 
 import {
   Dialog,
@@ -13,8 +14,8 @@ import { PromptVersion } from "@/types/prompts";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
-import { parseContentWithImages } from "@/lib/llm";
+import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -32,19 +33,33 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     first(versions),
   );
 
-  const { text: baseText, images: baseImages } = useMemo(
-    () => parseContentWithImages(baseVersion?.template || ""),
+  const baseText = useMemo(
+    () => baseVersion?.template || "",
     [baseVersion?.template],
   );
 
-  const { text: diffText, images: diffImages } = useMemo(
-    () => parseContentWithImages(diffVersion?.template || ""),
+  const { images: baseImages, videos: baseVideos } = useMemo(() => {
+    const content = parsePromptVersionContent(baseVersion);
+    return parseLLMMessageContent(content);
+  }, [baseVersion]);
+
+  const diffText = useMemo(
+    () => diffVersion?.template || "",
     [diffVersion?.template],
   );
 
+  const { images: diffImages, videos: diffVideos } = useMemo(() => {
+    const content = parsePromptVersionContent(diffVersion);
+    return parseLLMMessageContent(content);
+  }, [diffVersion]);
+
   const imagesHaveChanges = useMemo(
-    () => JSON.stringify(baseImages) !== JSON.stringify(diffImages),
+    () => !isEqual(baseImages, diffImages),
     [baseImages, diffImages],
+  );
+  const videosHaveChanges = useMemo(
+    () => !isEqual(baseVideos, diffVideos),
+    [baseVideos, diffVideos],
   );
 
   const hasMoreThenTwoVersions = versions?.length > 2;
@@ -138,27 +153,57 @@ const ComparePromptVersionDialog: React.FunctionComponent<
             {generateDiffView(baseText, baseText)}
             {generateDiffView(baseText, diffText)}
           </div>
-          {imagesHaveChanges && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-2 rounded-md border p-4">
-                <PromptMessageImageTags
-                  images={baseImages}
-                  setImages={() => {}}
-                  align="start"
-                  editable={false}
-                  preview={true}
-                />
-              </div>
-              <div className="flex items-center gap-2 rounded-md border p-4">
-                <PromptMessageImageTags
-                  images={diffImages}
-                  setImages={() => {}}
-                  align="start"
-                  editable={false}
-                  preview={true}
-                />
-              </div>
-            </div>
+          {(imagesHaveChanges || videosHaveChanges) && (
+            <>
+              {imagesHaveChanges && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2 rounded-md border p-4">
+                    <PromptMessageMediaTags
+                      type="image"
+                      items={baseImages}
+                      setItems={() => {}}
+                      align="start"
+                      editable={false}
+                      preview={true}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border p-4">
+                    <PromptMessageMediaTags
+                      type="image"
+                      items={diffImages}
+                      setItems={() => {}}
+                      align="start"
+                      editable={false}
+                      preview={true}
+                    />
+                  </div>
+                </div>
+              )}
+              {videosHaveChanges && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2 rounded-md border p-4">
+                    <PromptMessageMediaTags
+                      type="video"
+                      items={baseVideos}
+                      setItems={() => {}}
+                      align="start"
+                      editable={false}
+                      preview={true}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border p-4">
+                    <PromptMessageMediaTags
+                      type="video"
+                      items={diffVideos}
+                      setItems={() => {}}
+                      align="start"
+                      editable={false}
+                      preview={true}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </DialogContent>

@@ -1,13 +1,13 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.http.client.jdk.JdkHttpClient;
 import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -82,7 +82,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         log.debug("Cleaned model name from '{}' to '{}' (providerName='{}') for ChatModel",
                 modelParameters.name(), actualModelName, providerName);
 
-        var builder = OpenAiChatModel.builder()
+        var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
                 .modelName(actualModelName)
@@ -100,7 +100,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
-        return builder.build();
+        // Pass custom parameters directly to constructor since builder inheritance
+        // doesn't allow us to chain our custom methods cleanly
+        return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
     }
 
     @Override

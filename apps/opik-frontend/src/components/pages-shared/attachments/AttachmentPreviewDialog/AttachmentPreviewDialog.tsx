@@ -78,6 +78,23 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
   };
 
   const renderVideoContent = () => {
+    const isDataUrl = url.startsWith("data:");
+
+    if (isDataUrl) {
+      return (
+        <div className="flex max-h-[80vh] max-w-[90vw] items-center justify-center">
+          <video
+            src={url}
+            controls
+            className="max-h-[80vh] max-w-full"
+            preload="auto"
+          >
+            Your browser does not support embedded videos.
+          </video>
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center justify-center">
         <ReactPlayer playing url={url} controls />

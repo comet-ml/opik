@@ -11,6 +11,7 @@ interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
   stale: boolean;
+  traceId?: string;
 }
 
 interface PlaygroundOutputWithDatasetItem {
@@ -108,6 +109,11 @@ export type PlaygroundStore = {
     promptId: string,
     datasetItemId: string,
     changes: Partial<PlaygroundOutput>,
+  ) => void;
+  updateOutputTraceId: (
+    promptId: string,
+    datasetItemId: string,
+    traceId: string,
   ) => void;
   setDatasetVariables: (variables: string[]) => void;
   triggerProviderValidation: () => void;
@@ -212,6 +218,26 @@ const usePlaygroundStore = create<PlaygroundStore>()(
 
           const output = get(state.outputMap, key);
           const newOutput = { ...output, stale: false, ...changes };
+          const newOutputMap = { ...state.outputMap };
+
+          lodashSet(newOutputMap, key, newOutput);
+
+          return {
+            ...state,
+            outputMap: newOutputMap,
+          };
+        });
+      },
+      updateOutputTraceId: (promptId, datasetItemId, traceId) => {
+        set((state) => {
+          const key = datasetItemId
+            ? [promptId, "datasetItemMap", datasetItemId]
+            : [promptId];
+
+          const output = get(state.outputMap, key);
+          if (!output) return state;
+
+          const newOutput = { ...output, traceId };
           const newOutputMap = { ...state.outputMap };
 
           lodashSet(newOutputMap, key, newOutput);
@@ -353,6 +379,18 @@ export const useResetOutputMap = () =>
 
 export const useUpdateOutput = () =>
   usePlaygroundStore((state) => state.updateOutput);
+
+export const useUpdateOutputTraceId = () =>
+  usePlaygroundStore((state) => state.updateOutputTraceId);
+
+export const useTraceIdByPromptDatasetItemId = (
+  promptId: string,
+  datasetItemId?: string,
+) => {
+  return (
+    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.traceId ?? null
+  );
+};
 
 export const useDatasetVariables = () =>
   usePlaygroundStore((state) => state.datasetVariables);

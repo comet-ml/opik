@@ -29,6 +29,7 @@ const PlaygroundPage = () => {
       defaultValue: null,
     },
   );
+  const hasDataset = !!datasetId;
 
   const { DialogComponent } = useNavigationBlocker({
     condition: isRunning,
@@ -74,10 +75,12 @@ const PlaygroundPage = () => {
   return (
     <>
       <div
-        className="flex h-full w-fit min-w-full flex-col pt-6"
+        className={`flex h-full w-fit min-w-full flex-col pt-6 ${
+          hasDataset ? "h-auto w-full" : ""
+        }`}
         style={
           {
-            "--min-prompt-width": "560px",
+            "--min-prompt-width": "700px",
             "--item-gap": "1.5rem",
           } as React.CSSProperties
         }
@@ -86,6 +89,7 @@ const PlaygroundPage = () => {
           workspaceName={workspaceName}
           providerKeys={providerKeys}
           isPendingProviderKeys={isPendingProviderKeys}
+          hasDataset={hasDataset}
         />
 
         <div className="flex">

@@ -8,10 +8,15 @@ import {
   useUpdateOutput,
 } from "@/store/PlaygroundStore";
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
-import { LLMMessage, ProviderMessageType } from "@/types/llm";
+import {
+  LLMMessage,
+  ProviderMessageType,
+  MessageContent,
+  TextPart,
+  ImagePart,
+  VideoPart,
+} from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
-import { IMAGE_TAG_START, IMAGE_TAG_END } from "@/lib/llm";
-import { DATA_IMAGE_REGEX, IMAGE_URL_REGEX } from "@/lib/images";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import mustache from "mustache";
@@ -20,6 +25,7 @@ import set from "lodash/set";
 import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
+import { getTextFromMessageContent } from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -41,9 +47,13 @@ const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
-  const messageTags = getPromptMustacheTags(message.content);
-  const serializedDatasetItem = serializeTags(datasetItem, messageTags);
+  // Extract mustache tags from text content
+  const messageTags = getPromptMustacheTags(
+    getTextFromMessageContent(message.content),
+  );
 
+  // Validate variables exist
+  const serializedDatasetItem = serializeTags(datasetItem, messageTags);
   const notDefinedVariables = messageTags.filter((tag) =>
     isUndefined(get(serializedDatasetItem, tag)),
   );
@@ -52,75 +62,64 @@ const transformMessageIntoProviderMessage = (
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
 
-  // Wrap any raw image URLs or base64 data in the content with <<<image>>>...<<</image>>> tags
-  // This is needed when using datasets with images where mustache directly inserts image data
-  const renderedContent = wrapImageUrlsWithTags(
-    mustache.render(
+  // Handle content based on type
+  let processedContent: MessageContent;
+
+  if (typeof message.content === "string") {
+    // Text-only: render mustache and keep as string
+    processedContent = mustache.render(
       message.content,
       serializedDatasetItem,
       {},
-      {
-        // avoid escaping of a mustache
-        escape: (val: string) => val,
-      },
-    ),
-  );
+      { escape: (val: string) => val },
+    );
+  } else {
+    // Array with images/videos: render mustache in text, image URLs, and video URLs
+    processedContent = message.content.map((part) => {
+      if (part.type === "text") {
+        return {
+          type: "text",
+          text: mustache.render(
+            part.text,
+            serializedDatasetItem,
+            {},
+            { escape: (val: string) => val },
+          ),
+        } as TextPart;
+      } else if (part.type === "image_url") {
+        // Render mustache variables in image URLs
+        return {
+          type: "image_url",
+          image_url: {
+            url: mustache.render(
+              part.image_url.url,
+              serializedDatasetItem,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as ImagePart;
+      } else {
+        // Render mustache variables in video URLs
+        return {
+          type: "video_url",
+          video_url: {
+            url: mustache.render(
+              part.video_url.url,
+              serializedDatasetItem,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as VideoPart;
+      }
+    });
+  }
 
   return {
     role: message.role,
-    content: renderedContent,
+    content: processedContent,
   };
-};
-
-/**
- * Wraps raw image URLs and base64 data URLs in the content with <<<image>>>...<<</image>>> tags.
- * Detects both:
- * - data:image/...;base64,... (base64 encoded images)
- * - http(s)://... image URLs
- * - [image_N] placeholders (from processInputData)
- */
-const wrapImageUrlsWithTags = (content: string): string => {
-  /**
-   * Replacer function that wraps matches with image tags if not already wrapped.
-   * Checks the surrounding context at the match position to avoid double-wrapping.
-   */
-  const wrapIfNotAlreadyWrapped = (
-    match: string,
-    offset: number,
-    string: string,
-  ): string => {
-    const prefix = string.slice(
-      Math.max(0, offset - IMAGE_TAG_START.length),
-      offset,
-    );
-    const suffix = string.slice(
-      offset + match.length,
-      offset + match.length + IMAGE_TAG_END.length,
-    );
-
-    // Already wrapped at this position
-    if (prefix === IMAGE_TAG_START && suffix === IMAGE_TAG_END) {
-      return match;
-    }
-
-    return `${IMAGE_TAG_START}${match}${IMAGE_TAG_END}`;
-  };
-
-  let processedContent = content;
-
-  // Wrap data URLs
-  processedContent = processedContent.replace(
-    DATA_IMAGE_REGEX,
-    wrapIfNotAlreadyWrapped,
-  );
-
-  // Wrap HTTP(S) image URLs
-  processedContent = processedContent.replace(
-    IMAGE_URL_REGEX,
-    wrapIfNotAlreadyWrapped,
-  );
-
-  return processedContent;
 };
 
 interface UsePromptDatasetItemCombinationArgs {

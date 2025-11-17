@@ -6,6 +6,7 @@ import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { ATTACHMENT_ICON_MAP } from "@/constants/attachments";
+import VideoThumbnail from "../VideoThumbnail/VideoThumbnail";
 
 export type AttachmentThumbnailProps = {
   previewData: AttachmentPreviewData;
@@ -94,6 +95,8 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
           alt={name}
           className="size-full object-contain"
         />
+      ) : type === ATTACHMENT_TYPE.VIDEO ? (
+        <VideoThumbnail videoUrl={url} name={name} />
       ) : (
         <div className="flex size-full items-center justify-center rounded-sm bg-primary-foreground">
           <Icon className="size-8 text-slate-300" strokeWidth={1.33} />

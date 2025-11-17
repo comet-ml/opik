@@ -30,3 +30,17 @@ export type AttachmentPreviewData = {
   name: string;
   url: string;
 };
+
+export type ParsedVideoData = {
+  url: string;
+  name: string;
+  /**
+   * Optional mime type hint for rendering (e.g. video/mp4).
+   * When provided, consumers can display or transform the video appropriately.
+   */
+  mimeType?: string;
+};
+
+export type ParsedMediaData =
+  | (ParsedImageData & { type: ATTACHMENT_TYPE.IMAGE })
+  | (ParsedVideoData & { type: ATTACHMENT_TYPE.VIDEO });

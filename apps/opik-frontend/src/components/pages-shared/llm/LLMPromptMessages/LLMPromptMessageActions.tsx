@@ -6,11 +6,12 @@ import React, {
   useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { RotateCcw, Save, Wand2 } from "lucide-react";
+import { Copy, RotateCcw, Save, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
+import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
-import { LLMMessage } from "@/types/llm";
+import { LLMMessage, MessageContent } from "@/types/llm";
 import { PromptVersion } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
@@ -26,6 +27,11 @@ import {
   COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  getTextFromMessageContent,
+  convertMessageToMessagesJson,
+  parsePromptVersionContent,
+} from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
 
@@ -34,7 +40,7 @@ export interface ImprovePromptConfig {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   workspaceName: string;
-  onAccept: (messageId: string, improvedContent: string) => void;
+  onAccept: (messageId: string, improvedContent: MessageContent) => void;
 }
 
 type LLMPromptLibraryActionsProps = {
@@ -75,7 +81,10 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     { enabled: !!promptId },
   );
 
-  const hasContent = Boolean(content?.trim());
+  // Check if content has meaningful text
+  const hasContent = useMemo(() => {
+    return Boolean(getTextFromMessageContent(content).trim());
+  }, [content]);
   const showGenerateButton = improvePromptConfig && !hasContent;
   const showImproveButton = improvePromptConfig && hasContent;
   const hasModel = Boolean(improvePromptConfig?.model?.trim());
@@ -144,7 +153,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   const resetHandler = useCallback(() => {
     onChangeMessage({
-      content: promptData!.latest_version?.template ?? "",
+      content: parsePromptVersionContent(promptData!.latest_version),
       promptVersionId: promptData!.latest_version?.id,
     });
   }, [onChangeMessage, promptData]);
@@ -153,25 +162,48 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     (version: PromptVersion) => {
       onChangeMessage({
         promptId: version.prompt_id,
-        content: version.template ?? "",
+        content: parsePromptVersionContent(version),
         promptVersionId: version.id,
       });
     },
     [onChangeMessage],
   );
 
+  const handleCopyJson = useCallback(async () => {
+    try {
+      const jsonString = convertMessageToMessagesJson(message);
+      await navigator.clipboard.writeText(jsonString);
+      toast({
+        title: "Copied to clipboard",
+        description: "Prompt copied successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to copy",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
+      });
+    }
+  }, [message, toast]);
+
   const resetDisabled =
     !promptId ||
     promptData?.id !== promptId ||
     (promptData?.id === promptId &&
-      message.content === promptData?.latest_version?.template);
+      isEqual(
+        message.content,
+        parsePromptVersionContent(promptData?.latest_version),
+      ));
 
   const saveDisabled = message.content === "";
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      message.content !== promptData?.latest_version?.template,
+      !isEqual(
+        message.content,
+        parsePromptVersionContent(promptData?.latest_version),
+      ),
   );
   isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning
@@ -223,7 +255,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     ) {
       selectedPromptIdRef.current = undefined;
       onChangeMessage({
-        content: promptData.latest_version?.template ?? "",
+        content: parsePromptVersionContent(promptData.latest_version),
         promptVersionId: promptData.latest_version?.id,
       });
       setIsLoading(false);
@@ -311,6 +343,18 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           </Button>
         </TooltipWrapper>
 
+        <TooltipWrapper content="Copy prompt">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={saveDisabled}
+            onClick={handleCopyJson}
+            type="button"
+          >
+            <Copy />
+          </Button>
+        </TooltipWrapper>
+
         <Separator orientation="vertical" className="ml-1 mr-2 h-6" />
 
         <ConfirmDialog
@@ -324,7 +368,11 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           open={open === "save"}
           setOpen={setOpen}
           prompt={promptData}
-          template={content}
+          template={convertMessageToMessagesJson(message)}
+          metadata={{
+            created_from: "opik_ui",
+            type: "messages_json",
+          }}
           onSave={onSaveHandler}
         />
       </div>

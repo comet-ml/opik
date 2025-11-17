@@ -24,7 +24,12 @@ describe("processInputData", () => {
 
   it("should return empty result when input is undefined", () => {
     const result = processInputData(undefined);
-    expect(result).toEqual({ images: [], formattedData: undefined });
+    expect(result).toEqual({
+      images: [],
+      formattedData: undefined,
+      videos: [],
+      media: [],
+    });
   });
 
   it("should return empty images array when input has no images", () => {

@@ -15,12 +15,14 @@ interface ResizableDivContainerProps {
   workspaceName: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
+  hasDataset: boolean;
 }
 
 const ResizablePromptContainer = ({
   workspaceName,
   providerKeys,
   isPendingProviderKeys,
+  hasDataset,
 }: ResizableDivContainerProps) => {
   const defaultHeight = calculateDefaultHeight();
 
@@ -64,6 +66,7 @@ const ResizablePromptContainer = ({
           providerKeys={providerKeys}
           isPendingProviderKeys={isPendingProviderKeys}
           onResetHeight={handleResetHeight}
+          hasDataset={hasDataset}
         />
       </div>
     </Resizable>
