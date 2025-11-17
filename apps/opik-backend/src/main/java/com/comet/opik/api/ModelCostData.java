@@ -11,7 +11,9 @@ import lombok.Builder;
 public record ModelCostData(String litellmProvider,
         String inputCostPerToken,
         String outputCostPerToken,
+        String outputCostPerVideoPerSecond,
         String cacheCreationInputTokenCost,
         String cacheReadInputTokenCost,
+        String mode,
         boolean supportsVision) {
 }

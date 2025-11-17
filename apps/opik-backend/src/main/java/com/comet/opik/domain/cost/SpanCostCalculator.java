@@ -1,5 +1,6 @@
 package com.comet.opik.domain.cost;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
@@ -7,13 +8,16 @@ import java.util.Map;
 
 @UtilityClass
 class SpanCostCalculator {
-    public static BigDecimal textGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+    private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
+
+    public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }
 
-    public static BigDecimal textGenerationWithCacheCostOpenAI(ModelPrice modelPrice, Map<String, Integer> usage) {
+    public static BigDecimal textGenerationWithCacheCostOpenAI(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
 
         // In OpenAI usage format, input tokens includes the cached input tokens, so we need to substract them to compute the correct input token count
         // Don't generalize yet as other providers seems to separate the cached tokens from non-cached tokens
@@ -38,13 +42,15 @@ class SpanCostCalculator {
                 .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
 
-    public static BigDecimal textGenerationWithCacheCostAnthropic(ModelPrice modelPrice, Map<String, Integer> usage) {
+    public static BigDecimal textGenerationWithCacheCostAnthropic(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
         return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.input_tokens",
                 "original_usage.output_tokens", "original_usage.cache_read_input_tokens",
                 "original_usage.cache_creation_input_tokens");
     }
 
-    public static BigDecimal textGenerationWithCacheCostBedrock(ModelPrice modelPrice, Map<String, Integer> usage) {
+    public static BigDecimal textGenerationWithCacheCostBedrock(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
         return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.inputTokens",
                 "original_usage.outputTokens", "original_usage.cacheReadInputTokens",
                 "original_usage.cacheWriteInputTokens");
@@ -63,8 +69,8 @@ class SpanCostCalculator {
      * @param cacheCreationInputTokensKey Key for cache creation tokens in usage map
      * @return The calculated cost as a BigDecimal
      */
-    private static BigDecimal textGenerationWithCachedTokensNotIncludedInCost(ModelPrice modelPrice,
-            Map<String, Integer> usage,
+    private static BigDecimal textGenerationWithCachedTokensNotIncludedInCost(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage,
             String inputTokensKey, String outputTokensKey, String cacheReadInputTokensKey,
             String cacheCreationInputTokensKey) {
 
@@ -80,7 +86,21 @@ class SpanCostCalculator {
                         .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheReadInputTokensKey, 0))));
     }
 
-    public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+    public static BigDecimal defaultCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
         return BigDecimal.ZERO;
+    }
+
+    public static BigDecimal videoGenerationCost(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+        int durationSeconds = usage.getOrDefault(VIDEO_DURATION_KEY, 0);
+        BigDecimal videoPrice = modelPrice.videoOutputPrice();
+        if (durationSeconds <= 0 || !isPositive(videoPrice)) {
+            return BigDecimal.ZERO;
+        }
+        return videoPrice.multiply(BigDecimal.valueOf(durationSeconds));
+    }
+
+    private static boolean isPositive(BigDecimal value) {
+        return value != null && value.compareTo(BigDecimal.ZERO) > 0;
     }
 }

@@ -4,7 +4,9 @@ import com.comet.opik.api.ModelCostData;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
 
@@ -47,8 +49,7 @@ public class CostService {
         }
     }
 
-    private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
+    private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
@@ -101,20 +102,19 @@ public class CostService {
                 BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
+                BigDecimal videoOutputPrice = Optional.ofNullable(modelCost.outputCostPerVideoPerSecond())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
-                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
-                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
-                            SpanCostCalculator::textGenerationCost);
-                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    calculator = SpanCostCalculator::textGenerationCost;
-                }
+                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
+                        inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
+                        videoOutputPrice);
 
                 parsedModelPrices.put(
                         createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                cacheReadInputTokenPrice, calculator));
+                                cacheReadInputTokenPrice, videoOutputPrice, calculator));
             }
         });
 
@@ -137,5 +137,69 @@ public class CostService {
         }
 
         return true;
+    }
+
+    private static BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> resolveCalculator(
+            String provider,
+            ModelMode mode,
+            BigDecimal inputPrice,
+            BigDecimal outputPrice,
+            BigDecimal cacheCreationInputTokenPrice,
+            BigDecimal cacheReadInputTokenPrice,
+            BigDecimal videoOutputPrice) {
+
+        if (mode.isVideoGeneration() && isPositive(videoOutputPrice)) {
+            return SpanCostCalculator::videoGenerationCost;
+        }
+
+        if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
+            return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+        }
+
+        if (isPositive(inputPrice) || isPositive(outputPrice)) {
+            return SpanCostCalculator::textGenerationCost;
+        }
+
+        return SpanCostCalculator::defaultCost;
+    }
+
+    private static boolean isPositive(BigDecimal value) {
+        return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
+    }
+
+    @RequiredArgsConstructor
+    private enum ModelMode {
+        TEXT_GENERATION("text_generation"),
+        CHAT("chat"),
+        EMBEDDING("embedding"),
+        COMPLETION("completion"),
+        IMAGE_GENERATION("image_generation"),
+        AUDIO_TRANSCRIPTION("audio_transcription"),
+        AUDIO_SPEECH("audio_speech"),
+        MODERATION("moderation"),
+        RERANK("rerank"),
+        SEARCH("search"),
+        VIDEO_GENERATION("video_generation");
+
+        private static final ModelMode DEFAULT = TEXT_GENERATION;
+        private final String value;
+
+        static ModelMode fromValue(String rawValue) {
+            if (StringUtils.isBlank(rawValue)) {
+                return DEFAULT;
+            }
+
+            for (ModelMode mode : values()) {
+                if (mode.value.equalsIgnoreCase(rawValue)) {
+                    return mode;
+                }
+            }
+
+            return DEFAULT;
+        }
+
+        boolean isVideoGeneration() {
+            return this == VIDEO_GENERATION;
+        }
     }
 }
