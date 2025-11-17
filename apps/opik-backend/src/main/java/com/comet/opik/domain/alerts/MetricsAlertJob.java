@@ -83,27 +83,17 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         }
         log.debug("Starting metrics alert job");
 
-        // Use distributed lock to prevent overlapping runs between different instances
-        lockService.bestEffortLock(
-                METRICS_ALERT_LOCK_KEY,
-                Mono.fromCallable(() -> alertService.findAllByWorkspaceAndEventTypes(null,
-                        SUPPORTED_EVENT_TYPES))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .flatMapMany(Flux::fromIterable)
-                        .takeWhile(__ -> !isInterrupted())
-                        .flatMap(this::processAlert)
-                        .onErrorContinue((throwable, alert) -> log.error("Failed to process metrics alert '{}': {}",
-                                alert, throwable.getMessage(), throwable))
-                        .doOnComplete(() -> log.debug("MetricsAlertJob finished processing all alerts"))
-                        .then(),
-                Mono.defer(() -> {
-                    log.info("Could not acquire lock for metrics alert job, another job instance is running");
-                    return Mono.empty();
-                }),
-                webhookConfig.getMetrics().getMetricsAlertJobTimeout().toJavaDuration(),
-                webhookConfig.getMetrics().getMetricsAlertJobLockWaitTimeout().toJavaDuration()).subscribe(
-                        __ -> log.debug("Metrics alert job execution completed"),
-                        error -> log.error("Metrics alert job interrupted while acquiring lock", error));
+        Mono.fromCallable(() -> alertService.findAllByWorkspaceAndEventTypes(null,
+                SUPPORTED_EVENT_TYPES))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMapMany(Flux::fromIterable)
+                .takeWhile(__ -> !isInterrupted())
+                .flatMap(this::processAlert)
+                .onErrorContinue((throwable, alert) -> log.error("Failed to process metrics alert '{}': {}",
+                        alert, throwable.getMessage(), throwable))
+                .doOnComplete(() -> log.debug("MetricsAlertJob finished processing all alerts"))
+                .then()
+                .block();
     }
 
     @Override
