@@ -13,10 +13,11 @@ import dev.langchain4j.model.openai.internal.chat.InputAudio;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.PdfFile;
 import dev.langchain4j.model.openai.internal.chat.Role;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import static dev.langchain4j.model.openai.internal.chat.Role.USER;
 import static java.util.Collections.unmodifiableList;
@@ -28,6 +29,8 @@ import static java.util.Collections.unmodifiableList;
 @JsonDeserialize(builder = OpikUserMessage.Builder.class)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+@EqualsAndHashCode
+@ToString
 public final class OpikUserMessage implements Message {
 
     @JsonProperty
@@ -52,37 +55,6 @@ public final class OpikUserMessage implements Message {
 
     public String name() {
         return name;
-    }
-
-    @Override
-    public boolean equals(Object another) {
-        if (this == another) return true;
-        return another instanceof OpikUserMessage
-                && equalTo((OpikUserMessage) another);
-    }
-
-    private boolean equalTo(OpikUserMessage another) {
-        return Objects.equals(role, another.role)
-                && Objects.equals(content, another.content)
-                && Objects.equals(name, another.name);
-    }
-
-    @Override
-    public int hashCode() {
-        int h = 5381;
-        h += (h << 5) + Objects.hashCode(role);
-        h += (h << 5) + Objects.hashCode(content);
-        h += (h << 5) + Objects.hashCode(name);
-        return h;
-    }
-
-    @Override
-    public String toString() {
-        return "OpikUserMessage{"
-                + "role=" + role
-                + ", content=" + content
-                + ", name=" + name
-                + "}";
     }
 
     public static OpikUserMessage from(String text) {
