@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...api_objects import chat_prompt
+from ... import _llm_calls
 from ...utils.prompt_segments import (
     apply_segment_updates,
     extract_prompt_segments,
@@ -41,10 +42,11 @@ def _tool_metadata_json(metadata: dict[str, Any]) -> str:
 
 
 def generate_tool_description_variations(
-    optimizer: Any,
     base_prompt: chat_prompt.ChatPrompt,
     context: EvolutionaryMCPContext,
     num_variations: int,
+    model_parameters: dict[str, Any],
+    optimization_id: str | None,
 ) -> list[chat_prompt.ChatPrompt]:
     if num_variations <= 0:
         return []
@@ -62,7 +64,7 @@ def generate_tool_description_variations(
     ).strip()
 
     try:
-        response = optimizer._call_model(  # type: ignore[attr-defined]
+        response = _llm_calls.call_model(
             messages=[
                 {
                     "role": "system",
@@ -71,7 +73,8 @@ def generate_tool_description_variations(
                 {"role": "user", "content": instruction},
             ],
             is_reasoning=True,
-            optimization_id=getattr(optimizer, "_current_optimization_id", None),
+            optimization_id=optimization_id,
+            model_parameters=model_parameters,
         )
 
         payload = _extract_json_payload(response)
@@ -108,24 +111,25 @@ def generate_tool_description_variations(
 
 
 def initialize_population_mcp(
-    optimizer: Any,
     prompt: chat_prompt.ChatPrompt,
     context: EvolutionaryMCPContext,
+    model_parameters: dict[str, Any],
+    optimization_id: str | None,
+    population_size: int,
+    verbose: int,
 ) -> list[chat_prompt.ChatPrompt]:
-    population_size = getattr(optimizer, "population_size", 1)
-    with reporting.initializing_population(
-        verbose=getattr(optimizer, "verbose", 1)
-    ) as init_pop_report:
+    with reporting.initializing_population(verbose=verbose) as init_pop_report:
         init_pop_report.start(population_size)
 
         population = [prompt]
         num_to_generate = max(0, population_size - 1)
         if num_to_generate > 0:
             candidates = generate_tool_description_variations(
-                optimizer,
                 prompt,
                 context,
                 num_to_generate,
+                model_parameters,
+                optimization_id,
             )
             population.extend(candidates[:num_to_generate])
 
@@ -146,11 +150,18 @@ def initialize_population_mcp(
 
 
 def tool_description_mutation(
-    optimizer: Any,
     prompt: chat_prompt.ChatPrompt,
     context: EvolutionaryMCPContext,
+    model_parameters: dict[str, Any],
+    optimization_id: str | None,
 ) -> chat_prompt.ChatPrompt | None:
-    candidates = generate_tool_description_variations(optimizer, prompt, context, 1)
+    candidates = generate_tool_description_variations(
+        base_prompt=prompt,
+        context=context,
+        num_variations=1,
+        model_parameters=model_parameters,
+        optimization_id=optimization_id,
+    )
     if not candidates:
         return None
 

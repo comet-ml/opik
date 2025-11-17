@@ -11,14 +11,14 @@ from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer import task_evaluator
 
-from ... import _throttle
+from ... import _throttle, helpers
 from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
 from . import reporting
 import re
-
+from ... import _llm_calls
 from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
@@ -217,13 +217,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             subset_size = None  # Use all items for final checks
             logger.debug("Using full dataset for evaluation")
 
-        configuration_updates = self._drop_none(
+        configuration_updates = helpers.drop_none(
             {
                 "n_samples": subset_size,
                 "use_full_dataset": use_full_dataset,
             }
         )
-        meta_metadata = self._drop_none(
+        meta_metadata = helpers.drop_none(
             {
                 "optimization_id": optimization_id,
                 "stage": "trial_evaluation" if not use_full_dataset else "final_eval",
@@ -586,7 +586,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         initial_prompt = prompt
 
         current_prompt = prompt
-        configuration_updates = self._drop_none(
+        configuration_updates = helpers.drop_none(
             {
                 "max_trials": max_trials,
                 "prompts_per_round": self.prompts_per_round,
@@ -950,13 +950,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call["optimizer_name"] = self.__class__.__name__
                 metadata_for_call["opik_call_type"] = "optimization_algorithm"
 
-                # Use _call_model for optimization algorithm
-                content = self._call_model(
+                content = _llm_calls.call_model(
                     messages=[
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
                     optimization_id=optimization_id,
+                    model_parameters=self.model_parameters,
+                    project_name=self.project_name,
                     metadata=metadata_for_call,
                 )
                 logger.debug(f"Raw response from reasoning model: {content}")
@@ -1124,12 +1125,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metadata_for_call_tools["optimizer_name"] = self.__class__.__name__
                 metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
 
-                content = self._call_model(
+                content = _llm_calls.call_model(
                     messages=[
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": instruction},
                     ],
                     optimization_id=optimization_id,
+                    model_parameters=self.model_parameters,
+                    project_name=self.project_name,
                     metadata=metadata_for_call_tools,
                 )
 
