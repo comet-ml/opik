@@ -3,6 +3,7 @@ package com.comet.opik.domain.evaluators;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.LogItem;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
@@ -27,8 +28,8 @@ import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
-import static com.comet.opik.utils.TemplateUtils.QueryItem;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
 public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
@@ -81,7 +82,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
                     log.info("Finding logs with criteria: {}", criteria);
 
-                    var template = new ST(FIND_ALL);
+                    var template = TemplateUtils.newST(FIND_ALL);
 
                     bindTemplateParameters(criteria, template);
 
@@ -148,7 +149,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(INSERT_STATEMENT);
+                    var template = TemplateUtils.newST(INSERT_STATEMENT);
 
                     List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
                     template.add("items", queryItems);

@@ -80,9 +80,18 @@ Before adding a new dependency, ensure:
 
 ### **Templating**
 ```xml
-<!-- Mustache.java -->
+<!-- Mustache.java for view templates -->
 <mustache.version>0.9.10</mustache.version>
+
+<!-- StringTemplate4 for SQL query templates -->
+<stringtemplate.version>3.50.0</stringtemplate.version>
 ```
+
+**StringTemplate4 Usage**:
+- ⚠️ **CRITICAL**: Always use `TemplateUtils.newST()` factory method
+- ❌ **NEVER** use `new ST(template)` directly - causes memory leaks
+- 📦 **Import**: `com.comet.opik.utils.template.TemplateUtils`
+- 📚 **Documentation**: See `code_quality.mdc` for detailed usage patterns
 
 ### **AI/ML Libraries**
 ```xml
