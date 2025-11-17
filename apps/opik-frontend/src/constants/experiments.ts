@@ -8,6 +8,7 @@ export const EXPERIMENT_ITEM_METADATA_PREFIX = "metadata";
 
 export const OPTIMIZATION_METADATA_EXCLUDED_KEY = "configuration";
 export const OPTIMIZATION_OPTIMIZER_KEY = "optimizer";
+export const OPTIMIZATION_AGENT_CLASS_KEY = "agent_class";
 export const OPTIMIZATION_PROMPT_KEY = `${OPTIMIZATION_METADATA_EXCLUDED_KEY}.prompt`;
 export const OPTIMIZATION_EXAMPLES_KEY = `${OPTIMIZATION_METADATA_EXCLUDED_KEY}.examples`;
 
