@@ -1,5 +1,8 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
@@ -46,17 +49,21 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
     private final Boolean strictJsonSchema = false;
     private final Boolean returnThinking = false;
 
-    // Custom parameters to inject at request time
-    private final Map<String, Object> customParameters;
+    // Custom parameters to inject at request time (stored as JsonNode, converted to Map when needed)
+    private final JsonNode customParameters;
+    private static final ObjectMapper objectMapper = JsonUtils.getMapper();
 
     /**
      * Constructor that takes the parent's builder and custom parameters.
      * We bypass the builder pattern for custom parameters because Java builder inheritance
      * doesn't allow clean method chaining when parent methods return the parent builder type.
+     *
+     * @param builder The OpenAI chat model builder with standard parameters
+     * @param customParameters Additional parameters as JsonNode (will be converted to Map<String,Object> at request time)
      */
-    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, Map<String, Object> customParameters) {
+    public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters) {
         super(builder);
-        this.customParameters = customParameters != null ? customParameters : Map.of();
+        this.customParameters = customParameters;
 
         // Extract client via reflection since it's private in parent
         try {
@@ -110,7 +117,8 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                 // Use our stored custom parameters instead of parameters.customParameters()
                 // This allows us to inject custom parameters from LlmAsJudgeModelParameters
                 // without relying on LangChain4j's builder which doesn't support them
-                .customParameters(this.customParameters)
+                // Convert JsonNode to Map<String, Object> for the request
+                .customParameters(convertCustomParameters())
                 .build();
 
         ParsedAndRawResponse<ChatCompletionResponse> parsedAndRawResponse = withRetryMappingExceptions(
@@ -193,5 +201,24 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
         }
 
         return builder.build();
+    }
+
+    /**
+     * Convert JsonNode custom parameters to Map<String, Object> for ChatCompletionRequest.
+     * Returns null if customParameters is null, otherwise converts using Jackson ObjectMapper.
+     */
+    private Map<String, Object> convertCustomParameters() {
+        if (customParameters == null || customParameters.isNull()) {
+            return null;
+        }
+
+        try {
+            // Convert JsonNode to Map<String, Object>
+            return objectMapper.convertValue(customParameters,
+                    objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
+        } catch (IllegalArgumentException e) {
+            log.error("Failed to convert custom parameters from JsonNode to Map", e);
+            return null;
+        }
     }
 }
