@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.ConditionalGZipFilter;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -20,11 +21,14 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
+import org.glassfish.jersey.client.ClientProperties;
 import org.glassfish.jersey.media.multipart.FormDataBodyPart;
 import org.glassfish.jersey.media.multipart.FormDataMultiPart;
 import org.glassfish.jersey.media.multipart.MultiPartFeature;
@@ -44,7 +48,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -100,7 +103,7 @@ class DatasetsCsvUploadResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
-    private jakarta.ws.rs.client.Client registeredClient;
+    private Client registeredClient;
     private DatasetResourceClient datasetResourceClient;
     private DatasetItemDAO datasetItemDAO;
 
@@ -111,8 +114,8 @@ class DatasetsCsvUploadResourceTest {
 
         // Configure client but DON'T use GrizzlyConnectorProvider for multipart support
         // GrizzlyConnector doesn't properly handle multipart Content-Type headers
-        client.getClient().register(new com.comet.opik.api.resources.utils.ConditionalGZipFilter());
-        client.getClient().property(org.glassfish.jersey.client.ClientProperties.READ_TIMEOUT, 35_000);
+        client.getClient().register(new ConditionalGZipFilter());
+        client.getClient().property(ClientProperties.READ_TIMEOUT, 35_000);
         // Note: NOT setting connectorProvider - use default HttpUrlConnector for multipart
 
         // Register MultiPartFeature on the client and capture the registered client
@@ -139,7 +142,7 @@ class DatasetsCsvUploadResourceTest {
 
     @Test
     @DisplayName("Upload CSV file successfully - should return 202 Accepted and process items asynchronously")
-    void uploadCsvFile__success() throws IOException {
+    void uploadCsvFile__success() {
         // Given: Create a dataset
         Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                 .id(null)
@@ -200,7 +203,7 @@ class DatasetsCsvUploadResourceTest {
 
     @Test
     @DisplayName("Upload CSV file with large batch - should process in batches")
-    void uploadCsvFile__largeBatch() throws IOException {
+    void uploadCsvFile__largeBatch() {
         // Given: Create a dataset
         Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                 .id(null)
@@ -234,7 +237,7 @@ class DatasetsCsvUploadResourceTest {
 
     @Test
     @DisplayName("Upload CSV file with special characters - should handle correctly")
-    void uploadCsvFile__specialCharacters() throws IOException {
+    void uploadCsvFile__specialCharacters() {
         // Given: Create a dataset
         Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                 .id(null)
@@ -279,7 +282,7 @@ class DatasetsCsvUploadResourceTest {
                 });
     }
 
-    private jakarta.ws.rs.core.Response uploadCsvFile(UUID datasetId, String csvContent) {
+    private Response uploadCsvFile(UUID datasetId, String csvContent) {
         byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
         InputStream csvInputStream = new ByteArrayInputStream(csvBytes);
 
