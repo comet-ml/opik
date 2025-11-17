@@ -57,9 +57,14 @@ class ParameterOptimizer(BaseOptimizer):
         n_threads: int = 4,
         verbose: int = 1,
         seed: int = 42,
+        name: str | None = None,
     ) -> None:
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.default_n_trials = default_n_trials
         self.n_threads = n_threads
@@ -154,7 +159,8 @@ class ParameterOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=metric_name,
-            metadata={"optimizer": self.__class__.__name__},
+            name=self.name,
+            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id

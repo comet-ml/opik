@@ -70,9 +70,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_threads: int = 12,
         verbose: int = 1,
         seed: int = 42,
+        name: str | None = None,
     ):
         super().__init__(
-            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+            model=model,
+            verbose=verbose,
+            seed=seed,
+            model_parameters=model_parameters,
+            name=name,
         )
         self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches
@@ -434,7 +439,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
-            metadata={"optimizer": self.__class__.__name__},
+            name=self.name,
+            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
