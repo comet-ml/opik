@@ -33,7 +33,7 @@ import static dev.langchain4j.model.openai.internal.OpenAiUtils.validate;
  * This extends OpenAiChatModel to override the doChat() method where we'll intercept
  * and convert VideoContent to OpikUserMessage format before serialization.
  *
- * Use the builder() method to create instances.
+ * This is a hack that we can remove once they add support for video content in the OpenAI API.
  */
 @Slf4j
 public class OpikOpenAiChatModel extends OpenAiChatModel {
@@ -74,7 +74,6 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
 
     @Override
     public ChatResponse doChat(ChatRequest chatRequest) {
-        log.debug("OpikOpenAiChatModel.doChat() - checking for VideoContent");
 
         OpenAiChatRequestParameters parameters = (OpenAiChatRequestParameters) chatRequest.parameters();
         validate(parameters);
@@ -167,7 +166,6 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
         }
 
         // Has video - convert to OpikUserMessage
-        log.debug("Converting UserMessage with VideoContent to OpikUserMessage");
         OpikUserMessage.Builder builder = OpikUserMessage.builder();
 
         for (Content content : userMessage.contents()) {
@@ -177,7 +175,6 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                 builder.addImageUrl(imageContent.image().url().toString());
             } else if (content instanceof VideoContent videoContent) {
                 builder.addVideoUrl(videoContent.video().url().toString());
-                log.debug("Added VideoContent with URL: '{}'", videoContent.video().url());
             }
             // Other content types (audio, pdf) are not supported yet in OpikUserMessage
         }

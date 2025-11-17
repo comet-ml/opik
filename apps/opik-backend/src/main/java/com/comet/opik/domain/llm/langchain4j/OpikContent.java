@@ -10,12 +10,14 @@ import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.InputAudio;
 import dev.langchain4j.model.openai.internal.chat.PdfFile;
-
-import java.util.Objects;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 @JsonDeserialize(builder = OpikContent.Builder.class)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+@EqualsAndHashCode
+@ToString
 public final class OpikContent {
 
     @JsonProperty
@@ -62,46 +64,6 @@ public final class OpikContent {
 
     public PdfFile file() {
         return file;
-    }
-
-    @Override
-    public boolean equals(Object another) {
-        if (this == another) return true;
-        return another instanceof OpikContent
-                && equalTo((OpikContent) another);
-    }
-
-    private boolean equalTo(OpikContent another) {
-        return Objects.equals(type, another.type)
-                && Objects.equals(text, another.text)
-                && Objects.equals(imageUrl, another.imageUrl)
-                && Objects.equals(videoUrl, another.videoUrl)
-                && Objects.equals(inputAudio, another.inputAudio)
-                && Objects.equals(file, another.file);
-    }
-
-    @Override
-    public int hashCode() {
-        int h = 5381;
-        h += (h << 5) + Objects.hashCode(type);
-        h += (h << 5) + Objects.hashCode(text);
-        h += (h << 5) + Objects.hashCode(imageUrl);
-        h += (h << 5) + Objects.hashCode(videoUrl);
-        h += (h << 5) + Objects.hashCode(inputAudio);
-        h += (h << 5) + Objects.hashCode(file);
-        return h;
-    }
-
-    @Override
-    public String toString() {
-        return "OpikContent{" +
-                "type=" + type +
-                ", text=" + text +
-                ", imageUrl=" + imageUrl +
-                ", videoUrl=" + videoUrl +
-                ", inputAudio=" + inputAudio +
-                ", file=" + file +
-                "}";
     }
 
     public static Builder builder() {

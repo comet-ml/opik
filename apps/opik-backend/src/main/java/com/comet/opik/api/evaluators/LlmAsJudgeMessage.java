@@ -1,9 +1,13 @@
 package com.comet.opik.api.evaluators;
 
+import com.comet.opik.utils.LlmAsJudgeMessageContentDeserializer;
+import com.comet.opik.utils.LlmAsJudgeMessageContentSerializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import dev.langchain4j.data.message.ChatMessageType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -26,7 +30,7 @@ public record LlmAsJudgeMessage(
                 AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull ChatMessageType role,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) @NotNull Object content){
+                AutomationRuleEvaluator.View.Write.class}) @JsonSerialize(using = LlmAsJudgeMessageContentSerializer.class) @JsonDeserialize(using = LlmAsJudgeMessageContentDeserializer.class) @NotNull Object content){
 
     /**
      * Check if content is a string.
@@ -51,61 +55,28 @@ public record LlmAsJudgeMessage(
     }
 
     /**
-     * Get content as a list of content parts (when it is one).
-     * Handles conversion from LinkedHashMap (when deserialized from DB) to LlmAsJudgeMessageContent.
+     * Get content as a list of content parts.
+     * @return the content as a properly typed list
+     * @throws IllegalStateException if content is not a List or contains wrong types
      */
     @SuppressWarnings("unchecked")
     public List<LlmAsJudgeMessageContent> asContentList() {
-        if (!(content instanceof List<?>)) {
-            throw new IllegalStateException("Content is not a List");
+        if (!(content instanceof List<?> list)) {
+            throw new IllegalStateException("Content is not a List, got: " + content.getClass());
         }
 
-        List<?> rawList = (List<?>) content;
-        if (rawList.isEmpty()) {
+        if (list.isEmpty()) {
             return List.of();
         }
 
-        // If already proper type, return as is
-        if (rawList.get(0) instanceof LlmAsJudgeMessageContent) {
-            return (List<LlmAsJudgeMessageContent>) content;
+        // Verify all elements are the correct type
+        if (!(list.get(0) instanceof LlmAsJudgeMessageContent)) {
+            throw new IllegalStateException(
+                    "Content list contains wrong type. Expected LlmAsJudgeMessageContent, got: "
+                            + list.get(0).getClass()
+                            + ". This indicates a deserialization problem in the mapper.");
         }
 
-        // Otherwise, convert from LinkedHashMap to LlmAsJudgeMessageContent
-        return rawList.stream()
-                .map(obj -> {
-                    if (obj instanceof java.util.Map<?, ?> map) {
-                        return LlmAsJudgeMessageContent.builder()
-                                .type((String) map.get("type"))
-                                .text((String) map.get("text"))
-                                .imageUrl(map.get("image_url") != null
-                                        ? convertToImageUrl(map.get("image_url"))
-                                        : null)
-                                .videoUrl(map.get("video_url") != null
-                                        ? convertToVideoUrl(map.get("video_url"))
-                                        : null)
-                                .build();
-                    }
-                    throw new IllegalStateException("Unexpected content part type: " + obj.getClass());
-                })
-                .toList();
-    }
-
-    private static LlmAsJudgeMessageContent.ImageUrl convertToImageUrl(Object obj) {
-        if (obj instanceof java.util.Map<?, ?> map) {
-            return LlmAsJudgeMessageContent.ImageUrl.builder()
-                    .url((String) map.get("url"))
-                    .detail((String) map.get("detail"))
-                    .build();
-        }
-        throw new IllegalStateException("Unexpected image_url type: " + obj.getClass());
-    }
-
-    private static LlmAsJudgeMessageContent.VideoUrl convertToVideoUrl(Object obj) {
-        if (obj instanceof java.util.Map<?, ?> map) {
-            return LlmAsJudgeMessageContent.VideoUrl.builder()
-                    .url((String) map.get("url"))
-                    .build();
-        }
-        throw new IllegalStateException("Unexpected video_url type: " + obj.getClass());
+        return (List<LlmAsJudgeMessageContent>) content;
     }
 }

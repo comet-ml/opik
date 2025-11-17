@@ -1,5 +1,6 @@
-package com.comet.opik.domain.llm.langchain4j;
+package com.comet.opik.domain.llm;
 
+import dev.langchain4j.model.openai.internal.chat.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -7,12 +8,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
-import dev.langchain4j.model.openai.internal.chat.ImageDetail;
-import dev.langchain4j.model.openai.internal.chat.ImageUrl;
-import dev.langchain4j.model.openai.internal.chat.InputAudio;
-import dev.langchain4j.model.openai.internal.chat.Message;
-import dev.langchain4j.model.openai.internal.chat.PdfFile;
-import dev.langchain4j.model.openai.internal.chat.Role;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
@@ -22,12 +17,7 @@ import java.util.List;
 import static dev.langchain4j.model.openai.internal.chat.Role.USER;
 import static java.util.Collections.unmodifiableList;
 
-/**
- * This class is basically a copy-paste from langchain4j's OpenAI UserMessage, adding
- * support for video URLs. This is a hack that we can remove once they add support for it.
- */
 @JsonDeserialize(builder = OpikUserMessage.Builder.class)
-@JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @EqualsAndHashCode
 @ToString
@@ -128,25 +118,27 @@ public final class OpikUserMessage implements Message {
             this.content.add(content);
             return this;
         }
-
+        
         public Builder addInputAudio(InputAudio inputAudio) {
             initializeContent();
             this.content.add(
-                    OpikContent.builder()
-                            .type(OpikContentType.AUDIO)
-                            .inputAudio(inputAudio)
-                            .build());
-
+                OpikContent.builder()
+                    .type(OpikContentType.AUDIO)
+                    .inputAudio(inputAudio)
+                .build()
+            );
+            
             return this;
         }
 
         public Builder addPdfFile(PdfFile pdfFile) {
             initializeContent();
             this.content.add(
-                    OpikContent.builder()
+                OpikContent.builder()
                             .type(OpikContentType.FILE)
                             .file(pdfFile)
-                            .build());
+                            .build()
+            );
 
             return this;
         }
