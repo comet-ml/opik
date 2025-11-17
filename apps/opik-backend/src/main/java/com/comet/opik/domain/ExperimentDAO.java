@@ -17,6 +17,7 @@ import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -771,7 +772,7 @@ class ExperimentDAO {
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         var limit = 1;
-        var template = new ST(FIND);
+        var template = TemplateUtils.newST(FIND);
         template.add("id", id.toString());
         template.add("limit", limit);
         return Mono.from(connectionFactory.create())
@@ -785,7 +786,7 @@ class ExperimentDAO {
     @WithSpan
     Flux<Experiment> getByIds(@NonNull Set<UUID> ids) {
         log.info("Getting experiment by ids '{}'", ids);
-        var template = new ST(FIND);
+        var template = TemplateUtils.newST(FIND);
         template.add("ids_list", ids);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> get(
@@ -797,7 +798,7 @@ class ExperimentDAO {
     @WithSpan
     Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
         log.info("Getting experiment by '{}'", request);
-        var template = new ST(FIND);
+        var template = TemplateUtils.newST(FIND);
         template.add("name", request.name());
         if (request.lastRetrievedId() != null) {
             template.add("lastRetrievedId", request.lastRetrievedId());
@@ -984,7 +985,7 @@ class ExperimentDAO {
     }
 
     private ST newFindTemplate(String query, ExperimentSearchCriteria criteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -1120,7 +1121,7 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    var template = TemplateUtils.newST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
                     template.add("experiment_ids", ids);
                     var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids.toArray(UUID[]::new));
@@ -1134,7 +1135,7 @@ class ExperimentDAO {
     public Mono<List<DatasetEventInfoHolder>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    var template = TemplateUtils.newST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
 
                     bindFindAllDatasetIdsTemplateParams(criteria, template);
 
@@ -1205,7 +1206,7 @@ class ExperimentDAO {
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
 
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> template.add("name", name));
@@ -1280,7 +1281,7 @@ class ExperimentDAO {
     private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
             Connection connection) {
 
-        ST template = buildUpdateTemplate(experimentUpdate, UPDATE);
+        var template = buildUpdateTemplate(experimentUpdate, UPDATE);
         String sql = template.render();
 
         Statement statement = connection.createStatement(sql);
@@ -1291,7 +1292,7 @@ class ExperimentDAO {
     }
 
     private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update) {
-        ST template = new ST(update);
+        var template = TemplateUtils.newST(update);
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
             template.add("name", experimentUpdate.name());
