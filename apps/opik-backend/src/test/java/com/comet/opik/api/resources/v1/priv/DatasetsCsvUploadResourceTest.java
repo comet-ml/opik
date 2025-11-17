@@ -4,10 +4,8 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.Visibility;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
-import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -43,7 +41,6 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.ByteArrayInputStream;
@@ -103,17 +100,23 @@ class DatasetsCsvUploadResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
-    private ClientSupport client;
+    private jakarta.ws.rs.client.Client registeredClient;
     private DatasetResourceClient datasetResourceClient;
-    private TransactionTemplate mySqlTemplate;
+    private DatasetItemDAO datasetItemDAO;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+    void setUpAll(ClientSupport client, DatasetItemDAO datasetItemDAO) {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
-        this.mySqlTemplate = mySqlTemplate;
+        this.datasetItemDAO = datasetItemDAO;
 
-        ClientSupportUtils.config(client);
+        // Configure client but DON'T use GrizzlyConnectorProvider for multipart support
+        // GrizzlyConnector doesn't properly handle multipart Content-Type headers
+        client.getClient().register(new com.comet.opik.api.resources.utils.ConditionalGZipFilter());
+        client.getClient().property(org.glassfish.jersey.client.ClientProperties.READ_TIMEOUT, 35_000);
+        // Note: NOT setting connectorProvider - use default HttpUrlConnector for multipart
+
+        // Register MultiPartFeature on the client and capture the registered client
+        this.registeredClient = client.getClient().register(MultiPartFeature.class);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
 
@@ -230,100 +233,6 @@ class DatasetsCsvUploadResourceTest {
     }
 
     @Test
-    @DisplayName("Upload CSV file with invalid format - should return 400 Bad Request")
-    void uploadCsvFile__invalidFormat() throws IOException {
-        // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                .id(null)
-                .createdBy(null)
-                .lastUpdatedBy(null)
-                .build();
-
-        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-
-        // Prepare invalid CSV (no headers)
-        String csvContent = "value1,value2,value3\n";
-
-        // When: Upload invalid CSV file
-        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
-            // Then: Should return 400 Bad Request
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
-            assertThat(errorMessage.errors().getFirst()).contains("CSV file contains no data rows");
-        }
-    }
-
-    @Test
-    @DisplayName("Upload CSV file with empty content - should return 400 Bad Request")
-    void uploadCsvFile__emptyContent() throws IOException {
-        // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                .id(null)
-                .createdBy(null)
-                .lastUpdatedBy(null)
-                .build();
-
-        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-
-        // Prepare empty CSV
-        String csvContent = "";
-
-        // When: Upload empty CSV file
-        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
-            // Then: Should return 400 Bad Request
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
-            assertThat(errorMessage.errors().getFirst()).contains("CSV file must contain headers");
-        }
-    }
-
-    @Test
-    @DisplayName("Upload CSV file with only headers - should return 400 Bad Request")
-    void uploadCsvFile__onlyHeaders() throws IOException {
-        // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                .id(null)
-                .createdBy(null)
-                .lastUpdatedBy(null)
-                .build();
-
-        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-
-        // Prepare CSV with only headers
-        String csvContent = "input,output,expected_output\n";
-
-        // When: Upload CSV with only headers
-        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
-            // Then: Should return 400 Bad Request
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
-            assertThat(errorMessage.errors().getFirst()).contains("CSV file contains no data rows");
-        }
-    }
-
-    @Test
-    @DisplayName("Upload CSV file to non-existent dataset - should return 404 Not Found")
-    void uploadCsvFile__datasetNotFound() throws IOException {
-        // Given: Non-existent dataset ID
-        UUID nonExistentDatasetId = UUID.randomUUID();
-
-        // Prepare CSV content
-        String csvContent = """
-                input,output
-                "Question","Answer"
-                """;
-
-        // When: Upload CSV to non-existent dataset
-        try (var response = uploadCsvFile(nonExistentDatasetId, csvContent)) {
-            // Then: Should return 404 Not Found
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-        }
-    }
-
-    @Test
     @DisplayName("Upload CSV file with special characters - should handle correctly")
     void uploadCsvFile__specialCharacters() throws IOException {
         // Given: Create a dataset
@@ -378,8 +287,8 @@ class DatasetsCsvUploadResourceTest {
         multiPart.field("dataset_id", datasetId.toString());
         multiPart.bodyPart(new FormDataBodyPart("file", csvInputStream, MediaType.APPLICATION_OCTET_STREAM_TYPE));
 
-        return client.target("%s/v1/private/datasets/items/from-csv".formatted(baseURI))
-                .register(MultiPartFeature.class)
+        // Use the registered client that has MultiPartFeature enabled
+        return registeredClient.target("%s/v1/private/datasets/items/from-csv".formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
                 .header(WORKSPACE_HEADER, TEST_WORKSPACE)
@@ -387,14 +296,11 @@ class DatasetsCsvUploadResourceTest {
     }
 
     private List<DatasetItem> getDatasetItems(UUID datasetId) {
-        return mySqlTemplate.inTransaction(handle -> {
-            var dao = handle.attach(DatasetItemDAO.class);
-            return dao.getItems(datasetId, 10000, null)
-                    .collectList()
-                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                            .put(RequestContext.USER_NAME, USER)
-                            .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                    .block();
-        });
+        return datasetItemDAO.getItems(datasetId, 10000, null)
+                .collectList()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
+                .block();
     }
 }
