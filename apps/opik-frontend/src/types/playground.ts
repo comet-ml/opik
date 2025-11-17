@@ -82,7 +82,9 @@ export interface LogSpan {
   startTime: string;
   endTime: string;
   input: { messages: ProviderMessageType[] };
-  output: { choices: ChatCompletionMessageChoiceType[] };
+  output:
+    | { choices: ChatCompletionMessageChoiceType[] }
+    | { output: string | null };
   usage?: UsageType | null;
   model?: string;
   provider?: string;

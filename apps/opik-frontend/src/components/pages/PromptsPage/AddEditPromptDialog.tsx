@@ -39,7 +39,6 @@ import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import useAppStore from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import { useRawJsonView } from "@/hooks/useRawJsonView";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
@@ -82,11 +81,10 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
     editable: true,
   });
 
-  const { localText, images, setImages, handleContentChange } =
-    useMessageContent({
-      content: template,
-      onChangeContent: setTemplate,
-    });
+  const { localText, handleContentChange } = useMessageContent({
+    content: template,
+    onChangeContent: (content) => setTemplate(content as string),
+  });
 
   const { mutate: createMutate } = usePromptCreateMutation();
   const { mutate: updateMutate } = usePromptUpdateMutation();
@@ -242,16 +240,6 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                     .description
                 }
               </Description>
-            </div>
-          )}
-          {!isEdit && !isChatPrompt && (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label>Images</Label>
-              <PromptMessageImageTags
-                images={images}
-                setImages={setImages}
-                align="start"
-              />
             </div>
           )}
           {!isEdit && isChatPrompt && (

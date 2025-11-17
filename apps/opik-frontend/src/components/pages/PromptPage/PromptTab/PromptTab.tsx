@@ -18,8 +18,9 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
-import { parseContentWithImages } from "@/lib/llm";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
+import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
 
 interface PromptTabInterface {
@@ -83,9 +84,12 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     };
   }, [setActiveVersionId]);
 
-  const { text: displayText, images: extractedImages } = useMemo(() => {
-    return parseContentWithImages(activeVersion?.template || "");
-  }, [activeVersion?.template]);
+  const displayText = activeVersion?.template || "";
+
+  const { images: extractedImages, videos: extractedVideos } = useMemo(() => {
+    const content = parsePromptVersionContent(activeVersion);
+    return parseLLMMessageContent(content);
+  }, [activeVersion]);
 
   const isChatPrompt = useMemo(() => {
     return prompt?.template_structure === "chat";
@@ -122,10 +126,21 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       </div>
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
-        <div className="flex grow flex-col gap-0.5">
-          <p className="comet-body-s-accented text-foreground">
-            {isChatPrompt ? "Chat messages" : "Prompt"}
-          </p>
+        <div className="flex grow flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <p className="comet-body-s-accented text-foreground">
+              {isChatPrompt ? "Chat messages" : "Prompt"}
+            </p>
+            {!isChatPrompt && (
+              <CopyButton
+                text={displayText}
+                message="Prompt copied to clipboard"
+                tooltipText="Copy prompt"
+                variant="ghost"
+                size="icon-xs"
+              />
+            )}
+          </div>
           {isChatPrompt ? (
             <ChatPromptView template={activeVersion?.template || ""} />
           ) : (
@@ -138,9 +153,23 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <p className="comet-body-s-accented mt-4 text-foreground">
                     Images
                   </p>
-                  <PromptMessageImageTags
-                    images={extractedImages}
-                    setImages={() => {}}
+                  <PromptMessageMediaTags
+                    type="image"
+                    items={extractedImages}
+                    editable={false}
+                    preview={true}
+                    align="start"
+                  />
+                </>
+              )}
+              {extractedVideos.length > 0 && (
+                <>
+                  <p className="comet-body-s-accented mt-4 text-foreground">
+                    Videos
+                  </p>
+                  <PromptMessageMediaTags
+                    type="video"
+                    items={extractedVideos}
                     editable={false}
                     preview={true}
                     align="start"

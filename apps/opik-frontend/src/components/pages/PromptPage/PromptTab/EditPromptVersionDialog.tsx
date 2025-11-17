@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
 import { Code2, MessageSquare } from "lucide-react";
+import isEqual from "fast-deep-equal";
 
 import {
   Dialog,
@@ -32,12 +33,14 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   parseContentWithImages,
   generateDefaultLLMPromptMessage,
   getNextMessageType,
+  parseLLMMessageContent,
+  parsePromptVersionContent,
 } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLMMessage } from "@/types/llm";
@@ -115,11 +118,10 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
     editable: true,
   });
 
-  const { localText, images, setImages, handleContentChange } =
-    useMessageContent({
-      content: template,
-      onChangeContent: setTemplate,
-    });
+  const { localText, handleContentChange } = useMessageContent({
+    content: template,
+    onChangeContent: (content) => setTemplate(content as string),
+  });
 
   const { mutate } = useCreatePromptVersionMutation();
 
@@ -174,13 +176,26 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
     ? messages.length > 0 && (templateHasChanges || metadataHasChanges)
     : template?.length && (templateHasChanges || metadataHasChanges);
 
-  const { text: originalText, images: originalImages } =
-    parseContentWithImages(promptTemplate);
-  const { text: currentText, images: currentImages } =
-    parseContentWithImages(template);
+  const originalText = promptTemplate;
+  const { images: originalImages, videos: originalVideos } =
+    parseLLMMessageContent(
+      parsePromptVersionContent({
+        template: promptTemplate,
+        metadata: promptMetadata,
+      }),
+    );
 
-  const imagesHaveChanges =
-    JSON.stringify(originalImages) !== JSON.stringify(currentImages);
+  const currentText = template;
+  const { images: currentImages, videos: currentVideos } =
+    parseLLMMessageContent(
+      parsePromptVersionContent({
+        template: localText,
+        metadata: promptMetadata,
+      }),
+    );
+
+  const imagesHaveChanges = !isEqual(originalImages, currentImages);
+  const videosHaveChanges = !isEqual(originalVideos, currentVideos);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -286,33 +301,67 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                         content2={currentText}
                       />
                     </div>
-                    {imagesHaveChanges && (
+                    {(imagesHaveChanges || videosHaveChanges) && (
                       <div className="flex flex-col gap-3 rounded-md border p-4">
                         <div className="comet-body-s-accented text-muted-foreground">
-                          Images comparison
+                          Media comparison
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <div className="comet-body-xs text-muted-foreground">
-                            Before:
+                        {imagesHaveChanges && (
+                          <div className="flex gap-6">
+                            <div className="flex flex-1 flex-col gap-2">
+                              <div className="comet-body-xs text-muted-foreground">
+                                Images before:
+                              </div>
+                              <PromptMessageMediaTags
+                                type="image"
+                                items={originalImages}
+                                setItems={() => {}}
+                                align="start"
+                                editable={false}
+                              />
+                            </div>
+                            <div className="flex flex-1 flex-col gap-2">
+                              <div className="comet-body-xs text-muted-foreground">
+                                Images after:
+                              </div>
+                              <PromptMessageMediaTags
+                                type="image"
+                                items={currentImages}
+                                setItems={() => {}}
+                                align="start"
+                                editable={false}
+                              />
+                            </div>
                           </div>
-                          <PromptMessageImageTags
-                            images={originalImages}
-                            setImages={() => {}}
-                            align="start"
-                            editable={false}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <div className="comet-body-xs text-muted-foreground">
-                            After:
+                        )}
+                        {videosHaveChanges && (
+                          <div className="flex gap-6">
+                            <div className="flex flex-1 flex-col gap-2">
+                              <div className="comet-body-xs text-muted-foreground">
+                                Videos before:
+                              </div>
+                              <PromptMessageMediaTags
+                                type="video"
+                                items={originalVideos}
+                                setItems={() => {}}
+                                align="start"
+                                editable={false}
+                              />
+                            </div>
+                            <div className="flex flex-1 flex-col gap-2">
+                              <div className="comet-body-xs text-muted-foreground">
+                                Videos after:
+                              </div>
+                              <PromptMessageMediaTags
+                                type="video"
+                                items={currentVideos}
+                                setItems={() => {}}
+                                align="start"
+                                editable={false}
+                              />
+                            </div>
                           </div>
-                          <PromptMessageImageTags
-                            images={currentImages}
-                            setImages={() => {}}
-                            align="start"
-                            editable={false}
-                          />
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -323,10 +372,22 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
           {!isChatPrompt && previewMode === PROMPT_PREVIEW_MODE.write && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
-              <PromptMessageImageTags
-                images={images}
-                setImages={setImages}
+              <PromptMessageMediaTags
+                type="image"
+                items={currentImages}
+                setItems={() => {}}
                 align="start"
+                editable={false}
+                preview={true}
+              />
+              <Label>Videos</Label>
+              <PromptMessageMediaTags
+                type="video"
+                items={currentVideos}
+                setItems={() => {}}
+                align="start"
+                editable={false}
+                preview={true}
               />
             </div>
           )}

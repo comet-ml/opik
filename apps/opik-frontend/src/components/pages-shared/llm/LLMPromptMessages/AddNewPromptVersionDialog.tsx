@@ -50,6 +50,7 @@ type AddNewPromptVersionDialogProps = {
   template: string;
   templateStructure?: "text" | "chat";
   defaultName?: string;
+  metadata?: object;
   onSave: (version: PromptVersion) => void;
 };
 
@@ -60,6 +61,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   template,
   templateStructure = "text",
   defaultName = "",
+  metadata: providedMetadata,
   onSave,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -118,13 +120,21 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
       return setShowInvalidJSON(true);
     }
 
+    // Merge user-entered metadata with provided metadata (from playground)
+    // Provided metadata takes precedence for specific fields
+    const userMetadata = metadata ? safelyParseJSON(metadata) : {};
+    const finalMetadata =
+      providedMetadata || Object.keys(userMetadata).length > 0
+        ? { ...userMetadata, ...providedMetadata }
+        : undefined;
+
     if (isEdit) {
       if (selectedPrompt) {
         newVersionMutate({
           name: selectedPrompt?.name,
           template,
           changeDescription,
-          ...(metadata && { metadata: safelyParseJSON(metadata) }),
+          ...(finalMetadata && { metadata: finalMetadata }),
           ...(templateStructure && { templateStructure }),
           onSuccess: (data) => onSave(data),
         });
@@ -138,7 +148,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             name,
             template,
             template_structure: templateStructure,
-            ...(metadata && { metadata: safelyParseJSON(metadata) }),
+            ...(finalMetadata && { metadata: finalMetadata }),
             ...(description && { description }),
           },
           withResponse: true,

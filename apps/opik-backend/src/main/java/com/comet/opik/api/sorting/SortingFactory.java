@@ -3,12 +3,15 @@ package com.comet.opik.api.sorting;
 import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 public abstract class SortingFactory {
     public static final String ERR_INVALID_SORTING_PARAM_TEMPLATE = "Invalid sorting query parameter '%s'";
     public static final String ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE = "Invalid sorting fields '%s'";
@@ -30,9 +33,8 @@ public abstract class SortingFactory {
         // Hook for subclasses to process fields after deserialization
         sorting = processFields(sorting);
 
-        validateFields(sorting);
-
-        return sorting;
+        // Filter out invalid fields and return valid ones
+        return filterValidFields(sorting);
     }
 
     /**
@@ -46,29 +48,40 @@ public abstract class SortingFactory {
         return sorting;
     }
 
-    protected List<SortingField> validateAndReturn(@NonNull List<SortingField> sorting) {
-        validateFields(sorting);
-        return sorting;
-    }
-
     public abstract List<String> getSortableFields();
 
-    private void validateFields(@NonNull List<SortingField> sorting) {
-        if (sorting.isEmpty()) {
-            return;
-        }
-        if (sorting.size() > 1) {
-            throw new BadRequestException(ERR_MULTIPLE_SORTING);
+    /**
+     * Filter out invalid sorting fields instead of throwing errors.
+     * This provides graceful degradation - invalid fields are logged and ignored,
+     * allowing the request to proceed with valid fields or default sorting.
+     *
+     * @param sorting the sorting fields to filter
+     * @return list of valid sorting fields (may be empty)
+     */
+    private List<SortingField> filterValidFields(List<SortingField> sorting) {
+        if (CollectionUtils.isEmpty(sorting)) {
+            return sorting;
         }
 
-        List<String> illegalFields = sorting.stream()
-                .map(SortingField::field)
-                .filter(f -> !isFieldSupported(f) && !isDynamicFieldSupported(f))
-                .toList();
-        if (!illegalFields.isEmpty()) {
-            throw new BadRequestException(
-                    ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(StringUtils.join(illegalFields, ",")));
+        // Only support single field sorting for now
+        if (sorting.size() > 1) {
+            log.info("Multiple sorting fields requested but not supported, using first field only: '{}'",
+                    sorting.stream().map(SortingField::field).toList());
+            sorting = List.of(sorting.get(0));
         }
+
+        // Filter out unsupported fields
+        List<SortingField> validFields = sorting.stream()
+                .filter(sortField -> {
+                    boolean isValid = isFieldSupported(sortField.field()) || isDynamicFieldSupported(sortField.field());
+                    if (!isValid) {
+                        log.info("Ignoring unsupported sorting field: '{}'", sortField.field());
+                    }
+                    return isValid;
+                })
+                .toList();
+
+        return validFields;
     }
 
     private boolean isFieldSupported(String field) {

@@ -33,7 +33,7 @@ interface LLMPromptMessagesProps {
   onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
   hint?: string;
-  disableImages?: boolean;
+  disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
 }
 
@@ -45,7 +45,7 @@ const LLMPromptMessages = ({
   onChange,
   onAddMessage,
   hint = "",
-  disableImages = false,
+  disableMedia = false,
   improvePromptConfig,
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
@@ -161,7 +161,7 @@ const LLMPromptMessages = ({
                   message.id,
                 )}
                 message={message}
-                disableImages={disableImages}
+                disableMedia={disableMedia}
                 improvePromptConfig={improvePromptConfig}
               />
             ))}

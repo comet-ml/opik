@@ -5,6 +5,7 @@ import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
+import { parsePromptVersionContent } from "@/lib/llm";
 
 type TryInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
@@ -32,8 +33,9 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
 
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
-      promptContent:
-        activeVersion?.template ?? prompt?.latest_version?.template ?? "",
+      promptContent: parsePromptVersionContent(
+        activeVersion ?? prompt?.latest_version,
+      ),
       promptId: prompt?.id,
       promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
       templateStructure: prompt?.template_structure,
