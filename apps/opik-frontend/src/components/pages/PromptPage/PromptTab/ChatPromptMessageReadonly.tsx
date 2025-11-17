@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
-import { parseContentWithImages } from "@/lib/llm";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import { parseLLMMessageContent } from "@/lib/llm";
 
 interface ChatMessage {
   role: string;
@@ -41,8 +41,10 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
   };
 
   const messageText = getMessageContent(message.content);
-  const { text: displayText, images: extractedImages } =
-    parseContentWithImages(messageText);
+  const { text: displayText, images: extractedImages, videos: extractedVideos } = useMemo(
+    () => parseLLMMessageContent(messageText),
+    [messageText]
+  );
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md border bg-primary-foreground p-3">
@@ -55,9 +57,18 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
         {displayText}
       </div>
       {extractedImages.length > 0 && (
-        <PromptMessageImageTags
-          images={extractedImages}
-          setImages={() => {}}
+        <PromptMessageMediaTags
+          type="image"
+          items={extractedImages}
+          editable={false}
+          preview={true}
+          align="start"
+        />
+      )}
+      {extractedVideos.length > 0 && (
+        <PromptMessageMediaTags
+          type="video"
+          items={extractedVideos}
           editable={false}
           preview={true}
           align="start"
