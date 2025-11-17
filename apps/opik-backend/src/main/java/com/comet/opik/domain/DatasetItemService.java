@@ -49,6 +49,8 @@ public interface DatasetItemService {
 
     Mono<DatasetItem> get(UUID id);
 
+    Mono<Void> update(UUID id, DatasetItem item);
+
     Mono<Void> delete(List<UUID> ids);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
@@ -217,6 +219,29 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return Mono.just(item);
                 }))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> update(@NonNull UUID id, @NonNull DatasetItem item) {
+        return get(id)
+                .flatMap(existingItem -> {
+                    // Verify the item ID matches
+                    if (!existingItem.id().equals(id)) {
+                        return Mono.error(failWithNotFound("Dataset item not found"));
+                    }
+
+                    // Build updated item preserving read-only fields and dataset ID
+                    DatasetItem updatedItem = item.toBuilder()
+                            .id(id)
+                            .datasetId(existingItem.datasetId())
+                            .build();
+
+                    // Save the updated item (ClickHouse INSERT replaces existing rows with same ID)
+                    DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(), List.of(updatedItem));
+                    return saveBatch(batch, existingItem.datasetId());
+                })
+                .then();
     }
 
     @WithSpan

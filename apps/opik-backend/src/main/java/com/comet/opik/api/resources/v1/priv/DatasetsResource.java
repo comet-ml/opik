@@ -298,6 +298,29 @@ public class DatasetsResource {
         return Response.ok(datasetItem).build();
     }
 
+    @PUT
+    @Path("/items/{itemId}")
+    @Operation(operationId = "updateDatasetItem", summary = "Update dataset item by id", description = "Update dataset item by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "404", description = "Dataset item not found")
+    })
+    @RateLimited
+    public Response updateDatasetItem(
+            @PathParam("itemId") @NotNull UUID itemId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItem.class))) @JsonView(DatasetItem.View.Write.class) @NotNull @Valid DatasetItem item) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        itemService.update(itemId, item)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+        log.info("Updated dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
     @GET
     @Path("/{id}/items")
     @Operation(operationId = "getDatasetItems", summary = "Get dataset items", description = "Get dataset items", responses = {
