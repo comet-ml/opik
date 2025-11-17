@@ -367,13 +367,22 @@ export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 const convertLLMToProviderMessages = (
   messages: LLMMessage[],
 ): ProviderMessageType[] =>
-  messages.map(({ content, ...rest }) => ({
-    ...rest,
-    role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
-    // Convert union type to separate fields for backend
-    content: typeof content === "string" ? content : null,
-    content_array: Array.isArray(content) ? content : null,
-  }));
+  messages.map(({ content, ...rest }) => {
+    const base = {
+      ...rest,
+      role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
+    };
+
+    // For LlmAsJudgeMessage (online scoring), use separate fields
+    // Only set the appropriate field based on content type
+    if (typeof content === "string") {
+      return { ...base, content };
+    } else if (Array.isArray(content)) {
+      return { ...base, content_array: content };
+    }
+
+    return base;
+  });
 
 const convertProviderToLLMMessages = (
   messages: ProviderMessageType[],

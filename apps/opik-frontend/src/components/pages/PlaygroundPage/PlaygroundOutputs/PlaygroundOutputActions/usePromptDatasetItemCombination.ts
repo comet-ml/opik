@@ -118,9 +118,8 @@ const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
-    // Convert to backend format with separate fields
-    content: typeof processedContent === "string" ? processedContent : null,
-    content_array: Array.isArray(processedContent) ? processedContent : null,
+    // Send content as-is (either string or array) to match OpenAI API spec
+    content: processedContent,
   };
 };
 

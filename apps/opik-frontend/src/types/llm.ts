@@ -36,7 +36,9 @@ export interface LLMMessage {
   autoImprove?: boolean;
 }
 
-// Backend API format has separate fields for string vs array content
+// Backend API format has separate fields for different contexts:
+// - For LlmAsJudgeMessage (online scoring): uses content and content_array as separate fields
+// - For Chat Completions API (playground): uses polymorphic content field
 export type ProviderMessageType = {
   role: LLM_MESSAGE_ROLE;
   content?: string | null;
