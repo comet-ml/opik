@@ -53,7 +53,6 @@ disallow_untyped_calls = true
 check_untyped_defs = true
 mypy_path = "sdks/opik_optimizer/src"
 
-# Ignore type errors and missing imports from external packages while still checking imports
 [[tool.mypy.overrides]]
 module = [
     "opik.*",
@@ -69,7 +68,6 @@ module = [
     "gepa.*",
     "mcp.*",
 ]
-ignore_errors = true
 ignore_missing_imports = true
 
 [tool.uv]

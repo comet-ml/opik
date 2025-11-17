@@ -63,7 +63,7 @@ def fresh_start_system_prompt(output_style_guidance: str | None) -> str:
     return (
         "You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch "
         "based on a task description, specifically aiming for prompts that elicit answers in the style: "
-        f"'{style}'. Output ONLY a raw JSON list of strings."
+        f"'{style}'."
     )
 
 

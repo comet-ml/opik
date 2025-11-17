@@ -189,10 +189,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 del creator.Individual
             creator.create("Individual", list, fitness=fitness_attr)
 
-        self.toolbox = base.Toolbox()
-        # Attach methods from helper mixin modules to this instance to avoid
-        # multiple inheritance while preserving behavior.
-
         logger.debug(
             f"Initialized EvolutionaryOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
             f"LLM_Crossover: {self.enable_llm_crossover}, Seed: {self.seed}, "
@@ -292,7 +288,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # --- crossover -------------------------------------------------
         report.performing_crossover()
-        offspring = list(map(self.toolbox.clone, offspring))
+        offspring = [copy.deepcopy(ind) for ind in offspring]
+        # offspring = list(map[Any](self.toolbox.clone, offspring))
         for i in range(0, len(offspring), 2):
             if i + 1 < len(offspring):
                 c1, c2 = offspring[i], offspring[i + 1]
@@ -349,7 +346,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         invalid = [ind for ind in offspring if not ind.fitness.valid]
         report.performing_evaluation(len(invalid))
         for ind_idx, ind in enumerate(invalid):
-            fit = self.toolbox.evaluate(ind)
+            fit = self._deap_evaluate_individual_fitness(ind)
             if self.enable_moo:
                 ind.fitness.values = fit
             else:

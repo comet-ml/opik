@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import json
 import logging
@@ -13,7 +13,6 @@ from .. import reporting, helpers, mcp
 logger = logging.getLogger(__name__)
 
 
-# TODO: Check if we need to pass the model name here
 def _get_synonym(word: str, model: str, model_parameters: dict[str, Any]) -> str:
     """Get a synonym for a word using LLM."""
     try:
@@ -184,6 +183,7 @@ def _semantic_mutation(
 ) -> chat_prompt.ChatPrompt:
     """Enhanced semantic mutation with multiple strategies."""
     current_output_style_guidance = output_style_guidance
+
     if random.random() < 0.1:
         return _radical_innovation_mutation(
             prompt=prompt,
@@ -228,6 +228,7 @@ def _semantic_mutation(
             model_parameters=model_parameters,
             is_reasoning=True,
         )
+        response = cast(str, response)
 
         try:
             messages = utils.json_to_dict(response.strip())

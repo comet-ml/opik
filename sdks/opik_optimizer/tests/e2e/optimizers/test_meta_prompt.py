@@ -25,8 +25,8 @@ def test_metaprompt_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.MetaPromptOptimizer(
-        model="openai/gpt-4o",  # or "azure/gpt-4"
-        model_parameters={"temperature": 0.1, "max_tokens": 10000},
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 128000},
         n_threads=1,
         prompts_per_round=2,  # Reduced from 4
         seed=42,
@@ -118,8 +118,8 @@ def test_metaprompt_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4o", (
-        f"Expected openai/gpt-4o, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-mini", (
+        f"Expected openai/gpt-5-mini, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"
