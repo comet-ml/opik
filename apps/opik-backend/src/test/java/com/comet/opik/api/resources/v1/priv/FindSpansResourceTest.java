@@ -3763,6 +3763,15 @@ class FindSpansResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
 
+            // Create a span to ensure the project exists
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("project_name", projectName)
