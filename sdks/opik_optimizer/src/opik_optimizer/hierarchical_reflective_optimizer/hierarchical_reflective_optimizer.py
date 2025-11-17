@@ -434,7 +434,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
-            metadata={"optimizer": self.__class__.__name__},
+            metadata=self._build_optimization_metadata(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id

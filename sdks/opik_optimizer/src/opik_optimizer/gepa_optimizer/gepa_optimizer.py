@@ -261,7 +261,7 @@ class GepaOptimizer(BaseOptimizer):
                 client=opik_client,
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
-                metadata={"optimizer": self.__class__.__name__},
+                metadata=self._build_optimization_metadata(agent_class=agent_class),
                 optimization_id=optimization_id,
             ) as optimization:
                 try:

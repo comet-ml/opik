@@ -596,6 +596,32 @@ class BaseOptimizer(ABC):
 
         return self._drop_none(metadata)
 
+    def _build_optimization_metadata(
+        self, agent_class: type[OptimizableAgent] | None = None
+    ) -> dict[str, Any]:
+        """
+        Build metadata dictionary for optimization creation.
+
+        Args:
+            agent_class: Optional agent class. If None, will try to get from self.agent_class.
+
+        Returns:
+            Dictionary with 'optimizer' and optionally 'agent_class' keys.
+        """
+        metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
+
+        # Try to get agent_class name from parameter or instance
+        agent_class_name: str | None = None
+        if agent_class is not None:
+            agent_class_name = getattr(agent_class, "__name__", None)
+        elif hasattr(self, "agent_class") and self.agent_class is not None:
+            agent_class_name = getattr(self.agent_class, "__name__", None)
+
+        if agent_class_name:
+            metadata["agent_class"] = agent_class_name
+
+        return metadata
+
     def _prepare_experiment_config(
         self,
         *,
