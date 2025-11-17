@@ -24,7 +24,8 @@ export interface LLMJudgeSchema {
 export type TextPart = { type: "text"; text: string };
 export type ImagePart = { type: "image_url"; image_url: { url: string } };
 export type VideoPart = { type: "video_url"; video_url: { url: string } };
-export type MessageContent = string | Array<TextPart | ImagePart | VideoPart>;
+export type MessageContentPart = TextPart | ImagePart | VideoPart;
+export type MessageContent = string | Array<MessageContentPart>;
 
 export interface LLMMessage {
   id: string;
@@ -35,7 +36,15 @@ export interface LLMMessage {
   autoImprove?: boolean;
 }
 
-export type ProviderMessageType = Omit<LLMMessage, "id">;
+// Backend API format has separate fields for string vs array content
+export type ProviderMessageType = {
+  role: LLM_MESSAGE_ROLE;
+  content?: string | null;
+  content_array?: MessageContentPart[] | null;
+  promptId?: string;
+  promptVersionId?: string;
+  autoImprove?: boolean;
+};
 
 export interface PlaygroundPromptMetadata {
   created_from: "opik_ui";
