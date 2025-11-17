@@ -5,7 +5,10 @@ import useLocalStorageState from "use-local-storage-state";
 import useAppStore from "@/store/AppStore";
 import { usePromptMap, useSetPromptMap } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt } from "@/lib/playground";
-import { generateDefaultLLMPromptMessage, getTextFromMessageContent } from "@/lib/llm";
+import {
+  generateDefaultLLMPromptMessage,
+  getTextFromMessageContent,
+} from "@/lib/llm";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_SELECTED_DATASET_KEY,

@@ -41,10 +41,11 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
   };
 
   const messageText = getMessageContent(message.content);
-  const { text: displayText, images: extractedImages, videos: extractedVideos } = useMemo(
-    () => parseLLMMessageContent(messageText),
-    [messageText]
-  );
+  const {
+    text: displayText,
+    images: extractedImages,
+    videos: extractedVideos,
+  } = useMemo(() => parseLLMMessageContent(messageText), [messageText]);
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md border bg-primary-foreground p-3">
