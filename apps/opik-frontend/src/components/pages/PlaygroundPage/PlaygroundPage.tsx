@@ -80,7 +80,7 @@ const PlaygroundPage = () => {
         }`}
         style={
           {
-            "--min-prompt-width": "620px",
+            "--min-prompt-width": "700px",
             "--item-gap": "1.5rem",
           } as React.CSSProperties
         }

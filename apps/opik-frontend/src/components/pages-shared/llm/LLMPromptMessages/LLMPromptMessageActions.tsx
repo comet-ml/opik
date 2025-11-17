@@ -8,6 +8,7 @@ import React, {
 import useLocalStorageState from "use-local-storage-state";
 import { Copy, RotateCcw, Save, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
+import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, MessageContent } from "@/types/llm";
@@ -189,16 +190,20 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     !promptId ||
     promptData?.id !== promptId ||
     (promptData?.id === promptId &&
-      JSON.stringify(message.content) ===
-        JSON.stringify(parsePromptVersionContent(promptData?.latest_version)));
+      isEqual(
+        message.content,
+        parsePromptVersionContent(promptData?.latest_version),
+      ));
 
   const saveDisabled = message.content === "";
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      JSON.stringify(message.content) !==
-        JSON.stringify(parsePromptVersionContent(promptData?.latest_version)),
+      !isEqual(
+        message.content,
+        parsePromptVersionContent(promptData?.latest_version),
+      ),
   );
   isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning

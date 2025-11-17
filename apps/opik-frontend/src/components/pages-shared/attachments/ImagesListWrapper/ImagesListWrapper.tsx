@@ -17,10 +17,10 @@ const ImagesListWrapper: React.FC<ImagesListWrapperProps> = ({ media }) => {
   );
 
   const previewDataArray = useMemo(() => {
-    return media.map((itm) => ({
-      name: itm.name,
-      url: itm.url,
-      type: itm.type,
+    return media.map((item) => ({
+      name: item.name,
+      url: item.url,
+      type: item.type,
     }));
   }, [media]);
 

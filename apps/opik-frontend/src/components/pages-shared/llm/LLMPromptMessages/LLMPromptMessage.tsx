@@ -35,6 +35,7 @@ import {
   getTextFromMessageContent,
   hasImagesInContent,
   hasVideosInContent,
+  isMediaAllowedForRole,
 } from "@/lib/llm";
 
 const MESSAGE_TYPE_OPTIONS = [
@@ -108,7 +109,7 @@ const LLMPromptMessage = ({
 
   const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
     if (
-      newRole !== LLM_MESSAGE_ROLE.user &&
+      !isMediaAllowedForRole(newRole) &&
       (hasImagesInContent(content) || hasVideosInContent(content))
     ) {
       const textOnlyContent = getTextFromMessageContent(content);
@@ -230,8 +231,8 @@ const LLMPromptMessage = ({
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
               {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="comet-body-s-accented">Images</div>
+                <div className="mt-3 flex gap-2">
+                  <div className="comet-body-s-accented pt-1">Images</div>
                   <PromptMessageMediaTags
                     type="image"
                     items={images}
@@ -240,8 +241,8 @@ const LLMPromptMessage = ({
                 </div>
               )}
               {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="comet-body-s-accented">Videos</div>
+                <div className="mt-3 flex gap-2">
+                  <div className="comet-body-s-accented pt-1">Videos</div>
                   <PromptMessageMediaTags
                     type="video"
                     items={videos}

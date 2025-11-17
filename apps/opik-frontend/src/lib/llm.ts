@@ -69,6 +69,12 @@ export const hasImagesInContent = (content: MessageContent): boolean => {
   return content.some((c): c is ImagePart => c.type === "image_url");
 };
 
+export const isMediaAllowedForRole = (
+  messageRole: LLM_MESSAGE_ROLE,
+): boolean => {
+  return messageRole === LLM_MESSAGE_ROLE.user;
+};
+
 export const hasVideosInContent = (
   content: MessageContent,
 ): content is Array<TextPart | ImagePart | VideoPart> => {

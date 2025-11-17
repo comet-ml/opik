@@ -224,7 +224,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
     const modelSupportsVideos = supportsVideoInput(data.model);
     const supportsMultimodal = modelSupportsImages || modelSupportsVideos;
 
-    if (isOpenAIModel(data.model)) {
+    if (!isOpenAIModel(data.model)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:

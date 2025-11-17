@@ -1,12 +1,8 @@
-import React, { useRef } from "react";
+import React from "react";
 import { VideoIcon } from "lucide-react";
+import { useInView } from "react-intersection-observer";
 
 import { useVideoThumbnail } from "@/hooks/useVideoThumbnail";
-import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 export type VideoThumbnailProps = {
   /** URL of the video to generate thumbnail from */
@@ -24,10 +20,6 @@ type ThumbnailImageProps = {
   alt: string;
 };
 
-// ============================================================================
-// Constants
-// ============================================================================
-
 const STYLES = {
   container:
     "flex size-full items-center justify-center rounded-sm bg-primary-foreground",
@@ -36,17 +28,13 @@ const STYLES = {
   loadingSkeleton: "size-8 animate-pulse rounded bg-slate-300",
 } as const;
 
-const INTERSECTION_CONFIG = {
+const INTERSECTION_OPTIONS = {
   rootMargin: "100px",
   threshold: 0.01,
   triggerOnce: true,
-} as const;
+};
 
 const VIDEO_ICON_STROKE_WIDTH = 1.33;
-
-// ============================================================================
-// Sub-Components
-// ============================================================================
 
 /**
  * Container wrapper for video thumbnail states
@@ -99,10 +87,6 @@ const ErrorState = React.forwardRef<HTMLDivElement>((_, ref) => (
 ));
 ErrorState.displayName = "ErrorState";
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
 /**
  * Determines if thumbnail generation has failed
  */
@@ -113,10 +97,6 @@ const hasThumbnailFailed = (
 ): boolean => {
   return hasError || (!isLoading && !thumbnailUrl);
 };
-
-// ============================================================================
-// Main Component
-// ============================================================================
 
 /**
  * VideoThumbnail component
@@ -133,10 +113,9 @@ const hasThumbnailFailed = (
  * ```
  */
 const VideoThumbnail: React.FC<VideoThumbnailProps> = ({ videoUrl, name }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
   // Only generate thumbnail when component is visible in viewport
-  const isVisible = useIntersectionObserver(containerRef, INTERSECTION_CONFIG);
+  const { ref: containerRef, inView: isVisible } =
+    useInView(INTERSECTION_OPTIONS);
 
   // Generate thumbnail from video
   const { thumbnailUrl, isLoading, hasError } = useVideoThumbnail(

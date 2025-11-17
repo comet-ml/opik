@@ -20,7 +20,7 @@ type MediaType = "image" | "video";
 
 export type PromptMessageMediaTagsProps = {
   items: string[];
-  setItems: (newItems: string[]) => void;
+  setItems?: (newItems: string[]) => void;
   type: MediaType;
   align?: "start" | "end";
   preview?: boolean;
@@ -167,8 +167,6 @@ const PromptMessageMediaTags: React.FunctionComponent<
           preload="metadata"
           className="max-h-24 rounded border object-contain"
           onError={(event) => {
-            console.log("Video preview source", value);
-            console.error("Video preview failed", event);
             const parent = event.currentTarget.parentElement;
             if (parent) {
               parent.innerHTML = `
@@ -222,13 +220,13 @@ const PromptMessageMediaTags: React.FunctionComponent<
       return;
     }
 
-    setItems([...items, trimmed]);
+    setItems?.([...items, trimmed]);
     setNewItem("");
     setOpen(false);
   };
 
   const handleDeleteItem = (value: string) => {
-    setItems(items.filter((item) => item !== value));
+    setItems?.(items.filter((item) => item !== value));
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -83,10 +83,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     };
   }, [setActiveVersionId]);
 
-  const displayText = useMemo(
-    () => activeVersion?.template || "",
-    [activeVersion?.template],
-  );
+  const displayText = activeVersion?.template || "";
 
   const { images: extractedImages, videos: extractedVideos } = useMemo(() => {
     const content = parsePromptVersionContent(activeVersion);
@@ -143,7 +140,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <PromptMessageMediaTags
                 type="image"
                 items={extractedImages}
-                setItems={() => {}}
                 editable={false}
                 preview={true}
                 align="start"
@@ -158,7 +154,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               <PromptMessageMediaTags
                 type="video"
                 items={extractedVideos}
-                setItems={() => {}}
                 editable={false}
                 preview={true}
                 align="start"

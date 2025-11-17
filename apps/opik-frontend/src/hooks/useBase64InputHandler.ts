@@ -37,8 +37,8 @@ export const useBase64InputHandler = ({
     // Process base64 asynchronously to avoid blocking the UI
     setIsProcessing(true);
 
-    // Use setTimeout to process off the main thread
-    setTimeout(() => {
+    // Use queueMicrotask to process off the main thread
+    queueMicrotask(() => {
       try {
         const trimmed = value.trim();
 
@@ -94,7 +94,7 @@ export const useBase64InputHandler = ({
       } finally {
         setIsProcessing(false);
       }
-    }, 0);
+    });
 
     return true; // Base64 detected and being processed
   };

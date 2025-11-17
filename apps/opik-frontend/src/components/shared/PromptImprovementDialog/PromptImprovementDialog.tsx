@@ -211,7 +211,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
   const handleSuccessClick = useCallback(() => {
     if (hasPrompt) {
-      // Combine generated text with original images into MessageContent
+      // Combine generated text with original images and videos into MessageContent
       let finalPrompt: MessageContent;
       if (originalImages.length === 0 && originalVideos.length === 0) {
         finalPrompt = generatedPrompt;

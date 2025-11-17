@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
+import isEqual from "fast-deep-equal";
 
 import {
   Dialog,
@@ -53,11 +54,11 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   }, [diffVersion]);
 
   const imagesHaveChanges = useMemo(
-    () => JSON.stringify(baseImages) !== JSON.stringify(diffImages),
+    () => !isEqual(baseImages, diffImages),
     [baseImages, diffImages],
   );
   const videosHaveChanges = useMemo(
-    () => JSON.stringify(baseVideos) !== JSON.stringify(diffVideos),
+    () => !isEqual(baseVideos, diffVideos),
     [baseVideos, diffVideos],
   );
 

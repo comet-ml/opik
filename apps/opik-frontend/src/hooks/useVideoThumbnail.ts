@@ -1,9 +1,5 @@
 import { useEffect, useState, useRef } from "react";
 
-// ============================================================================
-// Types
-// ============================================================================
-
 export type UseVideoThumbnailReturn = {
   thumbnailUrl: string | null;
   isLoading: boolean;
@@ -18,10 +14,6 @@ type ThumbnailConfig = {
   timeoutMs: number;
 };
 
-// ============================================================================
-// Configuration & Cache
-// ============================================================================
-
 const DEFAULT_CONFIG: ThumbnailConfig = {
   quality: 0.8,
   format: "image/jpeg",
@@ -32,10 +24,6 @@ const DEFAULT_CONFIG: ThumbnailConfig = {
 
 // Global cache to store generated thumbnails
 const thumbnailCache = new Map<string, string>();
-
-// ============================================================================
-// Custom Hook
-// ============================================================================
 
 export const useVideoThumbnail = (
   videoUrl: string,

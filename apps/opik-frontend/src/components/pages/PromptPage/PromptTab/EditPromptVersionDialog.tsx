@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
+import isEqual from "fast-deep-equal";
 
 import {
   Dialog,
@@ -65,7 +66,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const metadataString = promptMetadata
     ? JSON.stringify(promptMetadata, null, 2)
     : "";
-  const [template, setTemplate] = useState<string>(promptTemplate);
+  const [template, setTemplate] = useState(promptTemplate);
   const [metadata, setMetadata] = useState(metadataString);
   const [changeDescription, setChangeDescription] = useState("");
 
@@ -124,10 +125,8 @@ const EditPromptVersionDialog: React.FunctionComponent<
       }),
     );
 
-  const imagesHaveChanges =
-    JSON.stringify(originalImages) !== JSON.stringify(currentImages);
-  const videosHaveChanges =
-    JSON.stringify(originalVideos) !== JSON.stringify(currentVideos);
+  const imagesHaveChanges = !isEqual(originalImages, currentImages);
+  const videosHaveChanges = !isEqual(originalVideos, currentVideos);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
