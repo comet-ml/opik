@@ -667,3 +667,16 @@ webhook:
     # Default: 100ms
     # Description: Maximum time to wait for acquiring alert job lock
     alertJobLockWaitTimeout: ${WEBHOOK_DEBOUNCING_ALERT_JOB_LOCK_WAIT_TIMEOUT:-100ms}
+  metrics:
+    # Default: 300s
+    # Description: Initial delay before the first metrics alert job execution
+    initialDelay: ${WEBHOOK_METRICS_INITIAL_DELAY:-300s}
+    # Default: 300s
+    # Description: Fixed delay between metrics alert job executions (waits this duration after completion)
+    fixedDelay: ${WEBHOOK_METRICS_FIXED_DELAY:-300s}
+    # Default: 60s
+    # Description: Timeout for metrics alert job execution
+    metricsAlertJobTimeout: ${WEBHOOK_METRICS_ALERT_JOB_TIMEOUT:-60s}
+    # Default: 1s
+    # Description: Maximum time to wait for acquiring metrics alert job lock
+    metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}

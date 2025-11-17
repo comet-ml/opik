@@ -13,7 +13,7 @@ import ProjectMetricsSection from "./ProjectMetricsSection";
 import ThreadMetricsSection from "./ThreadMetricsSection";
 import TraceMetricsSection from "./TraceMetricsSection";
 
-const METRICS_DATE_RANGE_KEY = "range";
+export const DEFAULT_DATE_URL_KEY = "metrics_time_range";
 
 interface MetricsTabProps {
   projectId: string;
@@ -31,7 +31,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     minDate,
     maxDate,
   } = useMetricDateRangeWithQuery({
-    key: METRICS_DATE_RANGE_KEY,
+    key: DEFAULT_DATE_URL_KEY,
   });
 
   const { data: traces } = useTracesList(
@@ -87,6 +87,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           onChangeValue={handleDateRangeChange}
           minDate={minDate}
           maxDate={maxDate}
+          hideAlltime={true}
         />
       </div>
 

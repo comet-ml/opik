@@ -317,6 +317,9 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
+          - page: Anonymizers
+            path: docs/production/anonymizers.mdx
+            slug: anonymizers
           - page: Alerts
             path: docs/production/alerts.mdx
             slug: alerts
@@ -764,6 +767,9 @@ navigation:
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
+      - page: Troubleshooting
+        path: docs/self-host/troubleshooting.mdx
+        slug: troubleshooting
       - section: Configuration
         slug: /configure
         contents:

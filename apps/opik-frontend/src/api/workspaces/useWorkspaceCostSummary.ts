@@ -4,8 +4,8 @@ import { WorkspaceCostSummary } from "@/types/workspaces";
 
 type UseWorkspaceCostSummaryParams = {
   projectIds: string[];
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
 };
 
 interface WorkspaceCostSummaryResponse extends WorkspaceCostSummary {}
@@ -18,8 +18,8 @@ const getWorkspaceCostSummary = async (
     `${WORKSPACES_REST_ENDPOINT}costs/summaries`,
     {
       ...(projectIds.length > 0 && { project_ids: projectIds }),
-      interval_start: intervalStart,
-      interval_end: intervalEnd,
+      ...(intervalStart && { interval_start: intervalStart }),
+      ...(intervalEnd && { interval_end: intervalEnd }),
     },
     {
       signal,

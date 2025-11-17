@@ -18,13 +18,15 @@ const FeedbackDefinitionsValueCell = (
     items = Object.keys(feedbackDefinition.details.categories || [])
       .sort()
       .join(", ");
-  } else {
+  } else if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
     items = (
       <p>
         Min: {feedbackDefinition.details.min}, Max:{" "}
         {feedbackDefinition.details.max}
       </p>
     );
+  } else if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
+    items = `${feedbackDefinition.details.true_label} / ${feedbackDefinition.details.false_label}`;
   }
 
   return (

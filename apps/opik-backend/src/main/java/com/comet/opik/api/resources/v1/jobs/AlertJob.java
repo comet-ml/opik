@@ -1,10 +1,9 @@
-package com.comet.opik.api.resources.v1.events.webhooks;
+package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.domain.AlertService;
-import com.comet.opik.domain.WorkspaceNameService;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.domain.alerts.AlertBucketService;
+import com.comet.opik.domain.alerts.AlertWebhookSender;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -14,14 +13,12 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -48,11 +45,9 @@ public class AlertJob extends Job {
 
     private final @NonNull AlertBucketService bucketService;
     private final @NonNull AlertService alertService;
-    private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull @Config WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
-    private final @NonNull WorkspaceNameService workspaceNameService;
-    private final @NonNull OpikConfiguration config;
+    private final @NonNull AlertWebhookSender alertWebhookSender;
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -140,8 +135,8 @@ public class AlertJob extends Job {
                 alertId, workspaceId, workspaceName, eventType, eventIds.size(), payloads.size());
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
-                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, workspaceName, eventType, eventIds, payloads,
-                        userNames))
+                .flatMap(alert -> alertWebhookSender.createAndSendWebhook(alert, workspaceId, workspaceName, eventType,
+                        eventIds, payloads, userNames))
                 .doOnSuccess(
                         __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
                                 alertId, eventIds.size(), payloads.size()))
@@ -149,71 +144,4 @@ public class AlertJob extends Job {
                         alertId, error.getMessage(), error));
     }
 
-    /**
-     * Creates a consolidated webhook event and sends it via WebhookPublisher.
-     *
-     * @param alert the alert configuration
-     * @param workspaceId the workspace ID
-     * @param workspaceName the workspace name
-     * @param eventType the event type
-     * @param eventIds the set of aggregated event IDs
-     * @param payloads the set of aggregated event payloads
-     * @return Mono that completes when the webhook is sent
-     */
-    private Mono<Void> createAndSendWebhook(
-            @NonNull Alert alert,
-            @NonNull String workspaceId,
-            @NonNull String workspaceName,
-            @NonNull AlertEventType eventType,
-            @NonNull List<String> eventIds,
-            @NonNull List<String> payloads,
-            @NonNull List<String> userNames) {
-
-        if (Boolean.FALSE.equals(alert.enabled())) {
-            log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
-            return Mono.empty();
-        }
-
-        if (StringUtils.isEmpty(alert.webhook().url())) {
-            log.warn("Alert '{}' has no webhook configuration, skipping", alert.id());
-            return Mono.empty();
-        }
-
-        log.debug("Creating consolidated webhook event for alert '{}' with '{}' events and '{}' payloads",
-                alert.id(), eventIds.size(), payloads.size());
-
-        // Create payload with alert and aggregation data
-        Map<String, Object> payload = Map.of(
-                "alertId", alert.id().toString(),
-                "alertName", alert.name(),
-                "eventType", eventType.getValue(),
-                "eventIds", eventIds,
-                "metadata", payloads,
-                "userNames", userNames,
-                "eventCount", eventIds.size(),
-                "aggregationType", "consolidated",
-                "message", String.format("Alert '%s': %d %s events aggregated",
-                        alert.name(), eventIds.size(), eventType.getValue()));
-
-        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}', payloadCount='{}'",
-                alert.name(), alert.id(), eventIds.size(), payloads.size());
-
-        // Send via WebhookPublisher with data from alert configuration
-        return webhookPublisher.publishWebhookEvent(
-                eventType,
-                alert,
-                workspaceId,
-                StringUtils.isBlank(workspaceName)
-                        ? workspaceNameService.getWorkspaceName(workspaceId,
-                                config.getAuthentication().getReactService().url())
-                        : workspaceName,
-                payload,
-                webhookConfig.getMaxRetries()) // maxRetries
-                .doOnSuccess(webhookId -> log.info(
-                        "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",
-                        alert.name(), alert.id(), webhookId))
-                .doOnError(error -> log.error("Failed to send webhook for alertName='{}',alertId='{}':",
-                        alert.name(), alert.id(), error))
-                .then();
-    }
 }

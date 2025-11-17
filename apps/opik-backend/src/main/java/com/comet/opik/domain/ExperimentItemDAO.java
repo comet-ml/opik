@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -15,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -30,8 +30,8 @@ import java.util.UUID;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.QueryItem;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -378,7 +378,7 @@ class ExperimentItemDAO {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
 
-        var template = new ST(INSERT)
+        var template = TemplateUtils.newST(INSERT)
                 .add("items", queryItems);
 
         String sql = template.render();
@@ -444,7 +444,7 @@ class ExperimentItemDAO {
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
 
-        var template = new ST(STREAM);
+        var template = TemplateUtils.newST(STREAM);
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
         }

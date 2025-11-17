@@ -34,7 +34,9 @@ const injectGitHubLink = () => {
 
   // Construct notebook path based on the page slug
   let notebookPath;
-  if (path.includes("quickstart_notebook")) {
+  if (path.includes("agent_optimization/quickstart_notebook")) {
+    notebookPath = "/sdks/opik_optimizer/notebooks/OpikOptimizerIntro.ipynb";
+  } else if (path.includes("quickstart_notebook")) {
     notebookPath = "/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb";
   } else if (path.includes("evaluate_hallucination_metric")) {
     notebookPath = "/apps/opik-documentation/documentation/docs/cookbook/evaluate_hallucination_metric.ipynb";
