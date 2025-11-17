@@ -40,7 +40,6 @@ public interface DashboardDAO {
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId
             """)
-    @UseStringTemplateEngine
     @AllowUnusedBindings
     int update(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,

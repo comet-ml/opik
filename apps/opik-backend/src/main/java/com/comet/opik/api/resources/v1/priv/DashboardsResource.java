@@ -25,8 +25,8 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -116,7 +116,7 @@ public class DashboardsResource {
         return Response.ok(dashboardPage).build();
     }
 
-    @PUT
+    @PATCH
     @Path("/{dashboardId}")
     @Operation(operationId = "updateDashboard", summary = "Update dashboard", description = "Update dashboard by id. Partial updates are supported - only provided fields will be updated.", responses = {
             @ApiResponse(responseCode = "200", description = "Updated dashboard", content = @Content(schema = @Schema(implementation = Dashboard.class))),

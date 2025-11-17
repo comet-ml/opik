@@ -1,11 +1,11 @@
 package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 
+import java.io.UncheckedIOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
@@ -18,8 +18,8 @@ public class JsonNodeColumnMapper implements ColumnMapper<JsonNode> {
             return null;
         }
         try {
-            return JsonUtils.getMapper().readTree(json);
-        } catch (JsonProcessingException e) {
+            return JsonUtils.getJsonNodeFromString(json);
+        } catch (UncheckedIOException e) {
             throw new SQLException("Failed to parse JSON string to JsonNode", e);
         }
     }

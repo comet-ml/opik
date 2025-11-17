@@ -58,6 +58,9 @@ public class SlugUtils {
      * @return the unique slug
      */
     public static String generateUniqueSlug(String baseSlug, long existingCount) {
+        if (StringUtils.isBlank(baseSlug)) {
+            return baseSlug;
+        }
         if (existingCount == 0) {
             return baseSlug;
         }

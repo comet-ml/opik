@@ -120,7 +120,7 @@ public class DashboardResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(update));
+                .method("PATCH", Entity.json(update));
     }
 
     public void delete(UUID id, String apiKey, String workspaceName) {
@@ -150,69 +150,57 @@ public class DashboardResourceClient {
     }
 
     public JsonNode createValidConfig() {
-        try {
-            String configJson = """
-                    {
-                        "version": 1,
-                        "layout": {
-                            "type": "grid",
-                            "columns": 24,
-                            "rowHeight": 10
-                        },
-                        "filters": {
-                            "dateRange": {
-                                "preset": "last_7_days"
+        String configJson = """
+                {
+                    "version": 1,
+                    "layout": {
+                        "type": "grid",
+                        "columns": 24,
+                        "rowHeight": 10
+                    },
+                    "filters": {
+                        "dateRange": {
+                            "preset": "last_7_days"
+                        }
+                    },
+                    "widgets": [
+                        {
+                            "id": "widget-1",
+                            "type": "chart",
+                            "title": "Latency p95",
+                            "position": {"x": 0, "y": 0, "w": 6, "h": 8},
+                            "data": {
+                                "source": "traces",
+                                "aggregation": {"metric": "latency_ms", "op": "p95"}
                             }
-                        },
-                        "widgets": [
-                            {
-                                "id": "widget-1",
-                                "type": "chart",
-                                "title": "Latency p95",
-                                "position": {"x": 0, "y": 0, "w": 6, "h": 8},
-                                "data": {
-                                    "source": "traces",
-                                    "aggregation": {"metric": "latency_ms", "op": "p95"}
-                                }
-                            }
-                        ]
-                    }
-                    """;
-            return JsonUtils.getMapper().readTree(configJson);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create valid config", e);
-        }
+                        }
+                    ]
+                }
+                """;
+        return JsonUtils.getJsonNodeFromString(configJson);
     }
 
     public JsonNode createInvalidConfigTooLarge() {
-        try {
-            // Create a config that exceeds 256KB
-            StringBuilder largeConfig = new StringBuilder("{\"version\":1,\"data\":\"");
-            for (int i = 0; i < 300000; i++) {
-                largeConfig.append("x");
-            }
-            largeConfig.append("\"}");
-            return JsonUtils.getMapper().readTree(largeConfig.toString());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create invalid config", e);
+        // Create a config that exceeds 256KB
+        StringBuilder largeConfig = new StringBuilder("{\"version\":1,\"data\":\"");
+        for (int i = 0; i < 300000; i++) {
+            largeConfig.append("x");
         }
+        largeConfig.append("\"}");
+        return JsonUtils.getJsonNodeFromString(largeConfig.toString());
     }
 
     public JsonNode createInvalidConfigTooManyWidgets() {
-        try {
-            StringBuilder config = new StringBuilder("{\"version\":1,\"widgets\":[");
-            for (int i = 0; i < 101; i++) {
-                if (i > 0) {
-                    config.append(",");
-                }
-                config.append(String.format(
-                        "{\"id\":\"widget-%d\",\"type\":\"chart\",\"position\":{\"x\":0,\"y\":0,\"w\":1,\"h\":1}}",
-                        i));
+        StringBuilder config = new StringBuilder("{\"version\":1,\"widgets\":[");
+        for (int i = 0; i < 101; i++) {
+            if (i > 0) {
+                config.append(",");
             }
-            config.append("]}");
-            return JsonUtils.getMapper().readTree(config.toString());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create invalid config", e);
+            config.append(String.format(
+                    "{\"id\":\"widget-%d\",\"type\":\"chart\",\"position\":{\"x\":0,\"y\":0,\"w\":1,\"h\":1}}",
+                    i));
         }
+        config.append("]}");
+        return JsonUtils.getJsonNodeFromString(config.toString());
     }
 }
