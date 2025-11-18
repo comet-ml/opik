@@ -1,4 +1,3 @@
-import pprint
 from typing import Dict, Any, Annotated
 from pydantic import BaseModel
 
@@ -311,8 +310,6 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
             ),
         ],
     )
-
-    pprint.pprint(fake_backend.trace_trees)
 
     assert len(fake_backend.trace_trees) == 1
     assert len(opik_tracer.created_traces()) == 1

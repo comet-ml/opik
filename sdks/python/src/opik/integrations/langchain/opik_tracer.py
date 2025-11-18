@@ -433,8 +433,9 @@ class OpikTracer(BaseTracer):
         Creates a root trace and span for a given run and stores the relevant trace and span
         data in local storage for future reference.
 
-        The new span is only created if no new trace is created, i.e., attached to an existing span
-        or distributed headers. If a new trace is created, the span is skipped and stored in.
+        The new span is only created if no new trace is created, i.e., when attached to an existing span
+        or distributed headers. If a new trace is created, the span is skipped and only the
+        trace data is stored in local storage for future reference.
         """
         # This is the first run for the chain.
         new_trace_data, new_span_data = self._track_root_run(run_dict)
