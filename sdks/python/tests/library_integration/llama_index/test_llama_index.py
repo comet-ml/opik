@@ -376,7 +376,6 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
 ):
     """Test that LlamaIndex callback respects existing trace context from @opik.track decorator"""
     import opik
-    from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
@@ -463,7 +462,9 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
                                 input={"messages": expected_messages},
                                 output={"output": ANY_BUT_NONE},
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=ANY_BUT_NONE,  # Usage populated for non-streaming calls
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -510,9 +511,7 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
     def outer_function():
         @opik.track(name="inner_span", project_name=project_name)
         def inner_function():
-            opik_callback_handler = LlamaIndexCallbackHandler(
-                project_name=project_name
-            )
+            opik_callback_handler = LlamaIndexCallbackHandler(project_name=project_name)
             opik_callback_manager = CallbackManager([opik_callback_handler])
             Settings.callback_manager = opik_callback_manager
             Settings.transformations = None
@@ -584,7 +583,9 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
                                 input={"messages": expected_messages},
                                 output={"output": ANY_BUT_NONE},
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=None,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -598,7 +599,9 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
                                         input={"messages": expected_messages},
                                         output={"output": ANY_BUT_NONE},
                                         tags=None,
-                                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                        metadata=ANY_DICT.containing(
+                                            {"created_from": "llama_index"}
+                                        ),
                                         usage=ANY_BUT_NONE,  # Usage populated for non-streaming calls
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
@@ -751,7 +754,7 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
             ChatMessage(role="user", content="Say hello"),
         ]
 
-        resp = llm.chat(messages)
+        _ = llm.chat(messages)
         opik_callback_handler.flush()
 
     opik.flush_tracker()
@@ -832,7 +835,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
 
     opik_callback_handler = LlamaIndexCallbackHandler(
         project_name=project_name,
-        skip_index_construction_trace=True  # Skip index construction to focus on query trace
+        skip_index_construction_trace=True,  # Skip index construction to focus on query trace
     )
     opik_callback_manager = CallbackManager([opik_callback_handler])
     Settings.callback_manager = opik_callback_manager
@@ -847,7 +850,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
 
     # Create query engine and query it
     query_engine = index.as_query_engine()
-    response = query_engine.query("What did the author do growing up?")
+    _ = query_engine.query("What did the author do growing up?")
 
     opik_callback_handler.flush()
 
@@ -899,7 +902,9 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                                 input=None,
                                 output=ANY_BUT_NONE,
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=None,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -930,7 +935,9 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                                 input=ANY_BUT_NONE,
                                 output=ANY_BUT_NONE,
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=None,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -945,7 +952,9 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                                 input=ANY_BUT_NONE,
                                 output=ANY_BUT_NONE,
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=None,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -960,7 +969,9 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                                 input=ANY_BUT_NONE,
                                 output=None,  # Templating span may not have output
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=None,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -975,7 +986,9 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                                 input=ANY_BUT_NONE,
                                 output=ANY_BUT_NONE,
                                 tags=None,
-                                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "llama_index"}
+                                ),
                                 usage=ANY_BUT_NONE,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
