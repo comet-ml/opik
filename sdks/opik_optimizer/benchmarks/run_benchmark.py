@@ -14,7 +14,6 @@ Usage:
 """
 
 import argparse
-from typing import List, Optional
 
 import benchmark_config
 from benchmark_manifest import load_manifest, manifest_to_task_specs
@@ -134,7 +133,7 @@ Examples:
 
     args = parser.parse_args()
 
-    manifest_tasks: Optional[List[BenchmarkTaskSpec]] = None
+    manifest_tasks: list[BenchmarkTaskSpec] | None = None
     manifest_seed = args.seed
     manifest_test_mode = args.test_mode
 

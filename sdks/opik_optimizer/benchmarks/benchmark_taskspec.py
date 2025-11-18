@@ -23,7 +23,7 @@ class BenchmarkTaskSpec:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, str | bool]) -> "BenchmarkTaskSpec":
+    def from_dict(cls, data: dict[str, str | bool]) -> BenchmarkTaskSpec:
         return cls(
             dataset_name=str(data["dataset_name"]),
             optimizer_name=str(data["optimizer_name"]),

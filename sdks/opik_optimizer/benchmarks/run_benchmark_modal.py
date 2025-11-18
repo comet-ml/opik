@@ -198,25 +198,24 @@ def submit_benchmark_tasks(
     for task in tasks_iter:
         task_id = task.task_id
 
-                # Skip logic for resume/retry
-                if retry_failed_run_id and task_id not in failed_tasks:
-                    skipped_count += 1
-                    continue
+        if retry_failed_run_id and task_id not in failed_tasks:
+            skipped_count += 1
+            continue
 
-                if resume_run_id and task_id in completed_tasks:
-                    skipped_count += 1
-                    continue
+        if resume_run_id and task_id in completed_tasks:
+            skipped_count += 1
+            continue
 
-                all_tasks.append(
-                    {
-                        "task_id": task_id,
-                        "dataset_name": task.dataset_name,
-                        "optimizer_name": task.optimizer_name,
-                        "model_name": task.model_name,
-                        "test_mode": task.test_mode,
-                        "run_id": run_id,
-                    }
-                )
+        all_tasks.append(
+            {
+                "task_id": task_id,
+                "dataset_name": task.dataset_name,
+                "optimizer_name": task.optimizer_name,
+                "model_name": task.model_name,
+                "test_mode": task.test_mode,
+                "run_id": run_id,
+            }
+        )
 
     print(f"   Generated {len(all_tasks)} tasks to submit")
     if skipped_count > 0:
