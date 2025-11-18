@@ -13,7 +13,7 @@ from . import _throttle
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 if TYPE_CHECKING:
-    from .optimization_config.chat_prompt import ChatPrompt
+    from .api_objects import chat_prompt
 
 
 def tools_to_dict(tools: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -41,10 +41,12 @@ class OptimizableAgent:
     model: str | None = None
     model_kwargs: dict[str, Any] = {}
     input_dataset_field: str | None = None
-    prompts: dict[str, "ChatPrompt"]
-    prompt: "ChatPrompt"
+    prompts: dict[str, "chat_prompt.ChatPrompt"]
+    prompt: "chat_prompt.ChatPrompt"
 
-    def __init__(self, prompt: "ChatPrompt", project_name: str | None = None) -> None:
+    def __init__(
+        self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
+    ) -> None:
         """
         Initialize the OptimizableAgent.
 
@@ -64,7 +66,7 @@ class OptimizableAgent:
         self.opik_logger = OpikLogger()
         litellm.callbacks = [self.opik_logger]
 
-    def init_agent(self, prompt: "ChatPrompt") -> None:
+    def init_agent(self, prompt: "chat_prompt.ChatPrompt") -> None:
         """Initialize the agent with the provided configuration."""
         # Register the tools, if any, for default LiteLLM Agent use:
         self.prompt = prompt
@@ -74,7 +76,7 @@ class OptimizableAgent:
         self,
         messages: list[dict[str, str]],
         tools: list[dict[str, str]] | None,
-        seed: int,
+        seed: int | None = None,
     ) -> Any:
         response = litellm.completion(
             model=self.model,

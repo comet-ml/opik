@@ -15,8 +15,8 @@ import opik_optimizer.datasets
 from opik_optimizer import (
     BaseOptimizer,
     reporting_utils,
+    ChatPrompt,
 )
-from opik_optimizer.optimization_config import chat_prompt
 
 
 @benchmark_logging.log_console_output_to_file()
@@ -46,7 +46,7 @@ def run_optimization(
             )(model=model_name, **optimizer_config.params)
 
             messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
-            initial_prompt = chat_prompt.ChatPrompt(messages=messages)  # type: ignore
+            initial_prompt = ChatPrompt(messages=messages)  # type: ignore
 
             # Start by running a first evaluation
             start_time_initial_eval = time.time()
@@ -71,9 +71,7 @@ def run_optimization(
                 metric=dataset_config.metrics[0],
                 **optimizer_config.optimize_params,
             )
-            optimized_prompt = chat_prompt.ChatPrompt(
-                messages=optimization_results.prompt
-            )
+            optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
 
             # Run final evaluation
             start_time_final_eval = time.time()

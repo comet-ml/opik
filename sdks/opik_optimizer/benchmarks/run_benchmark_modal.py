@@ -29,7 +29,6 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-
 import modal
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
@@ -146,10 +145,9 @@ def submit_benchmark_tasks(
     try:
         from modal.config import config_profiles
 
-        profiles = config_profiles()
+        profiles: list[str] = config_profiles()  # type: ignore[no-untyped-call]
         if profiles:
-            # Get the first profile name (profiles is dict_keys object)
-            workspace = list(profiles)[0]
+            workspace = profiles[0]
     except Exception:
         pass
 

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from rich import box
-from rich.console import Console, Group
+from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.progress import track
 from rich.text import Text
@@ -196,10 +196,10 @@ def _format_message_content(content: str | list[dict[str, Any]]) -> Text:
         return Text("(empty content)", style="dim")
 
     result = Text()
-    for i, part in enumerate(formatted_parts):
+    for i, text_part in enumerate(formatted_parts):
         if i > 0:
             result.append("\n\n")
-        result.append(part)
+        result.append(text_part)
 
     return result
 
@@ -294,12 +294,11 @@ def get_link_text(
         )
 
         # Create a visually appealing panel with an icon and ensure link doesn't wrap
-        link_text = Text(pre_text + link_text)
-        link_text.stylize(f"link {optimization_url}", len(pre_text), len(link_text))  # type: ignore
+        result_text = Text(pre_text + link_text)
+        result_text.stylize(f"link {optimization_url}", len(pre_text), len(result_text))  # type: ignore
+        return result_text
     else:
-        link_text = Text("No optimization run link available", style="dim")
-
-    return link_text
+        return Text("No optimization run link available", style="dim")
 
 
 def display_header(
@@ -342,31 +341,31 @@ def display_result(
     console = get_console()
     console.print(Text("\n> Optimization complete\n"))
 
-    content: Text | Panel = []
+    content: list[RenderableType] = []
 
     if best_score > initial_score:
         perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
         if has_percentage:
-            content += [
+            content.append(
                 Text(
                     f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
                     style="bold green",
                 )
-            ]
+            )
         else:
-            content += [
+            content.append(
                 Text(
                     f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
                     style="bold green",
                 )
-            ]
+            )
     else:
-        content += [
+        content.append(
             Text(
                 f"Optimization run did not find a better prompt than the initial one.\nScore: {best_score:.4f}",
                 style="dim bold red",
             )
-        ]
+        )
 
     content.append(Text("\nOptimized prompt:"))
     for i, msg in enumerate(best_prompt):

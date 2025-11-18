@@ -8,21 +8,12 @@ Requires:
 """
 
 from typing import Any
-import os
-import sys
 
-# Prefer local src/ over installed package during development
-_HERE = os.path.abspath(os.path.dirname(__file__))
-_SRC = os.path.abspath(os.path.join(_HERE, "..", "src"))
-if os.path.isdir(_SRC) and _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
+from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik.evaluation.metrics import LevenshteinRatio  # noqa: E402
-from opik.evaluation.metrics.score_result import ScoreResult  # noqa: E402
-
-from opik_optimizer import ChatPrompt, datasets  # noqa: E402
-from opik_optimizer.gepa_optimizer import GepaOptimizer  # noqa: E402
-from opik_optimizer.utils import search_wikipedia  # noqa: E402
+from opik_optimizer import GepaOptimizer, ChatPrompt, datasets
+from opik_optimizer.utils import search_wikipedia
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:

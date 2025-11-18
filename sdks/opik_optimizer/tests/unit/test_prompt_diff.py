@@ -1,4 +1,4 @@
-from opik_optimizer.hierarchical_reflective_optimizer.reporting import (
+from opik_optimizer.algorithms.hierarchical_reflective_optimizer.reporting import (
     MessageDiffItem,
     compute_message_diff_order,
 )

@@ -47,7 +47,7 @@ def test_optimizer_classes_importable() -> None:
 
 def test_chat_prompt_import_and_creation() -> None:
     """Test that ChatPrompt can be imported and created."""
-    from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+    from opik_optimizer import ChatPrompt
 
     # Test basic creation
     messages = [

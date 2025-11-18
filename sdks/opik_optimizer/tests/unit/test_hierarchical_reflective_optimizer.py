@@ -1,8 +1,6 @@
 """Unit tests for HierarchicalReflectiveOptimizer."""
 
-from opik_optimizer.hierarchical_reflective_optimizer import (
-    HierarchicalReflectiveOptimizer,
-)
+from opik_optimizer import HierarchicalReflectiveOptimizer
 
 
 class TestHierarchicalReflectiveOptimizer:

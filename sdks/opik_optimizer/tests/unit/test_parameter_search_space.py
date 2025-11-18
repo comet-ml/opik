@@ -1,11 +1,13 @@
 import pytest
 
-from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-from opik_optimizer.parameter_optimizer.parameter_search_space import (
+import opik_optimizer
+from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
     ParameterSearchSpace,
 )
-from opik_optimizer.parameter_optimizer.parameter_spec import ParameterSpec
-from opik_optimizer.parameter_optimizer.search_space_types import ParameterType
+from opik_optimizer.algorithms.parameter_optimizer.parameter_spec import ParameterSpec
+from opik_optimizer.algorithms.parameter_optimizer.search_space_types import (
+    ParameterType,
+)
 
 
 def test_parameter_space_from_dict() -> None:
@@ -42,7 +44,7 @@ def test_parameter_space_from_dict() -> None:
 
 
 def test_apply_updates_prompt_without_mutating_original() -> None:
-    prompt = ChatPrompt(system="Hello")
+    prompt = opik_optimizer.ChatPrompt(system="Hello")
     prompt.model = "gpt-4o-mini"
     prompt.model_kwargs = {"temperature": 0.1}
 

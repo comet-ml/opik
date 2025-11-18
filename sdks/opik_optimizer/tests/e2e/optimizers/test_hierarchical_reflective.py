@@ -4,11 +4,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any
 
-from opik_optimizer import (
-    HierarchicalReflectiveOptimizer,
-    datasets,
-)
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
 
 
 def test_hierarchical_reflective_optimizer() -> None:
@@ -18,7 +14,7 @@ def test_hierarchical_reflective_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
 
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric with reason field for hierarchical analysis
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -29,23 +25,20 @@ def test_hierarchical_reflective_optimizer() -> None:
         return result
 
     # Create initial prompt
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         system="Provide a concise answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with minimal parameters for faster testing
-    optimizer = HierarchicalReflectiveOptimizer(
-        model="openai/gpt-4o-mini",
+    optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 128000},
         n_threads=1,
         max_parallel_batches=2,
         batch_size=10,
         convergence_threshold=0.01,
         verbose=1,
         seed=42,
-        model_parameters={
-            "temperature": 0.7,
-            "max_tokens": 2000,
-        },
     )
 
     # Run optimization with minimal trials and samples
@@ -123,8 +116,8 @@ def test_hierarchical_reflective_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4o-mini", (
-        f"Expected openai/gpt-4o-mini, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-mini", (
+        f"Expected openai/gpt-5-mini, got {results.details['model']}"
     )
 
     # Validate hierarchical-specific details

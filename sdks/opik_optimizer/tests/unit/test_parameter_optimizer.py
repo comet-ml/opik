@@ -2,9 +2,8 @@ import types
 
 import pytest
 
-from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-from opik_optimizer.parameter_optimizer.parameter_optimizer import ParameterOptimizer
-from opik_optimizer.parameter_optimizer.parameter_search_space import (
+import opik_optimizer
+from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
     ParameterSearchSpace,
 )
 
@@ -12,7 +11,7 @@ from opik_optimizer.parameter_optimizer.parameter_search_space import (
 def test_parameter_optimizer_selects_best_parameters(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    optimizer = ParameterOptimizer(
+    optimizer = opik_optimizer.ParameterOptimizer(
         model="gpt-4o-mini",
         default_n_trials=2,
         seed=42,
@@ -20,7 +19,7 @@ def test_parameter_optimizer_selects_best_parameters(
         local_search_scale=0.5,
     )
 
-    prompt = ChatPrompt(system="Hi there")
+    prompt = opik_optimizer.ChatPrompt(system="Hi there")
     prompt.model = "gpt-4o-mini"
     prompt.model_kwargs = {"temperature": 0.1}
 
@@ -37,8 +36,8 @@ def test_parameter_optimizer_selects_best_parameters(
         return samples[min(index, len(samples) - 1)]
 
     def fake_evaluate(
-        self: ParameterOptimizer,
-        prompt: ChatPrompt,
+        self: opik_optimizer.ParameterOptimizer,
+        prompt: opik_optimizer.ChatPrompt,
         dataset: object,
         metric: object,
         *,
@@ -52,22 +51,25 @@ def test_parameter_optimizer_selects_best_parameters(
 
     monkeypatch.setattr(ParameterSearchSpace, "suggest", fake_suggest, raising=False)
     monkeypatch.setattr(
-        ParameterOptimizer, "evaluate_prompt", fake_evaluate, raising=False
+        opik_optimizer.ParameterOptimizer,
+        "evaluate_prompt",
+        fake_evaluate,
+        raising=False,
     )
     monkeypatch.setattr(
-        ParameterOptimizer,
+        opik_optimizer.ParameterOptimizer,
         "_validate_optimization_inputs",
         lambda *args, **kwargs: None,
         raising=False,
     )
     monkeypatch.setattr(
-        ParameterOptimizer,
+        opik_optimizer.ParameterOptimizer,
         "_setup_agent_class",
         lambda self, prompt, agent_class=None: types.SimpleNamespace(),
         raising=False,
     )
     monkeypatch.setattr(
-        "opik_optimizer.parameter_optimizer.parameter_optimizer.optuna_importance.get_param_importances",
+        "opik_optimizer.algorithms.parameter_optimizer.parameter_optimizer.optuna_importance.get_param_importances",
         lambda *args, **kwargs: {"temperature": 1.0},
         raising=False,
     )

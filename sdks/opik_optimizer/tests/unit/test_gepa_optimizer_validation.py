@@ -3,7 +3,7 @@ Test GepaOptimizer parameter validation.
 """
 
 import pytest
-from opik_optimizer.gepa_optimizer.gepa_optimizer import GepaOptimizer
+from opik_optimizer import GepaOptimizer
 
 
 class TestGepaOptimizerValidation:

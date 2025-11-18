@@ -7,8 +7,7 @@ import benchmark_config
 import opik_optimizer
 import opik_optimizer.datasets
 from benchmark_task import TaskEvaluationResult, TaskResult
-from opik_optimizer import BaseOptimizer, reporting_utils
-from opik_optimizer.optimization_config import chat_prompt
+from opik_optimizer import BaseOptimizer, reporting_utils, ChatPrompt
 
 
 def run_optimization_task(
@@ -54,7 +53,7 @@ def run_optimization_task(
             )(model=model_name, **optimizer_config.params)
 
             messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
-            initial_prompt = chat_prompt.ChatPrompt(messages=messages)  # type: ignore
+            initial_prompt = ChatPrompt(messages=messages)  # type: ignore
 
             # Run initial evaluation
             print(f"[{task_id}] Running initial evaluation...")
@@ -84,9 +83,7 @@ def run_optimization_task(
                 metric=dataset_config.metrics[0],
                 **optimizer_config.optimize_params,
             )
-            optimized_prompt = chat_prompt.ChatPrompt(
-                messages=optimization_results.prompt
-            )
+            optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
 
             # Run final evaluation
             print(f"[{task_id}] Running final evaluation...")

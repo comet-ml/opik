@@ -15,7 +15,7 @@ from collections.abc import Iterable
 
 import copy
 
-from ..optimization_config.chat_prompt import ChatPrompt
+from ..api_objects import chat_prompt
 
 
 PROMPT_SEGMENT_PREFIX_TOOL = "tool:"
@@ -52,7 +52,7 @@ def _normalise_tool(tool: dict[str, Any]) -> dict[str, Any]:
     return normalised
 
 
-def extract_prompt_segments(prompt: ChatPrompt) -> list[PromptSegment]:
+def extract_prompt_segments(prompt: chat_prompt.ChatPrompt) -> list[PromptSegment]:
     """Extract individual editable segments from ``prompt``.
 
     The extraction preserves order for chat messages while assigning
@@ -126,9 +126,9 @@ def extract_prompt_segments(prompt: ChatPrompt) -> list[PromptSegment]:
 
 
 def apply_segment_updates(
-    prompt: ChatPrompt,
+    prompt: chat_prompt.ChatPrompt,
     updates: dict[str, str],
-) -> ChatPrompt:
+) -> chat_prompt.ChatPrompt:
     """Return a new ``ChatPrompt`` with selected segments replaced.
 
     ``updates`` maps segment identifiers (as produced by
@@ -166,7 +166,7 @@ def apply_segment_updates(
                 function_block["description"] = replacement
             tool.update(normalised)
 
-    return ChatPrompt(
+    return chat_prompt.ChatPrompt(
         name=prompt.name,
         system=system,
         user=user,

@@ -4,12 +4,12 @@ import time
 from typing import Any
 
 from benchmark_task import TaskResult
-from opik_optimizer.optimization_config import chat_prompt
+from opik_optimizer import ChatPrompt
 
 
 class ChatPromptEncoder(json.JSONEncoder):
     def default(self, obj: Any) -> Any:
-        if isinstance(obj, chat_prompt.ChatPrompt):
+        if isinstance(obj, ChatPrompt):
             return obj.to_dict()
         return super().default(obj)
 
