@@ -24,7 +24,7 @@ public class LlmAsJudgeMessageManufacturer extends AbstractTypeManufacturer<LlmA
 
         var role = ChatMessageType.values()[random.nextInt(ChatMessageType.values().length)];
 
-        Object content = strategy.getTypeValue(metadata, context, String.class);
+        String content = strategy.getTypeValue(metadata, context, String.class);
 
         return LlmAsJudgeMessage.builder()
                 .role(role)

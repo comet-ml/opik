@@ -10,11 +10,11 @@ import {
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import {
   LLMMessage,
-  ProviderMessageType,
   MessageContent,
   TextPart,
   ImagePart,
   VideoPart,
+  ProviderMessageType,
 } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import isUndefined from "lodash/isUndefined";
@@ -118,6 +118,7 @@ const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
+    // Send content as-is (either string or array) to match OpenAI API spec
     content: processedContent,
   };
 };

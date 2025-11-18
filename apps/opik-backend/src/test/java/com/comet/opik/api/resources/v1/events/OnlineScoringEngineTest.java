@@ -716,7 +716,10 @@ class OnlineScoringEngineTest {
                 .build();
 
         // Render a message using the variable
-        var template = List.of(new LlmAsJudgeMessage(ChatMessageType.USER, "Test value: {{testVar}}"));
+        var template = List.of(LlmAsJudgeMessage.builder()
+                .role(ChatMessageType.USER)
+                .content("Test value: {{testVar}}")
+                .build());
         var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
         assertThat(rendered).hasSize(1);
         var userMessage = rendered.getFirst();
@@ -763,7 +766,7 @@ class OnlineScoringEngineTest {
         var messages = List.of(
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.USER)
-                        .content(contentParts)
+                        .contentArray(contentParts)
                         .build());
 
         var renderedMessages = OnlineScoringEngine.renderMessages(
@@ -805,7 +808,7 @@ class OnlineScoringEngineTest {
         var messages = List.of(
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.USER)
-                        .content(contentParts)
+                        .contentArray(contentParts)
                         .build());
 
         var rendered = OnlineScoringEngine.renderMessages(
@@ -891,7 +894,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         // When
@@ -925,7 +928,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         // When & Then
@@ -957,7 +960,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         // When & Then
@@ -991,7 +994,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         // When & Then
@@ -1026,7 +1029,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         var variables = Map.of(
@@ -1076,7 +1079,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         var variables = Map.of(
@@ -1128,7 +1131,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         var variables = Map.of(
@@ -1182,7 +1185,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         var variables = Map.of(
@@ -1214,7 +1217,7 @@ class OnlineScoringEngineTest {
         // Given
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(List.of())
+                .contentArray(List.of())
                 .build();
 
         // When
@@ -1256,7 +1259,7 @@ class OnlineScoringEngineTest {
 
         var message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content(contentParts)
+                .contentArray(contentParts)
                 .build();
 
         var variables = Map.of(

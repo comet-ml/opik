@@ -95,7 +95,9 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
+    input: {
+      messages: run.providerMessages,
+    },
     output: { output: parseCompletionOutput(run) },
   };
 
@@ -136,7 +138,9 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
+    input: {
+      messages: run.providerMessages,
+    },
     output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: run.model,
