@@ -108,8 +108,8 @@ def hotpot_validation(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hotpot_validation_sample" if test_mode else "hotpot_validation"
     """Returns the 300-example validation slice used in the GEPA benchmark."""
+    dataset_name = "hotpot_validation_sample" if test_mode else "hotpot_validation"
     return _hotpot_split(
         dataset_name=dataset_name,
         source_split="train",
