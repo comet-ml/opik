@@ -156,12 +156,20 @@ public class FiltersFactory {
 
         filter = (T) filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
 
-        Pair<String, String> T2 = getFieldAndKey(filter.key());
-        String customField = T2.getLeft();
-        String customKey = T2.getRight();
+        String filterKey = filter.key();
+        FieldType fieldType = extractFieldType(filterKey);
+        String keyWithoutType = removeTypeEncoding(filterKey);
 
-        var mappedFilter = filter.buildFromCustom(customField,
-                customKey == null ? FieldType.STRING : FieldType.DICTIONARY, filter.operator(), customKey,
+        Pair<String, String> fieldAndKey = getFieldAndKey(keyWithoutType);
+        String customField = fieldAndKey.getLeft();
+        String customKey = fieldAndKey.getRight();
+
+        // If no explicit type was provided, infer from key structure
+        if (fieldType == null) {
+            fieldType = customKey == null ? FieldType.STRING : FieldType.DICTIONARY;
+        }
+
+        var mappedFilter = filter.buildFromCustom(customField, fieldType, filter.operator(), customKey,
                 filter.value());
 
         if (mappedFilter == null) {
@@ -169,6 +177,31 @@ public class FiltersFactory {
         }
 
         return (T) mappedFilter;
+    }
+
+    private FieldType extractFieldType(String filterKey) {
+        if (filterKey == null || !filterKey.contains("|")) {
+            return null;
+        }
+
+        int pipeIndex = filterKey.lastIndexOf('|');
+        String typeStr = filterKey.substring(pipeIndex + 1).toUpperCase();
+
+        try {
+            return FieldType.valueOf(typeStr);
+        } catch (IllegalArgumentException exception) {
+            log.warn("Invalid field type encoding '{}' in filter key '{}'", typeStr, filterKey);
+            return null;
+        }
+    }
+
+    private String removeTypeEncoding(String filterKey) {
+        if (filterKey == null || !filterKey.contains("|")) {
+            return filterKey;
+        }
+
+        int pipeIndex = filterKey.lastIndexOf('|');
+        return filterKey.substring(0, pipeIndex);
     }
 
     private Pair<String, String> getFieldAndKey(String customKey) {

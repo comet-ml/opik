@@ -71,11 +71,23 @@ public class DatasetItemFilter extends FilterImpl {
         if (!DatasetItemDynamicField.validType(type)) {
             return null;
         }
+
+        // For dataset items, the SQL query builder expects the full path (e.g., "data.size")
+        // in the queryParamField to properly detect and format dynamic field access
+        String queryParamField = buildQueryParamField(customField, key);
+
         return toBuilder()
-                .field(mapField(customField, type))
+                .field(mapField(queryParamField, type))
                 .operator(operator)
                 .key(key)
                 .value(value)
                 .build();
+    }
+
+    private String buildQueryParamField(String customField, String key) {
+        if (key == null || key.isEmpty()) {
+            return customField;
+        }
+        return customField + "." + key;
     }
 }

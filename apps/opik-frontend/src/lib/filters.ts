@@ -147,6 +147,35 @@ const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
 export const processFiltersArray = (filters: Filter[]) => {
   return flatten(
     filters.map((filter) => {
+      // Transform dataset item data fields to use custom field with type encoding
+      // Format: field="custom", key="data.columnName|type"
+      if (filter.field.startsWith("data.")) {
+        const columnName = filter.field.substring(5); // Remove "data." prefix
+        const typeMapping: Record<string, string> = {
+          [COLUMN_TYPE.string]: "string",
+          [COLUMN_TYPE.number]: "number",
+          [COLUMN_TYPE.dictionary]: "dictionary",
+          [COLUMN_TYPE.numberDictionary]: "dictionary",
+        };
+        const backendType = typeMapping[filter.type] || "string";
+
+        const transformedFilter = {
+          ...filter,
+          field: "custom",
+          key: `data.${columnName}|${backendType}`,
+        };
+
+        switch (filter.type) {
+          case COLUMN_TYPE.time:
+            return processTimeFilter(transformedFilter);
+          case COLUMN_TYPE.duration:
+            return processDurationFilter(transformedFilter);
+          default:
+            return transformedFilter;
+        }
+      }
+
+      // Handle time and duration conversions for other fields
       switch (filter.type) {
         case COLUMN_TYPE.time:
           return processTimeFilter(filter);
@@ -179,16 +208,16 @@ export const processFilters = (
   }
 
   if (processedFilters.length > 0) {
-    // Only send fields that the backend expects: field, type, operator, value, and key (for dictionary types)
+    // Only send fields that the backend expects: field, operator, value, and key (when applicable)
+    // Note: type is not sent as it's encoded in the key for custom fields or determined by field enum
     const backendFilters = processedFilters.map(
-      ({ field, operator, value, key, type }) => {
-        // Include key only for dictionary types
-        const isDictionary =
-          type === COLUMN_TYPE.dictionary ||
-          type === COLUMN_TYPE.numberDictionary;
-        return isDictionary
-          ? { field, type, operator, value, key }
-          : { field, type, operator, value };
+      ({ field, operator, value, key }) => {
+        // Include key for custom fields (field="custom") and dictionary types
+        const needsKey = field === "custom" || (key && key.trim() !== "");
+
+        return needsKey
+          ? { field, operator, value, key }
+          : { field, operator, value };
       },
     );
     retVal.filters = JSON.stringify(backendFilters);

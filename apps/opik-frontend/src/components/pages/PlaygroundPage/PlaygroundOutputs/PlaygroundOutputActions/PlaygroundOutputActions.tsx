@@ -33,6 +33,10 @@ import {
 import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetEmptyState from "./DatasetEmptyState";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import { Filters } from "@/types/filters";
+import { ColumnData } from "@/types/shared";
+import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -43,6 +47,8 @@ interface PlaygroundOutputActionsProps {
   datasetItems: DatasetItem[];
   datasetColumns: DatasetItemColumn[];
   loadingDatasetItems: boolean;
+  filters: Filters;
+  onFiltersChange: (filters: Filters) => void;
 }
 
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -57,6 +63,8 @@ const PlaygroundOutputActions = ({
   datasetItems,
   datasetColumns,
   loadingDatasetItems,
+  filters,
+  onFiltersChange,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -134,6 +142,18 @@ const PlaygroundOutputActions = ({
   }, [datasets]);
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
+
+  // Build columns configuration for filtering
+  // Dataset columns are stored in the 'data' map, accessed as "data.column_name"
+  const columnsData: ColumnData<DatasetItem>[] = useMemo(() => {
+    if (!datasetColumns.length) return [];
+
+    return datasetColumns.map((column) => ({
+      id: `data.${column.name}`,
+      label: column.name,
+      type: mapDynamicColumnTypesToColumnType(column.types),
+    }));
+  }, [datasetColumns]);
 
   // Clear datasetId if the selected dataset no longer exists
   useEffect(() => {
@@ -494,6 +514,17 @@ const PlaygroundOutputActions = ({
             </Button>
           )}
         </div>
+        {datasetId && (
+          <div className="mt-2.5 flex">
+            <FiltersButton
+              columns={columnsData}
+              filters={filters}
+              onChange={onFiltersChange}
+              layout="icon"
+              disabled={loadingDatasetItems}
+            />
+          </div>
+        )}
         <div className="mt-2.5 flex">
           <MetricSelector
             rules={rules}
