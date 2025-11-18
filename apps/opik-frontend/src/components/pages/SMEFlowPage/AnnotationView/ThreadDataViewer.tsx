@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { JsonParam, useQueryParam } from "use-query-params";
 import { Loader2 } from "lucide-react";
@@ -22,8 +22,9 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
   const [traceId, setTraceId] = useState<string>("");
   const [spanId, setSpanId] = useState<string>("");
-  
-  const [tracePanelFilters, setTracePanelFilters] = useQueryParam(
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_tracePanelFilters, setTracePanelFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
     {
@@ -89,7 +90,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
     (id: string, shouldFilterToolCalls?: boolean) => {
       setTraceId(id);
       setSpanId("");
-      
+
       // Set filters if we need to filter tool calls
       if (shouldFilterToolCalls) {
         setTracePanelFilters([
@@ -113,6 +114,26 @@ const ThreadDataViewer: React.FunctionComponent = () => {
     setTracePanelFilters([]);
   }, [setTracePanelFilters]);
 
+  const handleSetSpanId = useCallback(
+    (
+      updaterOrValue:
+        | string
+        | null
+        | undefined
+        | ((prev: string | null | undefined) => string | null | undefined),
+    ) => {
+      if (typeof updaterOrValue === "function") {
+        setSpanId((prev) => {
+          const newValue = updaterOrValue(prev);
+          return newValue ?? "";
+        });
+      } else {
+        setSpanId(updaterOrValue ?? "");
+      }
+    },
+    [],
+  );
+
   return (
     <>
       <div className="relative pr-4">
@@ -131,7 +152,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
         projectId={thread?.project_id || ""}
         traceId={traceId}
         spanId={spanId}
-        setSpanId={setSpanId}
+        setSpanId={handleSetSpanId}
         open={Boolean(traceId)}
         onClose={handleClose}
       />
