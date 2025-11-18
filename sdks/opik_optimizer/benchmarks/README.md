@@ -59,6 +59,91 @@ modal run check_results.py --run-id <RUN_ID>
 modal run check_results.py --run-id <RUN_ID> --watch --detailed
 ```
 
+## Configuration Methods
+
+### Method 1: Command-Line Arguments (Quick & Interactive)
+
+Use CLI arguments for quick, interactive benchmarking:
+
+```bash
+python run_benchmark.py \
+  --demo-datasets gsm8k hotpot_300 \
+  --optimizers few_shot meta_prompt \
+  --models openai/gpt-4o-mini \
+  --test-mode
+```
+
+### Method 2: Manifest Files (Reproducible & Complex)
+
+Use JSON manifest files for reproducible, complex benchmark configurations:
+
+```bash
+python run_benchmark.py --config manifest.json
+```
+
+**Example Manifest** (`manifest.example.json`):
+
+```json
+{
+  "seed": 42,
+  "test_mode": true,
+  "tasks": [
+    {
+      "dataset": "gsm8k",
+      "optimizer": "few_shot",
+      "model": "openai/gpt-4o-mini"
+    },
+    {
+      "dataset": "hotpot_300",
+      "optimizer": "meta_prompt",
+      "model": "openai/gpt-4o-mini",
+      "optimize_params": {
+        "max_trials": 2,
+        "seed": 123
+      }
+    },
+    {
+      "dataset": "ai2_arc",
+      "optimizer": "evolutionary_optimizer",
+      "model": "openai/gpt-4o-mini",
+      "test_mode": false,
+      "optimizer_params": {
+        "population_size": 8,
+        "max_generations": 4
+      },
+      "optimize_params": {
+        "max_trials": 20
+      }
+    }
+  ]
+}
+```
+
+**Manifest Schema:**
+- `seed` (optional): Random seed for reproducibility
+- `test_mode` (optional): Default test mode for all tasks
+- `tasks` (required): Array of task configurations
+  - `dataset` (required): Dataset name from available datasets
+  - `optimizer` (required): Optimizer name from available optimizers
+  - `model` (required): Model name from configured models
+  - `test_mode` (optional): Override test mode for this specific task
+  - `optimizer_params` (optional): Dict merged into the optimizer constructor (per-task overrides)
+  - `optimize_params` (optional): Dict merged into the optimizer's `optimize_prompt` call (per-task overrides)
+
+**When to use manifests:**
+- Reproducing exact benchmark configurations
+- Running complex multi-task benchmarks
+- Version-controlling benchmark configurations
+- Sharing benchmark setups with team members
+- CI/CD pipelines
+
+Use the per-task `optimizer_params` and `optimize_params` fields to enforce rollout budgets (e.g., `max_trials`, iteration caps) or tweak optimizer seeds without modifying the global defaults.
+
+#### Override Cheat Sheet
+
+- `optimizer_params`: constructor overrides (e.g., change population size, tweak optimizer-specific random seeds, toggle tracing). These are applied once when we instantiate the optimizer class.
+- `optimizer_prompt_params`: prompt-iteration overrides (e.g., `max_trials`, `n_samples`, judge batching). These are merged into the subsequent `optimize_prompt` call. When manifests omit this field, the runners derive an `optimizer_prompt_params_override` from the dataset rollout caps so Modal and local runs stay consistent.
+
 ## Commands
 
 ### Parameters
@@ -68,6 +153,7 @@ All parameters work for both local and Modal execution:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `--modal` | Run on Modal cloud (omit for local execution) | `false` |
+| `--config` | Path to manifest JSON (overrides CLI options) | - |
 | `--demo-datasets` | Dataset names (e.g., `gsm8k`, `hotpot_300`) | All datasets |
 | `--optimizers` | Optimizer names (e.g., `few_shot`, `meta_prompt`) | All optimizers |
 | `--models` | Model names (e.g., `openai/gpt-4o-mini`) | All configured models |
@@ -124,6 +210,12 @@ python run_benchmark.py --modal --resume-run-id run_20250423_153045
 
 # Retry only failed tasks
 python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
+
+# Using a manifest file (local)
+python run_benchmark.py --config manifest.json
+
+# Using a manifest file (Modal)
+python run_benchmark.py --modal --config manifest.json --max-concurrent 10
 ```
 
 ## Results
