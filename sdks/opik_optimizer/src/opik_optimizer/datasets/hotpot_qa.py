@@ -89,8 +89,8 @@ def hotpot_train(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hotpot_train_sample" if test_mode else "hotpot_train"
     """Returns the 150-example training slice used in the GEPA benchmark."""
+    dataset_name = "hotpot_train_sample" if test_mode else "hotpot_train"
     return _hotpot_split(
         dataset_name=dataset_name,
         source_split="train",
