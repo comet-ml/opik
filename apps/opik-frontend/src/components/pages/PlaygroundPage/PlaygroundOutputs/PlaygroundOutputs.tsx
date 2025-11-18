@@ -1,10 +1,12 @@
 import React, { useEffect } from "react";
+import { JsonParam, useQueryParam } from "use-query-params";
 import PlaygroundOutputTable from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
 import PlaygroundOutputActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
 import { usePromptIds, useSetDatasetVariables } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 
 interface PlaygroundOutputsProps {
   workspaceName: string;
@@ -23,10 +25,15 @@ const PlaygroundOutputs = ({
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
 
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
+    updateType: "replaceIn",
+  });
+
   const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
     useDatasetItemsList(
       {
         datasetId: datasetId!,
+        filters: filters as Filters,
         page: 1,
         size: 1000,
         truncate: true,
@@ -79,6 +86,8 @@ const PlaygroundOutputs = ({
         workspaceName={workspaceName}
         onChangeDatasetId={onChangeDatasetId}
         loadingDatasetItems={isLoadingDatasetItems}
+        filters={filters as Filters}
+        onFiltersChange={setFilters}
       />
       {renderResult()}
     </div>
