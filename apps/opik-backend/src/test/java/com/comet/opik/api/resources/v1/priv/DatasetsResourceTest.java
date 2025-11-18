@@ -202,7 +202,7 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId"};
+            "createdBy", "lastUpdatedBy", "datasetId", "tags"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount"};
@@ -3868,7 +3868,7 @@ class DatasetsResourceTest {
         }
     }
 
-    private void getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
+    private DatasetItem getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
         var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path("items")
                 .path(expectedDatasetItem.id().toString())
@@ -3887,6 +3887,255 @@ class DatasetsResourceTest {
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
+
+        return actualEntity;
+    }
+
+    @Nested
+    @DisplayName("Patch dataset item:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PatchDatasetItem {
+
+        private Stream<Arguments> patchFieldScenarios() {
+            return Stream.of(
+                    // Test patching data field only
+                    arguments("data field", (java.util.function.Function<DatasetItem, DatasetItem>) item -> {
+                        var newData = Map.<String, JsonNode>of(
+                                "updated_field", factory.manufacturePojo(JsonNode.class));
+                        return DatasetItem.builder()
+                                .data(newData)
+                                .build();
+                    }),
+                    // Test patching source, traceId and spanId for SPAN source
+                    arguments("source, traceId and spanId to SPAN",
+                            (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                                    .builder()
+                                    .source(DatasetItemSource.SPAN)
+                                    .traceId(GENERATOR.generate())
+                                    .spanId(GENERATOR.generate())
+                                    .build()),
+                    // Test patching traceId only (keeping existing SPAN source and spanId)
+                    arguments("traceId only",
+                            (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                                    .builder()
+                                    .traceId(GENERATOR.generate())
+                                    .build()),
+                    // Test patching spanId only (keeping existing SPAN source and traceId)
+                    arguments("spanId only", (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                            .builder()
+                            .spanId(GENERATOR.generate())
+                            .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("patchFieldScenarios")
+        @DisplayName("Success: patch different fields")
+        void patchDatasetItem(String scenarioName, java.util.function.Function<DatasetItem, DatasetItem> patchBuilder) {
+            // Create initial item with SPAN source
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .source(DatasetItemSource.SPAN)
+                    .traceId(GENERATOR.generate())
+                    .spanId(GENERATOR.generate())
+                    .tags(Set.of())
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(originalItem))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify original item exists
+            var retrievedOriginal = getItemAndAssert(originalItem, TEST_WORKSPACE, API_KEY);
+
+            // Build patch with only the fields we want to update
+            var patchItem = patchBuilder.apply(originalItem);
+
+            // Apply patch
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve patched item
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+
+            // Verify patched fields were updated
+            if (patchItem.data() != null) {
+                assertThat(patchedItem.data()).isEqualTo(patchItem.data());
+            } else {
+                assertThat(patchedItem.data()).isEqualTo(retrievedOriginal.data());
+            }
+
+            if (patchItem.source() != null) {
+                assertThat(patchedItem.source()).isEqualTo(patchItem.source());
+            } else {
+                assertThat(patchedItem.source()).isEqualTo(retrievedOriginal.source());
+            }
+
+            if (patchItem.traceId() != null) {
+                assertThat(patchedItem.traceId()).isEqualTo(patchItem.traceId());
+            } else {
+                assertThat(patchedItem.traceId()).isEqualTo(retrievedOriginal.traceId());
+            }
+
+            if (patchItem.spanId() != null) {
+                assertThat(patchedItem.spanId()).isEqualTo(patchItem.spanId());
+            } else {
+                assertThat(patchedItem.spanId()).isEqualTo(retrievedOriginal.spanId());
+            }
+
+            // Verify read-only fields remain unchanged
+            assertThat(patchedItem.id()).isEqualTo(originalItem.id());
+            assertThat(patchedItem.datasetId()).isEqualTo(retrievedOriginal.datasetId());
+            assertThat(patchedItem.createdBy()).isEqualTo(retrievedOriginal.createdBy());
+            // Note: createdAt and lastUpdatedAt will be updated by ClickHouse on INSERT
+        }
+
+        @Test
+        @DisplayName("when dataset item not found, then return 404")
+        void patchDatasetItem__whenDatasetItemNotFound__thenReturn404() {
+            var itemId = GENERATOR.generate();
+            var patchItem = DatasetItem.builder()
+                    .data(Map.of("field", factory.manufacturePojo(JsonNode.class)))
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callPatchDatasetItem(itemId, patchItem, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset item not found");
+            }
+        }
+
+        @Test
+        @DisplayName("Success: add tags to dataset item")
+        void patchDatasetItem__whenAddingTags__thenSucceed() {
+            // Create initial item without tags
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of())
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(originalItem))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify original item has no tags
+            var retrievedOriginal = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrievedOriginal.tags()).isEmpty();
+
+            // Add tags via PATCH
+            var tagsToAdd = Set.of("tag1", "tag2", "tag3");
+            var patchItem = DatasetItem.builder()
+                    .tags(tagsToAdd)
+                    .build();
+
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were added
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(patchedItem.tags()).containsExactlyInAnyOrderElementsOf(tagsToAdd);
+        }
+
+        @Test
+        @DisplayName("Success: update tags on dataset item")
+        void patchDatasetItem__whenUpdatingTags__thenSucceed() {
+            // Create initial item with tags
+            var initialTags = Set.of("tag1", "tag2");
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(initialTags)
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(originalItem))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify original item has initial tags
+            var retrievedOriginal = getItemAndAssert(originalItem, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedOriginal.tags()).containsExactlyInAnyOrderElementsOf(initialTags);
+
+            // Update tags via PATCH (add new tags)
+            var updatedTags = Set.of("tag1", "tag2", "tag3", "tag4");
+            var patchItem = DatasetItem.builder()
+                    .tags(updatedTags)
+                    .build();
+
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were updated
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(patchedItem.tags()).containsExactlyInAnyOrderElementsOf(updatedTags);
+        }
+
+        @Test
+        @DisplayName("Success: remove tags from dataset item")
+        void patchDatasetItem__whenRemovingTags__thenSucceed() {
+            // Create initial item with tags
+            var initialTags = Set.of("tag1", "tag2", "tag3");
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(initialTags)
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(originalItem))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify original item has initial tags
+            var retrievedOriginal = getItemAndAssert(originalItem, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedOriginal.tags()).containsExactlyInAnyOrderElementsOf(initialTags);
+
+            // Remove some tags via PATCH
+            var remainingTags = Set.of("tag1");
+            var patchItem = DatasetItem.builder()
+                    .tags(remainingTags)
+                    .build();
+
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were removed
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(patchedItem.tags()).containsExactlyInAnyOrderElementsOf(remainingTags);
+        }
+
+        @Test
+        @DisplayName("Success: clear all tags from dataset item")
+        void patchDatasetItem__whenClearingAllTags__thenSucceed() {
+            // Create initial item with tags
+            var initialTags = Set.of("tag1", "tag2", "tag3");
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(initialTags)
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(originalItem))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify original item has initial tags
+            var retrievedOriginal = getItemAndAssert(originalItem, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedOriginal.tags()).containsExactlyInAnyOrderElementsOf(initialTags);
+
+            // Clear all tags via PATCH
+            var patchItem = DatasetItem.builder()
+                    .tags(Set.of())
+                    .build();
+
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
+
+            // Verify all tags were cleared
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(patchedItem.tags()).isEmpty();
+        }
     }
 
     @Nested
@@ -4394,6 +4643,150 @@ class DatasetsResourceTest {
                 int size,
                 int expectedTotalCount,
                 List<DatasetItem> expectedItems) {
+        }
+
+        @Test
+        @DisplayName("Success: filter dataset items by tags")
+        void getDatasetItemsByDatasetId__whenFilteringByTags__thenSucceed() {
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag2", "tag3"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag3", "tag4"))
+                    .build();
+            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag5"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3, item4))
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by tag2 - should return item1 and item2
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag2");
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            List<DatasetItem> expectedContent = List.of(item2, item1); // reversed order
+
+            assertThat(actualEntity.content()).hasSize(2);
+            assertThat(actualEntity.total()).isEqualTo(2);
+            assertThat(actualEntity.content().getFirst().id()).isEqualTo(expectedContent.getFirst().id());
+            assertThat(actualEntity.content().get(1).id()).isEqualTo(expectedContent.get(1).id());
+        }
+
+        @Test
+        @DisplayName("Success: filter dataset items by multiple tags")
+        void getDatasetItemsByDatasetId__whenFilteringByMultipleTags__thenSucceed() {
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag2", "tag3"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag3", "tag4"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by tag3 - should return item2 and item3
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag3");
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualEntity.content()).hasSize(2);
+            assertThat(actualEntity.total()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Success: filter dataset items by non-existent tag")
+        void getDatasetItemsByDatasetId__whenFilteringByNonExistentTag__thenReturnEmpty() {
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag3", "tag4"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2))
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by non-existent tag
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "nonexistent");
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualEntity.content()).isEmpty();
+            assertThat(actualEntity.total()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Success: filter dataset items without tags")
+        void getDatasetItemsByDatasetId__whenFilteringItemsWithoutTags__thenSucceed() {
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            // Create items, some with tags and some without
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(null)
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of())
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get all items without filtering - should return all 3
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
+            assertThat(allItems.content()).hasSize(3);
+
+            // Filter by tag1 - should return only item1
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag1");
+            var filteredItems = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            assertThat(filteredItems.content()).hasSize(1);
+            assertThat(filteredItems.content().getFirst().id()).isEqualTo(item1.id());
         }
     }
 

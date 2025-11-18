@@ -16,6 +16,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
+import { TagProps } from "@/components/ui/tag";
 
 export enum RESOURCE_TYPE {
   project,
@@ -34,6 +35,7 @@ export const RESOURCE_MAP = {
     param: "projectId",
     deleted: "Deleted project",
     label: "project",
+    color: "var(--color-blue)",
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
@@ -41,6 +43,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted dataset",
     label: "dataset",
+    color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
@@ -48,6 +51,7 @@ export const RESOURCE_MAP = {
     param: "promptId",
     deleted: "Deleted prompt",
     label: "prompt",
+    color: "var(--color-purple)",
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
@@ -55,6 +59,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted experiment",
     label: "experiment",
+    color: "var(--color-green)",
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
@@ -62,6 +67,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "optimization run",
+    color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
@@ -69,6 +75,7 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted optimization",
     label: "trial",
+    color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
@@ -76,6 +83,7 @@ export const RESOURCE_MAP = {
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
     label: "annotation queue",
+    color: "var(--color-pink)",
   },
 };
 
@@ -85,6 +93,9 @@ type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
   params?: Record<string, string | number | string[]>;
+  variant?: TagProps["variant"];
+  iconsSize?: number;
+  gapSize?: number;
   tooltipContent?: string;
   asTag?: boolean;
   isDeleted?: boolean;
@@ -96,6 +107,9 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   id,
   search,
   params,
+  variant = "gray",
+  iconsSize = 4,
+  gapSize = 2,
   tooltipContent = "",
   asTag = false,
   isDeleted = false,
@@ -124,15 +138,46 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
         <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
           <Tag
             size="md"
-            variant="gray"
+            variant={variant}
             className={cn(
-              "flex items-center gap-2",
+              "flex items-center",
+              gapSize === 1 && "gap-1",
+              gapSize === 2 && "gap-2",
+              gapSize === 3 && "gap-3",
+              gapSize === 4 && "gap-4",
               deleted && "opacity-50 cursor-default",
             )}
           >
-            <props.icon className="size-4 shrink-0" />
-            <div className="truncate">{text}</div>
-            {!deleted && <ArrowUpRight className="size-4 shrink-0" />}
+            <props.icon
+              className={cn(
+                "shrink-0",
+                iconsSize === 3 && "size-3",
+                iconsSize === 4 && "size-4",
+                iconsSize === 5 && "size-5",
+              )}
+              style={{ color: props.color }}
+            />
+            <div
+              className={cn(
+                "truncate",
+                variant === "transparent" && [
+                  "text-muted-slate",
+                  "comet-body-s-accented",
+                ],
+              )}
+            >
+              {text}
+            </div>
+            {!deleted && (
+              <ArrowUpRight
+                className={cn(
+                  "shrink-0 text-muted-slate",
+                  iconsSize === 3 && "size-3",
+                  iconsSize === 4 && "size-4",
+                  iconsSize === 5 && "size-5",
+                )}
+              />
+            )}
           </Tag>
         </TooltipWrapper>
       ) : (
