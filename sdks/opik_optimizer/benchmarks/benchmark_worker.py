@@ -67,6 +67,8 @@ def run_optimization_modal(
     model_name: str,
     test_mode: bool,
     run_id: str,
+    optimizer_params: dict | None = None,
+    optimizer_prompt_params: dict | None = None,
 ) -> dict:
     """
     Run a single optimization task on Modal.
@@ -81,6 +83,8 @@ def run_optimization_modal(
         model_name: Name of model to use
         test_mode: Whether to run in test mode (5 examples)
         run_id: Unique identifier for this benchmark run
+        optimizer_params: Optional overrides merged into the optimizer constructor
+        optimizer_prompt_params: Optional overrides merged into optimize_prompt
 
     Returns:
         Dictionary containing task result (also saved to Volume)
@@ -90,7 +94,7 @@ def run_optimization_modal(
 
     # Import core logic modules
     import time
-    from benchmark_task import TaskResult
+    from benchmark_task import TaskResult, TASK_STATUS_RUNNING
     from modal_utils.worker_core import run_optimization_task
     from modal_utils.storage import save_result_to_volume
 
@@ -101,7 +105,7 @@ def run_optimization_modal(
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
-        status="Running",
+        status=TASK_STATUS_RUNNING,
         timestamp_start=timestamp_start,
     )
     # Save immediately so it's visible to check_results.py
@@ -116,6 +120,8 @@ def run_optimization_modal(
         optimizer_name=optimizer_name,
         model_name=model_name,
         test_mode=test_mode,
+        optimizer_params_override=optimizer_params,
+        optimizer_prompt_params_override=optimizer_prompt_params,
     )
 
     # Ensure the final result uses the same timestamp_start as the Running status

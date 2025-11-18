@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from benchmark_task import TaskResult
+from benchmark_taskspec import BenchmarkTaskSpec
 from opik_optimizer import ChatPrompt
 
 
@@ -23,6 +24,7 @@ class BenchmarkCheckpointManager:
         demo_datasets: list[str],
         optimizers: list[str],
         models: list[str],
+        task_specs: list[BenchmarkTaskSpec],
     ):
         self.checkpoint_timestamp = time.time()
         self.checkpoint_folder = os.path.abspath(checkpoint_folder)
@@ -36,6 +38,7 @@ class BenchmarkCheckpointManager:
         self.demo_datasets = demo_datasets
         self.optimizers = optimizers
         self.models = models
+        self.task_specs = task_specs
 
         self.task_results: list[TaskResult] = []
 
@@ -47,6 +50,7 @@ class BenchmarkCheckpointManager:
                 "demo_datasets": self.demo_datasets,
                 "optimizers": self.optimizers,
                 "models": self.models,
+                "tasks": [spec.to_dict() for spec in self.task_specs],
                 "task_results": [x.model_dump() for x in self.task_results],
             }
             json.dump(checkpoint_dict, f, cls=ChatPromptEncoder, indent=3)
@@ -64,6 +68,16 @@ class BenchmarkCheckpointManager:
             self.demo_datasets = checkpoint_data["demo_datasets"]
             self.optimizers = checkpoint_data["optimizers"]
             self.models = checkpoint_data["models"]
+            tasks_data = checkpoint_data.get("tasks")
+            if tasks_data:
+                self.task_specs = [
+                    BenchmarkTaskSpec.from_dict(task) for task in tasks_data
+                ]
+            else:
+                raise ValueError(
+                    "Checkpoint file is missing the 'tasks' field. "
+                    "This checkpoint format is not supported—please re-run the benchmark."
+                )
             self.task_results = [
                 TaskResult.model_validate(x) for x in checkpoint_data["task_results"]
             ]
