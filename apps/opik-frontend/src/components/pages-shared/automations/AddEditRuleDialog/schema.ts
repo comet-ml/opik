@@ -364,21 +364,36 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
-const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map((m) => ({
-    content: m.content,
-    role: m.role.toUpperCase(),
-  }));
+const convertLLMToProviderMessages = (
+  messages: LLMMessage[],
+): ProviderMessageType[] =>
+  messages.map(({ content, ...rest }) => {
+    const base = {
+      ...rest,
+      role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
+    };
 
-const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
-  messages.map(
-    (m) =>
-      ({
-        ...m,
-        role: m.role.toLowerCase(),
-        id: generateRandomString(),
-      }) as LLMMessage,
-  );
+    // For LlmAsJudgeMessage (online scoring), use separate fields
+    // Only set the appropriate field based on content type
+    if (typeof content === "string") {
+      return { ...base, content };
+    } else if (Array.isArray(content)) {
+      return { ...base, content_array: content };
+    }
+
+    return base;
+  });
+
+const convertProviderToLLMMessages = (
+  messages: ProviderMessageType[],
+): LLMMessage[] =>
+  messages.map((m) => ({
+    ...m,
+    role: m.role.toLowerCase() as LLM_MESSAGE_ROLE,
+    // Convert from separate fields to union type for frontend
+    content: m.content_array ?? m.content ?? "",
+    id: generateRandomString(),
+  }));
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   return {
