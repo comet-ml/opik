@@ -208,7 +208,7 @@ description: "Find answers to common questions about Opik Agent Optimizer, inclu
     Yes—compose metrics using `MultiMetricObjective` or custom heuristics so optimizers weigh multiple goals. For complex trade-offs, capture human preferences in the metric reasons, or explore Pareto-aware optimizers like GEPA that surface trade-offs between accuracy and cost.
   </Accordion>
   <Accordion title="What about multimodal or agent workflows?">
-    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents/overview) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
+    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK and more. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents/overview) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
   </Accordion>
   <Accordion title="How reliable are optimizer metrics?">
     LLM-based metrics can be noisy. Always include deterministic checks when possible, and ensure your `ScoreResult.reason` is informative so reflective optimizers can identify true failure modes. See [Define metrics](/agent_optimization/optimization/define_metrics) and [Custom metrics](/agent_optimization/advanced/custom_metrics) for best practices.

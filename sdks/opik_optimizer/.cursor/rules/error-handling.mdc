@@ -10,7 +10,7 @@ Optimizers make heavy use of third-party services and background evaluations. Su
 ## Validation
 
 - `_validate_optimization_inputs` should raise `ValueError` with descriptive messages when prompts, datasets, or metrics are invalid. Mirror this pattern in new optimizers before any remote calls occur.
-- Configuration parsing (for example, `optimization_config` models, MCP configs) should use `pydantic.ValidationError` or custom exceptions that describe which field failed.
+- Configuration parsing (for example, `optimization_config` models) should use `pydantic.ValidationError` or custom exceptions that describe which field failed.
 
 ## Remote Calls and Retries
 
