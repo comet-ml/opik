@@ -18,9 +18,11 @@ import PlaygroundVariableCell from "@/components/pages/PlaygroundPage/Playground
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
+  tags: string[];
 };
 
 const columnHelper = createColumnHelper<PlaygroundOutputTableData>();
@@ -85,6 +87,7 @@ const PlaygroundOutputTable = ({
         variables: {
           ...di.data,
         },
+        tags: di.tags || [],
       };
     });
   }, [hydratedDatasetItems]);
@@ -117,6 +120,15 @@ const PlaygroundOutputTable = ({
             },
           }) as ColumnData<PlaygroundOutputTableData>,
       );
+
+    // Add tags column
+    inputColumns.push({
+      id: "tags",
+      label: "Tags",
+      type: COLUMN_TYPE.list,
+      accessorFn: (row) => row.tags || [],
+      cell: ListCell as never,
+    } as ColumnData<PlaygroundOutputTableData>);
 
     retVal.push(
       columnHelper.group({

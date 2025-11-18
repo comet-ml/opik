@@ -1,10 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { Database, FlaskConical, Pause, Play, Plus, X } from "lucide-react";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import MetricSelector from "./MetricSelector";
+import DatasetEmptyState from "./DatasetEmptyState";
+
+import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectByName from "@/api/projects/useProjectByName";
+import useRulesList from "@/api/automations/useRulesList";
+import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 import {
   usePromptCount,
   usePromptMap,
@@ -12,27 +24,19 @@ import {
   useSelectedRuleIds,
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
-import useProjectByName from "@/api/projects/useProjectByName";
-import useRulesList from "@/api/automations/useRulesList";
-import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
-import MetricSelector from "./MetricSelector";
-import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
-import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
-import { useQueryClient } from "@tanstack/react-query";
-
-import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
 import { cn } from "@/lib/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
-import { Separator } from "@/components/ui/separator";
 import {
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
 import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
+
+import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filters } from "@/types/filters";
+import { COLUMN_TYPE } from "@/types/shared";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
-import DatasetEmptyState from "./DatasetEmptyState";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -43,6 +47,8 @@ interface PlaygroundOutputActionsProps {
   datasetItems: DatasetItem[];
   datasetColumns: DatasetItemColumn[];
   loadingDatasetItems: boolean;
+  filters: Filters;
+  onFiltersChange: (filters: Filters) => void;
 }
 
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -57,6 +63,8 @@ const PlaygroundOutputActions = ({
   datasetItems,
   datasetColumns,
   loadingDatasetItems,
+  filters,
+  onFiltersChange,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -73,6 +81,17 @@ const PlaygroundOutputActions = ({
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
+
+  // Define filters column data for tag filtering
+  const filtersColumnData = useMemo(() => {
+    return [
+      {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+      },
+    ];
+  }, []);
 
   // Fetch playground project - always fetch to show metric selector
   const {
@@ -494,6 +513,16 @@ const PlaygroundOutputActions = ({
             </Button>
           )}
         </div>
+        {datasetId && (
+          <div className="mt-2.5 flex">
+            <FiltersButton
+              columns={filtersColumnData}
+              filters={filters}
+              onChange={onFiltersChange}
+              layout="icon"
+            />
+          </div>
+        )}
         <div className="mt-2.5 flex">
           <MetricSelector
             rules={rules}

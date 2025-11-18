@@ -1,10 +1,11 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import PlaygroundOutputTable from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
 import PlaygroundOutputActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
 import { usePromptIds, useSetDatasetVariables } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 
 interface PlaygroundOutputsProps {
   workspaceName: string;
@@ -22,6 +23,7 @@ const PlaygroundOutputs = ({
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
+  const [filters, setFilters] = useState<Filters>([]);
 
   const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
     useDatasetItemsList(
@@ -30,6 +32,7 @@ const PlaygroundOutputs = ({
         page: 1,
         size: 1000,
         truncate: true,
+        filters,
       },
       {
         enabled: !!datasetId,
@@ -38,6 +41,14 @@ const PlaygroundOutputs = ({
 
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
+
+  const handleChangeDatasetId = useCallback(
+    (id: string | null) => {
+      setFilters([]);
+      onChangeDatasetId(id);
+    },
+    [onChangeDatasetId],
+  );
 
   const renderResult = () => {
     if (datasetId) {
@@ -77,8 +88,10 @@ const PlaygroundOutputs = ({
         datasetItems={datasetItems}
         datasetColumns={datasetColumns}
         workspaceName={workspaceName}
-        onChangeDatasetId={onChangeDatasetId}
+        onChangeDatasetId={handleChangeDatasetId}
         loadingDatasetItems={isLoadingDatasetItems}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
       {renderResult()}
     </div>
