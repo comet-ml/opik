@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
-import { parseLLMMessageContent } from "@/lib/llm";
+import CodeHighlighter, {
+  SUPPORTED_LANGUAGE,
+} from "@/components/shared/CodeHighlighter/CodeHighlighter";
 
 interface ChatMessage {
   role: string;
@@ -24,28 +25,31 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
-  const getMessageContent = (
+  const getTextAndAttachments = (
     content: string | Array<{ type: string; [key: string]: unknown }>,
-  ): string => {
+  ): { text: string; attachments: Array<{ type: string; [key: string]: unknown }> } => {
     if (typeof content === "string") {
-      return content;
+      return { text: content, attachments: [] };
     }
+
     // Handle multimodal content
     if (Array.isArray(content)) {
-      return content
+      const textParts = content
         .filter((part) => part.type === "text")
         .map((part) => part.text || "")
         .join("\n");
+
+      const attachments = content.filter((part) => part.type !== "text");
+
+      return { text: textParts, attachments };
     }
-    return "";
+
+    return { text: "", attachments: [] };
   };
 
-  const messageText = getMessageContent(message.content);
-  const {
-    text: displayText,
-    images: extractedImages,
-    videos: extractedVideos,
-  } = useMemo(() => parseLLMMessageContent(messageText), [messageText]);
+  const { text: displayText, attachments } = getTextAndAttachments(
+    message.content,
+  );
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md border bg-primary-foreground p-3">
@@ -54,26 +58,22 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
           {getRoleLabel(message.role)}
         </span>
       </div>
-      <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-        {displayText}
-      </div>
-      {extractedImages.length > 0 && (
-        <PromptMessageMediaTags
-          type="image"
-          items={extractedImages}
-          editable={false}
-          preview={true}
-          align="start"
-        />
+      {displayText && (
+        <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+          {displayText}
+        </div>
       )}
-      {extractedVideos.length > 0 && (
-        <PromptMessageMediaTags
-          type="video"
-          items={extractedVideos}
-          editable={false}
-          preview={true}
-          align="start"
-        />
+      {attachments.length > 0 && (
+        <div className="space-y-2">
+          {attachments.map((attachment, index) => (
+            <div key={index} className="rounded border">
+              <CodeHighlighter
+                data={JSON.stringify(attachment, null, 2)}
+                language={SUPPORTED_LANGUAGE.json}
+              />
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
