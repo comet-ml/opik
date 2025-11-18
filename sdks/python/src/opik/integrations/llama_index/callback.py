@@ -68,7 +68,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._opik_context_storage = context_storage.get_current_context_instance()
 
         self._opik_trace_data: Optional[trace.TraceData] = None
-        self._trace_created_by_us: bool = False
+        self._trace_created_by_us = False
         self._wrapper_span_data: Optional[span.SpanData] = None
         self._llama_index_root_name: Optional[str] = None
 
