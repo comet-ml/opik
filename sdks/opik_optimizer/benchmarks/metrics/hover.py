@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, cast
+from collections.abc import Iterable
 
 from opik.evaluation.metrics.score_result import ScoreResult
 from pydantic import BaseModel
@@ -32,7 +33,9 @@ def _format_supporting_facts(facts: Iterable[Any] | None) -> str:
     rows = []
     for fact in facts or []:
         if isinstance(fact, dict):
-            rows.append(f"- {fact.get('key', 'unknown')} (sentence {fact.get('value')})")
+            rows.append(
+                f"- {fact.get('key', 'unknown')} (sentence {fact.get('value')})"
+            )
         else:
             rows.append(f"- {fact}")
     return "\n".join(rows) if rows else "No supporting facts provided."
@@ -90,10 +93,11 @@ Model verdict / reasoning:
 def hover_judge_feedback(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     """LLM-as-judge feedback used by HoVer."""
     gold_label = _normalize_hover_label(dataset_item.get("label")) or "UNKNOWN"
+    supporting_facts = cast(Iterable[Any] | None, dataset_item.get("supporting_facts"))
     prompt = HOVER_JUDGE_PROMPT.format(
         claim=str(dataset_item.get("claim", "")),
         gold_label=gold_label,
-        supporting_facts=_format_supporting_facts(dataset_item.get("supporting_facts")),
+        supporting_facts=_format_supporting_facts(supporting_facts),
         prediction=llm_output or "",
     )
     response, raw_output = utils.run_structured_judge(
