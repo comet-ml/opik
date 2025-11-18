@@ -1,3 +1,10 @@
+"""Central registry of datasets, optimizers, models, and initial prompts.
+
+Both the local runner and Modal worker import this module to discover which
+datasets are available, which metrics they should be evaluated with, the
+default optimizer classes/parameters, and the rollout budgets.
+"""
+
 from typing import Any
 from collections.abc import Callable
 
@@ -12,6 +19,19 @@ from opik.evaluation.metrics import (
 from opik.evaluation.metrics.score_result import ScoreResult
 from pydantic import BaseModel
 
+# Allow running both as package (python -m bench...) and as a script, and keep
+# static type checkers happy by falling back gracefully.
+try:
+    from .metrics import hotpot, hover, ifbench, pupa  # type: ignore[import]
+except ImportError:  # pragma: no cover - script execution path
+    import os
+    import sys
+
+    _THIS_DIR = os.path.dirname(__file__)
+    if _THIS_DIR not in sys.path:
+        sys.path.append(_THIS_DIR)
+    from metrics import hotpot, hover, ifbench, pupa
+
 
 class BenchmarkDatasetConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
@@ -19,6 +39,8 @@ class BenchmarkDatasetConfig(BaseModel):
     name: str
     display_name: str
     metrics: list[Callable]
+    rollout_budget: int | None = None
+    train_rollout_budget: int | None = None
 
 
 class BenchmarkProjectConfig(BaseModel):
@@ -111,7 +133,16 @@ def hallucination(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return Hallucination().score(input=dataset_item["question"], output=llm_output)
 
 
+_HOT_POT_METRICS = [hotpot.hotpot_exact_match, hotpot.hotpot_f1]
+_HOVER_METRICS = [hover.hover_label_accuracy, hover.hover_judge_feedback]
+_IFBENCH_METRICS = [ifbench.ifbench_compliance_judge]
+_PUPA_METRICS = [pupa.pupa_quality_judge, pupa.pupa_leakage_ratio]
+
+
 DATASET_CONFIG = {
+    # TODO: derive this entire structure from metadata defined alongside
+    # dataset helpers (names, default metrics, rollout budgets, seed counts,
+    # initial prompts, etc.) so the configuration is single-sourced.
     "gsm8k": BenchmarkDatasetConfig(
         name="gsm8k",
         display_name="GSM8K",
@@ -158,6 +189,90 @@ DATASET_CONFIG = {
         name="cnn_dailymail",
         display_name="CNN/Daily Mail",
         metrics=[create_levenshtein_ratio_metric("highlights")],
+    ),
+    "hotpot_train": BenchmarkDatasetConfig(
+        name="hotpot_train",
+        display_name="HotpotQA Train",
+        metrics=_HOT_POT_METRICS,
+        rollout_budget=6438,
+        train_rollout_budget=737,
+    ),
+    "hotpot_validation": BenchmarkDatasetConfig(
+        name="hotpot_validation",
+        display_name="HotpotQA Validation",
+        metrics=_HOT_POT_METRICS,
+        rollout_budget=6438,
+        train_rollout_budget=737,
+    ),
+    "hotpot_test": BenchmarkDatasetConfig(
+        name="hotpot_test",
+        display_name="HotpotQA Test",
+        metrics=_HOT_POT_METRICS,
+        rollout_budget=6438,
+        train_rollout_budget=737,
+    ),
+    "hover_train": BenchmarkDatasetConfig(
+        name="hover_train",
+        display_name="HoVer Train",
+        metrics=_HOVER_METRICS,
+        rollout_budget=6858,
+        train_rollout_budget=558,
+    ),
+    "hover_validation": BenchmarkDatasetConfig(
+        name="hover_validation",
+        display_name="HoVer Validation",
+        metrics=_HOVER_METRICS,
+        rollout_budget=6858,
+        train_rollout_budget=558,
+    ),
+    "hover_test": BenchmarkDatasetConfig(
+        name="hover_test",
+        display_name="HoVer Test",
+        metrics=_HOVER_METRICS,
+        rollout_budget=6858,
+        train_rollout_budget=558,
+    ),
+    "ifbench_train": BenchmarkDatasetConfig(
+        name="ifbench_train",
+        display_name="IFBench Train",
+        metrics=_IFBENCH_METRICS,
+        rollout_budget=678,
+        train_rollout_budget=79,
+    ),
+    "ifbench_validation": BenchmarkDatasetConfig(
+        name="ifbench_validation",
+        display_name="IFBench Validation",
+        metrics=_IFBENCH_METRICS,
+        rollout_budget=678,
+        train_rollout_budget=79,
+    ),
+    "ifbench_test": BenchmarkDatasetConfig(
+        name="ifbench_test",
+        display_name="IFBench Test",
+        metrics=_IFBENCH_METRICS,
+        rollout_budget=678,
+        train_rollout_budget=79,
+    ),
+    "pupa_train": BenchmarkDatasetConfig(
+        name="pupa_train",
+        display_name="PUPA Train",
+        metrics=_PUPA_METRICS,
+        rollout_budget=2157,
+        train_rollout_budget=269,
+    ),
+    "pupa_validation": BenchmarkDatasetConfig(
+        name="pupa_validation",
+        display_name="PUPA Validation",
+        metrics=_PUPA_METRICS,
+        rollout_budget=2157,
+        train_rollout_budget=269,
+    ),
+    "pupa_test": BenchmarkDatasetConfig(
+        name="pupa_test",
+        display_name="PUPA Test",
+        metrics=_PUPA_METRICS,
+        rollout_budget=2157,
+        train_rollout_budget=269,
     ),
 }
 
@@ -297,3 +412,52 @@ INITIAL_PROMPTS = {
         {"role": "user", "content": "{article}"},
     ],
 }
+
+
+def _clone_prompt(key: str) -> list[dict[str, str]]:
+    return [dict(message) for message in INITIAL_PROMPTS[key]]
+
+
+_HOVER_PROMPT = [
+    {
+        "role": "system",
+        "content": "Determine whether the claim is supported, refuted, or lacks evidence.",
+    },
+    {"role": "user", "content": "Claim: {claim}"},
+]
+
+_IFBENCH_PROMPT = [
+    {
+        "role": "system",
+        "content": "Answer the user's query and then rewrite the response to satisfy the constraints exactly.",
+    },
+    {
+        "role": "user",
+        "content": "Messages:\n{messages}\n\nConstraints:\n{constraint}",
+    },
+]
+
+_PUPA_PROMPT = [
+    {
+        "role": "system",
+        "content": "Rewrite the user's request to remove sensitive information while preserving intent.",
+    },
+    {"role": "user", "content": "User query: {user_query}"},
+]
+
+INITIAL_PROMPTS.update(
+    {
+        "hotpot_train": _clone_prompt("hotpot_300"),
+        "hotpot_validation": _clone_prompt("hotpot_300"),
+        "hotpot_test": _clone_prompt("hotpot_300"),
+        "hover_train": _HOVER_PROMPT,
+        "hover_validation": _HOVER_PROMPT,
+        "hover_test": _HOVER_PROMPT,
+        "ifbench_train": _IFBENCH_PROMPT,
+        "ifbench_validation": _IFBENCH_PROMPT,
+        "ifbench_test": _IFBENCH_PROMPT,
+        "pupa_train": _PUPA_PROMPT,
+        "pupa_validation": _PUPA_PROMPT,
+        "pupa_test": _PUPA_PROMPT,
+    }
+)
