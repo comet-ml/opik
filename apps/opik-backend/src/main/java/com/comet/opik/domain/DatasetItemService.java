@@ -236,6 +236,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     Optional.ofNullable(item.source()).ifPresent(builder::source);
                     Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
                     Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
+                    Optional.ofNullable(item.tags()).ifPresent(builder::tags);
 
                     DatasetItem patchedItem = builder.build();
 

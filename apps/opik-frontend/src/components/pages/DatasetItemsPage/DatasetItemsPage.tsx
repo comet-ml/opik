@@ -42,6 +42,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import {
@@ -225,6 +226,14 @@ const DatasetItemsPage = () => {
           cell: AutodetectCell as never,
         }) as ColumnData<DatasetItem>,
     );
+
+    retVal.push({
+      id: "tags",
+      label: "Tags",
+      type: COLUMN_TYPE.list,
+      accessorFn: (row) => row.tags || [],
+      cell: ListCell as never,
+    });
 
     retVal.push({
       id: "created_at",
