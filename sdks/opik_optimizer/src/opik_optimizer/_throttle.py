@@ -1,6 +1,7 @@
+import asyncio
 import functools
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import ParamSpec, TypeVar
 
 import opik.config
@@ -26,6 +27,10 @@ class RateLimiter:
         while not self.limiter.try_acquire(self.bucket_key):
             time.sleep(0.01)
 
+    async def acquire_async(self) -> None:
+        while not self.limiter.try_acquire(self.bucket_key):
+            await asyncio.sleep(0.01)
+
 
 def rate_limited(limiter: RateLimiter) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to rate limit a function using the provided limiter"""
@@ -35,6 +40,22 @@ def rate_limited(limiter: RateLimiter) -> Callable[[Callable[P, R]], Callable[P,
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             limiter.acquire()
             return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def rate_limited_async(
+    limiter: RateLimiter,
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+    """Decorator to rate limit async functions without blocking the loop"""
+
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+        @functools.wraps(func)
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            await limiter.acquire_async()
+            return await func(*args, **kwargs)
 
         return wrapper
 

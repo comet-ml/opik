@@ -107,17 +107,16 @@ def _prepare_model_params(
             final_params["metadata"]["opik_call_type"] = "reasoning"
 
     # Configure project_name and tags for Opik tracing
-    if "metadata" not in final_params:
-        final_params["metadata"] = {}
-    if "opik" not in final_params["metadata"]:
-        final_params["metadata"]["opik"] = {}
+    metadata = final_params.setdefault("metadata", {})
+    opik_metadata = metadata.setdefault("opik", {})
 
-    # Set project name for optimizer reasoning calls
-    final_params["metadata"]["opik"]["project_name"] = project_name
+    # Only set project name when provided so caller overrides survive
+    if project_name is not None:
+        opik_metadata["project_name"] = project_name
 
     # Add tags if optimization_id is available
     if optimization_id:
-        final_params["metadata"]["opik"]["tags"] = [
+        opik_metadata["tags"] = [
             optimization_id,
             "Prompt Optimization",
         ]
@@ -230,7 +229,7 @@ def call_model(
     return _parse_response(response, response_model)
 
 
-@_throttle.rate_limited(_limiter)
+@_throttle.rate_limited_async(_limiter)
 async def call_model_async(
     messages: list[dict[str, str]],
     model: str,
