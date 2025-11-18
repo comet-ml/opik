@@ -1,9 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
-import findIndex from "lodash/findIndex";
 import get from "lodash/get";
-import isBoolean from "lodash/isBoolean";
-import isFunction from "lodash/isFunction";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -28,8 +25,7 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
-import DatasetItemPanelContent from "@/components/pages/DatasetItemsPage/DatasetItemPanelContent";
+import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
 import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -295,33 +291,7 @@ const DatasetItemsPage = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
-
-  const hasNext = rowIndex >= 0 ? rowIndex < rows.length - 1 : false;
-  const hasPrevious = rowIndex >= 0 ? rowIndex > 0 : false;
-
-  const handleRowChange = useCallback(
-    (shift: number) => {
-      setActiveRowId(rows[rowIndex + shift]?.id ?? "");
-    },
-    [rowIndex, rows, setActiveRowId],
-  );
-
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
-
-  const horizontalNavigation = useMemo(
-    () =>
-      isBoolean(hasNext) &&
-      isBoolean(hasPrevious) &&
-      isFunction(handleRowChange)
-        ? {
-            onChange: handleRowChange,
-            hasNext,
-            hasPrevious,
-          }
-        : undefined,
-    [handleRowChange, hasNext, hasPrevious],
-  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -450,15 +420,14 @@ const DatasetItemsPage = () => {
           truncationEnabled={truncationEnabled}
         />
       </div>
-      <ResizableSidePanel
-        panelId="dataset-items"
-        entity="item"
-        open={Boolean(activeRowId)}
+      <DatasetItemEditor
+        datasetItemId={activeRowId as string}
+        columns={columnsData}
         onClose={handleClose}
-        horizontalNavigation={horizontalNavigation}
-      >
-        <DatasetItemPanelContent datasetItemId={activeRowId as string} />
-      </ResizableSidePanel>
+        isOpen={Boolean(activeRowId)}
+        rows={rows}
+        setActiveRowId={setActiveRowId}
+      />
 
       <AddEditDatasetItemDialog
         key={resetDialogKeyRef.current}
