@@ -23,6 +23,7 @@ from .chat_content_renderer_registry import (
     DEFAULT_CHAT_RENDERER_REGISTRY,
     register_default_chat_part_renderer,
 )
+from .image_url_utils import convert_image_url_to_data_url, is_data_url
 
 
 class ChatPromptTemplate:
@@ -141,6 +142,19 @@ def render_image_url_part(
     rendered_url = _render_template_string(url_template, variables, template_type)
     if not rendered_url:
         return None
+
+    # Convert HTTP/HTTPS URLs to base64 data URLs to ensure reliable access.
+    # This is necessary because some LLM APIs (like OpenAI) may have network
+    # restrictions that prevent them from accessing certain external URLs.
+    # Data URLs are always accessible since they're embedded in the request.
+    if not is_data_url(rendered_url) and (
+        rendered_url.startswith("http://") or rendered_url.startswith("https://")
+    ):
+        converted_url = convert_image_url_to_data_url(rendered_url)
+        if converted_url is not None:
+            rendered_url = converted_url
+        # If conversion fails, we'll use the original URL and let the API handle it
+        # (it may work for some URLs, or the API may provide a better error message)
 
     rendered_image: Dict[str, Any] = {"url": rendered_url}
     if "detail" in image_dict:
