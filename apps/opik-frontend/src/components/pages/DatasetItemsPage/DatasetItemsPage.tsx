@@ -4,7 +4,12 @@ import findIndex from "lodash/findIndex";
 import get from "lodash/get";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
-import { NumberParam, StringParam, useQueryParam } from "use-query-params";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -17,9 +22,11 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 import {
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -42,6 +49,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import {
@@ -84,6 +92,14 @@ const DatasetItemsPage = () => {
     updateType: "replaceIn",
   });
 
+  const [filters = [], setFilters] = useQueryParam<Filters, Filters>(
+    "filters",
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
@@ -116,6 +132,7 @@ const DatasetItemsPage = () => {
   const { data, isPending } = useDatasetItemsList(
     {
       datasetId,
+      filters,
       page: page as number,
       size: size as number,
       search: search!,
@@ -129,6 +146,7 @@ const DatasetItemsPage = () => {
   const { refetch: refetchExportData } = useDatasetItemsList(
     {
       datasetId,
+      filters,
       page: page as number,
       size: size as number,
       search: search!,
@@ -227,6 +245,14 @@ const DatasetItemsPage = () => {
     );
 
     retVal.push({
+      id: "tags",
+      label: "Tags",
+      type: COLUMN_TYPE.list,
+      accessorFn: (row) => row.tags || [],
+      cell: ListCell as never,
+    });
+
+    retVal.push({
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
@@ -248,6 +274,16 @@ const DatasetItemsPage = () => {
 
     return retVal;
   }, [dynamicDatasetColumns]);
+
+  const filtersColumnData = useMemo(() => {
+    return [
+      {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+      },
+    ];
+  }, []);
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {
@@ -356,7 +392,7 @@ const DatasetItemsPage = () => {
           </div>
         )}
         {dataset?.created_at && (
-          <div className="mb-2 flex gap-4 overflow-x-auto">
+          <div className="mb-2 flex gap-2 overflow-x-auto">
             <DateTag
               date={dataset?.created_at}
               resource={RESOURCE_TYPE.dataset}
@@ -377,6 +413,11 @@ const DatasetItemsPage = () => {
             placeholder="Search"
             className="w-[320px]"
             dimension="sm"
+          />
+          <FiltersButton
+            columns={filtersColumnData}
+            filters={filters}
+            onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -457,7 +498,10 @@ const DatasetItemsPage = () => {
         onClose={handleClose}
         horizontalNavigation={horizontalNavigation}
       >
-        <DatasetItemPanelContent datasetItemId={activeRowId as string} />
+        <DatasetItemPanelContent
+          datasetId={datasetId}
+          datasetItemId={activeRowId as string}
+        />
       </ResizableSidePanel>
 
       <AddEditDatasetItemDialog

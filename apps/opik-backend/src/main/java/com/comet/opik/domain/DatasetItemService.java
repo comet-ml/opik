@@ -30,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -48,6 +49,8 @@ public interface DatasetItemService {
             SpanEnrichmentOptions enrichmentOptions);
 
     Mono<DatasetItem> get(UUID id);
+
+    Mono<Void> patch(UUID id, DatasetItem item);
 
     Mono<Void> delete(List<UUID> ids);
 
@@ -217,6 +220,31 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return Mono.just(item);
                 }))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> patch(@NonNull UUID id, @NonNull DatasetItem item) {
+        return get(id)
+                .flatMap(existingItem -> {
+                    // Build patched item by merging provided fields with existing item
+                    // Only non-null fields from the patch are applied
+                    var builder = existingItem.toBuilder();
+
+                    // Apply patch fields if provided
+                    Optional.ofNullable(item.data()).ifPresent(builder::data);
+                    Optional.ofNullable(item.source()).ifPresent(builder::source);
+                    Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
+                    Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
+                    Optional.ofNullable(item.tags()).ifPresent(builder::tags);
+
+                    DatasetItem patchedItem = builder.build();
+
+                    // Save the patched item (ClickHouse INSERT replaces existing rows with same ID)
+                    DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(), List.of(patchedItem));
+                    return saveBatch(batch, existingItem.datasetId());
+                })
+                .then();
     }
 
     @WithSpan

@@ -35,6 +35,7 @@ export interface DatasetItem {
   source: DATASET_ITEM_SOURCE;
   trace_id?: string;
   span_id?: string;
+  tags?: string[];
   created_at: string;
   last_updated_at: string;
 }
