@@ -308,6 +308,7 @@ public class FilterQueryBuilder {
                     .put(DatasetItemField.SOURCE, SOURCE_DB)
                     .put(DatasetItemField.TRACE_ID, TRACE_ID_DB)
                     .put(DatasetItemField.SPAN_ID, SPAN_ID_DB)
+                    .put(DatasetItemField.TAGS, TAGS_DB)
                     .put(DatasetItemField.CREATED_AT, CREATED_AT_DB)
                     .put(DatasetItemField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(DatasetItemField.CREATED_BY, CREATED_BY_DB)
@@ -502,6 +503,7 @@ public class FilterQueryBuilder {
                 DatasetItemField.SOURCE,
                 DatasetItemField.TRACE_ID,
                 DatasetItemField.SPAN_ID,
+                DatasetItemField.TAGS,
                 DatasetItemField.CREATED_AT,
                 DatasetItemField.LAST_UPDATED_AT,
                 DatasetItemField.CREATED_BY,

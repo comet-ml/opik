@@ -317,3 +317,65 @@ To expand a dataset with AI:
   Dataset expansion works best when you have at least 5-10 high-quality examples in your original dataset. The AI uses
   these examples to understand the patterns and generate similar but varied content.
 </Tip>
+
+## Managing dataset item tags
+
+Tags are a powerful way to organize, categorize, and filter your dataset items. You can use tags to:
+
+- **Categorize test cases** by type, difficulty, or domain (e.g., `edge-case`, `production`, `multilingual`)
+- **Track data sources** where items originated from (e.g., `user-feedback`, `synthetic`, `real-world`)
+- **Mark review status** during dataset curation (e.g., `needs-review`, `validated`, `archived`)
+- **Filter for evaluation** to run experiments on specific subsets of your data
+- **Organize workflows** by marking items for different stages or teams
+
+Each dataset item can have multiple tags.
+
+### Adding tags to dataset items
+
+#### Adding tags to individual items
+
+To add tags to a single dataset item:
+
+1. **Navigate to your dataset** in the Opik UI (Evaluation > Datasets > [Your Dataset])
+2. **Click on any dataset item** to open the details panel
+3. **In the Tags section**, click the **"+" button**
+4. **Type the tag name** and press Enter
+5. The tag will be immediately added and saved
+
+You can remove tags by clicking the **"×" icon** next to any tag in the details panel.
+
+#### Adding tags to multiple items (batch operation)
+
+To add the same tag to multiple dataset items at once:
+
+1. **Navigate to your dataset** in the Opik UI
+2. **Select multiple items** by clicking the checkboxes next to each item
+3. **Click the "Add tags" button** in the toolbar (visible when items are selected)
+4. **Enter the tag name** in the dialog that appears
+5. **Click "Add tag"** to apply the tag to all selected items
+
+This is particularly useful when you want to categorize a group of related test cases or mark items from the same data source.
+
+<Tip>
+  Tags are case-sensitive and support alphanumeric characters, hyphens, and underscores. Choose consistent naming conventions for your tags to make filtering easier.
+</Tip>
+
+### Filtering dataset items by tags
+
+Once you've tagged your dataset items, you can filter them to work with specific subsets:
+
+1. **Navigate to your dataset** in the Opik UI
+2. **Click the "Filters" button** next to the search bar
+3. **Select "Tags" from the Column dropdown**
+4. **Choose "contains" as the operator**
+5. **Enter the tag name** you want to filter by
+6. **Close the dialog** to apply the filter
+
+The dataset items table will update to show only items matching your filter criteria. You can:
+
+- **View filtered items** to focus on specific categories
+- **Run experiments** on filtered subsets by using the filtered view
+- **Export filtered data** for specific test case groups
+- **Combine with other filters** to create complex queries
+
+The filter is saved in the URL, so you can bookmark or share specific filtered views of your dataset.

@@ -29,6 +29,7 @@ public record DatasetItem(
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotEmpty Map<String, JsonNode> data,
+        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) Set<String> tags,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,

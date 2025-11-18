@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, Sparkles } from "lucide-react";
+import { Trash, Sparkles, Tag } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 
@@ -11,6 +11,7 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
+import AddTagDialog from "./AddTagDialog";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -38,6 +39,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
     useState<boolean>(false);
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
+  const [addTagDialogOpen, setAddTagDialogOpen] = useState<boolean>(false);
   const disabled = !selectedDatasetItems?.length;
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
@@ -109,6 +111,15 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         setOpen={setGeneratedSamplesDialogOpen}
       />
 
+      <AddTagDialog
+        key={`tag-${resetKeyRef.current}`}
+        datasetId={datasetId}
+        rows={selectedDatasetItems}
+        open={addTagDialogOpen}
+        setOpen={setAddTagDialogOpen}
+        onSuccess={() => {}}
+      />
+
       <Button
         variant="secondary"
         size="sm"
@@ -120,6 +131,21 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         <Sparkles className="mr-2 size-4" />
         Expand dataset with AI
       </Button>
+
+      <TooltipWrapper content="Add tags">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setAddTagDialogOpen(true);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Tag className="mr-2 size-4" />
+          Add tags
+        </Button>
+      </TooltipWrapper>
 
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
