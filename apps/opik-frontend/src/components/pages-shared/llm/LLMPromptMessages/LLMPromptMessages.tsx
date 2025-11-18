@@ -35,6 +35,7 @@ interface LLMPromptMessagesProps {
   hint?: string;
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
+  hideAddButton?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -47,6 +48,7 @@ const LLMPromptMessages = ({
   hint = "",
   disableMedia = false,
   improvePromptConfig,
+  hideAddButton = false,
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -169,7 +171,9 @@ const LLMPromptMessages = ({
         </SortableContext>
 
         {hint && <p className="comet-body-s mt-2 text-light-slate">{hint}</p>}
+      </div>
 
+      {!hideAddButton && (
         <Button
           variant="outline"
           size="sm"
@@ -180,7 +184,7 @@ const LLMPromptMessages = ({
           <Plus className="mr-2 size-4" />
           Message
         </Button>
-      </div>
+      )}
     </DndContext>
   );
 };

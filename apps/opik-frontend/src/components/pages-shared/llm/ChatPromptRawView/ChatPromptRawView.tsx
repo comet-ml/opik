@@ -61,8 +61,8 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
           extensions={[jsonLanguage, EditorView.lineWrapping]}
           basicSetup={{
             lineNumbers: true,
-            highlightActiveLineGutter: true,
-            highlightActiveLine: true,
+            highlightActiveLineGutter: false,
+            highlightActiveLine: false,
             foldGutter: true,
           }}
         />

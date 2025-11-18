@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
-import { Code2, FileText, MessagesSquare } from "lucide-react";
+import { Code2, FileText, MessagesSquare, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -271,14 +271,28 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                   onRawValueChange={setRawJsonValue}
                 />
               ) : (
-                <div className="rounded-md border">
-                  <LLMPromptMessages
-                    messages={messages}
-                    onChange={setMessages}
-                    onAddMessage={handleAddMessage}
-                    hidePromptActions
-                  />
-                </div>
+                <>
+                  <div className="rounded-md border">
+                    <LLMPromptMessages
+                      messages={messages}
+                      onChange={setMessages}
+                      onAddMessage={handleAddMessage}
+                      hidePromptActions={true}
+                      disableMedia={true}
+                      hideAddButton={true}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-fit"
+                    onClick={handleAddMessage}
+                    type="button"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Message
+                  </Button>
+                </>
               )}
             </div>
           )}

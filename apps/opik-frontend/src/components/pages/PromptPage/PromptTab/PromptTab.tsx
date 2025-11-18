@@ -111,10 +111,12 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           Use this prompt
         </Button>
         <TryInPlaygroundButton prompt={prompt} activeVersion={activeVersion} />
-        <ImproveInPlaygroundButton
-          prompt={prompt}
-          activeVersion={activeVersion}
-        />
+        {!isChatPrompt && (
+          <ImproveInPlaygroundButton
+            prompt={prompt}
+            activeVersion={activeVersion}
+          />
+        )}
         <Button
           className="ml-auto"
           size="sm"

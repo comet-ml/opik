@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
-import { Code2, MessageSquare } from "lucide-react";
+import { Code2, MessageSquare, Plus } from "lucide-react";
 import isEqual from "fast-deep-equal";
 
 import {
@@ -91,10 +91,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
         return parsed.map((msg, index) => ({
           id: `msg-${index}`,
           role: msg.role,
-          content:
-            typeof msg.content === "string"
-              ? msg.content
-              : JSON.stringify(msg.content),
+          content: msg.content, // Keep content as-is (string or array)
         }));
       }
     } catch {
@@ -263,13 +260,34 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                   onRawValueChange={setRawJsonValue}
                 />
               ) : (
-                <LLMPromptMessages
-                  messages={messages}
-                  onChange={setMessages}
-                  onAddMessage={handleAddMessage}
-                  hint="Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}."
-                  hidePromptActions={true}
-                />
+                <>
+                  <div className="rounded-md border">
+                    <LLMPromptMessages
+                      messages={messages}
+                      onChange={setMessages}
+                      onAddMessage={handleAddMessage}
+                      hidePromptActions={true}
+                      disableMedia={true}
+                      hideAddButton={true}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-fit"
+                    onClick={handleAddMessage}
+                    type="button"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Message
+                  </Button>
+                  <p className="comet-body-s mt-2 text-light-slate">
+                    Use mustache syntax to reference dataset variables in your
+                    prompt. Example: {"{"}
+                    {"{"}question{"}}"}
+                    {"}"}.
+                  </p>
+                </>
               )
             ) : (
               <>
