@@ -78,7 +78,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         return self._name
 
     @property
-    def messages(self) -> List[Dict[str, prompt_types.MessageContent]]:
+    def template(self) -> List[Dict[str, prompt_types.MessageContent]]:
         """The chat messages template."""
         return copy.deepcopy(self._messages)
 
@@ -146,7 +146,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         info_dict: Dict[str, Any] = {
             "name": self.name,
             "version": {
-                "messages": self.messages,
+                "template": self.template,
             },
         }
 

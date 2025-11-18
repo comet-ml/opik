@@ -216,9 +216,9 @@ def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
         messages=messages,
     )
 
-    assert len(chat_prompt.messages[1]["content"]) == 2
-    assert chat_prompt.messages[1]["content"][0]["type"] == "text"
-    assert chat_prompt.messages[1]["content"][1]["type"] == "image_url"
+    assert len(chat_prompt.template[1]["content"]) == 2
+    assert chat_prompt.template[1]["content"][0]["type"] == "text"
+    assert chat_prompt.template[1]["content"][1]["type"] == "image_url"
 
 
 def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opik):
@@ -342,7 +342,7 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
     assert isinstance(retrieved_prompt, opik.ChatPrompt)
     assert retrieved_prompt.name == prompt_name
     assert retrieved_prompt.commit == created_prompt.commit
-    assert len(retrieved_prompt.messages) == 2
+    assert len(retrieved_prompt.template) == 2
 
 
 def test_get_chat_prompt__string_prompt__returns_none(opik_client: opik.Opik):
@@ -475,7 +475,7 @@ def test_get_chat_prompt__with_commit__chat_prompt(opik_client: opik.Opik):
     assert retrieved_v1 is not None
     assert isinstance(retrieved_v1, opik.ChatPrompt)
     assert retrieved_v1.commit == v1.commit
-    assert retrieved_v1.messages[0]["content"] == "Version 1"
+    assert retrieved_v1.template[0]["content"] == "Version 1"
 
 
 def test_get_chat_prompt__nonexistent__returns_none(opik_client: opik.Opik):

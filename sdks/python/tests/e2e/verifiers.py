@@ -582,7 +582,7 @@ def verify_chat_prompt_version(
     - template_structure field is always verified to be "chat"
     """
     testlib.assert_equal(name, chat_prompt.name)
-    testlib.assert_equal(messages, chat_prompt.messages)
+    testlib.assert_equal(messages, chat_prompt.template)
     testlib.assert_equal(type, chat_prompt.type)
     testlib.assert_equal(metadata, chat_prompt.metadata)
     assert (
