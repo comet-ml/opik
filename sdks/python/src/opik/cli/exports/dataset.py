@@ -33,7 +33,7 @@ def export_single_dataset(
     try:
         # Check if already exists and force is not set
         if format.lower() == "csv":
-            dataset_file = output_dir / f"datasets_{dataset.name}.csv"
+            dataset_file = output_dir / f"dataset_{dataset.name}.csv"
         else:
             dataset_file = output_dir / f"dataset_{dataset.name}.json"
 
@@ -48,13 +48,12 @@ def export_single_dataset(
         dataset_items = dataset.get_items()
 
         # Format items for export
+        # Use all fields from each item (datasets can have any user-defined keys/values)
         formatted_items = []
         for item in dataset_items:
-            formatted_item = {
-                "input": item.get("input"),
-                "expected_output": item.get("expected_output"),
-                "metadata": item.get("metadata"),
-            }
+            # Create a copy of the item, excluding the 'id' field if present
+            # (id is internal and not part of the dataset item content)
+            formatted_item = {k: v for k, v in item.items() if k != "id"}
             formatted_items.append(formatted_item)
 
         # Create dataset data structure
@@ -88,6 +87,7 @@ def export_dataset_by_name(
     force: bool,
     debug: bool,
     format: str,
+    api_key: Optional[str] = None,
 ) -> None:
     """Export a dataset by exact name."""
     try:
@@ -95,7 +95,10 @@ def export_dataset_by_name(
             debug_print(f"Exporting dataset: {name}", debug)
 
         # Initialize client
-        client = opik.Opik(workspace=workspace)
+        if api_key:
+            client = opik.Opik(api_key=api_key, workspace=workspace)
+        else:
+            client = opik.Opik(workspace=workspace)
 
         # Create output directory
         output_dir = Path(output_path) / workspace / "datasets"
@@ -164,13 +167,17 @@ def export_experiment_datasets(
                     "name": dataset_name,
                     "id": getattr(dataset_obj, "id", None),
                 },
-                "items": [item for item in dataset_items],
+                # Use all fields from each item, excluding 'id' (internal field)
+                "items": [
+                    {k: v for k, v in item.items() if k != "id"}
+                    for item in dataset_items
+                ],
                 "downloaded_at": datetime.now().isoformat(),
             }
 
             # Use format parameter to determine file extension and save method
             if format.lower() == "csv":
-                dataset_file = datasets_dir / f"datasets_{dataset_name}.csv"
+                dataset_file = datasets_dir / f"dataset_{dataset_name}.csv"
             else:
                 dataset_file = datasets_dir / f"dataset_{dataset_name}.json"
             datasets_dir.mkdir(parents=True, exist_ok=True)
@@ -232,6 +239,9 @@ def export_dataset_command(
     format: str,
 ) -> None:
     """Export a dataset by exact name to workspace/datasets."""
-    # Get workspace from context
+    # Get workspace and API key from context
     workspace = ctx.obj["workspace"]
-    export_dataset_by_name(name, workspace, path, max_results, force, debug, format)
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
+    export_dataset_by_name(
+        name, workspace, path, max_results, force, debug, format, api_key
+    )

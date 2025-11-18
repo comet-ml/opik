@@ -8,12 +8,15 @@ import click
 from rich.console import Console
 
 import opik
+
 from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
 
 console = Console()
+
+IMPORT_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
 def _import_by_type(
@@ -24,6 +27,7 @@ def _import_by_type(
     name_pattern: Optional[str],
     debug: bool,
     recreate_experiments: bool = False,
+    api_key: Optional[str] = None,
 ) -> None:
     """
     Import data by type (dataset, project, experiment) with pattern matching.
@@ -44,7 +48,10 @@ def _import_by_type(
             )
 
         # Initialize Opik client
-        client = opik.Opik(workspace=workspace)
+        if api_key:
+            client = opik.Opik(api_key=api_key, workspace=workspace)
+        else:
+            client = opik.Opik(workspace=workspace)
 
         # Determine source directory based on import type
         base_path = Path(workspace_folder)
@@ -101,10 +108,15 @@ def _import_by_type(
         sys.exit(1)
 
 
-@click.group(name="import")
+@click.group(name="import", context_settings=IMPORT_CONTEXT_SETTINGS)
 @click.argument("workspace", type=str)
+@click.option(
+    "--api-key",
+    type=str,
+    help="Opik API key. If not provided, will use OPIK_API_KEY environment variable or configuration.",
+)
 @click.pass_context
-def import_group(ctx: click.Context, workspace: str) -> None:
+def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> None:
     """Import data to Opik workspace.
 
     This command allows you to import previously exported data back into an Opik workspace.
@@ -140,6 +152,41 @@ def import_group(ctx: click.Context, workspace: str) -> None:
     """
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = workspace
+    # Use API key from this command or from parent context
+    ctx.obj["api_key"] = api_key or (
+        ctx.parent.obj.get("api_key") if ctx.parent and ctx.parent.obj else None
+    )
+
+
+# Set subcommand metavar to ITEM instead of COMMAND
+import_group.subcommand_metavar = "ITEM [ARGS]..."
+
+
+def format_commands(
+    self: click.Group, ctx: click.Context, formatter: click.HelpFormatter
+) -> None:
+    """Override to change 'Commands' heading to 'Items'."""
+    commands = []
+    for subcommand in self.list_commands(ctx):
+        cmd = self.get_command(ctx, subcommand)
+        if cmd is None or cmd.hidden:
+            continue
+        commands.append((subcommand, cmd))
+
+    if len(commands):
+        limit = formatter.width - 6 - max(len(cmd[0]) for cmd in commands)
+        rows = []
+        for subcommand, cmd in commands:
+            help = cmd.get_short_help_str(limit)
+            rows.append((subcommand, help))
+
+        if rows:
+            with formatter.section("Items"):
+                formatter.write_dl(rows)
+
+
+# Override format_commands method
+import_group.format_commands = format_commands.__get__(import_group, type(import_group))
 
 
 @import_group.command(name="dataset")
@@ -188,7 +235,10 @@ def import_dataset(
         opik import my-workspace dataset ./exported-data/ --name "training"
     """
     workspace = ctx.obj["workspace"]
-    _import_by_type("dataset", workspace_folder, workspace, dry_run, name, debug)
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
+    _import_by_type(
+        "dataset", workspace_folder, workspace, dry_run, name, debug, api_key=api_key
+    )
 
 
 @import_group.command(name="project")
@@ -243,6 +293,7 @@ def import_project(
         opik import my-workspace project ./exported-data/ --name "test" --dry-run
     """
     workspace = ctx.obj["workspace"]
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
         "project",
         workspace_folder,
@@ -251,6 +302,7 @@ def import_project(
         name,
         debug,
         True,  # Always recreate experiments when importing projects
+        api_key=api_key,
     )
 
 
@@ -283,9 +335,17 @@ def import_experiment(
 ) -> None:
     """Import experiments from workspace/experiments directory."""
     workspace = ctx.obj["workspace"]
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
     # Always recreate experiments when importing
     _import_by_type(
-        "experiment", workspace_folder, workspace, dry_run, name, debug, True
+        "experiment",
+        workspace_folder,
+        workspace,
+        dry_run,
+        name,
+        debug,
+        True,
+        api_key=api_key,
     )
 
 
@@ -318,4 +378,7 @@ def import_prompt(
 ) -> None:
     """Import prompts from workspace/prompts directory."""
     workspace = ctx.obj["workspace"]
-    _import_by_type("prompt", workspace_folder, workspace, dry_run, name, debug)
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
+    _import_by_type(
+        "prompt", workspace_folder, workspace, dry_run, name, debug, api_key=api_key
+    )

@@ -102,13 +102,18 @@ def write_csv_data(
     csv_row_converter_func: Callable[[Dict[str, Any]], List[Dict]],
 ) -> None:
     """Write data to CSV file using the provided row converter function."""
-    csv_rows = csv_row_converter_func(data)
-    if csv_rows:
+    try:
+        csv_rows = csv_row_converter_func(data)
+        if not csv_rows:
+            raise ValueError(f"CSV row converter returned empty list for {file_path}")
         with open(file_path, "w", newline="", encoding="utf-8") as csv_file_handle:
             csv_fieldnames = list(csv_rows[0].keys())
             csv_writer = csv.DictWriter(csv_file_handle, fieldnames=csv_fieldnames)
             csv_writer.writeheader()
             csv_writer.writerows(csv_rows)
+    except Exception as e:
+        # Re-raise with more context
+        raise RuntimeError(f"Failed to write CSV file {file_path}: {e}") from e
 
 
 def write_json_data(data: Dict[str, Any], file_path: Path) -> None:
@@ -127,27 +132,34 @@ def create_experiment_data_structure(
     experiment: Any, experiment_items: List[Any]
 ) -> Dict[str, Any]:
     """Create a comprehensive experiment data structure for export."""
+    # Get the full experiment data which contains all fields
+    experiment_data_obj = experiment.get_experiment_data()
+
     return {
         "experiment": {
             "id": experiment.id,
             "name": experiment.name,
             "dataset_name": experiment.dataset_name,
-            "metadata": getattr(experiment, "metadata", None),
-            "type": experiment.type,
-            "status": experiment.status,
-            "created_at": experiment.created_at,
-            "last_updated_at": experiment.last_updated_at,
-            "created_by": experiment.created_by,
-            "last_updated_by": experiment.last_updated_by,
-            "trace_count": experiment.trace_count,
-            "total_estimated_cost": experiment.total_estimated_cost,
-            "total_estimated_cost_avg": experiment.total_estimated_cost_avg,
-            "usage": experiment.usage,
-            "feedback_scores": experiment.feedback_scores,
-            "comments": experiment.comments,
-            "duration": experiment.duration,
-            "prompt_version": experiment.prompt_version,
-            "prompt_versions": experiment.prompt_versions,
+            "metadata": getattr(experiment_data_obj, "metadata", None),
+            "type": getattr(experiment_data_obj, "type", None),
+            "status": getattr(experiment_data_obj, "status", None),
+            "created_at": getattr(experiment_data_obj, "created_at", None),
+            "last_updated_at": getattr(experiment_data_obj, "last_updated_at", None),
+            "created_by": getattr(experiment_data_obj, "created_by", None),
+            "last_updated_by": getattr(experiment_data_obj, "last_updated_by", None),
+            "trace_count": getattr(experiment_data_obj, "trace_count", None),
+            "total_estimated_cost": getattr(
+                experiment_data_obj, "total_estimated_cost", None
+            ),
+            "total_estimated_cost_avg": getattr(
+                experiment_data_obj, "total_estimated_cost_avg", None
+            ),
+            "usage": getattr(experiment_data_obj, "usage", None),
+            "feedback_scores": getattr(experiment_data_obj, "feedback_scores", None),
+            "comments": getattr(experiment_data_obj, "comments", None),
+            "duration": getattr(experiment_data_obj, "duration", None),
+            "prompt_version": getattr(experiment_data_obj, "prompt_version", None),
+            "prompt_versions": getattr(experiment_data_obj, "prompt_versions", None),
         },
         "items": [serialize_experiment_item(item) for item in experiment_items],
         "downloaded_at": datetime.now().isoformat(),
@@ -245,31 +257,18 @@ def dataset_to_csv_rows(dataset_data: dict) -> List[Dict]:
     """Convert dataset data to CSV rows format."""
     rows = []
 
-    # Flatten dataset metadata
-    dataset_flat = flatten_dict_with_prefix(
-        {
-            "name": dataset_data.get("name"),
-            "description": dataset_data.get("description"),
-            "downloaded_at": dataset_data.get("downloaded_at"),
-        },
-        "dataset",
-    )
-
     # Create a row for each dataset item
     items = dataset_data.get("items", [])
     for i, item in enumerate(items):
-        # Flatten item data
+        # Flatten item data - use all fields from the item
+        # (datasets can have any user-defined keys/values)
         item_flat = flatten_dict_with_prefix(
-            {
-                "input": item.get("input"),
-                "expected_output": item.get("expected_output"),
-                "metadata": item.get("metadata"),
-            },
+            item,  # Use the entire item dict, not just hardcoded fields
             "item",
         )
 
-        # Combine dataset and item data
-        row = {**dataset_flat, **item_flat}
+        # Create row with item data and index
+        row = {**item_flat}
         row["item_index"] = i  # Add index for ordering
         rows.append(row)
 
@@ -382,7 +381,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
         exported = stats.get("datasets", 0)
         skipped = stats.get("datasets_skipped", 0)
         dataset_file_pattern = (
-            "datasets_*.csv" if format.lower() == "csv" else "dataset_*.json"
+            "dataset_*.csv" if format.lower() == "csv" else "dataset_*.json"
         )
         table.add_row(
             "📊 Datasets",
@@ -395,7 +394,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
         exported = stats.get("traces", 0)
         skipped = stats.get("traces_skipped", 0)
         trace_file_pattern = (
-            "traces_*.csv" if format.lower() == "csv" else "trace_*.json"
+            "trace_*.csv" if format.lower() == "csv" else "trace_*.json"
         )
         table.add_row(
             "🔍 Traces",

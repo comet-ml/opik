@@ -91,6 +91,7 @@ def export_prompt_by_name(
     force: bool,
     debug: bool,
     format: str,
+    api_key: Optional[str] = None,
 ) -> None:
     """Export a prompt by exact name."""
     try:
@@ -98,7 +99,10 @@ def export_prompt_by_name(
             debug_print(f"Exporting prompt: {name}", debug)
 
         # Initialize client
-        client = opik.Opik(workspace=workspace)
+        if api_key:
+            client = opik.Opik(api_key=api_key, workspace=workspace)
+        else:
+            client = opik.Opik(workspace=workspace)
 
         # Create output directory
         output_dir = Path(output_path) / workspace / "prompts"
@@ -437,6 +441,9 @@ def export_prompt_command(
     format: str,
 ) -> None:
     """Export a prompt by exact name to workspace/prompts."""
-    # Get workspace from context
+    # Get workspace and API key from context
     workspace = ctx.obj["workspace"]
-    export_prompt_by_name(name, workspace, path, max_results, force, debug, format)
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
+    export_prompt_by_name(
+        name, workspace, path, max_results, force, debug, format, api_key
+    )

@@ -476,17 +476,22 @@ ls ./csv_data/my-workspace/datasets/
 ls ./csv_data/my-workspace/experiments/
 ls ./csv_data/my-workspace/prompts/
 
-head -5 ./csv_data/my-workspace/projects/my-source-project/traces_my-source-project.csv
+# Each trace is exported to its own CSV file
+head -5 ./csv_data/my-workspace/projects/my-source-project/trace_*.csv | head -20
 head -5 ./csv_data/my-workspace/datasets/datasets_test-dataset.csv
 
 # 3. Analyze with pandas (optional)
 python -c "
 import pandas as pd
-df_traces = pd.read_csv('./csv_data/my-workspace/projects/my-source-project/traces_my-source-project.csv')
+import glob
+
+# Read all trace CSV files and combine them
+trace_files = glob.glob('./csv_data/my-workspace/projects/my-source-project/trace_*.csv')
+df_traces = pd.concat([pd.read_csv(f) for f in trace_files], ignore_index=True) if trace_files else pd.DataFrame()
 df_datasets = pd.read_csv('./csv_data/my-workspace/datasets/datasets_test-dataset.csv')
-print(f'Exported {len(df_traces)} trace records')
+print(f'Exported {len(df_traces)} trace records from {len(trace_files)} files')
 print(f'Exported {len(df_datasets)} dataset records')
-print('Trace columns:', df_traces.columns.tolist())
+print('Trace columns:', df_traces.columns.tolist() if not df_traces.empty else 'No traces')
 print('Dataset columns:', df_datasets.columns.tolist())
 "
 

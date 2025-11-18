@@ -310,7 +310,35 @@ class Dataset:
                     else:
                         dataset_items_ids_left.remove(dataset_item_id)
 
-                data_item_content = item.get_content().get("data", {})
+                # Extract data content from the item
+                # The API returns items with a "data" field that contains the actual content
+                item_content = item.get_content()
+                data_item_content = item_content.get("data")
+
+                # Handle cases where data might be None or missing
+                if data_item_content is None:
+                    # If data is None, check if the fields are already at the top level
+                    # (this can happen if the item was parsed differently)
+                    data_item_content = {
+                        k: v
+                        for k, v in item_content.items()
+                        if k not in ("id", "trace_id", "span_id", "source", "data")
+                    }
+                    # If still empty, log a warning and use empty dict
+                    if not data_item_content:
+                        LOGGER.warning(
+                            "Dataset item %s has no data content. This may indicate the item was created without content or there's an issue with data retrieval.",
+                            dataset_item_id,
+                        )
+                        data_item_content = {}
+                elif not isinstance(data_item_content, dict):
+                    # If data is not a dict, wrap it or use empty dict
+                    LOGGER.warning(
+                        "Dataset item %s has non-dict data content: %s. Using empty dict instead.",
+                        dataset_item_id,
+                        type(data_item_content).__name__,
+                    )
+                    data_item_content = {}
 
                 reconstructed_item = dataset_item.DatasetItem(
                     id=item.id,
