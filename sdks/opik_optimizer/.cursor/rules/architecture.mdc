@@ -62,7 +62,7 @@ class BaseOptimizer:
 - Production code must not import from `tests/`.
 - Optimizer packages may import from `base_optimizer`, shared utilities, and siblings within the same package. Avoid reaching into unrelated optimizer packages.
 - Provider glue belongs in `integrations/` and must guard imports so the default install stays lightweight.
-- `datasets/` exposes deterministic sample datasets for demos/tests; omit benchmark-only assets from runtime packages.
+- `datasets/` exposes deterministic sample datasets for demos/tests; omit benchmark-only assets from runtime packages. Pay attention to the dataset name suffixes (`_train`, `_validation`, `_test`, and `_sample`) to ensure the dataset name is unique.
 
 ## Caching, Throttling, and Telemetry
 

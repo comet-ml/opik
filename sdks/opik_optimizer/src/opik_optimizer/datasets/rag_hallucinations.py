@@ -5,7 +5,9 @@ def rag_hallucinations(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the RAG Hallucinations dataset.
     """
-    dataset_name = "rag_hallucination" if not test_mode else "rag_hallucination_test"
+    dataset_name = (
+        "rag_hallucination_train" if not test_mode else "rag_hallucination_sample"
+    )
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()

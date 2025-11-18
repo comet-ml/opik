@@ -2,7 +2,7 @@ import opik
 
 
 def medhallu(test_mode: bool = False) -> opik.Dataset:
-    dataset_name = "medhallu" if not test_mode else "medhallu_test"
+    dataset_name = "medhallu_train" if not test_mode else "medhallu_sample"
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()

@@ -5,7 +5,7 @@ def cnn_dailymail(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 100 samples of the CNN Daily Mail dataset.
     """
-    dataset_name = "cnn_dailymail" if not test_mode else "cnn_dailymail_test"
+    dataset_name = "cnn_dailymail_train" if not test_mode else "cnn_dailymail_sample"
     nb_items = 100 if not test_mode else 5
 
     client = opik.Opik()

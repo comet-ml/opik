@@ -6,7 +6,7 @@ def truthful_qa(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the TruthfulQA dataset.
     """
-    dataset_name = "truthful_qa" if not test_mode else "truthful_qa_test"
+    dataset_name = "truthful_qa_train" if not test_mode else "truthful_qa_sample"
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()

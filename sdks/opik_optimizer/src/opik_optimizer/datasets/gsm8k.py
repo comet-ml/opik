@@ -5,7 +5,7 @@ def gsm8k(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the GSM8K dataset.
     """
-    dataset_name = "gsm8k" if not test_mode else "gsm8k_test"
+    dataset_name = "gsm8k_train" if not test_mode else "gsm8k_sample"
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()
