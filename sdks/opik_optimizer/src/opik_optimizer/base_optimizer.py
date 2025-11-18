@@ -328,12 +328,15 @@ class BaseOptimizer(ABC):
 
     def _build_optimization_config(self) -> dict[str, Any]:
         """
-        Build metadata dictionary for optimization creation.
+        Build metadata dictionary for optimization creation to be used when
+        creating Opik optimizations.
 
         Returns:
             Dictionary with 'optimizer' and optionally 'name' keys.
         """
         metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
+        if self.name:
+            metadata["name"] = self.name
         return metadata
 
     def _prepare_experiment_config(
