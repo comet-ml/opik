@@ -68,7 +68,7 @@ def _get_span_type(run: Dict[str, Any]) -> SpanType:
 
 
 def _is_langgraph_root(run_dict: Dict[str, Any]) -> bool:
-    return run_dict.get("parent_run_id") is None
+    return run_dict.get("parent_run_id") is None and run_dict.get("name") == "LangGraph"
 
 
 def _get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -563,6 +563,15 @@ class OpikTracer(BaseTracer):
             new_span_data = self._attach_span_to_distributed_headers(
                 run_dict=run_dict,
                 metadata=_get_run_metadata(run_dict),
+            )
+        elif (
+            current_trace_data := self._opik_context_storage.get_trace_data()
+        ) is not None:
+            # LangGraph attached to existing trace - attach children directly to trace
+            new_span_data = self._attach_span_to_external_trace(
+                run_dict=run_dict,
+                current_trace_data=current_trace_data,
+                root_metadata=_get_run_metadata(run_dict),
             )
         else:
             LOGGER.warning(

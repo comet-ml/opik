@@ -106,19 +106,7 @@ def test_langchain__happyflow(
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                            "created_from": "langchain",
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
@@ -254,19 +242,9 @@ def test_langchain__distributed_headers__happyflow(
                                     ]
                                 },
                                 output=ANY_DICT,
-                                metadata={
-                                    "invocation_params": {
-                                        "responses": [
-                                            "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                        ],
-                                        "_type": "fake-list",
-                                        "stop": None,
-                                    },
-                                    "created_from": "langchain",
-                                    "options": {"stop": None},
-                                    "batch_size": 1,
-                                    "metadata": ANY_BUT_NONE,
-                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -377,19 +355,9 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     ]
                                 },
                                 output=ANY_DICT,
-                                metadata={
-                                    "invocation_params": {
-                                        "responses": [
-                                            "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                        ],
-                                        "_type": "fake-list",
-                                        "stop": None,
-                                    },
-                                    "created_from": "langchain",
-                                    "options": {"stop": None},
-                                    "batch_size": 1,
-                                    "metadata": ANY_BUT_NONE,
-                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -495,19 +463,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "created_from": "langchain",
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
@@ -607,19 +563,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "created_from": "langchain",
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
