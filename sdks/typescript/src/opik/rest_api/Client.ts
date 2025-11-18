@@ -13,6 +13,7 @@ import { Attachments } from "./api/resources/attachments/client/Client";
 import { Check } from "./api/resources/check/client/Client";
 import { AutomationRuleEvaluators } from "./api/resources/automationRuleEvaluators/client/Client";
 import { ChatCompletions } from "./api/resources/chatCompletions/client/Client";
+import { Dashboards } from "./api/resources/dashboards/client/Client";
 import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
 import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/Client";
@@ -65,6 +66,7 @@ export class OpikApiClient {
     protected _check: Check | undefined;
     protected _automationRuleEvaluators: AutomationRuleEvaluators | undefined;
     protected _chatCompletions: ChatCompletions | undefined;
+    protected _dashboards: Dashboards | undefined;
     protected _datasets: Datasets | undefined;
     protected _experiments: Experiments | undefined;
     protected _feedbackDefinitions: FeedbackDefinitions | undefined;
@@ -110,6 +112,10 @@ export class OpikApiClient {
 
     public get chatCompletions(): ChatCompletions {
         return (this._chatCompletions ??= new ChatCompletions(this._options));
+    }
+
+    public get dashboards(): Dashboards {
+        return (this._dashboards ??= new Dashboards(this._options));
     }
 
     public get datasets(): Datasets {
