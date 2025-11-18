@@ -260,10 +260,10 @@ const PlaygroundPrompt = ({
 
         // Convert to LLMMessage format - this will OVERWRITE existing messages
         const newMessages: LLMMessage[] = parsedMessages.map(
-          (msg: { role: string; content: string }) =>
+          (msg: { role: string; content: unknown }) =>
             generateDefaultLLMPromptMessage({
               role: msg.role as LLM_MESSAGE_ROLE,
-              content: msg.content,
+              content: msg.content as LLMMessage["content"],
             }),
         );
 
