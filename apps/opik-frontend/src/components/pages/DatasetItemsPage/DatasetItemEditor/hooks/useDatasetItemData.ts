@@ -18,7 +18,7 @@ export type DatasetField = {
 };
 
 interface UseDatasetItemDataParams {
-  datasetItemId: string;
+  datasetItemId?: string;
   columns: ColumnData<DatasetItem>[];
 }
 
@@ -92,11 +92,32 @@ export const useDatasetItemData = ({
   columns,
 }: UseDatasetItemDataParams): UseDatasetItemDataReturn => {
   const { data: datasetItem, isPending } = useDatasetItemById(
-    { datasetItemId },
-    { placeholderData: keepPreviousData },
+    { datasetItemId: datasetItemId || "" },
+    {
+      placeholderData: keepPreviousData,
+      enabled: !!datasetItemId,
+    },
   );
 
   const fields = useMemo(() => {
+    if (!datasetItemId) {
+      return columns
+        .filter(
+          (c) =>
+            c.id !== "tags" &&
+            c.id !== "created_at" &&
+            c.id !== "last_updated_at" &&
+            c.id !== "created_by",
+        )
+        .map((column) => ({
+          id: column.id,
+          label: column.label,
+          value: "",
+          type: FIELD_TYPE.SIMPLE,
+          isJsonString: false,
+        }));
+    }
+
     if (!datasetItem?.data) {
       return [];
     }
@@ -125,11 +146,11 @@ export const useDatasetItemData = ({
     return mappedFields.filter(
       (field): field is DatasetField => field !== null,
     );
-  }, [datasetItem, columns]);
+  }, [datasetItem, columns, datasetItemId]);
 
   return {
     fields,
-    isPending,
+    isPending: !!datasetItemId && isPending,
     datasetItem,
   };
 };

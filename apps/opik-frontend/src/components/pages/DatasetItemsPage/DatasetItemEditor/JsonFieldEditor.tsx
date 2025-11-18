@@ -1,43 +1,30 @@
-import React, { useCallback } from "react";
+import React from "react";
+import { useFormContext } from "react-hook-form";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
-import useJsonInput from "@/hooks/useJsonInput";
 import { FormErrorSkeleton } from "@/components/ui/form";
 
 interface JsonFieldEditorProps {
-  value: Record<string, unknown> | null | undefined;
-  onChange: (value: Record<string, unknown> | null) => void;
-  isEditing: boolean;
   fieldName: string;
+  isEditing: boolean;
 }
 
 const JsonFieldEditor: React.FC<JsonFieldEditorProps> = ({
-  value,
-  onChange,
-  isEditing,
   fieldName,
+  isEditing,
 }) => {
+  const form = useFormContext<Record<string, unknown>>();
   const theme = useCodemirrorTheme({ editable: isEditing });
 
-  const handleJsonChange = useCallback(
-    (newValue: Record<string, unknown> | null) => {
-      onChange(newValue);
-    },
-    [onChange],
-  );
+  const value = form.watch(fieldName) as string;
+  const fieldError = form.formState.errors[fieldName];
 
-  const {
-    jsonString,
-    showInvalidJSON,
-    handleJsonChange: handleChange,
-    handleJsonBlur,
-  } = useJsonInput({
-    value,
-    onChange: handleJsonChange,
-  });
+  const handleChange = (newValue: string) => {
+    form.setValue(fieldName, newValue, { shouldDirty: true });
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -45,9 +32,8 @@ const JsonFieldEditor: React.FC<JsonFieldEditorProps> = ({
         <CodeMirror
           id={fieldName}
           theme={theme}
-          value={jsonString}
+          value={value || ""}
           onChange={handleChange}
-          onBlur={handleJsonBlur}
           extensions={[
             jsonLanguage,
             EditorView.lineWrapping,
@@ -62,8 +48,8 @@ const JsonFieldEditor: React.FC<JsonFieldEditorProps> = ({
           }}
         />
       </div>
-      {showInvalidJSON && isEditing && (
-        <FormErrorSkeleton>Invalid JSON</FormErrorSkeleton>
+      {fieldError && isEditing && (
+        <FormErrorSkeleton>{String(fieldError.message)}</FormErrorSkeleton>
       )}
     </div>
   );

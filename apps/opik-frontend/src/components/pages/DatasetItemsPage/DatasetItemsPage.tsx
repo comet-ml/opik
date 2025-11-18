@@ -37,6 +37,7 @@ import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/Datase
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
+import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
 import DatasetTagsList from "@/components/pages/DatasetItemsPage/DatasetTagsList";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -120,6 +121,7 @@ const DatasetItemsPage = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [openAddSidebar, setOpenAddSidebar] = useState<boolean>(false);
 
   const { data: dataset } = useDatasetById({
     datasetId,
@@ -323,9 +325,13 @@ const DatasetItemsPage = () => {
   }, [columns, selectedColumns]);
 
   const handleNewDatasetItemClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
+    if (data?.total && data.total > 0) {
+      setOpenAddSidebar(true);
+    } else {
+      setOpenDialog(true);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    }
+  }, [data?.total]);
 
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
 
@@ -463,6 +469,7 @@ const DatasetItemsPage = () => {
       </div>
       <DatasetItemEditor
         datasetItemId={activeRowId as string}
+        datasetId={datasetId}
         columns={columnsData}
         onClose={handleClose}
         isOpen={Boolean(activeRowId)}
@@ -475,6 +482,13 @@ const DatasetItemsPage = () => {
         datasetId={datasetId}
         open={openDialog}
         setOpen={setOpenDialog}
+      />
+
+      <AddDatasetItemSidebar
+        datasetId={datasetId}
+        open={openAddSidebar}
+        setOpen={setOpenAddSidebar}
+        columns={columnsData}
       />
     </div>
   );
