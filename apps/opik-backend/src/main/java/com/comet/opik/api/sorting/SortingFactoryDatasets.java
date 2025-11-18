@@ -22,6 +22,8 @@ import static com.comet.opik.api.sorting.SortableFields.METADATA_WILDCARD;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.OUTPUT_WILDCARD;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
+import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
+import static com.comet.opik.api.sorting.SortableFields.USAGE;
 import static com.comet.opik.domain.filter.FilterQueryBuilder.INPUT_FIELD_PREFIX;
 import static com.comet.opik.domain.filter.FilterQueryBuilder.METADATA_FIELD_PREFIX;
 import static com.comet.opik.domain.filter.FilterQueryBuilder.OUTPUT_FIELD_PREFIX;
@@ -30,7 +32,8 @@ public class SortingFactoryDatasets extends SortingFactory {
 
     private static final List<String> SUPPORTED_FIELDS = List.of(ID, NAME, DESCRIPTION, TAGS, CREATED_AT,
             LAST_UPDATED_AT, CREATED_BY, LAST_UPDATED_BY, LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_OPTIMIZATION_AT,
-            DURATION, FEEDBACK_SCORES, DATA, OUTPUT_WILDCARD, INPUT_WILDCARD, METADATA_WILDCARD, COMMENTS);
+            DURATION, FEEDBACK_SCORES, DATA, OUTPUT_WILDCARD, INPUT_WILDCARD, METADATA_WILDCARD, COMMENTS,
+            TOTAL_ESTIMATED_COST, USAGE);
 
     @Override
     public List<String> getSortableFields() {

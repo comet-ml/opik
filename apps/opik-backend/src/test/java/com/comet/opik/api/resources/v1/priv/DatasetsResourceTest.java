@@ -5830,8 +5830,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when sorting with invalid field, then return bad request")
-        void findDatasetItemsWithExperimentItems__whenSortingWithInvalidField__thenReturnBadRequest() {
+        @DisplayName("when sorting with invalid field, then ignore and return success")
+        void findDatasetItemsWithExperimentItems__whenSortingWithInvalidField__thenIgnoreAndReturnSuccess() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -5841,6 +5841,26 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
             var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .datasetName(dataset.name())
                     .promptVersion(null)
@@ -5849,7 +5869,15 @@ class DatasetsResourceTest {
 
             createAndAssert(experiment, apiKey, workspaceName);
 
-            // Use invalid sorting field
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Use invalid sorting field - should be gracefully ignored
             var invalidSorting = SortingField.builder()
                     .field("invalid_field")
                     .direction(Direction.ASC)
@@ -5870,12 +5898,15 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                // Verify graceful degradation: request succeeds with invalid sorting
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
-                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(errorMessage.getMessage()).contains("Invalid sorting fields");
-                assertThat(errorMessage.getMessage()).contains("invalid_field");
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage).isNotNull();
+                // Verify data is returned despite invalid sorting field
+                assertThat(actualPage.content()).isNotEmpty();
+                assertThat(actualPage.content()).hasSize(1);
             }
         }
 
@@ -7351,6 +7382,207 @@ class DatasetsResourceTest {
                         .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
                         .isEqualTo(1);
             });
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Experiment Items Sorting and Filtering: OPIK-2936")
+    class ExperimentItemsSortingAndFiltering {
+
+        @Test
+        @DisplayName("should sort experiment items by total_estimated_cost in descending order")
+        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSorted() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces and spans with costs
+            var traceIds = new ArrayList<UUID>();
+            var costValues = List.of(
+                    BigDecimal.valueOf(10.50),
+                    BigDecimal.valueOf(25.75),
+                    BigDecimal.valueOf(5.25));
+
+            for (int i = 0; i < 3; i++) {
+                // Create trace
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build();
+                var traceId = createTrace(trace, apiKey, workspaceName);
+                traceIds.add(traceId);
+
+                // Create span with cost data
+                var span = factory.manufacturePojo(Span.class).toBuilder()
+                        .projectName(projectName)
+                        .traceId(traceId)
+                        .totalEstimatedCost(costValues.get(i))
+                        .build();
+                createSpan(span, apiKey, workspaceName);
+            }
+
+            // Create experiment
+            var experimentId = GENERATOR.generate();
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query with sorting by total_estimated_cost DESC
+            var sorting = toURLEncodedQueryParam(
+                    List.of(new SortingField("total_estimated_cost", Direction.DESC)));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sorting)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.content()).hasSize(3);
+
+                // Verify sorting order: 25.75, 10.50, 5.25
+                var costs = actualPage.content().stream()
+                        .map(item -> item.experimentItems().get(0).totalEstimatedCost())
+                        .toList();
+
+                assertThat(costs).hasSize(3);
+                assertThat(costs.get(0)).isEqualByComparingTo(BigDecimal.valueOf(25.75));
+                assertThat(costs.get(1)).isEqualByComparingTo(BigDecimal.valueOf(10.50));
+                assertThat(costs.get(2)).isEqualByComparingTo(BigDecimal.valueOf(5.25));
+            }
+        }
+
+        @Test
+        @DisplayName("should sort experiment items by usage.total_tokens in ascending order")
+        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSorted() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces and spans with usage data
+            var traceIds = new ArrayList<UUID>();
+            var usageValues = List.of(
+                    Map.of("total_tokens", 150, "prompt_tokens", 100, "completion_tokens", 50),
+                    Map.of("total_tokens", 50, "prompt_tokens", 30, "completion_tokens", 20),
+                    Map.of("total_tokens", 100, "prompt_tokens", 60, "completion_tokens", 40));
+
+            for (int i = 0; i < 3; i++) {
+                // Create trace
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build();
+                var traceId = createTrace(trace, apiKey, workspaceName);
+                traceIds.add(traceId);
+
+                // Create span with usage data
+                var span = factory.manufacturePojo(Span.class).toBuilder()
+                        .projectName(projectName)
+                        .traceId(traceId)
+                        .usage(usageValues.get(i))
+                        .build();
+                createSpan(span, apiKey, workspaceName);
+            }
+
+            // Create experiment
+            var experimentId = GENERATOR.generate();
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query with sorting by usage.total_tokens ASC
+            var sorting = toURLEncodedQueryParam(
+                    List.of(new SortingField("usage.total_tokens", Direction.ASC)));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sorting)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.content()).hasSize(3);
+
+                // Verify sorting order: 50, 100, 150
+                var tokens = actualPage.content().stream()
+                        .map(item -> item.experimentItems().get(0).usage().get("total_tokens"))
+                        .toList();
+
+                assertThat(tokens).containsExactly(50L, 100L, 150L);
+            }
         }
     }
 }

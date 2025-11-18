@@ -261,6 +261,21 @@ public class StatsMapper {
                     });
         }
 
+        @SuppressWarnings("unchecked")
+        Map<String, Object> usageMap = row.get(USAGE, Map.class);
+        if (usageMap != null) {
+            usageMap.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        double value = entry.getValue() instanceof Number number
+                                ? number.doubleValue()
+                                : 0.0;
+                        stats.add(new AvgValueStat(
+                                "%s.%s".formatted(USAGE, entry.getKey()),
+                                value));
+                    });
+        }
+
         return new ProjectStats(stats.build().toList());
     }
 
