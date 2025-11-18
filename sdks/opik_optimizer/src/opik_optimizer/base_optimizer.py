@@ -16,13 +16,11 @@ from opik.api_objects import optimization
 from opik import Dataset, opik_context
 from pydantic import BaseModel
 
-from . import _throttle, optimization_result
-from .optimization_config import chat_prompt, mappers
+from . import optimization_result
+from .api_objects import chat_prompt
 from .optimizable_agent import OptimizableAgent
 from .utils import create_litellm_agent_class
-from . import task_evaluator
-
-_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+from . import task_evaluator, helpers
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -209,273 +207,8 @@ class BaseOptimizer(ABC):
         }
 
     # ------------------------------------------------------------------
-    # LLM call methods
-    # ------------------------------------------------------------------
-
-    def _prepare_model_params(
-        self,
-        call_time_params: dict[str, Any],
-        response_model: type[BaseModel] | None = None,
-        is_reasoning: bool = False,
-    ) -> dict[str, Any]:
-        """
-        Prepare parameters for LiteLLM call by merging and adding monitoring.
-
-        Args:
-            call_time_params: Dict of LiteLLM params from call-time overrides
-            response_model: Optional Pydantic model for structured output
-            is_reasoning: Flag for metadata tagging
-
-        Returns:
-            Dictionary ready for litellm.completion/acompletion
-        """
-        from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
-
-        # Merge optimizer's model_parameters with call-time overrides
-        merged_params = {**self.model_parameters, **call_time_params}
-
-        # Add Opik monitoring wrapper
-        final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
-            merged_params
-        )
-
-        # Add reasoning metadata if applicable
-        if is_reasoning and "metadata" in final_params:
-            if "opik_call_type" not in final_params["metadata"]:
-                final_params["metadata"]["opik_call_type"] = "reasoning"
-
-        # Configure project_name and tags for Opik tracing
-        if "metadata" not in final_params:
-            final_params["metadata"] = {}
-        if "opik" not in final_params["metadata"]:
-            final_params["metadata"]["opik"] = {}
-
-        # Set project name for optimizer reasoning calls
-        final_params["metadata"]["opik"]["project_name"] = self.project_name
-
-        # Add tags if optimization_id is available
-        if self.current_optimization_id:
-            final_params["metadata"]["opik"]["tags"] = [
-                self.current_optimization_id,
-                "Prompt Optimization",
-            ]
-
-        # Add structured output support
-        if response_model is not None:
-            final_params["response_format"] = response_model
-
-        return final_params
-
-    def _parse_response(
-        self,
-        response: Any,
-        response_model: type[BaseModel] | None = None,
-    ) -> BaseModel | str:
-        """
-        Parse LiteLLM response, with optional structured output parsing.
-
-        Args:
-            response: The response from litellm.completion/acompletion
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        content = response.choices[0].message.content
-
-        # When using structured outputs with Pydantic models, LiteLLM automatically
-        # parses the response. Parse the JSON string into the Pydantic model
-        if response_model is not None:
-            return response_model.model_validate_json(content)
-
-        return content
-
-    def _build_call_time_params(
-        self,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        top_p: float | None = None,
-        presence_penalty: float | None = None,
-        frequency_penalty: float | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Build dictionary of call-time LiteLLM parameter overrides.
-
-        Args:
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            max_completion_tokens: Upper bound for generated tokens
-            top_p: Nucleus sampling probability mass
-            presence_penalty: Penalty for new tokens based on presence
-            frequency_penalty: Penalty for new tokens based on frequency
-            metadata: Optional metadata dict for monitoring
-
-        Returns:
-            Dictionary of non-None parameters for LiteLLM
-        """
-        call_time_params: dict[str, Any] = {}
-        if temperature is not None:
-            call_time_params["temperature"] = temperature
-        if max_tokens is not None:
-            call_time_params["max_tokens"] = max_tokens
-        if max_completion_tokens is not None:
-            call_time_params["max_completion_tokens"] = max_completion_tokens
-        if top_p is not None:
-            call_time_params["top_p"] = top_p
-        if presence_penalty is not None:
-            call_time_params["presence_penalty"] = presence_penalty
-        if frequency_penalty is not None:
-            call_time_params["frequency_penalty"] = frequency_penalty
-        if metadata is not None:
-            call_time_params["metadata"] = metadata
-        return call_time_params
-
-    @_throttle.rate_limited(_limiter)
-    def _call_model(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        seed: int | None = None,
-        response_model: type[BaseModel] | None = None,
-        is_reasoning: bool = False,
-        # Explicit call-time overrides for LiteLLM params
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        top_p: float | None = None,
-        presence_penalty: float | None = None,
-        frequency_penalty: float | None = None,
-        # Optimizer-specific metadata (not passed to LiteLLM)
-        optimization_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> BaseModel | str:
-        """
-        Call the LLM model with optional structured output.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content' keys
-            model: The model to use (defaults to self.model)
-            seed: Random seed for reproducibility (defaults to self.seed)
-            response_model: Optional Pydantic model for structured output
-            is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            max_completion_tokens: Upper bound for generated tokens
-            top_p: Nucleus sampling probability mass
-            presence_penalty: Penalty for new tokens based on presence
-            frequency_penalty: Penalty for new tokens based on frequency
-            optimization_id: Optional ID for optimization tracking (metadata only)
-            metadata: Optional metadata dict for monitoring
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        self._increment_llm_counter()
-
-        # Build dict of call-time LiteLLM parameter overrides (non-None only)
-        call_time_params = self._build_call_time_params(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_completion_tokens=max_completion_tokens,
-            top_p=top_p,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            metadata=metadata,
-        )
-
-        final_params_for_litellm = self._prepare_model_params(
-            call_time_params, response_model, is_reasoning
-        )
-
-        response = litellm.completion(
-            model=model or self.model,
-            messages=messages,
-            seed=seed if seed is not None else self.seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-
-        return self._parse_response(response, response_model)
-
-    @_throttle.rate_limited(_limiter)
-    async def _call_model_async(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        seed: int | None = None,
-        response_model: type[BaseModel] | None = None,
-        is_reasoning: bool = False,
-        # Explicit call-time overrides for LiteLLM params
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        top_p: float | None = None,
-        presence_penalty: float | None = None,
-        frequency_penalty: float | None = None,
-        # Optimizer-specific metadata (not passed to LiteLLM)
-        optimization_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> BaseModel | str:
-        """
-        Async version of _call_model using litellm.acompletion.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content' keys
-            model: The model to use (defaults to self.model)
-            seed: Random seed for reproducibility (defaults to self.seed)
-            response_model: Optional Pydantic model for structured output
-            is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            max_completion_tokens: Upper bound for generated tokens
-            top_p: Nucleus sampling probability mass
-            presence_penalty: Penalty for new tokens based on presence
-            frequency_penalty: Penalty for new tokens based on frequency
-            optimization_id: Optional ID for optimization tracking (metadata only)
-            metadata: Optional metadata dict for monitoring
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        self._increment_llm_counter()
-
-        # Build dict of call-time LiteLLM parameter overrides (non-None only)
-        call_time_params = self._build_call_time_params(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_completion_tokens=max_completion_tokens,
-            top_p=top_p,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            metadata=metadata,
-        )
-
-        final_params_for_litellm = self._prepare_model_params(
-            call_time_params, response_model, is_reasoning
-        )
-
-        response = await litellm.acompletion(
-            model=model or self.model,
-            messages=messages,
-            seed=seed if seed is not None else self.seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-
-        return self._parse_response(response, response_model)
-
-    # ------------------------------------------------------------------
     # Experiment metadata helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _drop_none(metadata: dict[str, Any]) -> dict[str, Any]:
-        return {k: v for k, v in metadata.items() if v is not None}
 
     @staticmethod
     def _deep_merge_dicts(
@@ -531,7 +264,7 @@ class BaseOptimizer(ABC):
             params: list[dict[str, Any]] = []
             for parameter in sig.parameters.values():
                 params.append(
-                    self._drop_none(
+                    helpers.drop_none(
                         {
                             "name": parameter.name,
                             "kind": parameter.kind.name,
@@ -548,7 +281,7 @@ class BaseOptimizer(ABC):
                 )
 
             signatures.append(
-                self._drop_none(
+                helpers.drop_none(
                     {
                         "name": name,
                         "parameters": params,
@@ -564,7 +297,7 @@ class BaseOptimizer(ABC):
         agent_config["model"] = getattr(prompt, "model", None) or self.model
         agent_config["tools"] = self._serialize_tools(prompt)
         agent_config["optimizer"] = self.__class__.__name__
-        return self._drop_none(agent_config)
+        return helpers.drop_none(agent_config)
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         """Override in subclasses to expose optimizer-specific parameters."""
@@ -591,16 +324,19 @@ class BaseOptimizer(ABC):
         if extra_parameters:
             metadata["parameters"] = extra_parameters
 
-        return self._drop_none(metadata)
+        return helpers.drop_none(metadata)
 
     def _build_optimization_config(self) -> dict[str, Any]:
         """
-        Build metadata dictionary for optimization creation.
+        Build metadata dictionary for optimization creation to be used when
+        creating Opik optimizations.
 
         Returns:
             Dictionary with 'optimizer' and optionally 'name' keys.
         """
         metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
+        if self.name:
+            metadata["name"] = self.name
         return metadata
 
     def _prepare_experiment_config(
@@ -657,7 +393,7 @@ class BaseOptimizer(ABC):
         if experiment_config:
             base_config = self._deep_merge_dicts(base_config, experiment_config)
 
-        return self._drop_none(base_config)
+        return helpers.drop_none(base_config)
 
     @abstractmethod
     def optimize_prompt(
@@ -764,7 +500,7 @@ class BaseOptimizer(ABC):
                 )
 
             result = {
-                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+                "llm_output": cleaned_model_output,
             }
             return result
 

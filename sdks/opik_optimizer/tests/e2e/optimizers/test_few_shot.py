@@ -4,8 +4,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any
 
-from opik_optimizer import FewShotBayesianOptimizer, datasets
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
 
 
 def test_few_shot_optimizer() -> None:
@@ -13,15 +12,15 @@ def test_few_shot_optimizer() -> None:
     if not os.getenv("OPENAI_API_KEY"):
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
-    optimizer = FewShotBayesianOptimizer(
-        model="openai/gpt-4",
+    optimizer = opik_optimizer.FewShotBayesianOptimizer(
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 128000},
         min_examples=1,
         max_examples=2,
-        model_parameters={"temperature": 0.1, "max_tokens": 5000},
     )
 
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -30,7 +29,7 @@ def test_few_shot_optimizer() -> None:
         )
 
     # Updated ChatPrompt for tiny_test dataset field names
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         messages=[
             {"role": "system", "content": "Provide an answer to the question."},
             {"role": "user", "content": "{text}"},  # Changed from "{question}"
@@ -122,8 +121,8 @@ def test_few_shot_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4", (
-        f"Expected openai/gpt-4, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-mini", (
+        f"Expected openai/gpt-5-mini, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"
