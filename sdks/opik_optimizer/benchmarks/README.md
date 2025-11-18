@@ -96,13 +96,24 @@ python run_benchmark.py --config manifest.json
     {
       "dataset": "hotpot_300",
       "optimizer": "meta_prompt",
-      "model": "openai/gpt-4o-mini"
+      "model": "openai/gpt-4o-mini",
+      "optimize_params": {
+        "max_trials": 2,
+        "seed": 123
+      }
     },
     {
       "dataset": "ai2_arc",
       "optimizer": "evolutionary_optimizer",
       "model": "openai/gpt-4o-mini",
-      "test_mode": false
+      "test_mode": false,
+      "optimizer_params": {
+        "population_size": 8,
+        "max_generations": 4
+      },
+      "optimize_params": {
+        "max_trials": 20
+      }
     }
   ]
 }
@@ -116,6 +127,8 @@ python run_benchmark.py --config manifest.json
   - `optimizer` (required): Optimizer name from available optimizers
   - `model` (required): Model name from configured models
   - `test_mode` (optional): Override test mode for this specific task
+  - `optimizer_params` (optional): Dict merged into the optimizer constructor (per-task overrides)
+  - `optimize_params` (optional): Dict merged into the optimizer's `optimize_prompt` call (per-task overrides)
 
 **When to use manifests:**
 - Reproducing exact benchmark configurations
@@ -123,6 +136,8 @@ python run_benchmark.py --config manifest.json
 - Version-controlling benchmark configurations
 - Sharing benchmark setups with team members
 - CI/CD pipelines
+
+Use the per-task `optimizer_params` and `optimize_params` fields to enforce rollout budgets (e.g., `max_trials`, iteration caps) or tweak optimizer seeds without modifying the global defaults.
 
 ## Commands
 
