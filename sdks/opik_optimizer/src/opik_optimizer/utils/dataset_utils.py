@@ -72,7 +72,8 @@ def create_dataset_from_records(
     test_mode: bool,
 ) -> opik.Dataset:
     """Create or reuse an Opik dataset with the provided records and size checks."""
-    full_name = f"{dataset_name}{'_sample' if test_mode else ''}"
+    suffix = "_sample" if test_mode and not dataset_name.endswith("_sample") else ""
+    full_name = f"{dataset_name}{suffix}"
     client = opik.Opik()
     dataset = client.get_or_create_dataset(full_name)
     existing = dataset.get_items()
