@@ -8,14 +8,14 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
+    rev: v3.21.1
     hooks:
       - id: pyupgrade
         args: [--py310-plus]
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1
+    rev: v0.14.5
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes]
