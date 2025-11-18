@@ -14,6 +14,8 @@ class ManifestTask(BaseModel):
     optimizer: str
     model: str
     test_mode: bool | None = None
+    optimizer_params: dict[str, Any] | None = None
+    optimize_params: dict[str, Any] | None = None
 
 
 class BenchmarkManifest(BaseModel):
@@ -47,9 +49,13 @@ def manifest_to_task_specs(
                 dataset_name=task.dataset,
                 optimizer_name=task.optimizer,
                 model_name=task.model,
-                test_mode=task.test_mode
-                if task.test_mode is not None
-                else default_test_mode,
+                test_mode=(
+                    task.test_mode
+                    if task.test_mode is not None
+                    else default_test_mode
+                ),
+                optimizer_params=task.optimizer_params,
+                optimize_params=task.optimize_params,
             )
         )
     return specs
