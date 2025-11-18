@@ -154,6 +154,8 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
+from .dashboard_page_public import DashboardPagePublic
+from .dashboard_public import DashboardPublic
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -572,6 +574,8 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
+    "DashboardPagePublic",
+    "DashboardPublic",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
