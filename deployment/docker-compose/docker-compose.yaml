@@ -160,7 +160,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
       IS_MINIO: true
       S3_URL: http://minio:9000
-      PYTHON_EVALUATOR_URL: http://python-backend:8000
+      PYTHON_EVALUATOR_URL: ${PYTHON_EVALUATOR_URL:-http://python-backend:${PYTHON_BACKEND_PORT:-8000}}
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
       CORS: ${CORS:-false}
@@ -248,7 +248,7 @@ services:
     hostname: demo-data-generator
     environment:
       CREATE_DEMO_DATA: ${CREATE_DEMO_DATA:-true}
-      PYTHON_BACKEND_URL: ${PYTHON_BACKEND_URL:-http://python-backend:8000}
+      PYTHON_BACKEND_URL: ${PYTHON_BACKEND_URL:-http://python-backend:${PYTHON_BACKEND_PORT:-8000}}
     command: [ "sh", "-c", "./demo_data_entrypoint.sh" ]
     depends_on:
       frontend:
