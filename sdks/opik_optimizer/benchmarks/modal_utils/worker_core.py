@@ -38,6 +38,9 @@ def run_optimization_task(
         optimizer_name: Name of optimizer to use
         model_name: Name of model to use
         test_mode: Whether to run in test mode (5 examples)
+        optimizer_params_override: Constructor kwargs override for the optimizer
+        optimizer_prompt_params_override: Additional kwargs merged into
+            ``optimize_prompt`` (usually rollout caps or prompt-iteration knobs).
 
     Returns:
         TaskResult object containing the optimization results
