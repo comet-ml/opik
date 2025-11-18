@@ -522,6 +522,7 @@ class TestCLIImportExport:
         self._create_test_traces(opik_client, source_project_name)
 
         # Test export with name filter using new CLI structure
+        # OQL syntax: use = not ==, and double quotes for string values
         export_cmd = [
             "export",
             "default",
@@ -530,7 +531,7 @@ class TestCLIImportExport:
             "--path",
             str(test_data_dir),
             "--filter",
-            "name == 'test_function_1'",
+            'name = "test_function_1"',
         ]
 
         result = self._run_cli_command(export_cmd, "Export with name filter")
