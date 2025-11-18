@@ -3868,7 +3868,7 @@ class DatasetsResourceTest {
         }
     }
 
-    private void getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
+    private DatasetItem getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {
         var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path("items")
                 .path(expectedDatasetItem.id().toString())
@@ -3887,6 +3887,139 @@ class DatasetsResourceTest {
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
+
+        return actualEntity;
+    }
+
+    @Nested
+    @DisplayName("Patch dataset item:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PatchDatasetItem {
+
+        private Stream<Arguments> patchFieldScenarios() {
+            return Stream.of(
+                    // Test patching data field only
+                    arguments("data field", (java.util.function.Function<DatasetItem, DatasetItem>) item -> {
+                        var newData = Map.<String, JsonNode>of(
+                                "updated_field", factory.manufacturePojo(JsonNode.class));
+                        return DatasetItem.builder()
+                                .data(newData)
+                                .build();
+                    }),
+                    // Test patching source, traceId and spanId for SPAN source
+                    arguments("source, traceId and spanId to SPAN",
+                            (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                                    .builder()
+                                    .source(DatasetItemSource.SPAN)
+                                    .traceId(GENERATOR.generate())
+                                    .spanId(GENERATOR.generate())
+                                    .build()),
+                    // Test patching traceId only (keeping existing SPAN source and spanId)
+                    arguments("traceId only",
+                            (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                                    .builder()
+                                    .traceId(GENERATOR.generate())
+                                    .build()),
+                    // Test patching spanId only (keeping existing SPAN source and traceId)
+                    arguments("spanId only", (java.util.function.Function<DatasetItem, DatasetItem>) item -> DatasetItem
+                            .builder()
+                            .spanId(GENERATOR.generate())
+                            .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("patchFieldScenarios")
+        @DisplayName("Success: patch different fields")
+        void patchDatasetItem(String scenarioName, java.util.function.Function<DatasetItem, DatasetItem> patchBuilder) {
+            // Create initial item with SPAN source
+            var originalItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .source(DatasetItemSource.SPAN)
+                    .traceId(GENERATOR.generate())
+                    .spanId(GENERATOR.generate())
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(originalItem))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify original item exists
+            var retrievedOriginal = getItemAndAssert(originalItem, TEST_WORKSPACE, API_KEY);
+
+            // Build patch with only the fields we want to update
+            var patchItem = patchBuilder.apply(originalItem);
+
+            // Apply patch
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path(originalItem.id().toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            // Retrieve patched item
+            var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
+
+            // Verify patched fields were updated
+            if (patchItem.data() != null) {
+                assertThat(patchedItem.data()).isEqualTo(patchItem.data());
+            } else {
+                assertThat(patchedItem.data()).isEqualTo(retrievedOriginal.data());
+            }
+
+            if (patchItem.source() != null) {
+                assertThat(patchedItem.source()).isEqualTo(patchItem.source());
+            } else {
+                assertThat(patchedItem.source()).isEqualTo(retrievedOriginal.source());
+            }
+
+            if (patchItem.traceId() != null) {
+                assertThat(patchedItem.traceId()).isEqualTo(patchItem.traceId());
+            } else {
+                assertThat(patchedItem.traceId()).isEqualTo(retrievedOriginal.traceId());
+            }
+
+            if (patchItem.spanId() != null) {
+                assertThat(patchedItem.spanId()).isEqualTo(patchItem.spanId());
+            } else {
+                assertThat(patchedItem.spanId()).isEqualTo(retrievedOriginal.spanId());
+            }
+
+            // Verify read-only fields remain unchanged
+            assertThat(patchedItem.id()).isEqualTo(originalItem.id());
+            assertThat(patchedItem.datasetId()).isEqualTo(retrievedOriginal.datasetId());
+            assertThat(patchedItem.createdBy()).isEqualTo(retrievedOriginal.createdBy());
+            // Note: createdAt and lastUpdatedAt will be updated by ClickHouse on INSERT
+        }
+
+        @Test
+        @DisplayName("when dataset item not found, then return 404")
+        void patchDatasetItem__whenDatasetItemNotFound__thenReturn404() {
+            var itemId = GENERATOR.generate();
+            var patchItem = DatasetItem.builder()
+                    .data(Map.of("field", factory.manufacturePojo(JsonNode.class)))
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path(itemId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset item not found");
+            }
+        }
     }
 
     @Nested
