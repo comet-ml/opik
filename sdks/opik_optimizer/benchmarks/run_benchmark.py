@@ -14,8 +14,11 @@ Usage:
 """
 
 import argparse
+from typing import List, Optional
 
 import benchmark_config
+from benchmark_manifest import load_manifest, manifest_to_task_specs
+from benchmark_taskspec import BenchmarkTaskSpec
 
 
 def main() -> None:
@@ -122,7 +125,28 @@ Examples:
         help="Resume incomplete run (skip completed tasks)",
     )
 
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to benchmark manifest JSON (overrides dataset/model/optimizer options)",
+    )
+
     args = parser.parse_args()
+
+    manifest_tasks: Optional[List[BenchmarkTaskSpec]] = None
+    manifest_seed = args.seed
+    manifest_test_mode = args.test_mode
+
+    if args.config:
+        manifest = load_manifest(args.config)
+        manifest_tasks = manifest_to_task_specs(manifest)
+        if not manifest_tasks:
+            raise ValueError("Manifest must contain at least one task.")
+        if manifest.seed is not None:
+            manifest_seed = manifest.seed
+        if manifest.test_mode is not None:
+            manifest_test_mode = manifest.test_mode
 
     if args.modal:
         # Modal execution
@@ -138,11 +162,12 @@ Examples:
                 demo_datasets=args.demo_datasets,
                 optimizers=args.optimizers,
                 models=args.models,
-                seed=args.seed,
-                test_mode=args.test_mode,
+                seed=manifest_seed,
+                test_mode=manifest_test_mode,
                 max_concurrent=args.max_concurrent,
                 retry_failed_run_id=args.retry_failed_run_id,
                 resume_run_id=args.resume_run_id,
+                task_specs=manifest_tasks,
             )
     else:
         # Local execution
@@ -157,11 +182,12 @@ Examples:
             optimizers=args.optimizers,
             models=args.models,
             max_workers=args.max_concurrent,
-            seed=args.seed,
-            test_mode=args.test_mode,
+            seed=manifest_seed,
+            test_mode=manifest_test_mode,
             checkpoint_dir=args.checkpoint_dir,
             retry_failed_run_id=args.retry_failed_run_id,
             resume_run_id=args.resume_run_id,
+            task_specs=manifest_tasks,
         )
 
 
