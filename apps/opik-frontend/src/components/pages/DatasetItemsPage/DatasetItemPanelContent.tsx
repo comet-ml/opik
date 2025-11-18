@@ -17,12 +17,13 @@ import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMut
 import { processInputData } from "@/lib/images";
 
 type DatasetItemPanelContentProps = {
+  datasetId: string;
   datasetItemId: string;
 };
 
 const DatasetItemPanelContent: React.FunctionComponent<
   DatasetItemPanelContentProps
-> = ({ datasetItemId }) => {
+> = ({ datasetId, datasetItemId }) => {
   const { data, isPending } = useDatasetItemById(
     {
       datasetItemId,
@@ -43,6 +44,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
 
   const handleAddTag = (newTag: string) => {
     updateMutation.mutate({
+      datasetId,
       itemId: datasetItemId,
       tags: [...tags, newTag],
     });
@@ -50,6 +52,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
 
   const handleDeleteTag = (tag: string) => {
     updateMutation.mutate({
+      datasetId,
       itemId: datasetItemId,
       tags: tags.filter((t) => t !== tag),
     });

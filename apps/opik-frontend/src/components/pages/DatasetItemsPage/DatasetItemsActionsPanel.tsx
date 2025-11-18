@@ -113,6 +113,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
       <AddTagDialog
         key={`tag-${resetKeyRef.current}`}
+        datasetId={datasetId}
         rows={selectedDatasetItems}
         open={open === 3}
         setOpen={setOpen}

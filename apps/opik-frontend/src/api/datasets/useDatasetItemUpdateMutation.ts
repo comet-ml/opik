@@ -5,6 +5,7 @@ import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseDatasetItemUpdateMutationParams = {
+  datasetId: string;
   itemId: string;
   tags: string[];
 };
@@ -41,10 +42,10 @@ const useDatasetItemUpdateMutation = () => {
     onSettled: (data, error, variables) => {
       // Invalidate both the individual item and the list queries
       queryClient.invalidateQueries({
-        queryKey: ["datasetItem", { datasetItemId: variables.itemId }],
+        queryKey: ["dataset-item", { datasetItemId: variables.itemId }],
       });
       queryClient.invalidateQueries({
-        queryKey: ["datasetItems"],
+        queryKey: ["dataset-items", { datasetId: variables.datasetId }],
       });
     },
   });

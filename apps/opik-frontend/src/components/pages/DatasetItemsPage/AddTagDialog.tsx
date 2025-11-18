@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/use-toast";
 import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMutation";
 
 type AddTagDialogProps = {
+  datasetId: string;
   rows: Array<DatasetItem>;
   open: boolean | number;
   setOpen: (open: boolean | number) => void;
@@ -20,6 +21,7 @@ type AddTagDialogProps = {
 };
 
 const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
+  datasetId,
   rows,
   open,
   setOpen,
@@ -49,6 +51,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 
       promises.push(
         updateMutation.mutateAsync({
+          datasetId,
           itemId: row.id,
           tags: newTags,
         }),

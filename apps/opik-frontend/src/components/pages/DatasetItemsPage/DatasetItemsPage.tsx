@@ -466,7 +466,10 @@ const DatasetItemsPage = () => {
         onClose={handleClose}
         horizontalNavigation={horizontalNavigation}
       >
-        <DatasetItemPanelContent datasetItemId={activeRowId as string} />
+        <DatasetItemPanelContent
+          datasetId={datasetId}
+          datasetItemId={activeRowId as string}
+        />
       </ResizableSidePanel>
 
       <AddEditDatasetItemDialog
