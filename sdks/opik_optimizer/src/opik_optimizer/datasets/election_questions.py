@@ -2,7 +2,9 @@ import opik
 
 
 def election_questions(test_mode: bool = False) -> opik.Dataset:
-    dataset_name = "election_questions" if not test_mode else "election_questions_test"
+    dataset_name = (
+        "election_questions_train" if not test_mode else "election_questions_sample"
+    )
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()
