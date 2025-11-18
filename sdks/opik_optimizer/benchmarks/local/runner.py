@@ -1,9 +1,22 @@
+"""Local benchmark runner that schedules optimization tasks on the host machine.
+
+The CLI entry point (`run_benchmark_local.py`) instantiates `BenchmarkRunner`
+from this module.  It is responsible for:
+  * building the product of datasets/optimizers/models (or using a
+    manifest) and persisting checkpoints so runs can be resumed,
+  * launching `run_optimization` either in a process pool or sequentially when
+    multiprocessing is not available,
+  * enforcing rollout budgets by deriving `max_trials` when manifests do not
+    override optimizer parameters.
+"""
+
 import os
 import sys
 import time
 import traceback
 from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
+from typing import Any
 
 from local import checkpoint as benchmark_checkpoint
 from local import logging as benchmark_logging
@@ -19,6 +32,8 @@ from opik_optimizer import (
     ChatPrompt,
 )
 
+from utils.budgeting import resolve_optimize_params
+
 
 @benchmark_logging.log_console_output_to_file()
 def run_optimization(
@@ -27,6 +42,8 @@ def run_optimization(
     optimizer_name: str,
     model_name: str,
     test_mode: bool,
+    optimizer_params_override: dict[str, Any] | None = None,
+    optimizer_prompt_params_override: dict[str, Any] | None = None,
 ) -> TaskResult:
     timestamp_start = time.time()
 
@@ -42,9 +59,12 @@ def run_optimization(
             )
 
             optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
+            constructor_kwargs = dict(optimizer_config.params)
+            if optimizer_params_override:
+                constructor_kwargs.update(optimizer_params_override)
             optimizer: BaseOptimizer = getattr(
                 opik_optimizer, optimizer_config.class_name
-            )(model=model_name, **optimizer_config.params)
+            )(model=model_name, **constructor_kwargs)
 
             messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
             initial_prompt = ChatPrompt(messages=messages)  # type: ignore
@@ -66,11 +86,14 @@ def run_optimization(
             initial_evaluation_duration = time.time() - start_time_initial_eval
 
             # Run optimization
+            optimize_kwargs = dict(optimizer_config.optimize_params)
+            if optimizer_prompt_params_override:
+                optimize_kwargs.update(optimizer_prompt_params_override)
             optimization_results = optimizer.optimize_prompt(
                 prompt=initial_prompt,
                 dataset=dataset,
                 metric=dataset_config.metrics[0],
-                **optimizer_config.optimize_params,
+                **optimize_kwargs,
             )
             optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
 
@@ -242,6 +265,9 @@ class BenchmarkRunner:
                     if resume_run_id and task_id in completed_ids:
                         continue
 
+                    optimize_override = resolve_optimize_params(
+                        task.dataset_name, task.optimizer_name, task.optimize_params
+                    )
                     future = executor.submit(
                         run_optimization,
                         task_id=task_id,
@@ -249,6 +275,8 @@ class BenchmarkRunner:
                         optimizer_name=task.optimizer_name,
                         model_name=task.model_name,
                         test_mode=task.test_mode,
+                        optimizer_params_override=task.optimizer_params,
+                        optimizer_prompt_params_override=optimize_override,
                     )
 
                     future_to_info[future] = (

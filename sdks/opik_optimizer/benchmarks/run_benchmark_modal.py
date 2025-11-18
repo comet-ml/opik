@@ -32,6 +32,7 @@ from pathlib import Path
 import modal
 
 from benchmark_taskspec import BenchmarkTaskSpec
+from utils.budgeting import resolve_optimize_params
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
@@ -206,6 +207,9 @@ def submit_benchmark_tasks(
             skipped_count += 1
             continue
 
+        optimize_override = resolve_optimize_params(
+            task.dataset_name, task.optimizer_name, task.optimize_params
+        )
         all_tasks.append(
             {
                 "task_id": task_id,
@@ -214,6 +218,8 @@ def submit_benchmark_tasks(
                 "model_name": task.model_name,
                 "test_mode": task.test_mode,
                 "run_id": run_id,
+                "optimizer_params": task.optimizer_params,
+                "optimizer_prompt_params": optimize_override,
             }
         )
 

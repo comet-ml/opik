@@ -2,6 +2,7 @@
 
 import time
 import traceback
+from typing import Any
 
 import benchmark_config
 import opik_optimizer
@@ -16,13 +17,21 @@ def run_optimization_task(
     optimizer_name: str,
     model_name: str,
     test_mode: bool,
+    optimizer_params_override: dict[str, Any] | None = None,
+    optimizer_prompt_params_override: dict[str, Any] | None = None,
 ) -> TaskResult:
     """
-    Run a single optimization task.
+    Run a single optimization task on Modal infrastructure.
 
-    This is the core optimization logic without Modal decorators,
-    making it easier to test and reuse.
+    Mirrors `local.runner.run_optimization` but omits Live console handling so
+    Modal workers can focus purely on running the benchmark. Two optional
+    override dictionaries allow per-task customization:
 
+      * ``optimizer_params_override`` – merged into the optimizer constructor
+        kwargs (e.g., to tweak seeds or thread counts).
+      * ``optimizer_prompt_params_override`` – merged into the optimizer's
+        ``optimize_prompt`` call (typically used to enforce rollout budgets
+        derived at submission time).
     Args:
         task_id: Unique identifier for this task
         dataset_name: Name of dataset to use
@@ -48,9 +57,12 @@ def run_optimization_task(
             )
 
             optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
+            constructor_kwargs = dict(optimizer_config.params)
+            if optimizer_params_override:
+                constructor_kwargs.update(optimizer_params_override)
             optimizer: BaseOptimizer = getattr(
                 opik_optimizer, optimizer_config.class_name
-            )(model=model_name, **optimizer_config.params)
+            )(model=model_name, **constructor_kwargs)
 
             messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
             initial_prompt = ChatPrompt(messages=messages)  # type: ignore
@@ -77,11 +89,14 @@ def run_optimization_task(
 
             # Run optimization
             print(f"[{task_id}] Running optimization...")
+            optimize_kwargs = dict(optimizer_config.optimize_params)
+            if optimizer_prompt_params_override:
+                optimize_kwargs.update(optimizer_prompt_params_override)
             optimization_results = optimizer.optimize_prompt(
                 prompt=initial_prompt,
                 dataset=dataset,
                 metric=dataset_config.metrics[0],
-                **optimizer_config.optimize_params,
+                **optimize_kwargs,
             )
             optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
 

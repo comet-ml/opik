@@ -67,6 +67,8 @@ def run_optimization_modal(
     model_name: str,
     test_mode: bool,
     run_id: str,
+    optimizer_params: dict | None = None,
+    optimizer_prompt_params: dict | None = None,
 ) -> dict:
     """
     Run a single optimization task on Modal.
@@ -116,6 +118,8 @@ def run_optimization_modal(
         optimizer_name=optimizer_name,
         model_name=model_name,
         test_mode=test_mode,
+        optimizer_params_override=optimizer_params,
+        optimizer_prompt_params_override=optimizer_prompt_params,
     )
 
     # Ensure the final result uses the same timestamp_start as the Running status

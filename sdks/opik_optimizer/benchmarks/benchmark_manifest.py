@@ -50,9 +50,7 @@ def manifest_to_task_specs(
                 optimizer_name=task.optimizer,
                 model_name=task.model,
                 test_mode=(
-                    task.test_mode
-                    if task.test_mode is not None
-                    else default_test_mode
+                    task.test_mode if task.test_mode is not None else default_test_mode
                 ),
                 optimizer_params=task.optimizer_params,
                 optimize_params=task.optimize_params,
