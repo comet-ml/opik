@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -81,10 +82,11 @@ public class CsvDatasetItemProcessor {
             tempFile = bufferToTempFile(inputStream);
         } catch (IOException e) {
             log.error("Failed to buffer CSV file to temp storage for dataset '{}'", datasetId, e);
-            throw new BadRequestException("Failed to process CSV file: " + e.getMessage());
+            throw new InternalServerErrorException("Failed to process CSV file: " + e.getMessage());
         }
 
         // Now process asynchronously with automatic cleanup
+        log.info("Starting asynchronous CSV processing for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
         validateAndProcessCsvFromFile(tempFile, datasetId, workspaceId, userName, visibility)
                 .doOnError(error -> {
                     log.error("CSV processing failed for dataset '{}'", datasetId, error);
@@ -95,7 +97,8 @@ public class CsvDatasetItemProcessor {
                             datasetId, totalItems);
                     deleteTempFile(tempFile);
                 })
-                .subscribe();
+                .subscribe(null, error -> log.error("Subscription error during CSV processing for dataset '{}'",
+                        datasetId, error));
     }
 
     /**

@@ -189,7 +189,7 @@ server:
       # Description: The port on which the application HTTP connector listens
       port: ${SERVER_APPLICATION_PORT:-8080}
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
-      # Default: 30s
+      # Default: 1m
       # Description: The maximum idle time for a connection, after which it will be closed.
       idleTimeout: ${SERVER_IDLE_TIMEOUT:-1m}
   adminConnectors:

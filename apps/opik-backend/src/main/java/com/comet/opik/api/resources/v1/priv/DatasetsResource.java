@@ -475,6 +475,9 @@ public class DatasetsResource {
 
         csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
 
+        log.info("CSV upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
+                workspaceId);
+
         return Response.status(Response.Status.ACCEPTED).build();
     }
 

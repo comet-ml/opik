@@ -75,10 +75,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
-  const [csvError, setCsvError] = useState<string | undefined>(undefined);
   const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
     undefined,
   );
+  const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
   const [description, setDescription] = useState<string>(
@@ -138,7 +138,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
                 toast({
                   title: "CSV upload accepted",
                   description:
-                    "Your CSV file is being processed in the background. Dataset items will appear shortly.",
+                    "Your CSV file is being processed in the background. Dataset items will appear automatically when ready. If you don't see them, try refreshing the page.",
                 });
               },
               onError: (error: unknown) => {
