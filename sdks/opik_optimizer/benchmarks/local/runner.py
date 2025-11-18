@@ -147,6 +147,7 @@ class BenchmarkRunner:
         models: list[str],
         retry_failed_run_id: str | None,
         resume_run_id: str | None,
+        task_specs: list[BenchmarkTaskSpec] | None = None,
     ) -> None:
         # Create unique id
         if resume_run_id and retry_failed_run_id:
@@ -208,6 +209,9 @@ class BenchmarkRunner:
             models_for_log = checkpoint_manager.models
         else:
             checkpoint_manager.save()
+
+        # Start scheduling the tasks
+        start_time = time.time()
 
         task_results: list[TaskResult] = []
         with self.benchmark_logger.create_live_panel() as live:
