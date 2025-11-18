@@ -11,6 +11,7 @@ from .chat_completions.client import AsyncChatCompletionsClient, ChatCompletions
 from .check.client import AsyncCheckClient, CheckClient
 from .core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from .core.request_options import RequestOptions
+from .dashboards.client import AsyncDashboardsClient, DashboardsClient
 from .datasets.client import AsyncDatasetsClient, DatasetsClient
 from .environment import OpikApiEnvironment
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
@@ -98,6 +99,7 @@ class OpikApi:
         self.check = CheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
         self.chat_completions = ChatCompletionsClient(client_wrapper=self._client_wrapper)
+        self.dashboards = DashboardsClient(client_wrapper=self._client_wrapper)
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
@@ -235,6 +237,7 @@ class AsyncOpikApi:
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
         self.chat_completions = AsyncChatCompletionsClient(client_wrapper=self._client_wrapper)
+        self.dashboards = AsyncDashboardsClient(client_wrapper=self._client_wrapper)
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)

@@ -48,6 +48,8 @@ tags:
   description: Automation rule evaluators resource
 - name: Chat Completions
   description: Chat Completions related resources
+- name: Dashboards
+  description: Workspace Dashboard resources
 - name: Datasets
   description: Dataset resources
 - name: Experiments
@@ -1137,6 +1139,134 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChatCompletionResponse"
+  /v1/private/dashboards:
+    get:
+      tags:
+      - Dashboards
+      summary: Find dashboards
+      description: Find dashboards in a workspace
+      operationId: findDashboards
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter dashboards by name (partial match, case insensitive)"
+      responses:
+        "200":
+          description: Dashboard page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPage_Public"
+    post:
+      tags:
+      - Dashboards
+      summary: Create dashboard
+      description: Create a new dashboard in a workspace
+      operationId: createDashboard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dashboard_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/dashboards/{dashboardId}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+  /v1/private/dashboards/{dashboardId}:
+    get:
+      tags:
+      - Dashboards
+      summary: Get dashboard by id
+      description: Get dashboard by id
+      operationId: getDashboardById
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dashboard resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Dashboard not found
+    delete:
+      tags:
+      - Dashboards
+      summary: Delete dashboard
+      description: Delete dashboard by id
+      operationId: deleteDashboard
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+    patch:
+      tags:
+      - Dashboards
+      summary: Update dashboard
+      description: Update dashboard by id. Partial updates are supported - only provided
+        fields will be updated.
+      operationId: updateDashboard
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardUpdate_Public"
+      responses:
+        "200":
+          description: Updated dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Dashboard not found
+        "409":
+          description: Conflict - dashboard with this name already exists
   /v1/private/datasets:
     get:
       tags:
@@ -5990,6 +6120,8 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
+    JsonNode:
+      type: object
     LlmAsJudgeCode:
       required:
       - messages
@@ -6027,7 +6159,11 @@ components:
           - TOOL_EXECUTION_RESULT
           - CUSTOM
         content:
-          type: string
+          type: object
+        structured_content:
+          type: boolean
+        string_content:
+          type: boolean
     LlmAsJudgeModelParameters:
       required:
       - name
@@ -6042,6 +6178,8 @@ components:
         seed:
           type: integer
           format: int32
+        custom_parameters:
+          $ref: "#/components/schemas/JsonNode"
     LlmAsJudgeOutputSchema:
       required:
       - description
@@ -6217,6 +6355,8 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
+    JsonNode_Write:
+      type: object
     LlmAsJudgeCode_Write:
       required:
       - messages
@@ -6254,7 +6394,11 @@ components:
           - TOOL_EXECUTION_RESULT
           - CUSTOM
         content:
-          type: string
+          type: object
+        structured_content:
+          type: boolean
+        string_content:
+          type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
       - name
@@ -6269,6 +6413,8 @@ components:
         seed:
           type: integer
           format: int32
+        custom_parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
     LlmAsJudgeOutputSchema_Write:
       required:
       - description
@@ -6485,6 +6631,8 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
+    JsonNode_Public:
+      type: object
     LlmAsJudgeCode_Public:
       required:
       - messages
@@ -6522,7 +6670,11 @@ components:
           - TOOL_EXECUTION_RESULT
           - CUSTOM
         content:
-          type: string
+          type: object
+        structured_content:
+          type: boolean
+        string_content:
+          type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
       - name
@@ -6537,6 +6689,8 @@ components:
         seed:
           type: integer
           format: int32
+        custom_parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
     LlmAsJudgeOutputSchema_Public:
       required:
       - description
@@ -7060,6 +7214,92 @@ components:
           - function
         function:
           $ref: "#/components/schemas/Function"
+    Dashboard_Public:
+      required:
+      - config
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        workspace_id:
+          type: string
+          readOnly: true
+        name:
+          maxLength: 120
+          minLength: 1
+          type: string
+        slug:
+          type: string
+          readOnly: true
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    Dashboard_Write:
+      required:
+      - config
+      - name
+      type: object
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonNode_Write"
+    DashboardPage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dashboard_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    DashboardUpdate_Public:
+      type: object
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
     Dataset:
       required:
       - name
@@ -9253,8 +9493,6 @@ components:
           - running
           - completed
           - cancelled
-    JsonNode:
-      type: object
     BooleanFeedbackDefinition:
       required:
       - details
@@ -9940,8 +10178,6 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
-    JsonNode_Write:
-      type: object
     ProviderApiKeyPage_Public:
       type: object
       properties:
@@ -11095,8 +11331,6 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion_Detail"
-    JsonNode_Public:
-      type: object
     PromptVersionPage_Public:
       type: object
       properties:
