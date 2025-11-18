@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -196,7 +197,7 @@ public class CsvDatasetItemProcessor {
                                     header -> header,
                                     header -> {
                                         String value = record.get(header);
-                                        return value != null && !value.isEmpty()
+                                        return StringUtils.isNotEmpty(value)
                                                 ? JsonUtils.valueToTree(value)
                                                 : JsonUtils.valueToTree("");
                                     }));
