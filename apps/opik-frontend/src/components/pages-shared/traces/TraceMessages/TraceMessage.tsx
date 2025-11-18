@@ -3,7 +3,7 @@ import JsonView from "react18-json-view";
 import isObject from "lodash/isObject";
 import isUndefined from "lodash/isUndefined";
 
-import { SPAN_TYPE, Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
+import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import LikeFeedback from "@/components/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
@@ -13,11 +13,11 @@ import { prettifyMessage } from "@/lib/traces";
 import { cn, toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import isFunction from "lodash/isFunction";
-import BaseTraceDataTypeIcon from "../TraceDetailsPanel/BaseTraceDataTypeIcon";
+import { Wrench } from "lucide-react";
 
 type TraceMessageProps = {
   trace: Trace;
-  handleOpenTrace?: (id: string) => void;
+  handleOpenTrace?: (id: string, filterToolCalls?: boolean) => void;
 };
 
 const TraceMessage: React.FC<TraceMessageProps> = ({
@@ -80,21 +80,11 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
-          {trace.has_tool_spans && (
-            <div className="absolute -left-6 top-2">
-              <BaseTraceDataTypeIcon type={SPAN_TYPE.tool} />
-            </div>
-          )}
           {input}
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2 dark:bg-secondary">
-          {trace.has_tool_spans && (
-            <div className="absolute -left-6 top-2">
-              <BaseTraceDataTypeIcon type={SPAN_TYPE.tool} />
-            </div>
-          )}
           {output}
         </div>
       </div>
@@ -105,10 +95,23 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           <Button
             variant="ghost"
             size="2xs"
-            onClick={() => handleOpenTrace(trace.id)}
+            onClick={() => handleOpenTrace(trace.id, false)}
           >
             View trace
           </Button>
+          {trace.has_tool_spans && (
+            <>
+              <Separator orientation="vertical" className="mx-1 h-3" />
+              <Button
+                variant="ghost"
+                size="2xs"
+                onClick={() => handleOpenTrace(trace.id, true)}
+              >
+                <Wrench className="mr-1 size-3" />
+                View tool calls
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>
