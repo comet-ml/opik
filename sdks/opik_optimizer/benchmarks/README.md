@@ -139,6 +139,11 @@ python run_benchmark.py --config manifest.json
 
 Use the per-task `optimizer_params` and `optimize_params` fields to enforce rollout budgets (e.g., `max_trials`, iteration caps) or tweak optimizer seeds without modifying the global defaults.
 
+#### Override Cheat Sheet
+
+- `optimizer_params`: constructor overrides (e.g., change population size, tweak optimizer-specific random seeds, toggle tracing). These are applied once when we instantiate the optimizer class.
+- `optimizer_prompt_params`: prompt-iteration overrides (e.g., `max_trials`, `n_samples`, judge batching). These are merged into the subsequent `optimize_prompt` call. When manifests omit this field, the runners derive an `optimizer_prompt_params_override` from the dataset rollout caps so Modal and local runs stay consistent.
+
 ## Commands
 
 ### Parameters
