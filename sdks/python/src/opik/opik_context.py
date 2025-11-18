@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, Dict, List, Optional, Union, Iterator, Union
+from typing import Any, Dict, List, Optional, Iterator, Union
 
 import opik.llm_usage as llm_usage
 from opik.api_objects import span, trace, opik_client, prompt
