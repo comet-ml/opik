@@ -115,8 +115,8 @@ def test_llama_index__happyflow(
     assert len(fake_backend.trace_trees) == 2
     assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
 
-    # check token usage info
-    llm_response = fake_backend.trace_trees[1].spans[0].spans[1].spans[3].usage
+    # check token usage info (now one level less deep due to removed duplicate span)
+    llm_response = fake_backend.trace_trees[1].spans[1].spans[3].usage
     assert_dict_has_keys(
         llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
     )
@@ -179,8 +179,8 @@ def test_llama_index__no_index_construction_logging_happyflow(
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
 
-    # check token usage info
-    llm_response = fake_backend.trace_trees[0].spans[0].spans[1].spans[3].usage
+    # check token usage info (now one level less deep due to removed duplicate span)
+    llm_response = fake_backend.trace_trees[0].spans[1].spans[3].usage
     assert_dict_has_keys(
         llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
     )
@@ -867,12 +867,12 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
         last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
-            # Top-level query span
+            # Retrieve span with nested embedding
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="general",
-                name="query",
-                input=ANY_BUT_NONE,
+                name="retrieve",
+                input=ANY_BUT_NONE,  # Retrieve has query_str input
                 output=ANY_BUT_NONE,
                 tags=None,
                 metadata=ANY_DICT.containing({"created_from": "llama_index"}),
@@ -881,126 +881,110 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[
-                    # Retrieve span with nested embedding
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="general",
-                        name="retrieve",
+                        name="embedding",
+                        input=None,
+                        output=ANY_BUT_NONE,
+                        tags=None,
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "llama_index"}
+                        ),
+                        usage=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                    )
+                ],
+            ),
+            # Synthesize span with nested processing spans
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="general",
+                name="synthesize",
+                input=ANY_BUT_NONE,  # Synthesize has query input
+                output=ANY_BUT_NONE,
+                tags=None,
+                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[
+                    # Chunking span
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="general",
+                        name="chunking",
                         input=ANY_BUT_NONE,
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "llama_index"}
+                        ),
                         usage=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
-                        spans=[
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                type="general",
-                                name="embedding",
-                                input=None,
-                                output=ANY_BUT_NONE,
-                                tags=None,
-                                metadata=ANY_DICT.containing(
-                                    {"created_from": "llama_index"}
-                                ),
-                                usage=None,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=expected_project_name,
-                                spans=[],
-                            )
-                        ],
+                        spans=[],
                     ),
-                    # Synthesize span with nested processing spans
+                    # Another chunking span
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="general",
-                        name="synthesize",
-                        input=ANY_BUT_NONE,  # Synthesize has query input
+                        name="chunking",
+                        input=ANY_BUT_NONE,
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "llama_index"}
+                        ),
                         usage=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
-                        spans=[
-                            # Chunking span
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                type="general",
-                                name="chunking",
-                                input=ANY_BUT_NONE,
-                                output=ANY_BUT_NONE,
-                                tags=None,
-                                metadata=ANY_DICT.containing(
-                                    {"created_from": "llama_index"}
-                                ),
-                                usage=None,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=expected_project_name,
-                                spans=[],
-                            ),
-                            # Another chunking span
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                type="general",
-                                name="chunking",
-                                input=ANY_BUT_NONE,
-                                output=ANY_BUT_NONE,
-                                tags=None,
-                                metadata=ANY_DICT.containing(
-                                    {"created_from": "llama_index"}
-                                ),
-                                usage=None,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=expected_project_name,
-                                spans=[],
-                            ),
-                            # Templating span
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                type="general",
-                                name="templating",
-                                input=ANY_BUT_NONE,
-                                output=None,  # Templating span may not have output
-                                tags=None,
-                                metadata=ANY_DICT.containing(
-                                    {"created_from": "llama_index"}
-                                ),
-                                usage=None,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=expected_project_name,
-                                spans=[],
-                            ),
-                            # LLM span
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                type="llm",
-                                name="llm",
-                                input=ANY_BUT_NONE,
-                                output=ANY_BUT_NONE,
-                                tags=None,
-                                metadata=ANY_DICT.containing(
-                                    {"created_from": "llama_index"}
-                                ),
-                                usage=ANY_BUT_NONE,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=expected_project_name,
-                                spans=[],
-                                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
-                                provider=LLMProvider.OPENAI,
-                            ),
-                        ],
+                        spans=[],
+                    ),
+                    # Templating span
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="general",
+                        name="templating",
+                        input=ANY_BUT_NONE,
+                        output=None,  # Templating span may not have output
+                        tags=None,
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "llama_index"}
+                        ),
+                        usage=None,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                    ),
+                    # LLM span
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="llm",
+                        input=ANY_BUT_NONE,
+                        output=ANY_BUT_NONE,
+                        tags=None,
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "llama_index"}
+                        ),
+                        usage=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        provider=LLMProvider.OPENAI,
                     ),
                 ],
-            )
+            ),
         ],
     )
 
