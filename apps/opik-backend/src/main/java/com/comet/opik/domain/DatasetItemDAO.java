@@ -627,7 +627,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
                 di.source AS source,
-                di.tags AS tags,
+                any(di.tags) AS tags,
                 di.created_at AS created_at,
                 di.last_updated_at AS last_updated_at,
                 di.created_by AS created_by,
