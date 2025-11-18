@@ -108,7 +108,8 @@ ParameterOptimizer(
     local_search_scale: float = 0.2,
     n_threads: int = 4,
     verbose: int = 1,
-    seed: int = 42
+    seed: int = 42,
+    name: str | None = None
 )
 ```
 
@@ -123,6 +124,7 @@ ParameterOptimizer(
 <ParamField path="n_threads" type="int" optional={true} default="4">Number of parallel threads for evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
 
 ### Methods
 #### cleanup
@@ -221,7 +223,8 @@ FewShotBayesianOptimizer(
     max_examples: int = 8,
     n_threads: int = 8,
     verbose: int = 1,
-    seed: int = 42
+    seed: int = 42,
+    name: str | None = None
 )
 ```
 
@@ -235,6 +238,7 @@ FewShotBayesianOptimizer(
 <ParamField path="n_threads" type="int" optional={true} default="8">Number of threads for parallel evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
 
 ### Methods
 #### cleanup
@@ -329,7 +333,8 @@ MetaPromptOptimizer(
     enable_context: bool = True,
     n_threads: int = 12,
     verbose: int = 1,
-    seed: int = 42
+    seed: int = 42,
+    name: str | None = None
 )
 ```
 
@@ -343,6 +348,7 @@ MetaPromptOptimizer(
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for prompt evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
 
 ### Methods
 #### cleanup
@@ -488,7 +494,8 @@ EvolutionaryOptimizer(
     infer_output_style: bool = False,
     n_threads: int = 12,
     verbose: int = 1,
-    seed: int = 42
+    seed: int = 42,
+    name: str | None = None
 )
 ```
 
@@ -511,6 +518,7 @@ EvolutionaryOptimizer(
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of threads for parallel evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
 
 ### Methods
 #### cleanup
@@ -641,7 +649,8 @@ GepaOptimizer(
     model_parameters: dict[str, typing.Any] | None = None,
     n_threads: int = 6,
     verbose: int = 1,
-    seed: int = 42
+    seed: int = 42,
+    name: str | None = None
 )
 ```
 
@@ -653,6 +662,7 @@ GepaOptimizer(
 <ParamField path="n_threads" type="int" optional={true} default="6">Number of parallel threads for evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
 
 ### Methods
 #### cleanup
@@ -770,7 +780,8 @@ HierarchicalReflectiveOptimizer(
     convergence_threshold: float = 0.01,
     n_threads: int = 12,
     verbose: int = 1,
-    seed: int = 42
+    seed: int = 42,
+    name: str | None = None
 )
 ```
 
@@ -785,6 +796,7 @@ HierarchicalReflectiveOptimizer(
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="name" type="str | None" optional={true} />
 
 ### Methods
 #### cleanup
