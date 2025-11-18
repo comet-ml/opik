@@ -18,10 +18,13 @@ data:
   AWS_SECRET_ACCESS_KEY: ""
   IS_MINIO: "false"
   {{- end }}
+  PYTHON_EVALUATOR_URL: "http://opik-python-backend:{{ index $.Values.component "python-backend" "env" "PYTHON_BACKEND_PORT" | default "8000" }}"
   {{- end }}
   
   {{- range $envkey, $envvalue := $value.env }}
+  {{- if not (and (eq $key "backend") (eq $envkey "PYTHON_EVALUATOR_URL")) }}
   {{ $envkey }}: {{ $envvalue | quote }}
+  {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}

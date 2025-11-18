@@ -38,7 +38,7 @@ spec:
       - name: wait-for-python-backend-service
         image: curlimages/curl:8.12.1
         command: ["/bin/sh", "-c"]
-        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-python-backend:8000/healthcheck" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Python Backend is not available. Waiting for the Opik Python Backend..."; done']
+        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-python-backend:{{ index .Values.component "python-backend" "env" "PYTHON_BACKEND_PORT" | default "8000" }}/healthcheck" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Python Backend is not available. Waiting for the Opik Python Backend..."; done']
       - name: wait-for-frontend-service
         image: curlimages/curl:8.12.1
         command: ["/bin/sh", "-c"]
@@ -51,7 +51,7 @@ spec:
         - name: CREATE_DEMO_DATA
           value: "true"
         - name: PYTHON_BACKEND_URL
-          value: "http://opik-python-backend:8000"
+          value: "http://opik-python-backend:{{ index .Values.component "python-backend" "env" "PYTHON_BACKEND_PORT" | default "8000" }}"
   backoffLimit: 3
 
 {{- end }}
