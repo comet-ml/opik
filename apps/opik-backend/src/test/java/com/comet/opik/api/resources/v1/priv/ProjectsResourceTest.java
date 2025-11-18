@@ -1579,6 +1579,8 @@ class ProjectsResourceTest {
     }
 
     private ErrorCountWithDeviation getErrorCountWithDeviation(List<Trace> traces, Instant projectCreatedAt) {
+        // Use Instant.now() to match production query behavior which uses now() in ClickHouse
+        // The test determinism comes from the trace UUID timestamps, not from the boundary calculation
         Instant now = Instant.now();
         Instant lastWeekStart = now.atZone(ZoneOffset.UTC).toLocalDate().minusDays(7).atStartOfDay()
                 .toInstant(ZoneOffset.UTC);
@@ -1600,7 +1602,8 @@ class ProjectsResourceTest {
 
         long errorCount = recentErrorCount + pastPeriodErrorCount;
         Long deviationPercentage = pastPeriodErrorCount > 0
-                ? Long.valueOf(Math.round((recentErrorCount / (double) pastPeriodErrorCount) * 100))
+                ? Long.valueOf(
+                        Math.round(((recentErrorCount - pastPeriodErrorCount) / (double) pastPeriodErrorCount) * 100))
                 : null;
 
         return ErrorCountWithDeviation.builder()
