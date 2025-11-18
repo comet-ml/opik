@@ -724,53 +724,30 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
-        return template.nonTransaction(connection -> {
-            var stTemplate = TemplateUtils.newST(GET_TOTAL_COST);
-
-            // Add project_ids flag to template if provided
-            if (projectIds != null && !projectIds.isEmpty()) {
-                stTemplate.add("project_ids", true);
-            }
-
-            // Add uuid_from_time flag
-            stTemplate.add("uuid_from_time", true);
-            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
-
-            // Add uuid_to_time flag if endTime is provided
-            String uuidToTime = null;
-            if (endTime != null) {
-                stTemplate.add("uuid_to_time", true);
-                uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
-            }
-
-            // Create statement once with all flags set
-            var statement = connection.createStatement(stTemplate.render())
-                    .bind("uuid_from_time", uuidFromTime);
-
-            // Bind uuid_to_time only if endTime is provided
-            if (uuidToTime != null) {
-                statement = statement.bind("uuid_to_time", uuidToTime);
-            }
-
-            // Bind project IDs if provided
-            if (projectIds != null && !projectIds.isEmpty()) {
-                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
-            }
-
-            InstrumentAsyncUtils.Segment segment = startSegment("getTotalCost", "Clickhouse", "get");
-
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, metadata) -> row.get("total_cost", BigDecimal.class)))
-                    .next()
-                    .defaultIfEmpty(BigDecimal.ZERO)
-                    .doFinally(signalType -> endSegment(segment));
-        });
+        return getAlertMetric(
+                GET_TOTAL_COST,
+                projectIds,
+                startTime,
+                endTime,
+                "getTotalCost",
+                "total_cost");
     }
 
     @Override
     public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
+        return getAlertMetric(
+                GET_AVERAGE_DURATION,
+                projectIds,
+                startTime,
+                endTime,
+                "getAverageDuration",
+                "avg_duration");
+    }
+
+    private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
+            Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
         return template.nonTransaction(connection -> {
-            var stTemplate = TemplateUtils.newST(GET_AVERAGE_DURATION);
+            var stTemplate = TemplateUtils.newST(query);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -802,10 +779,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 statement.bind("project_ids", projectIds.toArray(new UUID[0]));
             }
 
-            InstrumentAsyncUtils.Segment segment = startSegment("getAverageDuration", "Clickhouse", "get");
+            InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, metadata) -> row.get("avg_duration", BigDecimal.class)))
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get(rowName, BigDecimal.class)))
                     .next()
                     .defaultIfEmpty(BigDecimal.ZERO)
                     .doFinally(signalType -> endSegment(segment));
