@@ -6046,6 +6046,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6053,10 +6057,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6337,6 +6337,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceFilter_Write"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6344,10 +6348,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6551,6 +6551,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6558,10 +6562,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6813,6 +6813,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6820,10 +6824,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6898,6 +6898,10 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6905,10 +6909,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11077,6 +11077,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11130,6 +11138,13 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure: 'text' or 'chat'. Inherited from parent\
+            \ prompt."
+          enum:
+          - text
+          - chat
         change_description:
           type: string
         variables:
@@ -11175,6 +11190,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11210,6 +11233,13 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure: 'text' or 'chat'. Inherited from parent\
+            \ prompt."
+          enum:
+          - text
+          - chat
         change_description:
           type: string
         variables:
@@ -11247,6 +11277,11 @@ components:
           type: string
         version:
           $ref: "#/components/schemas/PromptVersion_Detail"
+        template_structure:
+          type: string
+          enum:
+          - text
+          - chat
     Prompt_Detail:
       required:
       - name
@@ -11263,6 +11298,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11332,6 +11375,13 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure: 'text' or 'chat'. Inherited from parent\
+            \ prompt."
+          enum:
+          - text
+          - chat
         change_description:
           type: string
         created_at:
@@ -11377,6 +11427,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -11410,6 +11468,11 @@ components:
           type: string
         commit:
           type: string
+        template_structure:
+          type: string
+          enum:
+          - text
+          - chat
     Prompt_Updatable:
       required:
       - name
