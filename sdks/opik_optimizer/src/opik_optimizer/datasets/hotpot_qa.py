@@ -89,10 +89,9 @@ def hotpot_train(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hotpot_train_sample" if test_mode else "hotpot_train"
     """Returns the 150-example training slice used in the GEPA benchmark."""
     return _hotpot_split(
-        dataset_name=dataset_name,
+        dataset_name="hotpot_train",
         source_split="train",
         start=0,
         count=150,
@@ -108,10 +107,9 @@ def hotpot_validation(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hotpot_validation_sample" if test_mode else "hotpot_validation"
     """Returns the 300-example validation slice used in the GEPA benchmark."""
     return _hotpot_split(
-        dataset_name=dataset_name,
+        dataset_name="hotpot_validation",
         source_split="train",
         start=150,
         count=300,
@@ -127,10 +125,9 @@ def hotpot_test(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hotpot_test_sample" if test_mode else "hotpot_test"
     """Returns the 300-example test slice used in the GEPA benchmark."""
     return _hotpot_split(
-        dataset_name=dataset_name,
+        dataset_name="hotpot_test",
         source_split="validation",
         start=0,
         count=300,
@@ -154,7 +151,7 @@ def hotpot_slice(
     Generic helper to create HotpotQA subsets from Hugging Face.
     """
     return _hotpot_split(
-        dataset_name=f"{dataset_name}{'_sample' if test_mode else ''}",
+        dataset_name=dataset_name,
         source_split=source_split,
         start=start,
         count=count,

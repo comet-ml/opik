@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any, List
 
 import opik
 from datasets import load_dataset
@@ -19,9 +18,8 @@ def hover_train(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hover_train_sample" if test_mode else "hover_train"
     return _hover_split(
-        dataset_name=dataset_name,
+        dataset_name="hover_train",
         source_split="train",
         start=0,
         count=150,
@@ -37,9 +35,8 @@ def hover_validation(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hover_validation_sample" if test_mode else "hover_validation"
     return _hover_split(
-        dataset_name=dataset_name,
+        dataset_name="hover_validation",
         source_split="train",
         start=150,
         count=300,
@@ -55,9 +52,8 @@ def hover_test(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
-    dataset_name = "hover_test_sample" if test_mode else "hover_test"
     return _hover_split(
-        dataset_name=dataset_name,
+        dataset_name="hover_test",
         source_split="validation",
         start=0,
         count=300,
@@ -78,7 +74,7 @@ def hover_slice(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     return _hover_split(
-        dataset_name=f"{dataset_name}{'_sample' if test_mode else ''}",
+        dataset_name=dataset_name,
         source_split=source_split,
         start=start,
         count=count,
