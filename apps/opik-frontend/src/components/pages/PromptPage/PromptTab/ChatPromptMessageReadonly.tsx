@@ -27,7 +27,10 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
 
   const getTextAndAttachments = (
     content: string | Array<{ type: string; [key: string]: unknown }>,
-  ): { text: string; attachments: Array<{ type: string; [key: string]: unknown }> } => {
+  ): {
+    text: string;
+    attachments: Array<{ type: string; [key: string]: unknown }>;
+  } => {
     if (typeof content === "string") {
       return { text: content, attachments: [] };
     }
