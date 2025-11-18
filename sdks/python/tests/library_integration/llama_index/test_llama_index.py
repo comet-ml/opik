@@ -367,6 +367,159 @@ def test_llama_index_stream_chat__happyflow(
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
+@pytest.mark.asyncio
+async def test_llama_index_async_chat__happyflow(
+    ensure_openai_configured,
+    fake_backend,
+    project_name,
+    expected_project_name,
+):
+    """Test async chat operation creates correct trace and spans"""
+    opik_callback_handler = LlamaIndexCallbackHandler(project_name=project_name)
+    opik_callback_manager = CallbackManager([opik_callback_handler])
+    Settings.callback_manager = opik_callback_manager
+    Settings.transformations = None
+
+    from llama_index.llms.openai import OpenAI
+    from llama_index.core.llms import ChatMessage
+
+    llm = OpenAI(model="gpt-3.5-turbo")
+    messages = [
+        ChatMessage(
+            role="system", content="You are a pirate with a colorful personality."
+        ),
+        ChatMessage(
+            role="user", content="What is your name? Answer with a single word"
+        ),
+    ]
+
+    resp = await llm.achat(messages)
+
+    opik_callback_handler.flush()
+
+    expected_messages = [message.model_dump() for message in messages]
+
+    EXPECTED_TRACE_TREES = [
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="chat",
+            input={"messages": expected_messages},
+            output={"output": ANY_BUT_NONE},
+            metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            project_name=expected_project_name,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="llm",
+                    name="llm",
+                    input={"messages": expected_messages},
+                    output={"output": ANY_BUT_NONE},
+                    tags=None,
+                    metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                    usage=ANY_BUT_NONE,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    project_name=expected_project_name,
+                    spans=[],
+                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    provider=LLMProvider.OPENAI,
+                )
+            ],
+        ),
+    ]
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("llama-index-integration-test", "llama-index-integration-test"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_llama_index_async_stream_chat__happyflow(
+    ensure_openai_configured,
+    fake_backend,
+    project_name,
+    expected_project_name,
+):
+    """Test async streaming chat operation creates correct trace and spans"""
+    opik_callback_handler = LlamaIndexCallbackHandler(project_name=project_name)
+    opik_callback_manager = CallbackManager([opik_callback_handler])
+    Settings.callback_manager = opik_callback_manager
+    Settings.transformations = None
+
+    from llama_index.llms.openai import OpenAI
+    from llama_index.core.llms import ChatMessage
+
+    llm = OpenAI(model="gpt-3.5-turbo")
+    messages = [
+        ChatMessage(
+            role="system", content="You are a pirate with a colorful personality."
+        ),
+        ChatMessage(
+            role="user", content="What is your name? Answer with a single word"
+        ),
+    ]
+
+    final_resp = ""
+    resp = await llm.astream_chat(messages)
+    async for r in resp:
+        final_resp += r.delta
+
+    opik_callback_handler.flush()
+
+    expected_messages = [message.model_dump() for message in messages]
+
+    EXPECTED_TRACE_TREES = [
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="chat",
+            input={"messages": expected_messages},
+            output=None,
+            metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            project_name=expected_project_name,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="llm",
+                    name="llm",
+                    input={"messages": expected_messages},
+                    output={"output": ANY_BUT_NONE},
+                    tags=None,
+                    metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                    usage=None,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    project_name=expected_project_name,
+                    spans=[],
+                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                    provider=LLMProvider.OPENAI,
+                )
+            ],
+        ),
+    ]
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("llama-index-integration-test", "llama-index-integration-test"),
+    ],
+)
 def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
     ensure_openai_configured,
     fake_backend,
@@ -765,6 +918,101 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="external_trace",
+        input=None,  # External trace doesn't capture input automatically
+        output=None,  # External trace doesn't capture output automatically
+        tags=None,
+        metadata=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        spans=[
+            # LlamaIndex wrapper span (created because external trace exists)
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="general",
+                name="chat",
+                input={"messages": expected_messages},
+                output={"output": ANY_BUT_NONE},
+                tags=None,
+                metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                usage=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[
+                    # LLM span nested inside the wrapper span
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="llm",
+                        input={"messages": expected_messages},
+                        output={"output": ANY_BUT_NONE},
+                        tags=None,
+                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
+                        usage=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        provider=LLMProvider.OPENAI,
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("llama-index-integration-test", "llama-index-integration-test"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_llama_index_async__used_with_start_as_current_trace__attached_to_external_trace(
+    ensure_openai_configured,
+    fake_backend,
+    index_documents_directory,
+    project_name,
+    expected_project_name,
+):
+    """Test that async LlamaIndex operations respect external trace created with start_as_current_trace()"""
+    import opik
+    from llama_index.llms.openai import OpenAI
+    from llama_index.core.llms import ChatMessage
+
+    # Create external trace using start_as_current_trace context manager
+    with opik.start_as_current_trace(
+        name="async_external_trace",
+        project_name=project_name,
+    ):
+        opik_callback_handler = LlamaIndexCallbackHandler(project_name=project_name)
+        opik_callback_manager = CallbackManager([opik_callback_handler])
+        Settings.callback_manager = opik_callback_manager
+        Settings.transformations = None
+
+        llm = OpenAI(model="gpt-3.5-turbo")
+        messages = [
+            ChatMessage(role="user", content="Say hello in 3 words"),
+        ]
+
+        _ = await llm.achat(messages)
+        opik_callback_handler.flush()
+
+    opik.flush_tracker()
+
+    expected_messages = [message.model_dump() for message in messages]
+
+    # Should have 1 trace (the external one) with LlamaIndex wrapper span and LLM span
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_external_trace",
         input=None,  # External trace doesn't capture input automatically
         output=None,  # External trace doesn't capture output automatically
         tags=None,
