@@ -1,6 +1,7 @@
 import argparse
 
 import benchmark_config
+from benchmark_taskspec import BenchmarkTaskSpec
 from local.runner import BenchmarkRunner
 from utils.validation import ask_for_input_confirmation
 
@@ -19,6 +20,7 @@ def run_benchmark(
     checkpoint_dir: str = DEFAULT_CHECKPOINT_DIR,
     retry_failed_run_id: str | None = None,
     resume_run_id: str | None = None,
+    task_specs: list[BenchmarkTaskSpec] | None = None,
 ) -> None:
     if demo_datasets is not None and not isinstance(demo_datasets, list):
         raise ValueError("demo_datasets must be a list of strings")
@@ -56,7 +58,12 @@ def run_benchmark(
     )
 
     runner.run_benchmarks(
-        demo_datasets, optimizers, models, retry_failed_run_id, resume_run_id
+        demo_datasets=demo_datasets,
+        optimizers=optimizers,
+        models=models,
+        retry_failed_run_id=retry_failed_run_id,
+        resume_run_id=resume_run_id,
+        task_specs=task_specs,
     )
 
 
