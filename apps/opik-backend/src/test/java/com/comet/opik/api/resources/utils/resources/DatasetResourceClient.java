@@ -132,6 +132,30 @@ public class DatasetResourceClient {
         }
     }
 
+    public void patchDatasetItem(UUID itemId, DatasetItem patchItem, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path(itemId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callPatchDatasetItem(UUID itemId, DatasetItem patchItem, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path(itemId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE));
+    }
+
     public DatasetItemPage getDatasetItems(UUID datasetId, Map<String, Object> queryParams, String apiKey,
             String workspaceName) {
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))

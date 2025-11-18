@@ -3936,6 +3936,7 @@ class DatasetsResourceTest {
                     .source(DatasetItemSource.SPAN)
                     .traceId(GENERATOR.generate())
                     .spanId(GENERATOR.generate())
+                    .tags(Set.of())
                     .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -3952,17 +3953,7 @@ class DatasetsResourceTest {
             var patchItem = patchBuilder.apply(originalItem);
 
             // Apply patch
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(originalItem.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
 
             // Retrieve patched item
             var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
@@ -4007,13 +3998,8 @@ class DatasetsResourceTest {
                     .data(Map.of("field", factory.manufacturePojo(JsonNode.class)))
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(itemId.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
+            try (var actualResponse = datasetResourceClient.callPatchDatasetItem(itemId, patchItem, API_KEY,
+                    TEST_WORKSPACE)) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -4046,17 +4032,7 @@ class DatasetsResourceTest {
                     .tags(tagsToAdd)
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(originalItem.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
 
             // Verify tags were added
             var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
@@ -4089,17 +4065,7 @@ class DatasetsResourceTest {
                     .tags(updatedTags)
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(originalItem.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
 
             // Verify tags were updated
             var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
@@ -4132,17 +4098,7 @@ class DatasetsResourceTest {
                     .tags(remainingTags)
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(originalItem.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
 
             // Verify tags were removed
             var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
@@ -4174,17 +4130,7 @@ class DatasetsResourceTest {
                     .tags(Set.of())
                     .build();
 
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(originalItem.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            datasetResourceClient.patchDatasetItem(originalItem.id(), patchItem, API_KEY, TEST_WORKSPACE);
 
             // Verify all tags were cleared
             var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
