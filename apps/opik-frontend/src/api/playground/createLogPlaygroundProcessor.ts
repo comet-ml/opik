@@ -24,30 +24,9 @@ import {
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
-import { ChatCompletionMessageType, ProviderMessageType } from "@/types/llm";
+import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
-
-// Convert ChatCompletionMessageType to ProviderMessageType for logging
-// When logging to backend, we need to use the format with separate fields
-const convertChatCompletionToProviderMessage = (
-  message: ChatCompletionMessageType,
-): ProviderMessageType => {
-  const { content, ...rest } = message;
-
-  // If content is a string, use the content field
-  if (typeof content === "string") {
-    return { ...rest, content };
-  }
-
-  // If content is an array, use the content_array field
-  if (Array.isArray(content)) {
-    return { ...rest, content_array: content };
-  }
-
-  // If content is null/undefined
-  return { ...rest, content: null };
-};
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -55,7 +34,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   datasetName: string | null;
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
-  providerMessages: ChatCompletionMessageType[];
+  providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
@@ -117,9 +96,7 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     startTime: run.startTime,
     endTime: run.endTime,
     input: {
-      messages: run.providerMessages.map(
-        convertChatCompletionToProviderMessage,
-      ),
+      messages: run.providerMessages,
     },
     output: { output: parseCompletionOutput(run) },
   };
@@ -162,9 +139,7 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     startTime: run.startTime,
     endTime: run.endTime,
     input: {
-      messages: run.providerMessages.map(
-        convertChatCompletionToProviderMessage,
-      ),
+      messages: run.providerMessages,
     },
     output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),

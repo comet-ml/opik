@@ -24,8 +24,7 @@ export interface LLMJudgeSchema {
 export type TextPart = { type: "text"; text: string };
 export type ImagePart = { type: "image_url"; image_url: { url: string } };
 export type VideoPart = { type: "video_url"; video_url: { url: string } };
-export type MessageContentPart = TextPart | ImagePart | VideoPart;
-export type MessageContent = string | Array<MessageContentPart>;
+export type MessageContent = string | Array<TextPart | ImagePart | VideoPart>;
 
 export interface LLMMessage {
   id: string;
@@ -36,25 +35,8 @@ export interface LLMMessage {
   autoImprove?: boolean;
 }
 
-// Backend API format for LlmAsJudgeMessage (online scoring/automation rules)
-// Uses separate fields: content (string) and content_array (array)
-export type ProviderMessageType = {
-  role: LLM_MESSAGE_ROLE;
-  content?: string | null;
-  content_array?: MessageContentPart[] | null;
-  promptId?: string;
-  promptVersionId?: string;
-  autoImprove?: boolean;
-};
-
-// Chat Completions API format (playground)
-// Uses polymorphic content field matching OpenAI spec
-export type ChatCompletionMessageType = {
-  role: LLM_MESSAGE_ROLE;
-  content?: MessageContent | null;
-  promptId?: string;
-  promptVersionId?: string;
-  autoImprove?: boolean;
+export type ProviderMessageType = Omit<LLMMessage, "id"> & {
+  content_array?: Array<TextPart | ImagePart | VideoPart> | null;
 };
 
 export interface PlaygroundPromptMetadata {

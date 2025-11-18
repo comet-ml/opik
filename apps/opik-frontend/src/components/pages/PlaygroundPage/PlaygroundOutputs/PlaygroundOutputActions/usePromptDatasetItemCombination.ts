@@ -10,11 +10,11 @@ import {
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import {
   LLMMessage,
-  ChatCompletionMessageType,
   MessageContent,
   TextPart,
   ImagePart,
   VideoPart,
+  ProviderMessageType,
 } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import isUndefined from "lodash/isUndefined";
@@ -46,7 +46,7 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
 const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
-): ChatCompletionMessageType => {
+): ProviderMessageType => {
   // Extract mustache tags from text content
   const messageTags = getPromptMustacheTags(
     getTextFromMessageContent(message.content),

@@ -368,8 +368,9 @@ const convertLLMToProviderMessages = (
   messages: LLMMessage[],
 ): ProviderMessageType[] =>
   messages.map(({ content, ...rest }) => {
-    const base = {
+    const base: ProviderMessageType = {
       ...rest,
+      content,
       role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
     };
 
@@ -378,7 +379,11 @@ const convertLLMToProviderMessages = (
     if (typeof content === "string") {
       return { ...base, content };
     } else if (Array.isArray(content)) {
-      return { ...base, content_array: content };
+      return {
+        ...base,
+        content: null,
+        content_array: content,
+      } as unknown as ProviderMessageType;
     }
 
     return base;
