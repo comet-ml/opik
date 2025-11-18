@@ -34,9 +34,13 @@ def load_manifest(path: str) -> BenchmarkManifest:
         raise ValueError(f"Invalid manifest: {exc}") from exc
 
 
-def manifest_to_task_specs(manifest: BenchmarkManifest) -> list[BenchmarkTaskSpec]:
+def manifest_to_task_specs(
+    manifest: BenchmarkManifest, fallback_test_mode: bool = False
+) -> list[BenchmarkTaskSpec]:
     specs: list[BenchmarkTaskSpec] = []
-    default_test_mode = manifest.test_mode if manifest.test_mode is not None else False
+    default_test_mode = (
+        manifest.test_mode if manifest.test_mode is not None else fallback_test_mode
+    )
     for task in manifest.tasks:
         specs.append(
             BenchmarkTaskSpec(

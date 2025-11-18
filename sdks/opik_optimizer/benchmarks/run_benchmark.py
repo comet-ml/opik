@@ -139,7 +139,9 @@ Examples:
 
     if args.config:
         manifest = load_manifest(args.config)
-        manifest_tasks = manifest_to_task_specs(manifest)
+        manifest_tasks = manifest_to_task_specs(
+            manifest, fallback_test_mode=args.test_mode
+        )
         if not manifest_tasks:
             raise ValueError("Manifest must contain at least one task.")
         if manifest.seed is not None:
