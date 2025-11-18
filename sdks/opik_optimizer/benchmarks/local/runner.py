@@ -9,6 +9,7 @@ from local import checkpoint as benchmark_checkpoint
 from local import logging as benchmark_logging
 import benchmark_config
 from benchmark_task import TaskEvaluationResult, TaskResult
+from benchmark_taskspec import BenchmarkTaskSpec
 
 import opik_optimizer
 import opik_optimizer.datasets
@@ -222,7 +223,9 @@ class BenchmarkRunner:
                 future_to_info: dict[Future[TaskResult], tuple[str, str, str, str]] = {}
 
                 failed_ids = {
-                    x.id for x in checkpoint_manager.task_results if x.status == "Failed"
+                    x.id
+                    for x in checkpoint_manager.task_results
+                    if x.status == "Failed"
                 }
                 completed_ids = {
                     x.id
@@ -272,9 +275,7 @@ class BenchmarkRunner:
                         model_name=task.model_name,
                         status="Pending",
                     )
-                    live.update(
-                        self.benchmark_logger._generate_live_display_message()
-                    )
+                    live.update(self.benchmark_logger._generate_live_display_message())
 
                 # Process completions as they happen
                 running_futures: set[Future[TaskResult]] = set()
