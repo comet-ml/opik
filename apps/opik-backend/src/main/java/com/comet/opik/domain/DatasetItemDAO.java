@@ -92,6 +92,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 trace_id,
                 span_id,
                 data,
+                tags,
                 created_at,
                 workspace_id,
                 created_by,
@@ -106,6 +107,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                          :traceId<item.index>,
                          :spanId<item.index>,
                          :data<item.index>,
+                         :tags<item.index>,
                          now64(9),
                          :workspace_id,
                          :createdBy<item.index>,
@@ -159,6 +161,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 trace_id,
                 span_id,
                 source,
+                tags,
                 created_at,
                 last_updated_at,
                 created_by,
@@ -624,6 +627,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
                 di.source AS source,
+                di.tags AS tags,
                 di.created_at AS created_at,
                 di.last_updated_at AS last_updated_at,
                 di.created_by AS created_by,
@@ -732,6 +736,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.trace_id,
                 di.span_id,
                 di.source,
+                di.tags,
                 di.created_at,
                 di.last_updated_at,
                 di.created_by,
@@ -1030,6 +1035,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
                 statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
                 statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
+                statement.bind("tags" + i, item.tags() != null ? item.tags().toArray(String[]::new) : new String[]{});
                 statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;

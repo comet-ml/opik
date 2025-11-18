@@ -28,4 +28,4 @@ services:
 
   python-backend:
     ports:
-      - "8000:8000" # Exposing Python backend HTTP port to host
+      - "${PYTHON_BACKEND_PORT:-8000}:${PYTHON_BACKEND_PORT:-8000}" # Exposing Python backend HTTP port to host

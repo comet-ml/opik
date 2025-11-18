@@ -12,12 +12,16 @@ export const LlmAsJudgeMessage: core.serialization.ObjectSchema<
     OpikApi.LlmAsJudgeMessage
 > = core.serialization.object({
     role: LlmAsJudgeMessageRole,
-    content: core.serialization.string(),
+    content: core.serialization.record(core.serialization.string(), core.serialization.unknown()),
+    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
+    stringContent: core.serialization.property("string_content", core.serialization.boolean().optional()),
 });
 
 export declare namespace LlmAsJudgeMessage {
     export interface Raw {
         role: LlmAsJudgeMessageRole.Raw;
-        content: string;
+        content: Record<string, unknown>;
+        structured_content?: boolean | null;
+        string_content?: boolean | null;
     }
 }
