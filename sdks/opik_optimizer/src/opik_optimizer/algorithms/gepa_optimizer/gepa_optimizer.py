@@ -419,6 +419,12 @@ class GepaOptimizer(BaseOptimizer):
         finally:
             exc_type, exc_val, exc_tb = sys.exc_info()
             if optimization_cm_entered:
+                # Manually closing the optimization context ensures its status is updated
+                # exactly once (completed/cancelled) after the entire GEPA run finishes.
+                # We capture the exception tuple so the context manager can surface failures
+                # just like a regular `with` block. This is admittedly a temporary workaround
+                # until we put GEPA behind a native Opik adapter that can manage its lifecycle
+                # without manual enter/exit plumbing.
                 optimization_cm.__exit__(exc_type, exc_val, exc_tb)
             enable_experiment_reporting()
 
