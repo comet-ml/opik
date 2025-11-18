@@ -71,8 +71,14 @@ public class DatasetItemFilter extends FilterImpl {
         if (!DatasetItemDynamicField.validType(type)) {
             return null;
         }
+        // For dataset items, combine customField (e.g., "data") and key (e.g., "size")
+        // to form the full path (e.g., "data.size") for proper SQL generation
+        String fullFieldPath = key != null && !key.isEmpty()
+                ? customField + "." + key
+                : customField;
+
         return toBuilder()
-                .field(mapField(customField, type))
+                .field(mapField(fullFieldPath, type))
                 .operator(operator)
                 .key(key)
                 .value(value)

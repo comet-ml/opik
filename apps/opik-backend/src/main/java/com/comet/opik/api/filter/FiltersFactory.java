@@ -156,12 +156,32 @@ public class FiltersFactory {
 
         filter = (T) filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
 
-        Pair<String, String> T2 = getFieldAndKey(filter.key());
+        // Check if the key contains type encoding (format: "field.key|type")
+        String filterKey = filter.key();
+        FieldType explicitType = null;
+
+        if (filterKey != null && filterKey.contains("|")) {
+            int pipeIndex = filterKey.lastIndexOf('|');
+            String typeStr = filterKey.substring(pipeIndex + 1).toUpperCase();
+            filterKey = filterKey.substring(0, pipeIndex);
+
+            try {
+                explicitType = FieldType.valueOf(typeStr);
+            } catch (IllegalArgumentException e) {
+                // Invalid type encoding, ignore and continue with default logic
+            }
+        }
+
+        Pair<String, String> T2 = getFieldAndKey(filterKey);
         String customField = T2.getLeft();
         String customKey = T2.getRight();
 
+        FieldType fieldType = explicitType != null
+                ? explicitType
+                : (customKey == null ? FieldType.STRING : FieldType.DICTIONARY);
+
         var mappedFilter = filter.buildFromCustom(customField,
-                customKey == null ? FieldType.STRING : FieldType.DICTIONARY, filter.operator(), customKey,
+                fieldType, filter.operator(), customKey,
                 filter.value());
 
         if (mappedFilter == null) {
