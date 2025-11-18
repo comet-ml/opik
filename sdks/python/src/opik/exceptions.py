@@ -146,3 +146,9 @@ class SearchTimeoutError(OpikException):
     """Exception raised when a search times out."""
 
     pass
+
+
+class ImageConversionError(OpikException):
+    """Exception raised when an image URL cannot be converted to a data URL."""
+
+    pass

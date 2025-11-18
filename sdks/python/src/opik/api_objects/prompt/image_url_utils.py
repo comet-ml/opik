@@ -7,10 +7,38 @@ restrictions or cannot access certain external URLs.
 
 import base64
 import logging
-from typing import Optional
 import httpx
 
+from ...exceptions import ImageConversionError
+
 LOGGER = logging.getLogger(__name__)
+
+# Standard User-Agent string for HTTP requests
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+def _infer_mime_type_from_url(url: str) -> str:
+    """Infer MIME type from URL file extension.
+
+    Args:
+        url: The image URL to analyze.
+
+    Returns:
+        A MIME type string (e.g., "image/jpeg", "image/png").
+        Defaults to "image/jpeg" if the type cannot be determined.
+    """
+    url_lower = url.lower()
+    if url_lower.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    elif url_lower.endswith(".png"):
+        return "image/png"
+    elif url_lower.endswith(".gif"):
+        return "image/gif"
+    elif url_lower.endswith(".webp"):
+        return "image/webp"
+    else:
+        # Default to JPEG if we can't determine
+        return "image/jpeg"
 
 
 def is_data_url(url: str) -> bool:
@@ -25,7 +53,7 @@ def is_data_url(url: str) -> bool:
     return url.startswith("data:")
 
 
-def convert_image_url_to_data_url(url: str, timeout: float = 10.0) -> Optional[str]:
+def convert_image_url_to_data_url(url: str, timeout: float = 10.0) -> str:
     """Convert an image URL to a base64-encoded data URL.
 
     This function downloads the image from the URL and converts it to a
@@ -37,8 +65,11 @@ def convert_image_url_to_data_url(url: str, timeout: float = 10.0) -> Optional[s
         timeout: Request timeout in seconds. Defaults to 10.0.
 
     Returns:
-        A base64-encoded data URL (e.g., "data:image/jpeg;base64,..."),
-        or None if the conversion failed.
+        A base64-encoded data URL (e.g., "data:image/jpeg;base64,...").
+
+    Raises:
+        ImageConversionError: If the conversion fails due to network errors,
+            invalid responses, or encoding issues.
 
     Example:
         >>> url = "https://example.com/image.jpg"
@@ -51,7 +82,7 @@ def convert_image_url_to_data_url(url: str, timeout: float = 10.0) -> Optional[s
 
     try:
         # Download the image with proper headers
-        headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+        headers = {"User-Agent": USER_AGENT}
 
         with httpx.Client(timeout=timeout) as client:
             response = client.get(url, headers=headers, follow_redirects=True)
@@ -61,30 +92,24 @@ def convert_image_url_to_data_url(url: str, timeout: float = 10.0) -> Optional[s
             content_type = response.headers.get("Content-Type", "")
             if not content_type or not content_type.startswith("image/"):
                 # Try to infer from URL
-                url_lower = url.lower()
-                if url_lower.endswith(".jpg") or url_lower.endswith(".jpeg"):
-                    content_type = "image/jpeg"
-                elif url_lower.endswith(".png"):
-                    content_type = "image/png"
-                elif url_lower.endswith(".gif"):
-                    content_type = "image/gif"
-                elif url_lower.endswith(".webp"):
-                    content_type = "image/webp"
-                else:
-                    # Default to JPEG if we can't determine
-                    content_type = "image/jpeg"
+                content_type = _infer_mime_type_from_url(url)
 
             # Convert to base64
-            encoded = base64.b64encode(response.content).decode("utf-8")
-            data_url = f"data:{content_type};base64,{encoded}"
+            try:
+                encoded = base64.b64encode(response.content).decode("utf-8")
+            except UnicodeDecodeError as e:
+                raise ImageConversionError(
+                    f"Failed to decode image content as UTF-8 for URL: {url}"
+                ) from e
 
+            data_url = f"data:{content_type};base64,{encoded}"
             return data_url
 
-    except Exception as e:
-        LOGGER.warning(
-            f"Failed to convert image URL to data URL: {url}. Error: {e}. "
-            "The original URL will be used, but it may fail if the LLM API "
-            "cannot access it."
-        )
-        # Return None to indicate failure - caller can decide what to do
-        return None
+    except httpx.HTTPError as e:
+        raise ImageConversionError(
+            f"HTTP error while downloading image from {url}: {e}"
+        ) from e
+    except httpx.TimeoutException as e:
+        raise ImageConversionError(
+            f"Timeout while downloading image from {url} (timeout: {timeout}s)"
+        ) from e
