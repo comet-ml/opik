@@ -71,6 +71,8 @@ public interface ProjectMetricsDAO {
     Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
 
     Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
+
+    Mono<BigDecimal> getTotalTraceErrors(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
 }
 
 @Slf4j
@@ -565,6 +567,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
             """;
 
+    private static final String GET_TOTAL_TRACE_ERRORS = """
+            SELECT
+                COUNT(1) AS total_trace_errors
+            FROM traces final
+            WHERE workspace_id = :workspace_id
+                AND length(error_info) > 0
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
+            """;
+
     private static final String GET_THREAD_COUNT = """
             %s
             SELECT <bucket> AS bucket,
@@ -742,6 +755,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 endTime,
                 "getAverageDuration",
                 "avg_duration");
+    }
+
+    @Override
+    public Mono<BigDecimal> getTotalTraceErrors(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
+        return getAlertMetric(
+                GET_TOTAL_TRACE_ERRORS,
+                projectIds,
+                startTime,
+                endTime,
+                "getTotalTraceErrors",
+                "total_trace_errors");
     }
 
     private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,

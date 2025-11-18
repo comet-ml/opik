@@ -49,6 +49,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -2832,10 +2833,9 @@ class AlertResourceTest {
                     // rather than AlertJob, so we normalize them to TRACE_ERRORS for consistent test validation
                     return trigger.toBuilder()
                             .triggerConfigs(configs)
-                            .eventType(trigger.eventType() == AlertEventType.TRACE_COST
-                                    || trigger.eventType() == AlertEventType.TRACE_LATENCY
-                                            ? AlertEventType.TRACE_ERRORS
-                                            : trigger.eventType())
+                            .eventType(MetricsAlertJob.SUPPORTED_EVENT_TYPES.contains(trigger.eventType())
+                                    ? PROMPT_CREATED
+                                    : trigger.eventType())
                             .createdBy(null)
                             .createdAt(null)
                             .build();
