@@ -151,6 +151,9 @@ server:
       # Description: The port on which the application HTTP connector listens
       port: 8080
       maxRequestHeaderSize: 16KB
+      # Default: 30s
+      # Description: The maximum idle time for a connection, after which it will be closed.
+      idleTimeout: ${SERVER_IDLE_TIMEOUT:-1m}
   adminConnectors:
     - type: http
       # Default: 8081
