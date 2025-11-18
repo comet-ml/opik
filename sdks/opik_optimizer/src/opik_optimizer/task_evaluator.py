@@ -79,9 +79,10 @@ def evaluate(
         verbose: Whether to print debug information.
 
     Returns:
-        float: The average score of the evaluated task. When ``return_result`` is True,
-            a tuple of (average score, opik.evaluation.evaluation_result.EvaluationResult)
-            is returned instead.
+        float: The average score of the evaluated task.
+
+    Note:
+        If you need access to the raw evaluation result, use `evaluate_with_result`.
     """
     # NOTE: GEPA needs both the aggregate score and the raw Opik result so it can map
     # candidate trajectories back to GEPA's data structures. To avoid breaking every
