@@ -405,7 +405,7 @@ const DatasetItemsPage = () => {
           datasetId={datasetId}
         />
       </div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+      <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search!}

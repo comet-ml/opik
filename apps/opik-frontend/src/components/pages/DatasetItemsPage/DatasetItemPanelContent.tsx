@@ -46,7 +46,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
     updateMutation.mutate({
       datasetId,
       itemId: datasetItemId,
-      tags: [...tags, newTag],
+      item: { tags: [...tags, newTag] },
     });
   };
 
@@ -54,7 +54,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
     updateMutation.mutate({
       datasetId,
       itemId: datasetItemId,
-      tags: tags.filter((t) => t !== tag),
+      item: { tags: tags.filter((t) => t !== tag) },
     });
   };
 

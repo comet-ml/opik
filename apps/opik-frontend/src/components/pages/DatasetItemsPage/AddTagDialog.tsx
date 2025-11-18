@@ -15,8 +15,8 @@ import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMut
 type AddTagDialogProps = {
   datasetId: string;
   rows: Array<DatasetItem>;
-  open: boolean | number;
-  setOpen: (open: boolean | number) => void;
+  open: boolean;
+  setOpen: (open: boolean) => void;
   onSuccess?: () => void;
 };
 
@@ -53,7 +53,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         updateMutation.mutateAsync({
           datasetId,
           itemId: row.id,
-          tags: newTags,
+          item: { tags: newTags },
         }),
       );
     });
@@ -77,7 +77,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   };
 
   return (
-    <Dialog open={Boolean(open)} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Add tag to {rows.length} dataset items</DialogTitle>

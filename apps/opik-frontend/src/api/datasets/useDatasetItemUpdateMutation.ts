@@ -3,11 +3,12 @@ import { AxiosError } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
+import { DatasetItem } from "@/types/datasets";
 
 type UseDatasetItemUpdateMutationParams = {
   datasetId: string;
   itemId: string;
-  tags: string[];
+  item: Partial<DatasetItem>;
 };
 
 const useDatasetItemUpdateMutation = () => {
@@ -17,11 +18,11 @@ const useDatasetItemUpdateMutation = () => {
   return useMutation({
     mutationFn: async ({
       itemId,
-      tags,
+      item,
     }: UseDatasetItemUpdateMutationParams) => {
       const { data } = await api.patch(
         `${DATASETS_REST_ENDPOINT}items/${itemId}`,
-        { tags },
+        item,
       );
 
       return data;

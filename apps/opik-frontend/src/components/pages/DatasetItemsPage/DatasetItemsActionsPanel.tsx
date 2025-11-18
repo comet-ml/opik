@@ -39,7 +39,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
     useState<boolean>(false);
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
-  const [open, setOpen] = useState<boolean | number>(false);
+  const [addTagDialogOpen, setAddTagDialogOpen] = useState<boolean>(false);
   const disabled = !selectedDatasetItems?.length;
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
@@ -115,8 +115,8 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         key={`tag-${resetKeyRef.current}`}
         datasetId={datasetId}
         rows={selectedDatasetItems}
-        open={open === 3}
-        setOpen={setOpen}
+        open={addTagDialogOpen}
+        setOpen={setAddTagDialogOpen}
         onSuccess={() => {}}
       />
 
@@ -137,7 +137,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
           variant="outline"
           size="sm"
           onClick={() => {
-            setOpen(3);
+            setAddTagDialogOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
