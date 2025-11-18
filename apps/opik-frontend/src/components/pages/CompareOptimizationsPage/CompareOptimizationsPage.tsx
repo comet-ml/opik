@@ -208,61 +208,64 @@ const CompareOptimizationsPage: React.FC = () => {
     [experiments, search],
   );
 
-  const { scoreMap, bestExperiment, baselineExperiment } = useMemo(() => {
-    const retVal: {
-      scoreMap: Record<string, { score: number; percentage?: number }>;
-      baseScore: number;
-      bestExperiment?: Experiment;
-      baselineExperiment?: Experiment;
-    } = {
-      scoreMap: {},
-      baseScore: 0,
-    };
-    let maxScoreValue: number;
+  const { scoreMap, bestExperiment, baselineExperiment, baseScore } =
+    useMemo(() => {
+      const retVal: {
+        scoreMap: Record<string, { score: number; percentage?: number }>;
+        baseScore: number;
+        bestExperiment?: Experiment;
+        baselineExperiment?: Experiment;
+      } = {
+        scoreMap: {},
+        baseScore: 0,
+      };
+      let maxScoreValue: number;
 
-    const sortedRows = experiments
-      .slice()
-      .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
+      const sortedRows = experiments
+        .slice()
+        .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
 
-    retVal.baselineExperiment = sortedRows[0];
+      retVal.baselineExperiment = sortedRows[0];
 
-    if (
-      !optimization?.objective_name ||
-      !experiments.length ||
-      !isArray(sortedRows?.[0]?.feedback_scores)
-    )
-      return retVal;
+      if (
+        !optimization?.objective_name ||
+        !experiments.length ||
+        !isArray(sortedRows?.[0]?.feedback_scores)
+      )
+        return retVal;
 
-    retVal.baseScore =
-      getFeedbackScoreValue(
-        sortedRows[0].feedback_scores,
-        optimization.objective_name,
-      ) ?? 0;
+      retVal.baseScore =
+        getFeedbackScoreValue(
+          sortedRows[0].feedback_scores,
+          optimization.objective_name,
+        ) ?? 0;
 
-    // if baseScore is 0, then we cannot calculate the relative score
-    if (retVal.baseScore === 0) return retVal;
+      experiments.forEach((e) => {
+        const score = getFeedbackScoreValue(
+          e.feedback_scores ?? [],
+          optimization.objective_name,
+        );
 
-    experiments.forEach((e) => {
-      const score = getFeedbackScoreValue(
-        e.feedback_scores ?? [],
-        optimization.objective_name,
-      );
+        if (!isUndefined(score)) {
+          if (isUndefined(maxScoreValue) || score > maxScoreValue) {
+            maxScoreValue = score;
+            retVal.bestExperiment = e;
+          }
 
-      if (!isUndefined(score)) {
-        if (isUndefined(maxScoreValue) || score > maxScoreValue) {
-          maxScoreValue = score;
-          retVal.bestExperiment = e;
+          const percentage =
+            retVal.baseScore === 0
+              ? undefined
+              : calculatePercentageChange(retVal.baseScore, score);
+
+          retVal.scoreMap[e.id] = {
+            score,
+            percentage,
+          };
         }
+      });
 
-        retVal.scoreMap[e.id] = {
-          score,
-          percentage: calculatePercentageChange(retVal.baseScore, score),
-        };
-      }
-    });
-
-    return retVal;
-  }, [experiments, optimization?.objective_name]);
+      return retVal;
+    }, [experiments, optimization?.objective_name]);
 
   const columnsDef: ColumnData<Experiment>[] = useMemo(() => {
     if (!optimization?.objective_name) return [];
@@ -315,6 +318,7 @@ const CompareOptimizationsPage: React.FC = () => {
         cell: ObjectiveScoreCell as never,
         customMeta: {
           scoreMap,
+          baseScore: baseScore,
         },
       },
       {
@@ -329,7 +333,7 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
       },
     ];
-  }, [optimization?.objective_name, scoreMap]);
+  }, [optimization?.objective_name, scoreMap, baseScore]);
 
   const columns = useMemo(() => {
     return [
