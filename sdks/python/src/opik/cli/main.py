@@ -6,9 +6,9 @@ from typing import Optional
 import click
 
 from .configure import configure
-from .export import export_group
+from .exports import export_group
 from .healthcheck import healthcheck
-from .import_command import import_group
+from .imports import import_group
 from .proxy import proxy
 from .usage_report import usage_report  # Import from usage_report package
 
