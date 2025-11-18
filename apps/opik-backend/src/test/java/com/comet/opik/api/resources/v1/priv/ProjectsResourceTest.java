@@ -41,6 +41,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -85,6 +86,7 @@ import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -1577,20 +1579,28 @@ class ProjectsResourceTest {
     }
 
     private ErrorCountWithDeviation getErrorCountWithDeviation(List<Trace> traces, Instant projectCreatedAt) {
-        Instant lastWeek = projectCreatedAt.minus(7, ChronoUnit.DAYS);
+        Instant now = Instant.now();
+        Instant lastWeekStart = now.atZone(ZoneOffset.UTC).toLocalDate().minusDays(7).atStartOfDay()
+                .toInstant(ZoneOffset.UTC);
         long recentErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
-                .filter(trace -> trace.startTime().isAfter(lastWeek) || trace.startTime().equals(lastWeek))
+                .filter(trace -> {
+                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    return !traceTime.isBefore(lastWeekStart) && !traceTime.isAfter(now);
+                })
                 .count();
 
         long pastPeriodErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
-                .filter(trace -> trace.startTime().isBefore(lastWeek))
+                .filter(trace -> {
+                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    return traceTime.isBefore(lastWeekStart);
+                })
                 .count();
 
         long errorCount = recentErrorCount + pastPeriodErrorCount;
         Long deviationPercentage = pastPeriodErrorCount > 0
-                ? Long.valueOf(Math.round(((errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100))
+                ? Long.valueOf(Math.round((recentErrorCount / (double) pastPeriodErrorCount) * 100))
                 : null;
 
         return ErrorCountWithDeviation.builder()
