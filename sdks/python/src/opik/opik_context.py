@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, Dict, List, Optional, Union, Iterator
+from typing import Any, Dict, List, Optional, Union, Iterator, Union
 
 import opik.llm_usage as llm_usage
 from opik.api_objects import span, trace, opik_client, prompt
@@ -68,7 +68,7 @@ def update_current_span(
     total_cost: Optional[float] = None,
     attachments: Optional[List[Attachment]] = None,
     error_info: Optional[ErrorInfoDict] = None,
-    prompts: Optional[List[prompt.Prompt]] = None,
+    prompts: Optional[List[prompt.BasePrompt]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -130,7 +130,7 @@ def update_current_trace(
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     thread_id: Optional[str] = None,
     attachments: Optional[List[Attachment]] = None,
-    prompts: Optional[List[prompt.Prompt]] = None,
+    prompts: Optional[List[prompt.BasePrompt]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
