@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import opik
 from opik.evaluation import evaluator as opik_evaluator
+from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
 from . import multi_metric_objective
 
@@ -78,12 +79,78 @@ def evaluate(
         verbose: Whether to print debug information.
 
     Returns:
-        float: The average score of the evaluated task.
+        float: The average score of the evaluated task. When ``return_result`` is True,
+            a tuple of (average score, opik.evaluation.evaluation_result.EvaluationResult)
+            is returned instead.
     """
+    # NOTE: GEPA needs both the aggregate score and the raw Opik result so it can map
+    # candidate trajectories back to GEPA's data structures. To avoid breaking every
+    # optimizer call site, we keep this helper returning only the float and expose a
+    # separate `evaluate_with_result` for the GEPA adapter. If more optimizers need
+    # access to the full result we should refactor both functions to return a typed
+    # dataclass (e.g., `EvaluationSummary` with `.score` and `.result`) or add an
+    # overload that keeps the return type stable.
+    score, _ = _evaluate_internal(
+        dataset=dataset,
+        evaluated_task=evaluated_task,
+        metric=metric,
+        num_threads=num_threads,
+        optimization_id=optimization_id,
+        dataset_item_ids=dataset_item_ids,
+        project_name=project_name,
+        n_samples=n_samples,
+        experiment_config=experiment_config,
+        verbose=verbose,
+    )
+    return score
+
+
+def evaluate_with_result(
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    metric: Callable,
+    num_threads: int,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
+    verbose: int = 1,
+) -> tuple[float, opik_evaluation_result.EvaluationResult | None]:
+    """
+    Run evaluation and return both the aggregate score and the underlying Opik result.
+    """
+    return _evaluate_internal(
+        dataset=dataset,
+        evaluated_task=evaluated_task,
+        metric=metric,
+        num_threads=num_threads,
+        optimization_id=optimization_id,
+        dataset_item_ids=dataset_item_ids,
+        project_name=project_name,
+        n_samples=n_samples,
+        experiment_config=experiment_config,
+        verbose=verbose,
+    )
+
+
+def _evaluate_internal(
+    *,
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    metric: Callable,
+    num_threads: int,
+    optimization_id: str | None,
+    dataset_item_ids: list[str] | None,
+    project_name: str | None,
+    n_samples: int | None,
+    experiment_config: dict[str, Any] | None,
+    verbose: int,
+) -> tuple[float, opik_evaluation_result.EvaluationResult | None]:
     items = dataset.get_items(n_samples)
     if not items:
         print("[DEBUG] Empty dataset, returning 0.0")
-        return 0.0
+        return 0.0, None
 
     if dataset_item_ids:
         items = [item for item in items if item.get("id") in dataset_item_ids]
@@ -91,7 +158,7 @@ def evaluate(
     eval_metrics = [_create_metric_class(metric)]
 
     if optimization_id is not None:
-        result = opik_evaluator.evaluate_optimization_trial(
+        evaluation_result = opik_evaluator.evaluate_optimization_trial(
             optimization_id=optimization_id,
             dataset=dataset,
             task=evaluated_task,
@@ -104,7 +171,7 @@ def evaluate(
             verbose=verbose,
         )
     else:
-        result = opik_evaluator.evaluate(
+        evaluation_result = opik_evaluator.evaluate(
             dataset=dataset,
             task=evaluated_task,
             project_name=project_name,
@@ -116,23 +183,23 @@ def evaluate(
             verbose=verbose,
         )
 
-    if not result.test_results:
-        return 0.0
+    if not evaluation_result.test_results:
+        return 0.0, evaluation_result
 
     # Filter score results to only include the objective metric
     objective_metric_name = metric.__name__
     objective_score_results: list[score_result.ScoreResult] = []
-    for test_result in result.test_results:
+    for test_result in evaluation_result.test_results:
         for score_result_ in test_result.score_results:
             if score_result_.name == objective_metric_name:
                 objective_score_results.append(score_result_)
                 break
 
     if not objective_score_results:
-        return 0.0
+        return 0.0, evaluation_result
 
     avg_score = sum(
         [score_result_.value for score_result_ in objective_score_results]
     ) / len(objective_score_results)
 
-    return avg_score
+    return avg_score, evaluation_result
