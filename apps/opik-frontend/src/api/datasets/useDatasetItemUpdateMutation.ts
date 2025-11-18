@@ -39,8 +39,12 @@ const useDatasetItemUpdateMutation = () => {
       });
     },
     onSettled: (data, error, variables) => {
-      return queryClient.invalidateQueries({
+      // Invalidate both the individual item and the list queries
+      queryClient.invalidateQueries({
         queryKey: ["datasetItem", { datasetItemId: variables.itemId }],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["datasetItems"],
       });
     },
   });
