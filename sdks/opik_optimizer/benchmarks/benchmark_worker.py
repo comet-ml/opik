@@ -94,7 +94,7 @@ def run_optimization_modal(
 
     # Import core logic modules
     import time
-    from benchmark_task import TaskResult
+    from benchmark_task import TaskResult, TASK_STATUS_RUNNING
     from modal_utils.worker_core import run_optimization_task
     from modal_utils.storage import save_result_to_volume
 
@@ -105,7 +105,7 @@ def run_optimization_modal(
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
-        status="Running",
+        status=TASK_STATUS_RUNNING,
         timestamp_start=timestamp_start,
     )
     # Save immediately so it's visible to check_results.py

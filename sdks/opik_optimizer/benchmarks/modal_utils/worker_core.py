@@ -7,7 +7,12 @@ from typing import Any
 import benchmark_config
 import opik_optimizer
 import opik_optimizer.datasets
-from benchmark_task import TaskEvaluationResult, TaskResult
+from benchmark_task import (
+    TaskEvaluationResult,
+    TaskResult,
+    TASK_STATUS_FAILED,
+    TASK_STATUS_SUCCESS,
+)
 from opik_optimizer import BaseOptimizer, reporting_utils, ChatPrompt
 
 
@@ -132,7 +137,7 @@ def run_optimization_task(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer_name,
                 model_name=model_name,
-                status="Success",
+                status=TASK_STATUS_SUCCESS,
                 timestamp_start=timestamp_start,
                 initial_prompt=initial_prompt,
                 initial_evaluation=TaskEvaluationResult(
@@ -163,7 +168,7 @@ def run_optimization_task(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer_name,
                 model_name=model_name,
-                status="Failed",
+                status=TASK_STATUS_FAILED,
                 timestamp_start=timestamp_start,
                 initial_prompt=initial_prompt,
                 error_message=traceback.format_exc(),

@@ -21,7 +21,14 @@ from typing import Any
 from local import checkpoint as benchmark_checkpoint
 from local import logging as benchmark_logging
 import benchmark_config
-from benchmark_task import TaskEvaluationResult, TaskResult
+from benchmark_task import (
+    TaskEvaluationResult,
+    TaskResult,
+    TASK_STATUS_FAILED,
+    TASK_STATUS_PENDING,
+    TASK_STATUS_RUNNING,
+    TASK_STATUS_SUCCESS,
+)
 from benchmark_taskspec import BenchmarkTaskSpec
 
 import opik_optimizer
@@ -121,7 +128,7 @@ def run_optimization(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer_name,
                 model_name=model_name,
-                status="Success",
+                status=TASK_STATUS_SUCCESS,
                 timestamp_start=timestamp_start,
                 initial_prompt=initial_prompt,
                 initial_evaluation=TaskEvaluationResult(
@@ -144,7 +151,7 @@ def run_optimization(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer_name,
                 model_name=model_name,
-                status="Failed",
+                status=TASK_STATUS_FAILED,
                 timestamp_start=timestamp_start,
                 initial_prompt=initial_prompt,
                 error_message=traceback.format_exc(),
@@ -248,12 +255,12 @@ class BenchmarkRunner:
                 failed_ids = {
                     x.id
                     for x in checkpoint_manager.task_results
-                    if x.status == "Failed"
+                    if x.status == TASK_STATUS_FAILED
                 }
                 completed_ids = {
                     x.id
                     for x in checkpoint_manager.task_results
-                    if x.status not in ["Pending", "Failed"]
+                    if x.status not in (TASK_STATUS_PENDING, TASK_STATUS_FAILED)
                 }
 
                 for task in tasks:
@@ -292,7 +299,7 @@ class BenchmarkRunner:
                             dataset_name=task.dataset_name,
                             optimizer_name=task.optimizer_name,
                             model_name=task.model_name,
-                            status="Pending",
+                            status=TASK_STATUS_PENDING,
                             timestamp_start=time.time(),
                         )
                     )
@@ -301,7 +308,7 @@ class BenchmarkRunner:
                         dataset_name=task.dataset_name,
                         optimizer_name=task.optimizer_name,
                         model_name=task.model_name,
-                        status="Pending",
+                        status=TASK_STATUS_PENDING,
                     )
                     live.update(self.benchmark_logger._generate_live_display_message())
 
@@ -338,7 +345,7 @@ class BenchmarkRunner:
                                 dataset_name=dn,
                                 optimizer_name=on,
                                 model_name=mn,
-                                status="Running",
+                                status=TASK_STATUS_RUNNING,
                                 timestamp_start=time.time(),
                             )
                         )
@@ -347,7 +354,7 @@ class BenchmarkRunner:
                             dataset_name=dn,
                             optimizer_name=on,
                             model_name=mn,
-                            status="Running",
+                            status=TASK_STATUS_RUNNING,
                         )
                         live.update(
                             self.benchmark_logger._generate_live_display_message()
@@ -393,7 +400,7 @@ class BenchmarkRunner:
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
-                                    status="Failed",
+                                    status=TASK_STATUS_FAILED,
                                     timestamp_start=time.time(),
                                     initial_prompt=None,
                                     error_message=traceback.format_exc(),
@@ -404,7 +411,7 @@ class BenchmarkRunner:
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
-                                    status="Failed",
+                                    status=TASK_STATUS_FAILED,
                                 )
 
                             self.benchmark_logger.add_result_panel(

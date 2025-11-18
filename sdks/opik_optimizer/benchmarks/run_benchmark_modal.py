@@ -103,6 +103,12 @@ def submit_benchmark_tasks(
         raise ValueError("models must be a list of strings")
 
     if task_specs is not None:
+        if demo_datasets is not None or optimizers is not None or models is not None:
+            raise ValueError(
+                "When providing explicit task specs (e.g., via a manifest), do not "
+                "combine them with --demo-datasets/--optimizers/--models. "
+                "Specify either a manifest or CLI filters, not both."
+            )
         demo_datasets = sorted({task.dataset_name for task in task_specs})
         optimizers = sorted({task.optimizer_name for task in task_specs})
         models = sorted({task.model_name for task in task_specs})

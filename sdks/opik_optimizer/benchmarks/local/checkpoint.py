@@ -74,17 +74,10 @@ class BenchmarkCheckpointManager:
                     BenchmarkTaskSpec.from_dict(task) for task in tasks_data
                 ]
             else:
-                self.task_specs = [
-                    BenchmarkTaskSpec(
-                        dataset_name=dataset_name,
-                        optimizer_name=optimizer_name,
-                        model_name=model_name,
-                        test_mode=self.test_mode,
-                    )
-                    for dataset_name in self.demo_datasets
-                    for optimizer_name in self.optimizers
-                    for model_name in self.models
-                ]
+                raise ValueError(
+                    "Checkpoint file is missing the 'tasks' field. "
+                    "This checkpoint format is not supported—please re-run the benchmark."
+                )
             self.task_results = [
                 TaskResult.model_validate(x) for x in checkpoint_data["task_results"]
             ]
