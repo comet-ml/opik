@@ -140,13 +140,21 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
             size="md"
             variant={variant}
             className={cn(
-              `gap-${gapSize}`,
               "flex items-center",
+              gapSize === 1 && "gap-1",
+              gapSize === 2 && "gap-2",
+              gapSize === 3 && "gap-3",
+              gapSize === 4 && "gap-4",
               deleted && "opacity-50 cursor-default",
             )}
           >
             <props.icon
-              className={cn("size-shrink-0", `size-${iconsSize}`)}
+              className={cn(
+                "shrink-0",
+                iconsSize === 3 && "size-3",
+                iconsSize === 4 && "size-4",
+                iconsSize === 5 && "size-5",
+              )}
               style={{ color: props.color }}
             />
             <div
@@ -163,9 +171,10 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
             {!deleted && (
               <ArrowUpRight
                 className={cn(
-                  `size-${iconsSize}`,
-                  "size-shrink-0",
-                  "text-muted-slate",
+                  "shrink-0 text-muted-slate",
+                  iconsSize === 3 && "size-3",
+                  iconsSize === 4 && "size-4",
+                  iconsSize === 5 && "size-5",
                 )}
               />
             )}

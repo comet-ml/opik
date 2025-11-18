@@ -1,23 +1,20 @@
 import React, { useEffect } from "react";
 import sortBy from "lodash/sortBy";
 import { BooleanParam, useQueryParam } from "use-query-params";
-import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
+import { Maximize2, Minimize2, PenLine } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
-import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import {
-  RESOURCE_MAP,
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
 import NavigationTag from "@/components/shared/NavigationTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -84,41 +81,17 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
   const renderSubSection = () => {
     if (isCompare) {
-      const { color } = RESOURCE_MAP[RESOURCE_TYPE.experiment];
-
       const tag =
         experimentsIds.length === 2 ? (
-          <Tag
-            size="md"
-            variant="transparent"
-            className="flex items-center gap-1"
-          >
-            <FlaskConical className="size-4 shrink-0" style={{ color }} />
-            <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
-              {experiments[1]?.name}
-            </div>
-          </Tag>
+          <ExperimentTag experimentName={experiments[1]?.name} />
         ) : (
-          <Tag size="md" variant="transparent">
-            <div className="comet-body-s-accented text-muted-slate">
-              {`${experimentsIds.length - 1} experiments`}
-            </div>
-          </Tag>
+          <ExperimentTag count={experimentsIds.length - 1} />
         );
 
       return (
         <div className="flex h-11 items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
-          <Tag
-            size="md"
-            variant="transparent"
-            className="flex items-center gap-1"
-          >
-            <FlaskConical className="size-4 shrink-0" style={{ color }} />
-            <div className="comet-body-s-accented min-w-0 truncate text-muted-slate">
-              {experiment?.name}
-            </div>
-          </Tag>
+          <ExperimentTag experimentName={experiment?.name} />
           <span className="text-nowrap">compared against</span>
           {tag}
         </div>
