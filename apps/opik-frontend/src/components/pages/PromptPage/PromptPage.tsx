@@ -59,7 +59,7 @@ const PromptPage: React.FunctionComponent = () => {
         limitWidth
       >
         {prompt?.created_at && (
-          <div className="mb-2 flex gap-4 overflow-x-auto">
+          <div className="mb-2 flex gap-2 overflow-x-auto">
             <DateTag
               date={prompt?.created_at}
               resource={RESOURCE_TYPE.prompt}

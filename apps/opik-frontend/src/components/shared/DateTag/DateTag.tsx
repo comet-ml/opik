@@ -21,11 +21,13 @@ const DateTag = ({ date, resource }: DateTagProps) => {
     <TooltipWrapper content={`${capitalize(label)} creation time`}>
       <Tag
         size="md"
-        variant="gray"
-        className="flex shrink-0 items-center gap-2"
+        variant="transparent"
+        className="flex shrink-0 items-center gap-1"
       >
-        <Clock className="size-4 shrink-0" />
-        <div className="truncate">{formatDate(date)}</div>
+        <Clock className="size-3 shrink-0 text-[var(--color-blue)]" />
+        <div className="comet-body-s-accented truncate text-muted-slate">
+          {formatDate(date)}
+        </div>
       </Tag>
     </TooltipWrapper>
   );

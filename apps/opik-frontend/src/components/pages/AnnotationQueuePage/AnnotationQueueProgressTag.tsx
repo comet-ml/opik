@@ -2,6 +2,7 @@ import React from "react";
 import { Tag } from "@/components/ui/tag";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import AnnotationQueueProgress from "@/components/pages-shared/annotation-queues/AnnotationQueueProgress";
+import { SquareCheck } from "lucide-react";
 
 interface AnnotationQueueProgressTagProps {
   annotationQueue: AnnotationQueue;
@@ -13,8 +14,13 @@ const AnnotationQueueProgressTag: React.FunctionComponent<
   return (
     <AnnotationQueueProgress annotationQueue={annotationQueue}>
       {({ averageProgress, progressPercentage, itemsCount }) => (
-        <Tag variant="gray" size="md" className="cursor-pointer">
-          Progress: {averageProgress}/{itemsCount} ({progressPercentage}%)
+        <Tag
+          variant="transparent"
+          size="md"
+          className="comet-body-s-accented flex cursor-pointer items-center gap-1 text-muted-slate"
+        >
+          <SquareCheck className="size-3 shrink-0 text-[var(--color-red)]" />
+          {averageProgress}/{itemsCount} ({progressPercentage}%)
         </Tag>
       )}
     </AnnotationQueueProgress>
