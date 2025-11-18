@@ -410,6 +410,7 @@ class OpikTracer(BaseTracer):
 
         if not run.parent_run_id:
             self._create_root_trace_and_span(run_id=run.id, run_dict=run_dict)
+            return
 
         # Check if the parent is a skipped LangGraph root run.
         # If so, attach children directly to trace.
