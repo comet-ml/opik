@@ -41,6 +41,46 @@ def export_traces(
             f"DEBUG: _export_traces called with project_name: {project_name}, project_dir: {project_dir}",
             debug,
         )
+
+    # Validate filter syntax before using it
+    if filter_string:
+        try:
+            from opik.api_objects import opik_query_language
+
+            # Try to parse the filter to validate syntax
+            oql = opik_query_language.OpikQueryLanguage(filter_string)
+            if oql.get_filter_expressions() is None and filter_string.strip():
+                console.print(
+                    f"[red]Error: Invalid filter syntax: Filter '{filter_string}' could not be parsed.[/red]"
+                )
+                console.print("[yellow]OQL filter syntax examples:[/yellow]")
+                console.print('  status = "running"')
+                console.print('  name contains "test"')
+                console.print('  start_time >= "2024-01-01T00:00:00Z"')
+                console.print("  usage.total_tokens > 1000")
+                console.print(
+                    "[yellow]Note: String values must be in double quotes, use = not :[/yellow]"
+                )
+                raise ValueError(
+                    f"Invalid filter syntax: '{filter_string}' could not be parsed"
+                )
+        except ValueError as e:
+            # If it's already our custom error message, re-raise it
+            if "Invalid filter syntax" in str(e) and "could not be parsed" in str(e):
+                raise
+            # Otherwise, format the error nicely
+            error_msg = str(e)
+            console.print(f"[red]Error: Invalid filter syntax: {error_msg}[/red]")
+            console.print("[yellow]OQL filter syntax examples:[/yellow]")
+            console.print('  status = "running"')
+            console.print('  name contains "test"')
+            console.print('  start_time >= "2024-01-01T00:00:00Z"')
+            console.print("  usage.total_tokens > 1000")
+            console.print(
+                "[yellow]Note: String values must be in double quotes, use = not :[/yellow]"
+            )
+            raise
+
     exported_count = 0
     skipped_count = 0
     page_size = min(100, max_results)  # Process in smaller batches
@@ -65,10 +105,24 @@ def export_traces(
                         f"DEBUG: Getting traces by project with project_name: {project_name}, filter: {filter_string}, page: {current_page}, size: {current_page_size}",
                         debug,
                     )
+
+                # Parse filter to JSON format - backend expects JSON, not OQL string
+                parsed_filter = None
+                if filter_string:
+                    from opik.api_objects import opik_query_language
+
+                    oql = opik_query_language.OpikQueryLanguage(filter_string)
+                    parsed_filter = oql.parsed_filters  # This is the JSON string
+                    if debug:
+                        debug_print(
+                            f"DEBUG: Parsed filter to JSON: {parsed_filter}", debug
+                        )
+
                 # Use get_traces_by_project for better performance when we know the project name
+                # Backend expects JSON string format for filters
                 trace_page = client.rest_client.traces.get_traces_by_project(
                     project_name=project_name,
-                    filters=filter_string,
+                    filters=parsed_filter,  # Pass parsed JSON string - backend expects JSON
                     page=current_page,
                     size=current_page_size,
                     truncate=False,  # Don't truncate data for download
@@ -90,7 +144,7 @@ def export_traces(
                         "[red]Error: Invalid filter format in export query.[/red]"
                     )
                     console.print(
-                        "[yellow]This appears to be an internal query parsing issue. Please try the export again.[/yellow]"
+                        '[yellow]String values in filters must be in double quotes, e.g., status = "running"[/yellow]'
                     )
                     if debug:
                         debug_print(f"Technical details: {e}", debug)
@@ -232,6 +286,47 @@ def export_project_by_name(
         if debug:
             debug_print(f"Exporting project: {name}", debug)
 
+        # Validate filter syntax before doing anything else
+        if filter_string:
+            try:
+                from opik.api_objects import opik_query_language
+
+                # Try to parse the filter to validate syntax
+                oql = opik_query_language.OpikQueryLanguage(filter_string)
+                if oql.get_filter_expressions() is None and filter_string.strip():
+                    console.print(
+                        f"[red]Error: Invalid filter syntax: Filter '{filter_string}' could not be parsed.[/red]"
+                    )
+                    console.print("[yellow]OQL filter syntax examples:[/yellow]")
+                    console.print('  status = "running"')
+                    console.print('  name contains "test"')
+                    console.print('  start_time >= "2024-01-01T00:00:00Z"')
+                    console.print("  usage.total_tokens > 1000")
+                    console.print(
+                        "[yellow]Note: String values must be in double quotes, use = not :[/yellow]"
+                    )
+                    raise ValueError(
+                        f"Invalid filter syntax: '{filter_string}' could not be parsed"
+                    )
+            except ValueError as e:
+                # If it's already our custom error message, re-raise it
+                if "Invalid filter syntax" in str(e) and "could not be parsed" in str(
+                    e
+                ):
+                    raise
+                # Otherwise, format the error nicely
+                error_msg = str(e)
+                console.print(f"[red]Error: Invalid filter syntax: {error_msg}[/red]")
+                console.print("[yellow]OQL filter syntax examples:[/yellow]")
+                console.print('  status = "running"')
+                console.print('  name contains "test"')
+                console.print('  start_time >= "2024-01-01T00:00:00Z"')
+                console.print("  usage.total_tokens > 1000")
+                console.print(
+                    "[yellow]Note: String values must be in double quotes, use = not :[/yellow]"
+                )
+                raise
+
         # Initialize client
         if api_key:
             client = opik.Opik(api_key=api_key, workspace=workspace)
@@ -294,6 +389,13 @@ def export_project_by_name(
                 f"[yellow]Project '{name}' already exists (use --force to re-download)[/yellow]"
             )
 
+    except ValueError as e:
+        # Filter validation errors are already formatted, just exit
+        if "Invalid filter syntax" in str(e):
+            sys.exit(1)
+        # Other ValueErrors should be shown
+        console.print(f"[red]Error exporting project: {e}[/red]")
+        sys.exit(1)
     except Exception as e:
         console.print(f"[red]Error exporting project: {e}[/red]")
         sys.exit(1)
@@ -316,7 +418,8 @@ def export_single_project(
         project_traces_dir.mkdir(parents=True, exist_ok=True)
 
         # Check if traces directory already has files in the requested format and force is not set
-        if not force:
+        # Skip early return if a filter is provided, as we need to check if existing traces match the filter
+        if not force and not filter_string:
             # Only check for files in the requested format
             if format.lower() == "csv":
                 existing_traces = list(project_traces_dir.glob("trace_*.csv"))
