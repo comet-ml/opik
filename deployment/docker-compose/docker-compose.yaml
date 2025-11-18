@@ -207,8 +207,9 @@ services:
       PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
+      PYTHON_BACKEND_PORT: ${PYTHON_BACKEND_PORT:-8000}
     healthcheck:
-      test: [ "CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:8000/healthcheck; else exit 0; fi" ]
+      test: [ "CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:$${PYTHON_BACKEND_PORT:-8000}/healthcheck; else exit 0; fi" ]
       interval: 2s
       timeout: 60s
       retries: 30
