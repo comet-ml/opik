@@ -9,7 +9,7 @@ import opik
 from rich.console import Console
 
 from .experiment import recreate_experiments
-from .utils import matches_name_pattern
+from .utils import matches_name_pattern, clean_feedback_scores
 
 console = Console()
 
@@ -70,6 +70,11 @@ def import_projects_from_directory(
                         original_trace_id = trace_info.get("id")
 
                         # Create trace with full data
+                        # Clean feedback scores to remove read-only fields
+                        feedback_scores = clean_feedback_scores(
+                            trace_info.get("feedback_scores")
+                        )
+
                         trace = client.trace(
                             name=trace_info.get("name", "imported_trace"),
                             start_time=(
@@ -90,7 +95,7 @@ def import_projects_from_directory(
                             output=trace_info.get("output", {}),
                             metadata=trace_info.get("metadata"),
                             tags=trace_info.get("tags"),
-                            feedback_scores=trace_info.get("feedback_scores"),
+                            feedback_scores=feedback_scores,
                             error_info=trace_info.get("error_info"),
                             thread_id=trace_info.get("thread_id"),
                             project_name=project_name,
@@ -101,6 +106,11 @@ def import_projects_from_directory(
 
                         # Create spans with full data
                         for span_info in spans_info:
+                            # Clean feedback scores to remove read-only fields
+                            span_feedback_scores = clean_feedback_scores(
+                                span_info.get("feedback_scores")
+                            )
+
                             client.span(
                                 name=span_info.get("name", "imported_span"),
                                 start_time=(
@@ -122,7 +132,7 @@ def import_projects_from_directory(
                                 metadata=span_info.get("metadata"),
                                 tags=span_info.get("tags"),
                                 usage=span_info.get("usage"),
-                                feedback_scores=span_info.get("feedback_scores"),
+                                feedback_scores=span_feedback_scores,
                                 model=span_info.get("model"),
                                 provider=span_info.get("provider"),
                                 error_info=span_info.get("error_info"),
@@ -159,6 +169,7 @@ def import_projects_from_directory(
                             dry_run,
                             name_pattern,
                             trace_id_map,
+                            debug,
                         )
 
                         if debug and experiments_recreated > 0:

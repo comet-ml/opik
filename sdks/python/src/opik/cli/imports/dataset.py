@@ -28,12 +28,33 @@ def import_datasets_from_directory(
             return 0
 
         imported_count = 0
+        error_count = 0
         for dataset_file in dataset_files:
             try:
                 with open(dataset_file, "r", encoding="utf-8") as f:
                     dataset_data = json.load(f)
 
-                dataset_name = dataset_data.get("name", "")
+                # Handle two export formats:
+                # 1. {"name": "...", "items": [...]} - from export_single_dataset
+                # 2. {"dataset": {"name": "...", "id": "..."}, "items": [...]} - from export_experiment_datasets
+                dataset_name = dataset_data.get("name") or (
+                    dataset_data.get("dataset", {}).get("name")
+                    if dataset_data.get("dataset")
+                    else None
+                )
+
+                # Check if name is missing or empty
+                if not dataset_name or (
+                    isinstance(dataset_name, str) and not dataset_name.strip()
+                ):
+                    console.print(
+                        f"[red]Error: Dataset file {dataset_file.name} is missing or has an empty name field[/red]"
+                    )
+                    error_count += 1
+                    continue
+
+                # Strip whitespace from name
+                dataset_name = dataset_name.strip()
 
                 # Filter by name pattern if specified
                 if name_pattern and not matches_name_pattern(
@@ -69,12 +90,17 @@ def import_datasets_from_directory(
 
             except Exception as e:
                 console.print(
-                    f"[red]Error importing dataset from {dataset_file}: {e}[/red]"
+                    f"[red]Error importing dataset from {dataset_file.name}: {e}[/red]"
                 )
+                error_count += 1
                 continue
+
+        if error_count > 0 and imported_count == 0:
+            # If there were errors and nothing was imported, return -1 to indicate failure
+            return -1
 
         return imported_count
 
     except Exception as e:
         console.print(f"[red]Error importing datasets: {e}[/red]")
-        return 0
+        return -1

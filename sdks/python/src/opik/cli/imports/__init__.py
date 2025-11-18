@@ -99,9 +99,17 @@ def _import_by_type(
                 f"[blue]Dry run complete: Would import {imported_count} {import_type}s[/blue]"
             )
         else:
-            console.print(
-                f"[green]Successfully imported {imported_count} {import_type}s[/green]"
-            )
+            if imported_count < 0:
+                # Negative count indicates errors occurred
+                console.print(
+                    f"[red]Import failed: Errors occurred while importing {import_type}s[/red]"
+                )
+            elif imported_count == 0:
+                console.print(f"[yellow]No {import_type}s were imported[/yellow]")
+            else:
+                console.print(
+                    f"[green]Successfully imported {imported_count} {import_type}s[/green]"
+                )
 
     except Exception as e:
         console.print(f"[red]Error importing {import_type}s: {e}[/red]")

@@ -54,6 +54,8 @@ def serialize_experiment_item(item: Any) -> Dict[str, Any]:
         "created_by",
         "last_updated_by",
         "trace_visibility_mode",
+        "dataset_item_data",  # Include dataset item data for import
+        "evaluation_task_output",  # Include evaluation task output if present
     ]:
         if hasattr(item, attr):
             value = getattr(item, attr)

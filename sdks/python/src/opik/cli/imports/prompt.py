@@ -35,12 +35,26 @@ def import_prompts_from_directory(
                 with open(prompt_file, "r", encoding="utf-8") as f:
                     prompt_data = json.load(f)
 
-                prompt_name = prompt_data.get("name", "")
-                if not prompt_name:
+                # Handle two export formats:
+                # 1. {"name": "...", "current_version": {...}, "history": [...]} - from export_single_prompt
+                # 2. {"prompt": {"name": "...", ...}, "current_version": {...}, "history": [...]} - from export_experiment_prompts
+                prompt_name = prompt_data.get("name") or (
+                    prompt_data.get("prompt", {}).get("name")
+                    if prompt_data.get("prompt")
+                    else None
+                )
+
+                # Check if name is missing or empty
+                if not prompt_name or (
+                    isinstance(prompt_name, str) and not prompt_name.strip()
+                ):
                     console.print(
                         f"[yellow]Skipping {prompt_file.name} (no name found)[/yellow]"
                     )
                     continue
+
+                # Strip whitespace from name
+                prompt_name = prompt_name.strip()
 
                 # Filter by name pattern if specified
                 if name_pattern and not matches_name_pattern(prompt_name, name_pattern):

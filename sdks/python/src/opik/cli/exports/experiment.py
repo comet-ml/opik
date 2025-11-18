@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import click
 from rich.console import Console
@@ -188,8 +188,14 @@ def export_experiment_by_id(
     force: bool,
     debug: bool,
     format: str,
-) -> int:
-    """Export a specific experiment by ID, including related datasets and traces."""
+) -> tuple[Dict[str, int], int]:
+    """Export a specific experiment by ID, including related datasets and traces.
+
+    Returns:
+        Tuple of (stats dictionary, file_written flag) where:
+        - stats: Dictionary with keys "datasets", "prompts", "traces" and their counts
+        - file_written: 1 if experiment file was written, 0 if skipped or error
+    """
     try:
         console.print(f"[blue]Fetching experiment by ID: {experiment_id}[/blue]")
 
@@ -197,7 +203,8 @@ def export_experiment_by_id(
         experiment = client.get_experiment_by_id(experiment_id)
         if not experiment:
             console.print(f"[red]Experiment '{experiment_id}' not found[/red]")
-            return 0
+            # Return empty stats and 0 for file written when not found
+            return ({"datasets": 0, "prompts": 0, "traces": 0}, 0)
 
         debug_print(f"Found experiment: {experiment.name}", debug)
 
@@ -280,12 +287,13 @@ def export_experiment_by_id(
                 f"[green]Experiment {experiment.name} exported with stats: {stats}[/green]"
             )
 
-        # Return 1 if the experiment file was written, 0 if it was skipped
-        return 1 if experiment_file_written else 0
+        # Return stats dictionary and whether file was written
+        return (stats, 1 if experiment_file_written else 0)
 
     except Exception as e:
         console.print(f"[red]Error exporting experiment {experiment_id}: {e}[/red]")
-        return 0
+        # Return empty stats and 0 for file written on error
+        return ({"datasets": 0, "prompts": 0, "traces": 0}, 0)
 
 
 def export_experiment_by_name(
@@ -341,6 +349,16 @@ def export_experiment_by_name(
         exported_count = 0
         skipped_count = 0
 
+        # Aggregate stats from all experiments
+        aggregated_stats = {
+            "datasets": 0,
+            "datasets_skipped": 0,
+            "prompts": 0,
+            "prompts_skipped": 0,
+            "traces": 0,
+            "traces_skipped": 0,
+        }
+
         for experiment in experiments:
             if debug:
                 debug_print(
@@ -352,22 +370,35 @@ def export_experiment_by_name(
                 client, output_dir, experiment.id, max_traces, force, debug, format
             )
 
-            if result > 0:
-                exported_count += 1
-            else:
-                skipped_count += 1
+            # result is now a tuple: (stats_dict, file_written_flag)
+            if isinstance(result, tuple):
+                exp_stats, file_written = result
+                # Aggregate stats
+                aggregated_stats["datasets"] += exp_stats.get("datasets", 0)
+                aggregated_stats["prompts"] += exp_stats.get("prompts", 0)
+                aggregated_stats["traces"] += exp_stats.get("traces", 0)
 
-        # Count trace files
-        trace_files = list(output_dir.glob("trace_*.json"))
-        trace_csv_files = list(output_dir.glob("trace_*.csv"))
-        total_trace_files = len(trace_files) + len(trace_csv_files)
+                if file_written > 0:
+                    exported_count += 1
+                else:
+                    skipped_count += 1
+            else:
+                # Backward compatibility: if result is just a number
+                if result > 0:
+                    exported_count += 1
+                else:
+                    skipped_count += 1
 
         # Collect statistics for summary
         stats = {
             "experiments": exported_count,
             "experiments_skipped": skipped_count,
-            "traces": total_trace_files,
-            "traces_skipped": 0,  # We don't track skipped traces in current implementation
+            "datasets": aggregated_stats["datasets"],
+            "datasets_skipped": aggregated_stats["datasets_skipped"],
+            "prompts": aggregated_stats["prompts"],
+            "prompts_skipped": aggregated_stats["prompts_skipped"],
+            "traces": aggregated_stats["traces"],
+            "traces_skipped": aggregated_stats["traces_skipped"],
         }
 
         # Show export summary

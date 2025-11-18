@@ -1,6 +1,6 @@
 """Common utilities for import functionality."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import opik
 from rich.console import Console
@@ -31,14 +31,19 @@ def translate_trace_id(
 def find_dataset_item_by_content(
     dataset: opik.Dataset, expected_content: Dict[str, Any]
 ) -> Optional[str]:
-    """Find a dataset item by matching its content."""
+    """Find a dataset item by matching its content.
+
+    Compares all fields in expected_content (excluding 'id') with dataset items.
+    """
     try:
         items = dataset.get_items()
+        # Remove 'id' from expected_content for comparison
+        expected_without_id = {k: v for k, v in expected_content.items() if k != "id"}
+
         for item in items:
-            # Compare key fields for matching
-            if item.get("input") == expected_content.get("input") and item.get(
-                "expected_output"
-            ) == expected_content.get("expected_output"):
+            # Compare all fields (excluding 'id')
+            item_without_id = {k: v for k, v in item.items() if k != "id"}
+            if item_without_id == expected_without_id:
                 return item.get("id")
     except Exception:
         pass
@@ -46,22 +51,27 @@ def find_dataset_item_by_content(
 
 
 def create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str:
-    """Create a dataset item and return its ID."""
-    new_item = {
-        "input": item_data.get("input"),
-        "expected_output": item_data.get("expected_output"),
-        "metadata": item_data.get("metadata"),
-    }
+    """Create a dataset item and return its ID.
+
+    Uses all fields from item_data (except 'id') to support flexible dataset schemas.
+    """
+    # Use all fields from item_data except 'id' (which is handled separately)
+    new_item = {k: v for k, v in item_data.items() if k != "id" and v is not None}
+
+    # Ensure item is not empty (backend requires non-empty data)
+    if not new_item:
+        raise ValueError(
+            "Dataset item data is empty - at least one field must be provided"
+        )
 
     dataset.insert([new_item])
 
-    # Find the newly created item
+    # Find the newly created item by matching all fields
     items = dataset.get_items()
     for item in items:
-        if (
-            item.get("input") == new_item["input"]
-            and item.get("expected_output") == new_item["expected_output"]
-        ):
+        # Compare all fields (excluding 'id')
+        item_without_id = {k: v for k, v in item.items() if k != "id"}
+        if item_without_id == new_item:
             item_id = item.get("id")
             if item_id is not None:
                 return item_id
@@ -69,9 +79,7 @@ def create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str
     dataset_name = getattr(dataset, "name", None)
     dataset_info = f", Dataset: {dataset_name!r}" if dataset_name else ""
     raise Exception(
-        f"Failed to create dataset item. "
-        f"Input: {new_item.get('input')!r}, "
-        f"Expected Output: {new_item.get('expected_output')!r}{dataset_info}"
+        f"Failed to create dataset item. " f"Content: {new_item!r}{dataset_info}"
     )
 
 
@@ -85,3 +93,40 @@ def handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
 
     # Fall back to direct trace_id
     return item_data.get("trace_id")
+
+
+def clean_feedback_scores(
+    feedback_scores: Optional[List[Dict[str, Any]]],
+) -> Optional[List[Dict[str, Any]]]:
+    """Clean feedback scores by removing fields that are not allowed when creating them.
+
+    Exported feedback scores include read-only fields like 'source', 'created_at', etc.
+    that must be removed before importing.
+
+    Allowed fields: name, value, category_name, reason
+    """
+    if not feedback_scores:
+        return None
+
+    cleaned_scores = []
+    for score in feedback_scores:
+        if not isinstance(score, dict):
+            continue
+
+        # Only keep allowed fields
+        cleaned_score = {
+            "name": score.get("name"),
+            "value": score.get("value"),
+        }
+
+        # Add optional fields if they exist
+        if "category_name" in score:
+            cleaned_score["category_name"] = score.get("category_name")
+        if "reason" in score:
+            cleaned_score["reason"] = score.get("reason")
+
+        # Only add if name and value are present
+        if cleaned_score.get("name") and cleaned_score.get("value") is not None:
+            cleaned_scores.append(cleaned_score)
+
+    return cleaned_scores if cleaned_scores else None

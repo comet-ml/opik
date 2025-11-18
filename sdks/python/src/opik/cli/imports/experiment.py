@@ -1,6 +1,7 @@
 """Experiment import functionality."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -15,6 +16,7 @@ from .utils import (
     handle_trace_reference,
     translate_trace_id,
     matches_name_pattern,
+    clean_feedback_scores,
 )
 
 console = Console()
@@ -37,6 +39,7 @@ def recreate_experiment(
     project_name: str,
     trace_id_map: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
+    debug: bool = False,
 ) -> bool:
     """Recreate a single experiment from exported data.
 
@@ -101,10 +104,30 @@ def recreate_experiment(
                 continue
 
             # Handle dataset item
-            dataset_item_data = item_data.get("dataset_item_data", {})
+            dataset_item_data = item_data.get("dataset_item_data")
+
+            # If dataset_item_data is missing, try to use input as fallback (for older exports)
             if not dataset_item_data:
+                # Check if input field exists and use it as dataset item data
+                input_data = item_data.get("input")
+                if input_data and isinstance(input_data, dict):
+                    dataset_item_data = input_data
+                    if debug:
+                        console.print(
+                            "[blue]Using 'input' field as dataset_item_data (export may be from older version)[/blue]"
+                        )
+                else:
+                    console.print(
+                        "[yellow]Warning: No dataset item data found, skipping item. "
+                        "This may be due to an older export format. Please re-export the experiment.[/yellow]"
+                    )
+                    skipped_items += 1
+                    continue
+
+            # Ensure dataset_item_data is a dict
+            if not isinstance(dataset_item_data, dict):
                 console.print(
-                    "[yellow]Warning: No dataset item data, skipping item[/yellow]"
+                    "[yellow]Warning: dataset_item_data is not a dictionary, skipping item[/yellow]"
                 )
                 skipped_items += 1
                 continue
@@ -128,13 +151,21 @@ def recreate_experiment(
                             except Exception:
                                 chosen_id = None
 
-                        # Build DatasetItem with flexible extra fields
+                        # Build DatasetItem with all fields from dataset_item_data
+                        # Exclude 'id' as it's handled separately
                         content = {
-                            "input": dataset_item_data.get("input"),
-                            "expected_output": dataset_item_data.get("expected_output"),
-                            "metadata": dataset_item_data.get("metadata"),
+                            k: v
+                            for k, v in dataset_item_data.items()
+                            if k != "id" and v is not None
                         }
-                        content = {k: v for k, v in content.items() if v is not None}
+
+                        # Ensure content is not empty (backend requires non-empty data)
+                        if not content:
+                            console.print(
+                                "[yellow]Warning: Dataset item data is empty, skipping item[/yellow]"
+                            )
+                            skipped_items += 1
+                            continue
 
                         if chosen_id is not None:
                             ds_obj = ds_item.DatasetItem(id=chosen_id, **content)  # type: ignore
@@ -202,6 +233,7 @@ def recreate_experiments(
     dry_run: bool = False,
     name_pattern: Optional[str] = None,
     trace_id_map: Optional[Dict[str, str]] = None,
+    debug: bool = False,
 ) -> int:
     """Recreate experiments from JSON files."""
     experiment_files = find_experiment_files(project_dir)
@@ -243,7 +275,7 @@ def recreate_experiments(
             experiment_data = load_experiment_data(experiment_file)
 
             if recreate_experiment(
-                client, experiment_data, project_name, trace_id_map, dry_run
+                client, experiment_data, project_name, trace_id_map, dry_run, debug
             ):
                 successful += 1
             else:
@@ -257,6 +289,160 @@ def recreate_experiments(
     return successful
 
 
+def _import_traces_from_projects_directory(
+    client: opik.Opik,
+    workspace_root: Path,
+    dry_run: bool,
+    debug: bool,
+) -> Dict[str, str]:
+    """Import traces from projects directory and return trace_id_map.
+
+    Returns a mapping from original trace ID to new trace ID.
+    """
+    trace_id_map: Dict[str, str] = {}
+    projects_dir = workspace_root / "projects"
+
+    if not projects_dir.exists():
+        if debug:
+            console.print(
+                f"[blue]No projects directory found at {projects_dir}, skipping trace import[/blue]"
+            )
+        return trace_id_map
+
+    project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
+
+    if not project_dirs:
+        if debug:
+            console.print(
+                "[blue]No project directories found, skipping trace import[/blue]"
+            )
+        return trace_id_map
+
+    if debug:
+        console.print(
+            f"[blue]Importing traces from {len(project_dirs)} project(s) to build trace ID mapping...[/blue]"
+        )
+
+    for project_dir in project_dirs:
+        project_name = project_dir.name
+        trace_files = list(project_dir.glob("trace_*.json"))
+
+        if not trace_files:
+            continue
+
+        if debug:
+            console.print(
+                f"[blue]Importing {len(trace_files)} trace(s) from project '{project_name}'...[/blue]"
+            )
+
+        for trace_file in trace_files:
+            try:
+                with open(trace_file, "r", encoding="utf-8") as f:
+                    trace_data = json.load(f)
+
+                trace_info = trace_data.get("trace", {})
+                spans_info = trace_data.get("spans", [])
+                original_trace_id = trace_info.get("id")
+
+                if not original_trace_id:
+                    continue
+
+                if dry_run:
+                    if debug:
+                        console.print(
+                            f"[blue]Would import trace {original_trace_id} from project '{project_name}'[/blue]"
+                        )
+                    continue
+
+                # Create trace with full data
+                # Clean feedback scores to remove read-only fields
+                feedback_scores = clean_feedback_scores(
+                    trace_info.get("feedback_scores")
+                )
+
+                trace = client.trace(
+                    name=trace_info.get("name", "imported_trace"),
+                    start_time=(
+                        datetime.fromisoformat(
+                            trace_info["start_time"].replace("Z", "+00:00")
+                        )
+                        if trace_info.get("start_time")
+                        else None
+                    ),
+                    end_time=(
+                        datetime.fromisoformat(
+                            trace_info["end_time"].replace("Z", "+00:00")
+                        )
+                        if trace_info.get("end_time")
+                        else None
+                    ),
+                    input=trace_info.get("input", {}),
+                    output=trace_info.get("output", {}),
+                    metadata=trace_info.get("metadata"),
+                    tags=trace_info.get("tags"),
+                    feedback_scores=feedback_scores,
+                    error_info=trace_info.get("error_info"),
+                    thread_id=trace_info.get("thread_id"),
+                    project_name=project_name,
+                )
+
+                # Map original trace ID to new trace ID
+                trace_id_map[original_trace_id] = trace.id
+
+                # Create spans with full data
+                for span_info in spans_info:
+                    # Clean feedback scores to remove read-only fields
+                    span_feedback_scores = clean_feedback_scores(
+                        span_info.get("feedback_scores")
+                    )
+
+                    client.span(
+                        name=span_info.get("name", "imported_span"),
+                        start_time=(
+                            datetime.fromisoformat(
+                                span_info["start_time"].replace("Z", "+00:00")
+                            )
+                            if span_info.get("start_time")
+                            else None
+                        ),
+                        end_time=(
+                            datetime.fromisoformat(
+                                span_info["end_time"].replace("Z", "+00:00")
+                            )
+                            if span_info.get("end_time")
+                            else None
+                        ),
+                        input=span_info.get("input", {}),
+                        output=span_info.get("output", {}),
+                        metadata=span_info.get("metadata"),
+                        tags=span_info.get("tags"),
+                        usage=span_info.get("usage"),
+                        feedback_scores=span_feedback_scores,
+                        model=span_info.get("model"),
+                        provider=span_info.get("provider"),
+                        error_info=span_info.get("error_info"),
+                        total_cost=span_info.get("total_cost"),
+                        trace_id=trace.id,
+                        project_name=project_name,
+                    )
+
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Failed to import trace from {trace_file}: {e}[/yellow]"
+                )
+                continue
+
+    if not dry_run and trace_id_map:
+        # Flush client to ensure traces are persisted before recreating experiments
+        client.flush()
+        if debug:
+            console.print(
+                f"[green]Imported {len(trace_id_map)} trace(s) and built trace ID mapping[/green]"
+            )
+
+    return trace_id_map
+
+
 def import_experiments_from_directory(
     client: opik.Opik,
     source_dir: Path,
@@ -265,13 +451,29 @@ def import_experiments_from_directory(
     debug: bool,
     recreate_experiments_flag: bool,
 ) -> int:
-    """Import experiments from a directory."""
+    """Import experiments from a directory.
+
+    This function will first import traces from the projects directory (if it exists)
+    to build a trace_id_map, then use that map when recreating experiments.
+    """
     try:
         experiment_files = list(source_dir.glob("experiment_*.json"))
 
         if not experiment_files:
             console.print("[yellow]No experiment files found in the directory[/yellow]")
             return 0
+
+        # Import traces first to build trace_id_map
+        # source_dir is typically workspace/experiments, so parent is workspace root
+        workspace_root = source_dir.parent
+        trace_id_map = _import_traces_from_projects_directory(
+            client, workspace_root, dry_run, debug
+        )
+
+        if not trace_id_map and not dry_run:
+            console.print(
+                "[yellow]Warning: No traces were imported. Experiment items may be skipped if they reference traces.[/yellow]"
+            )
 
         imported_count = 0
         for experiment_file in experiment_files:
@@ -304,17 +506,19 @@ def import_experiments_from_directory(
                         f"[blue]Importing experiment: {experiment_name}[/blue]"
                     )
 
-                # Import experiment. We cannot translate trace ids here unless traces were
-                # imported in the same session; pass no mapping in this mode.
+                # Get project name from experiment metadata or use default
                 project_for_logs = (experiment_info.get("metadata") or {}).get(
                     "project_name"
                 ) or "default"
+
+                # Use trace_id_map to translate trace IDs
                 success = recreate_experiment(
                     client,
                     experiment_data,
                     project_for_logs,
-                    None,
+                    trace_id_map if trace_id_map else None,
                     dry_run,
+                    debug,
                 )
 
                 if success:
