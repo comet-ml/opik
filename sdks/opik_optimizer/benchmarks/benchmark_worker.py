@@ -83,6 +83,8 @@ def run_optimization_modal(
         model_name: Name of model to use
         test_mode: Whether to run in test mode (5 examples)
         run_id: Unique identifier for this benchmark run
+        optimizer_params: Optional overrides merged into the optimizer constructor
+        optimizer_prompt_params: Optional overrides merged into optimize_prompt
 
     Returns:
         Dictionary containing task result (also saved to Volume)
