@@ -87,4 +87,13 @@ def load_context7_dataset(test_mode: bool = False) -> DatasetResult:
         return _ListDataset(dataset_name, examples)
 
 
-__all__ = ["load_context7_dataset"]
+def context7_eval(test_mode: bool = False):
+    dataset = load_context7_dataset(test_mode=test_mode)
+    if isinstance(dataset, _ListDataset):
+        raise RuntimeError(
+            "Opik client is not available; context7_eval requires Opik dataset support."
+        )
+    return dataset
+
+
+__all__ = ["load_context7_dataset", "context7_eval"]
