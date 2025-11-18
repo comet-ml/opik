@@ -3753,12 +3753,24 @@ class FindSpansResourceTest {
         }
 
         @Test
-        void whenSortingByInvalidField__thenReturn400() {
-            var field = RandomStringUtils.secure().nextAlphanumeric(10);
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
-                    "Invalid sorting fields '%s'".formatted(field));
+        void whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var field = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create a span to ensure the project exists
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -3766,14 +3778,15 @@ class FindSpansResourceTest {
                     .queryParam("sorting",
                             URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
+            var actualEntity = actualResponse.readEntity(Span.SpanPage.class);
+            assertThat(actualEntity).isNotNull();
         }
 
         @ParameterizedTest

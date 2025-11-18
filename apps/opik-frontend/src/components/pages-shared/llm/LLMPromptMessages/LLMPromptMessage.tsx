@@ -29,8 +29,14 @@ import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
+import {
+  getTextFromMessageContent,
+  hasImagesInContent,
+  hasVideosInContent,
+  isMediaAllowedForRole,
+} from "@/lib/llm";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -58,7 +64,7 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
-  disableImages?: boolean;
+  disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
 }
 
@@ -73,7 +79,7 @@ const LLMPromptMessage = ({
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
-  disableImages = true,
+  disableMedia = true,
   improvePromptConfig,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
@@ -89,11 +95,29 @@ const LLMPromptMessage = ({
     transition,
   };
 
-  const { localText, images, setImages, handleContentChange } =
-    useMessageContent({
-      content,
-      onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
-    });
+  const {
+    localText,
+    images,
+    videos,
+    setImages,
+    setVideos,
+    handleContentChange,
+  } = useMessageContent({
+    content,
+    onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
+  });
+
+  const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
+    if (
+      !isMediaAllowedForRole(newRole) &&
+      (hasImagesInContent(content) || hasVideosInContent(content))
+    ) {
+      const textOnlyContent = getTextFromMessageContent(content);
+      onChangeMessage({ role: newRole, content: textOnlyContent });
+    } else {
+      onChangeMessage({ role: newRole });
+    }
+  };
 
   return (
     <>
@@ -124,7 +148,7 @@ const LLMPromptMessage = ({
                   return (
                     <DropdownMenuCheckboxItem
                       key={value}
-                      onSelect={() => onChangeMessage({ role: value })}
+                      onSelect={() => handleRoleChange(value)}
                       checked={role === value}
                     >
                       {label}
@@ -206,12 +230,23 @@ const LLMPromptMessage = ({
                 }}
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
-              {!disableImages && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="comet-body-s-accented">Images</div>
-                  <PromptMessageImageTags
-                    images={images}
-                    setImages={setImages}
+              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
+                <div className="mt-3 flex gap-2">
+                  <div className="comet-body-s-accented pt-1">Images</div>
+                  <PromptMessageMediaTags
+                    type="image"
+                    items={images}
+                    setItems={setImages}
+                  />
+                </div>
+              )}
+              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
+                <div className="mt-3 flex gap-2">
+                  <div className="comet-body-s-accented pt-1">Videos</div>
+                  <PromptMessageMediaTags
+                    type="video"
+                    items={videos}
+                    setItems={setVideos}
                   />
                 </div>
               )}

@@ -1,4 +1,6 @@
 package com.comet.opik.domain.evaluators;
 
-record LlmAsJudgeCodeParameters(String name, Double temperature, Integer seed) {
+import com.fasterxml.jackson.databind.JsonNode;
+
+record LlmAsJudgeCodeParameters(String name, Double temperature, Integer seed, JsonNode customParameters) {
 }

@@ -41,10 +41,16 @@ export interface LogQueueParams extends RunStreamingReturn {
   datasetItemData?: object;
 }
 
+export interface TraceMapping {
+  traceId: string;
+  promptId: string;
+  datasetItemId?: string;
+}
+
 export interface LogProcessorArgs {
   onAddExperimentRegistry: (loggedExperiments: LogExperiment[]) => void;
   onError: (error: Error) => void;
-  onCreateTraces: (traces: LogTrace[]) => void;
+  onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
 }
 
 export interface LogProcessor {
@@ -89,7 +95,9 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
+    input: {
+      messages: run.providerMessages,
+    },
     output: { output: parseCompletionOutput(run) },
   };
 
@@ -112,7 +120,16 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
   return trace;
 };
 
+const hasChoicesContent = (run: LogQueueParams): boolean => {
+  return !!run?.choices?.some((choice) => choice.delta.content);
+};
+
 const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
+  const spanOutput =
+    run.choices && hasChoicesContent(run)
+      ? { choices: run.choices }
+      : { output: run.result };
+
   return {
     id: v7(),
     traceId,
@@ -121,8 +138,10 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
-    output: { choices: run.choices ? run.choices : [] },
+    input: {
+      messages: run.providerMessages,
+    },
+    output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: run.model,
     provider: run.provider,
@@ -179,6 +198,7 @@ const createLogPlaygroundProcessor = ({
 }: LogProcessorArgs): LogProcessor => {
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
+  const traceMappings: TraceMapping[] = [];
 
   const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
     try {
@@ -191,7 +211,7 @@ const createLogPlaygroundProcessor = ({
   const traceBatch = createBatchProcessor<LogTrace>(async (traces) => {
     try {
       await createBatchTraces(traces);
-      onCreateTraces(traces);
+      onCreateTraces(traces, traceMappings);
     } catch {
       onError(new Error("There has been an error with logging traces"));
     }
@@ -224,12 +244,19 @@ const createLogPlaygroundProcessor = ({
 
   return {
     log: (run: LogQueueParams) => {
-      const { promptId, datasetName } = run;
+      const { promptId, datasetName, datasetItemId } = run;
 
       const isWithExperiments = !!datasetName;
 
       const trace = getTraceFromRun(run);
       const span = getSpanFromRun(run, trace.id);
+
+      // Store the trace mapping
+      traceMappings.push({
+        traceId: trace.id,
+        promptId,
+        datasetItemId,
+      });
 
       traceBatch.addItem(trace);
       spanBatch.addItem(span);

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
+import { parsePromptVersionContent } from "@/lib/llm";
 
 type ImproveInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
@@ -22,7 +23,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
 
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
-      promptContent: prompt?.latest_version?.template ?? "",
+      promptContent: parsePromptVersionContent(prompt?.latest_version),
       promptId: prompt?.id,
       promptVersionId: prompt?.latest_version?.id,
       autoImprove: true,

@@ -7,6 +7,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -18,7 +19,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -409,7 +409,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -422,7 +422,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -442,7 +442,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -467,7 +467,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
@@ -496,7 +496,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY name, bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -519,10 +519,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM spans_dedup
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
-                STEP <step>;
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_GUARDRAILS_FAILED_COUNT = """
@@ -534,10 +534,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE g.result = 'failed'
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
-                STEP <step>;
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TOTAL_COST = """
@@ -574,7 +574,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
@@ -596,7 +596,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             ORDER BY bucket
             <if(with_fill)>WITH FILL
                 FROM <fill_from>
-                <fill_to>
+                TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
                 STEP <step><endif>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
@@ -724,49 +724,30 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
-        return template.nonTransaction(connection -> {
-            var stTemplate = new ST(GET_TOTAL_COST);
-
-            // Add project_ids flag to template if provided
-            if (projectIds != null && !projectIds.isEmpty()) {
-                stTemplate.add("project_ids", true);
-            }
-
-            // Add uuid_from_time flag
-            stTemplate.add("uuid_from_time", true);
-            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
-
-            var statement = connection.createStatement(stTemplate.render())
-                    .bind("uuid_from_time", uuidFromTime);
-
-            // Bind uuid_to_time only if endTime is provided
-            if (endTime != null) {
-                stTemplate.add("uuid_to_time", true);
-                var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
-                statement = connection.createStatement(stTemplate.render())
-                        .bind("uuid_from_time", uuidFromTime)
-                        .bind("uuid_to_time", uuidToTime);
-            }
-
-            // Bind project IDs if provided
-            if (projectIds != null && !projectIds.isEmpty()) {
-                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
-            }
-
-            InstrumentAsyncUtils.Segment segment = startSegment("getTotalCost", "Clickhouse", "get");
-
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, metadata) -> row.get("total_cost", BigDecimal.class)))
-                    .next()
-                    .defaultIfEmpty(BigDecimal.ZERO)
-                    .doFinally(signalType -> endSegment(segment));
-        });
+        return getAlertMetric(
+                GET_TOTAL_COST,
+                projectIds,
+                startTime,
+                endTime,
+                "getTotalCost",
+                "total_cost");
     }
 
     @Override
     public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
+        return getAlertMetric(
+                GET_AVERAGE_DURATION,
+                projectIds,
+                startTime,
+                endTime,
+                "getAverageDuration",
+                "avg_duration");
+    }
+
+    private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
+            Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
         return template.nonTransaction(connection -> {
-            var stTemplate = new ST(GET_AVERAGE_DURATION);
+            var stTemplate = TemplateUtils.newST(query);
 
             // Add project_ids flag to template if provided
             if (projectIds != null && !projectIds.isEmpty()) {
@@ -777,16 +758,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             stTemplate.add("uuid_from_time", true);
             var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
 
+            // Add uuid_to_time flag if endTime is provided
+            String uuidToTime = null;
+            if (endTime != null) {
+                stTemplate.add("uuid_to_time", true);
+                uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
+            }
+
+            // Create statement once with all flags set
             var statement = connection.createStatement(stTemplate.render())
                     .bind("uuid_from_time", uuidFromTime);
 
             // Bind uuid_to_time only if endTime is provided
-            if (endTime != null) {
-                stTemplate.add("uuid_to_time", true);
-                var uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
-                statement = connection.createStatement(stTemplate.render())
-                        .bind("uuid_from_time", uuidFromTime)
-                        .bind("uuid_to_time", uuidToTime);
+            if (uuidToTime != null) {
+                statement = statement.bind("uuid_to_time", uuidToTime);
             }
 
             // Bind project IDs if provided
@@ -794,10 +779,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 statement.bind("project_ids", projectIds.toArray(new UUID[0]));
             }
 
-            InstrumentAsyncUtils.Segment segment = startSegment("getAverageDuration", "Clickhouse", "get");
+            InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, metadata) -> row.get("avg_duration", BigDecimal.class)))
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get(rowName, BigDecimal.class)))
                     .next()
                     .defaultIfEmpty(BigDecimal.ZERO)
                     .doFinally(signalType -> endSegment(segment));
@@ -806,7 +791,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
-        var template = new ST(query)
+        var template = TemplateUtils.newST(query)
                 .add("step", intervalToSql(request.interval()))
                 .add("bucket", wrapWeekly(request.interval(),
                         "toStartOfInterval(trace_time, %s)".formatted(intervalToSql(request.interval()))))
@@ -819,7 +804,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         if (request.uuidToTime() != null) {
             template.add("uuid_to_time", true);
             template.add("with_fill", true);
-            template.add("fill_to", "TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))");
         }
         // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
 

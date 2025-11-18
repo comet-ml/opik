@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
@@ -44,8 +45,10 @@ public class MessageContentNormalizer {
 
         // For non-vision models: flatten structured content to string
         var needsNormalization = request.messages().stream()
-                .anyMatch(message -> message instanceof UserMessage userMessage
-                        && !(userMessage.content() instanceof String));
+                .anyMatch(message -> (message instanceof UserMessage userMessage
+                        && !(userMessage.content() instanceof String))
+                        || (message instanceof OpikUserMessage opikUserMessage
+                                && !(opikUserMessage.content() instanceof String)));
 
         if (!needsNormalization) {
             return request;
@@ -53,7 +56,9 @@ public class MessageContentNormalizer {
 
         var normalizedMessages = new ArrayList<Message>(request.messages().size());
         for (var message : request.messages()) {
-            if (message instanceof UserMessage userMessage) {
+            if (message instanceof OpikUserMessage opikUserMessage) {
+                normalizedMessages.add(normalizeOpikUserMessage(opikUserMessage));
+            } else if (message instanceof UserMessage userMessage) {
                 normalizedMessages.add(normalizeUserMessage(userMessage));
             } else {
                 normalizedMessages.add(message);
@@ -71,9 +76,12 @@ public class MessageContentNormalizer {
      */
     private ChatCompletionRequest expandImagePlaceholders(ChatCompletionRequest request) {
         var needsExpansion = request.messages().stream()
-                .anyMatch(message -> message instanceof UserMessage userMessage
+                .anyMatch(message -> (message instanceof UserMessage userMessage
                         && userMessage.content() instanceof String content
-                        && content.contains(IMAGE_PLACEHOLDER_START));
+                        && content.contains(IMAGE_PLACEHOLDER_START))
+                        || (message instanceof OpikUserMessage opikUserMessage
+                                && opikUserMessage.content() instanceof String opikContent
+                                && opikContent.contains(IMAGE_PLACEHOLDER_START)));
 
         if (!needsExpansion) {
             return request;
@@ -81,7 +89,10 @@ public class MessageContentNormalizer {
 
         var expandedMessages = new ArrayList<Message>(request.messages().size());
         for (var message : request.messages()) {
-            if (message instanceof UserMessage userMessage && userMessage.content() instanceof String content) {
+            if (message instanceof OpikUserMessage opikUserMessage
+                    && opikUserMessage.content() instanceof String content) {
+                expandedMessages.add(expandOpikUserMessage(opikUserMessage, content));
+            } else if (message instanceof UserMessage userMessage && userMessage.content() instanceof String content) {
                 expandedMessages.add(expandUserMessage(userMessage, content));
             } else {
                 expandedMessages.add(message);
@@ -189,6 +200,74 @@ public class MessageContentNormalizer {
         }
 
         builder.content(flattened);
+        return builder.build();
+    }
+
+    /**
+     * Normalize OpikUserMessage by flattening structured content to string.
+     */
+    private Message normalizeOpikUserMessage(OpikUserMessage opikUserMessage) {
+        // If content is already a string, return as-is
+        if (opikUserMessage.content() instanceof String) {
+            return opikUserMessage;
+        }
+
+        // If content is a list, flatten it to string
+        var flattened = flattenContent(opikUserMessage.content());
+        return OpikUserMessage.builder()
+                .name(opikUserMessage.name())
+                .content(flattened)
+                .build();
+    }
+
+    /**
+     * Expand OpikUserMessage with string content containing image placeholders to structured content.
+     */
+    private OpikUserMessage expandOpikUserMessage(OpikUserMessage opikUserMessage, String content) {
+        var matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
+
+        if (!matcher.find()) {
+            // No image placeholders found, return as-is
+            return opikUserMessage;
+        }
+
+        // Reset matcher to start from beginning
+        matcher.reset();
+
+        var builder = OpikUserMessage.builder();
+        if (opikUserMessage.name() != null) {
+            builder.name(opikUserMessage.name());
+        }
+
+        var lastIndex = 0;
+
+        while (matcher.find()) {
+            // Add text content before the image placeholder
+            if (matcher.start() > lastIndex) {
+                var textSegment = content.substring(lastIndex, matcher.start());
+                if (StringUtils.isNotBlank(textSegment)) {
+                    builder.addText(textSegment);
+                }
+            }
+
+            // Extract and add image URL
+            var url = matcher.group(1).trim();
+            if (!url.isEmpty()) {
+                var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
+                builder.addImageUrl(unescapedUrl);
+            }
+
+            lastIndex = matcher.end();
+        }
+
+        // Add any remaining text after the last image placeholder
+        if (lastIndex < content.length()) {
+            var trailingText = content.substring(lastIndex);
+            if (StringUtils.isNotBlank(trailingText)) {
+                builder.addText(trailingText);
+            }
+        }
+
         return builder.build();
     }
 

@@ -28,7 +28,7 @@ public class TemplateUtils {
     }
 
     public static ST getBatchSql(String sql, int size) {
-        var template = new ST(sql);
+        var template = newST(sql);
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(size);
 
         template.add("items", queryItems);
