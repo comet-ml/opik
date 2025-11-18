@@ -31,6 +31,8 @@ from datetime import datetime
 from pathlib import Path
 import modal
 
+from benchmark_taskspec import BenchmarkTaskSpec
+
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
 
@@ -49,6 +51,7 @@ def submit_benchmark_tasks(
     max_concurrent: int = 5,
     retry_failed_run_id: str | None = None,
     resume_run_id: str | None = None,
+    task_specs: list[BenchmarkTaskSpec] | None = None,
 ) -> None:
     """
     Submit all benchmark tasks to Modal workers.
@@ -98,15 +101,17 @@ def submit_benchmark_tasks(
     if models is not None and not isinstance(models, list):
         raise ValueError("models must be a list of strings")
 
-    # Get default configurations
-    if demo_datasets is None:
-        demo_datasets = list(benchmark_config.DATASET_CONFIG.keys())
-
-    if optimizers is None:
-        optimizers = list(benchmark_config.OPTIMIZER_CONFIGS.keys())
-
-    if models is None:
-        models = benchmark_config.MODELS
+    if task_specs is not None:
+        demo_datasets = sorted({task.dataset_name for task in task_specs})
+        optimizers = sorted({task.optimizer_name for task in task_specs})
+        models = sorted({task.model_name for task in task_specs})
+    else:
+        if demo_datasets is None:
+            demo_datasets = list(benchmark_config.DATASET_CONFIG.keys())
+        if optimizers is None:
+            optimizers = list(benchmark_config.OPTIMIZER_CONFIGS.keys())
+        if models is None:
+            models = benchmark_config.MODELS
 
     # Create unique run id
     if resume_run_id and retry_failed_run_id:
@@ -175,10 +180,23 @@ def submit_benchmark_tasks(
     all_tasks = []
     skipped_count = 0
 
-    for dataset_name in demo_datasets:
-        for optimizer_name in optimizers:
-            for model_name in models:
-                task_id = f"{dataset_name}_{optimizer_name}_{model_name}"
+    if task_specs is None:
+        tasks_iter: list[BenchmarkTaskSpec] = [
+            BenchmarkTaskSpec(
+                dataset_name=dataset,
+                optimizer_name=optimizer,
+                model_name=model,
+                test_mode=test_mode,
+            )
+            for dataset in demo_datasets
+            for optimizer in optimizers
+            for model in models
+        ]
+    else:
+        tasks_iter = task_specs
+
+    for task in tasks_iter:
+        task_id = task.task_id
 
                 # Skip logic for resume/retry
                 if retry_failed_run_id and task_id not in failed_tasks:
@@ -192,10 +210,10 @@ def submit_benchmark_tasks(
                 all_tasks.append(
                     {
                         "task_id": task_id,
-                        "dataset_name": dataset_name,
-                        "optimizer_name": optimizer_name,
-                        "model_name": model_name,
-                        "test_mode": test_mode,
+                        "dataset_name": task.dataset_name,
+                        "optimizer_name": task.optimizer_name,
+                        "model_name": task.model_name,
+                        "test_mode": task.test_mode,
                         "run_id": run_id,
                     }
                 )
@@ -219,6 +237,8 @@ def submit_benchmark_tasks(
         max_concurrent=max_concurrent,
         total_tasks=len(all_tasks),
         workspace=workspace,
+        seed=seed,
+        tasks=[task.to_dict() for task in tasks_iter] if task_specs else None,
     )
 
     # Submit all tasks asynchronously
@@ -309,6 +329,8 @@ def _save_run_metadata(
     total_tasks: int,
     max_concurrent: int = 5,
     workspace: str | None = None,
+    seed: int | None = None,
+    tasks: list[dict[str, str | bool]] | None = None,
 ) -> None:
     """Save run metadata to Modal Volume."""
     # We need to save this from within a Modal function context
@@ -325,6 +347,8 @@ def _save_run_metadata(
             "total_tasks": total_tasks,
             "timestamp": datetime.now().isoformat(),
             "workspace": workspace,
+            "seed": seed,
+            "tasks": tasks,
         },
     )
 
