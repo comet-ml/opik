@@ -18,7 +18,7 @@ def hotpot_300(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the HotpotQA dataset.
     """
-    dataset_name = "hotpot_300" if not test_mode else "hotpot_300_test"
+    dataset_name = "hotpot_300_train" if not test_mode else "hotpot_300_sample"
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()
@@ -89,9 +89,10 @@ def hotpot_train(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
+    dataset_name = "hotpot_train_sample" if test_mode else "hotpot_train"
     """Returns the 150-example training slice used in the GEPA benchmark."""
     return _hotpot_split(
-        dataset_name="hotpot_train",
+        dataset_name=dataset_name,
         source_split="train",
         start=0,
         count=150,
@@ -107,9 +108,10 @@ def hotpot_validation(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
+    dataset_name = "hotpot_validation_sample" if test_mode else "hotpot_validation"
     """Returns the 300-example validation slice used in the GEPA benchmark."""
     return _hotpot_split(
-        dataset_name="hotpot_validation",
+        dataset_name=dataset_name,
         source_split="train",
         start=150,
         count=300,
@@ -125,9 +127,10 @@ def hotpot_test(
     seed: int | None = None,
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
+    dataset_name = "hotpot_test_sample" if test_mode else "hotpot_test"
     """Returns the 300-example test slice used in the GEPA benchmark."""
     return _hotpot_split(
-        dataset_name="hotpot_test",
+        dataset_name=dataset_name,
         source_split="validation",
         start=0,
         count=300,
@@ -151,7 +154,7 @@ def hotpot_slice(
     Generic helper to create HotpotQA subsets from Hugging Face.
     """
     return _hotpot_split(
-        dataset_name=dataset_name,
+        dataset_name=f"{dataset_name}{'_sample' if test_mode else ''}",
         source_split=source_split,
         start=start,
         count=count,

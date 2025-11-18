@@ -6,9 +6,9 @@ def ragbench_sentence_relevance(test_mode: bool = False) -> opik.Dataset:
     Dataset containing the first 300 samples of the RAGBench sentence relevance dataset.
     """
     dataset_name = (
-        "ragbench_sentence_relevance"
+        "ragbench_sentence_relevance_train"
         if not test_mode
-        else "ragbench_sentence_relevance_test"
+        else "ragbench_sentence_relevance_sample"
     )
     nb_items = 300 if not test_mode else 5
 

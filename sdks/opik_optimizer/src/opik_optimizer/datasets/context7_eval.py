@@ -16,7 +16,7 @@ OpikDataset = Any
 
 DATA_PACKAGE = "opik_optimizer.data"
 DATA_FILENAME = "context7_eval.jsonl"
-DATASET_NAME = "context7_eval"
+DATASET_NAME = "context7_eval_train"
 
 
 def _load_examples() -> list[dict[str, Any]]:
