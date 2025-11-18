@@ -393,7 +393,7 @@ async def test_llama_index_async_chat__happyflow(
         ),
     ]
 
-    resp = await llm.achat(messages)
+    _ = await llm.achat(messages)
 
     opik_callback_handler.flush()
 
@@ -1136,9 +1136,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         input=None,
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "llama_index"}
-                        ),
+                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
                         usage=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -1169,9 +1167,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         input=ANY_BUT_NONE,
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "llama_index"}
-                        ),
+                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
                         usage=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -1186,9 +1182,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         input=ANY_BUT_NONE,
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "llama_index"}
-                        ),
+                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
                         usage=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -1203,9 +1197,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         input=ANY_BUT_NONE,
                         output=None,  # Templating span may not have output
                         tags=None,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "llama_index"}
-                        ),
+                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
                         usage=None,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -1220,9 +1212,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         input=ANY_BUT_NONE,
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "llama_index"}
-                        ),
+                        metadata=ANY_DICT.containing({"created_from": "llama_index"}),
                         usage=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,

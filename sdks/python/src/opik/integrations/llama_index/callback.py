@@ -228,7 +228,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         ):
             self._opik_client.span(**span_data.as_start_parameters)
 
-        parent_event_is_root_operation = parent_id == llama_index_schema.BASE_TRACE_EVENT
+        parent_event_is_root_operation = (
+            parent_id == llama_index_schema.BASE_TRACE_EVENT
+        )
         if parent_event_is_root_operation and span_input is not None:
             if self._wrapper_span_data is not None:
                 self._wrapper_span_data.update(input=span_input)
