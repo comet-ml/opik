@@ -59,8 +59,7 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
 
     # Initialize optimizer with minimal parameters for faster testing
     optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
-        model="openai/gpt-5-mini",
-        # model_parameters={"temperature": 0.1, "max_tokens": 128000},
+        model="openai/gpt-4o",
         n_threads=1,
         max_parallel_batches=2,
         batch_size=5,
