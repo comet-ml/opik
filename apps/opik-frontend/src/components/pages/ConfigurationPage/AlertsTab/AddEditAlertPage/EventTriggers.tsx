@@ -50,6 +50,32 @@ const WINDOW_OPTIONS: DropdownOption<string>[] = [
   { label: "30 days", value: "2592000" },
 ];
 
+function getThresholdLabel(eventType: ALERT_EVENT_TYPE): string {
+  switch (eventType) {
+    case ALERT_EVENT_TYPE.trace_cost:
+      return "Total cost exceeds (USD)";
+    case ALERT_EVENT_TYPE.trace_errors:
+      return "Trace errors count exceeds";
+    case ALERT_EVENT_TYPE.trace_latency:
+      return "Average latency exceeds (seconds)";
+    default:
+      return "Threshold exceeds";
+  }
+}
+
+function getThresholdPlaceholder(eventType: ALERT_EVENT_TYPE): string {
+  switch (eventType) {
+    case ALERT_EVENT_TYPE.trace_cost:
+      return "100";
+    case ALERT_EVENT_TYPE.trace_errors:
+      return "10";
+    case ALERT_EVENT_TYPE.trace_latency:
+      return "0.0";
+    default:
+      return "0";
+  }
+}
+
 const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   form,
   projectsIds,
@@ -106,9 +132,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
             return (
               <FormItem className="flex-1">
                 <Label className="comet-body-s">
-                  {eventType === ALERT_EVENT_TYPE.trace_cost
-                    ? "Total cost exceeds (USD)"
-                    : "Average latency exceeds (seconds)"}
+                  {getThresholdLabel(eventType)}
                 </Label>
                 <FormControl>
                   <Input
@@ -117,9 +141,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                     })}
                     type="number"
                     step="any"
-                    placeholder={
-                      eventType === ALERT_EVENT_TYPE.trace_cost ? "100" : "0.0"
-                    }
+                    placeholder={getThresholdPlaceholder(eventType)}
                     value={field.value as string}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
@@ -270,9 +292,10 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
               {fields.map((field, index) => {
                 const config = TRIGGER_CONFIG[field.eventType];
                 const isLastItem = index === fields.length - 1;
-                const isCostOrLatencyTrigger =
+                const isThresholdTrigger =
                   field.eventType === ALERT_EVENT_TYPE.trace_cost ||
-                  field.eventType === ALERT_EVENT_TYPE.trace_latency;
+                  field.eventType === ALERT_EVENT_TYPE.trace_latency ||
+                  field.eventType === ALERT_EVENT_TYPE.trace_errors;
 
                 return (
                   <div key={field.id}>
@@ -307,7 +330,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                             />
                           )}
                         </div>
-                        {isCostOrLatencyTrigger &&
+                        {isThresholdTrigger &&
                           renderThresholdConfig(index, field.eventType)}
                       </div>
                       <div className="flex items-center">

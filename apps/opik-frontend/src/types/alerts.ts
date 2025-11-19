@@ -16,6 +16,7 @@ export enum ALERT_TRIGGER_CONFIG_TYPE {
   "threshold:feedback_score" = "threshold:feedback_score",
   "threshold:cost" = "threshold:cost",
   "threshold:latency" = "threshold:latency",
+  "threshold:errors" = "threshold:errors",
 }
 
 export enum ALERT_TYPE {

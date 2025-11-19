@@ -13,7 +13,8 @@ public enum AlertTriggerConfigType {
     SCOPE_PROJECT("scope:project"),
     THRESHOLD_FEEDBACK_SCORE("threshold:feedback_score"),
     THRESHOLD_COST("threshold:cost"),
-    THRESHOLD_LATENCY("threshold:latency");
+    THRESHOLD_LATENCY("threshold:latency"),
+    THRESHOLD_ERRORS("threshold:errors");
 
     @JsonValue
     private final String value;

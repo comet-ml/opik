@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
@@ -96,38 +97,15 @@ class AlertServiceImpl implements AlertService {
     private final static EnumMap<AlertEventType, String> TEST_PAYLOAD = new EnumMap<>(Map.of(
             AlertEventType.TRACE_ERRORS,
             """
-                    [
-                        {
-                          "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
-                          "name": "handle_query",
-                          "project_id": "0198ec68-6e06-7253-a20b-d35c9252b9ba",
-                          "project_name": "Demo Project",
-                          "start_time": "2025-08-27T17:06:36.740824Z",
-                          "end_time": "2025-08-27T17:06:41.039345Z",
-                          "input": {
-                            "query": "Who is our main contact at greenleaf tech?",
-                            "messages": [
-                              {
-                                "role": "user",
-                                "content": "Who is our main contact at greenleaf tech?"
-                              }
-                            ]
-                          },
-                          "output": {
-                            "response": "Your main contact at Greenleaf Tech is Jessica Lau, who serves as the Head of IT Procurement."
-                          },
-                          "error_info": {
-                            "exception_type": "ValidationException",
-                            "message": "Failed to validate contact information",
-                            "traceback": "Traceback (most recent call last):\\n  File \\"app.py\\", line 42, in handle_query\\n    validate_contact(contact)\\n  ValidationException: Failed to validate contact information"
-                          },
-                          "metadata": {
-                            "customer_id": "customer_123",
-                            "tool_call": "contact"
-                          },
-                          "tags": ["production", "contact-query"]
-                        }
-                    ]
+                    {
+                      "event_type": "TRACE_ERRORS",
+                      "metric_name": "trace:errors",
+                      "metric_value": "15",
+                      "threshold": "10",
+                      "window_seconds": "3600",
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
+                    }
                     """,
             AlertEventType.TRACE_FEEDBACK_SCORE,
             """
@@ -251,7 +229,8 @@ class AlertServiceImpl implements AlertService {
                       "metric_value": "150.75",
                       "threshold": "100.00",
                       "window_seconds": "3600",
-                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb"
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
                     }
                     """,
             AlertEventType.TRACE_LATENCY,
@@ -262,7 +241,8 @@ class AlertServiceImpl implements AlertService {
                       "metric_value": "5250.5000",
                       "threshold": "5",
                       "window_seconds": "1800",
-                      "project_ids": ""
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
                     }
                     """));
 
@@ -365,7 +345,7 @@ class AlertServiceImpl implements AlertService {
 
             Set<String> eventTypeValues = eventTypes.stream()
                     .map(AlertEventType::getValue)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
 
             return alertDAO.findByWorkspaceAndEventTypes(workspaceId, eventTypeValues);
         });

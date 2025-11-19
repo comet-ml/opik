@@ -14,10 +14,11 @@ export const TriggerSchema = z
     window: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    // Validate threshold for cost and latency triggers
+    // Validate threshold for cost, latency, and errors triggers
     if (
       data.eventType === ALERT_EVENT_TYPE.trace_cost ||
-      data.eventType === ALERT_EVENT_TYPE.trace_latency
+      data.eventType === ALERT_EVENT_TYPE.trace_latency ||
+      data.eventType === ALERT_EVENT_TYPE.trace_errors
     ) {
       if (!data.threshold || data.threshold.trim() === "") {
         ctx.addIssue({

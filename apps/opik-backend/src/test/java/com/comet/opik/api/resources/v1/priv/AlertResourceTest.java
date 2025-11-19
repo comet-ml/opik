@@ -20,6 +20,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.filter.AlertField;
 import com.comet.opik.api.filter.AlertFilter;
@@ -49,6 +50,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -76,6 +78,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -92,6 +95,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -108,7 +112,6 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
@@ -1435,85 +1438,28 @@ class AlertResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("traceErrorsProjectScopeProvider")
-        @DisplayName("when single trace with error is created, then webhook is called based on project scope")
-        void whenSingleTraceWithErrorIsCreated_thenWebhookIsCalledBasedOnProjectScope(
-                Function<UUID, AlertTrigger> getAlertTrigger) {
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when trace errors exceed threshold, then error alert webhook is called")
+        void whenTraceErrorsExceedThreshold_thenErrorAlertWebhookIsCalled(boolean isProjectScoped) {
             var mock = prepareMockWorkspace();
 
             // Create a project
             String projectName = RandomStringUtils.randomAlphabetic(10);
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
-            // Create an alert with or without project scope configuration
-            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
-                    HttpStatus.SC_CREATED);
+            // Create an alert with error threshold configuration
+            // Threshold: 2 errors, Window: 60 seconds
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_ERRORS,
+                    AlertTriggerConfigType.THRESHOLD_ERRORS,
+                    isProjectScoped ? projectId : null, "2", "60");
 
-            // Create a trace with error
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .usage(null)
-                    .visibilityMode(null)
-                    .build();
-            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
-
-            // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload(alert);
-            List<Trace> traces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
-
-            assertThat(traces).hasSize(1);
-            Trace actualTrace = traces.getFirst();
-
-            assertThat(actualTrace)
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
-                                    .build())
-                    .isEqualTo(trace);
-
-            assertThat(actualTrace.projectName()).isEqualTo(projectName);
-            assertThat(actualTrace.projectId()).isEqualTo(projectId);
-        }
-
-        static Stream<Arguments> traceErrorsProjectScopeProvider() {
-            return Stream.of(
-                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
-                            .eventType(AlertEventType.TRACE_ERRORS)
-                            .build()),
-                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
-                            .eventType(AlertEventType.TRACE_ERRORS)
-                            .triggerConfigs(List.of(
-                                    AlertTriggerConfig.builder()
-                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
-                                            .configValue(Map.of(
-                                                    PROJECT_IDS_CONFIG_KEY,
-                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
-                                            .build()))
-                            .build()));
-        }
-
-        @Test
-        @DisplayName("when batch of traces with errors is created, then webhook is called")
-        void whenBatchOfTracesWithErrorsIsCreated_thenWebhookIsCalled() {
-            var mock = prepareMockWorkspace();
-
-            // Create a project
-            String projectName = RandomStringUtils.randomAlphabetic(10);
-            var projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
-
-            // Create an alert for trace errors
-            var alertTrigger = AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_ERRORS)
-                    .build();
             var alert = createAlertForEvent(alertTrigger);
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
 
-            // Create a batch of traces with errors
-            List<Trace> tracesWithErrors = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .map(trace -> trace.toBuilder()
+            // Create traces with errors that exceed the threshold (3 > 2)
+            List<Trace> tracesWithErrors = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .visibilityMode(null)
@@ -1522,24 +1468,21 @@ class AlertResourceTest {
 
             traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
 
-            // Wait for webhook call and verify
+            // Wait for MetricsAlertJob to run and verify webhook was called
             var payload = verifyWebhookCalledAndGetPayload(alert);
-            List<Trace> actualTraces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
 
-            assertThat(actualTraces).hasSize(tracesWithErrors.size());
+            // Verify payload contains error metrics information
+            MetricsAlertPayload errorPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            actualTraces.forEach(actualTrace -> {
-                assertThat(actualTrace.projectName()).isEqualTo(projectName);
-                assertThat(actualTrace.projectId()).isEqualTo(projectId);
-            });
+            verifyMetricsPayload(errorPayload, "TRACE_ERRORS", "3", "2", "60", isProjectScoped ? projectId : null,
+                    isProjectScoped ? projectName : null);
 
-            assertThat(actualTraces)
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
-                                    .build())
-                    .ignoringCollectionOrder()
-                    .isEqualTo(tracesWithErrors);
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
@@ -1702,9 +1645,9 @@ class AlertResourceTest {
 
             // Verify payload contains cost metrics information
             @SuppressWarnings("unchecked")
-            Map<String, String> costPayload = JsonUtils.readValue(payload, Map.class);
+            MetricsAlertPayload costPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId);
+            verifyMetricsPayload(costPayload, "TRACE_COST", "60", "50", "60", projectId, projectName);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1750,9 +1693,9 @@ class AlertResourceTest {
 
             // Verify payload contains latency metrics information
             @SuppressWarnings("unchecked")
-            Map<String, String> latencyPayload = JsonUtils.readValue(payload, Map.class);
+            MetricsAlertPayload latencyPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3.0", "2", "60", projectId);
+            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3", "2", "60", projectId, projectName);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1762,30 +1705,15 @@ class AlertResourceTest {
                     HttpStatus.SC_NO_CONTENT);
         }
 
-        private void verifyMetricsPayload(Map<String, String> payload, String eventType, String metricValue,
-                String threshold, String windowSeconds, UUID projectId) {
-            assertThat(payload).containsEntry("event_type", eventType);
+        private void verifyMetricsPayload(MetricsAlertPayload payload, String eventType, String metricValue,
+                String threshold, String windowSeconds, UUID projectId, String projectName) {
+            assertThat(payload.eventType()).isEqualTo(eventType);
 
-            // Handle numeric values from JSON deserialization
-            Object metricValueObj = payload.get("metric_value");
-            BigDecimal actualMetricValue = metricValueObj instanceof Number
-                    ? BigDecimal.valueOf(((Number) metricValueObj).doubleValue())
-                    : new BigDecimal(metricValueObj.toString());
-            assertThat(actualMetricValue.compareTo(new BigDecimal(metricValue))).isZero();
-
-            Object thresholdObj = payload.get("threshold");
-            BigDecimal actualThreshold = thresholdObj instanceof Number
-                    ? BigDecimal.valueOf(((Number) thresholdObj).doubleValue())
-                    : new BigDecimal(thresholdObj.toString());
-            assertThat(actualThreshold.compareTo(new BigDecimal(threshold))).isZero();
-
-            Object windowObj = payload.get("window_seconds");
-            long actualWindow = windowObj instanceof Number
-                    ? ((Number) windowObj).longValue()
-                    : Long.parseLong(windowObj.toString());
-            assertThat(actualWindow).isEqualTo(Long.parseLong(windowSeconds));
-
-            assertThat(payload.get("project_ids").toString()).contains(projectId.toString());
+            assertThat(payload.metricValue()).isEqualTo(metricValue);
+            assertThat(payload.threshold()).isEqualTo(threshold);
+            assertThat(payload.windowSeconds()).isEqualTo(Long.parseLong(windowSeconds));
+            assertThat(payload.projectIds()).isEqualTo(Optional.ofNullable(projectId).map(UUID::toString).orElse(""));
+            assertThat(payload.projectNames()).isEqualTo(Optional.ofNullable(projectName).orElse(""));
         }
 
         private String verifyWebhookCalledAndGetPayload(Alert alert) {
@@ -2076,8 +2004,8 @@ class AlertResourceTest {
 
         @ParameterizedTest
         @MethodSource("alertTypeProvider")
-        @DisplayName("Success: should send webhook formatted trace errors event")
-        void testTraceErrorsEvent(AlertType alertType) {
+        @DisplayName("Success: should send error alert webhook when traces exceed error threshold")
+        void testErrorAlertEvent__whenTracesExceedThreshold__thenWebhookCalled(AlertType alertType) {
             // Given
             var mock = prepareMockWorkspace();
 
@@ -2085,18 +2013,19 @@ class AlertResourceTest {
             String projectName = RandomStringUtils.randomAlphabetic(10);
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
-            // Create alert with webhook
-            var alert = createAlertForEvent(AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_ERRORS)
-                    .build(), alertType);
+            // Create alert with error threshold configuration
+            // Threshold: 2 errors, Window: 60 seconds
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_ERRORS,
+                    AlertTriggerConfigType.THRESHOLD_ERRORS,
+                    projectId, "2", "60");
 
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var alert = createAlertForEvent(alertTrigger, alertType);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
 
-            // Create traces with errors
-            List<Trace> tracesWithErrors = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .limit(3)
-                    .map(trace -> trace.toBuilder()
+            // Create traces with errors that exceed the threshold (3 > 2)
+            List<Trace> tracesWithErrors = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .visibilityMode(null)
@@ -2105,15 +2034,16 @@ class AlertResourceTest {
 
             traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
 
-            // Construct expected URLs
-            var expectedDetails = new ArrayList<String>();
-            expectedDetails.add("*Traces with Errors:*\n");
-            tracesWithErrors.forEach(trace -> {
-                String expectedUrl = String.format(BASE_URL + "/%s/projects/%s/traces?trace=%s",
-                        mock.getRight(), projectId, trace.id());
-                expectedDetails.add(expectedUrl);
-            });
-            verifyPayload(alertType, 1, "Trace Errors", expectedDetails);
+            // Verify webhook was called and payload is properly formatted
+            verifyPayload(alertType, 1, "Trace Error Alert",
+                    List.of("Trace Errors Alert Triggered", "Current Trace Errors", "Threshold", "Time Window"));
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
@@ -2322,47 +2252,6 @@ class AlertResourceTest {
 
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Experiment Finished", expectedDetails);
-        }
-
-        @Test
-        @DisplayName("Success: should send webhook with fallback block when trace errors exceed Slack text limit")
-        void testTraceErrorsEventWithFallback() {
-            // Given
-            var mock = prepareMockWorkspace();
-
-            // Create a project
-            String projectName = RandomStringUtils.randomAlphabetic(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
-
-            // Create alert with webhook for Slack only
-            var alert = createAlertForEvent(AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_ERRORS)
-                    .build(), AlertType.SLACK);
-
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
-
-            // Create many traces with errors to exceed Slack's 3000 character limit
-            // Each trace URL is ~150 characters, so we need ~20 traces to exceed the limit
-            List<Trace> tracesWithErrors = IntStream.range(0, 25)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .usage(null)
-                            .visibilityMode(null)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
-
-            // Verify webhook was called
-            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
-
-            String url = BASE_URL + "/" + mock.getRight() + "/projects";
-            String fallbackText = String.format(
-                    "Overall %d Traces with errors created, you could check them here: <%s|View All>",
-                    tracesWithErrors.size(), url);
-
-            // Verify Slack payload has fallback block due to text truncation
-            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
 
         @Test
@@ -2832,10 +2721,9 @@ class AlertResourceTest {
                     // rather than AlertJob, so we normalize them to TRACE_ERRORS for consistent test validation
                     return trigger.toBuilder()
                             .triggerConfigs(configs)
-                            .eventType(trigger.eventType() == AlertEventType.TRACE_COST
-                                    || trigger.eventType() == AlertEventType.TRACE_LATENCY
-                                            ? AlertEventType.TRACE_ERRORS
-                                            : trigger.eventType())
+                            .eventType(MetricsAlertJob.SUPPORTED_EVENT_TYPES.contains(trigger.eventType())
+                                    ? PROMPT_CREATED
+                                    : trigger.eventType())
                             .createdBy(null)
                             .createdAt(null)
                             .build();
@@ -2921,21 +2809,24 @@ class AlertResourceTest {
 
     private static AlertTrigger triggerWithThreshold(AlertEventType eventType, AlertTriggerConfigType configType,
             UUID projectId, String threshold, String window) {
+        List<AlertTriggerConfig> triggerConfigs = new ArrayList<>();
+        triggerConfigs.add(AlertTriggerConfig.builder()
+                .type(configType)
+                .configValue(Map.of(
+                        THRESHOLD_CONFIG_KEY, threshold,
+                        WINDOW_CONFIG_KEY, window))
+                .build());
+        if (projectId != null) {
+            triggerConfigs.add(AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(
+                            PROJECT_IDS_CONFIG_KEY,
+                            JsonUtils.writeValueAsString(Set.of(projectId))))
+                    .build());
+        }
         return AlertTrigger.builder()
                 .eventType(eventType)
-                .triggerConfigs(List.of(
-                        AlertTriggerConfig.builder()
-                                .type(configType)
-                                .configValue(Map.of(
-                                        THRESHOLD_CONFIG_KEY, threshold,
-                                        WINDOW_CONFIG_KEY, window))
-                                .build(),
-                        AlertTriggerConfig.builder()
-                                .type(AlertTriggerConfigType.SCOPE_PROJECT)
-                                .configValue(Map.of(
-                                        PROJECT_IDS_CONFIG_KEY,
-                                        JsonUtils.writeValueAsString(Set.of(projectId))))
-                                .build()))
+                .triggerConfigs(triggerConfigs)
                 .build();
     }
 }
