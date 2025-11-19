@@ -46,7 +46,7 @@ spec:
       {{- end }}
       {{- if or $value.initContainers $value.waitForClickhouse $value.waitForMysql $value.run_migration }}
       initContainers:
-      {{- if and (eq $key "backend") $value.waitForMysql }}
+      {{- if and (eq $key "backend") $value.waitForMysql.enabled }}
         - name: wait-for-mysql-service
           image: "{{ default $.Values.registry $value.waitForMysql.image.registry }}/{{ $value.waitForMysql.image.repository }}:{{ $value.waitForMysql.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForMysql.image.pullPolicy }}
