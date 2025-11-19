@@ -7,8 +7,10 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
@@ -4135,6 +4137,143 @@ class DatasetsResourceTest {
             // Verify all tags were cleared
             var patchedItem = datasetResourceClient.getDatasetItem(originalItem.id(), API_KEY, TEST_WORKSPACE);
             assertThat(patchedItem.tags()).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch update dataset items:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchUpdateDatasetItems {
+
+        @Test
+        @DisplayName("Success: batch add tags with merge")
+        void batchUpdateDatasetItems__whenAddingTagsWithMerge__thenSucceed() {
+            // Create items with different initial tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("existing1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("existing2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of())
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("existing1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("existing2");
+            assertThat(retrieved3.tags()).isEmpty();
+
+            // Batch add tags with merge
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(item1.id(), item2.id(), item3.id()))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("newtag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were merged
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("existing1", "newtag");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("existing2", "newtag");
+            assertThat(updated3.tags()).containsExactlyInAnyOrder("newtag");
+        }
+
+        @Test
+        @DisplayName("Success: batch replace tags without merge")
+        void batchUpdateDatasetItems__whenReplacingTagsWithoutMerge__thenSucceed() {
+            // Create items with initial tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("old1", "old2"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("old3", "old4"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("old1", "old2");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("old3", "old4");
+
+            // Batch replace tags without merge
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(item1.id(), item2.id()))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("new1", "new2"))
+                            .build())
+                    .mergeTags(false)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were replaced
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("new1", "new2");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("new1", "new2");
+        }
+
+        @Test
+        @DisplayName("Error: batch update with empty ids")
+        void batchUpdateDatasetItems__whenEmptyIds__thenBadRequest() {
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of())
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: batch update exceeds max size")
+        void batchUpdateDatasetItems__whenExceedsMaxSize__thenBadRequest() {
+            // Create more than 1000 IDs
+            var tooManyIds = new java.util.HashSet<UUID>();
+            for (int i = 0; i < 1001; i++) {
+                tooManyIds.add(UUID.randomUUID());
+            }
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(tooManyIds)
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
         }
     }
 

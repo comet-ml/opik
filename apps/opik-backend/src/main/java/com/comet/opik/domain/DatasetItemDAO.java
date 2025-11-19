@@ -822,17 +822,21 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String BULK_UPDATE = """
             INSERT INTO dataset_items
             SELECT
-                s.id,
+                s.workspace_id,
                 s.dataset_id,
                 s.source,
                 s.trace_id,
                 s.span_id,
-                <if(data)> :data <else> s.data <endif> as data,
-                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags,
+                s.id,
+                s.input,
+                s.expected_output,
+                s.metadata,
                 s.created_at,
-                s.workspace_id,
+                now64(9) as last_updated_at,
                 s.created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                <if(data)> :data <else> s.data <endif> as data,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
             FROM dataset_items s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
             ORDER BY (s.workspace_id, s.dataset_id, s.id) DESC, s.last_updated_at DESC
