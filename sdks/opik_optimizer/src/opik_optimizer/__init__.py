@@ -9,6 +9,7 @@ from .api_objects.chat_prompt import ChatPrompt
 from .base_optimizer import BaseOptimizer
 from .algorithms import (
     GepaOptimizer,
+    GepaOptimizerAdapter,
     MetaPromptOptimizer,
     EvolutionaryOptimizer,
     HierarchicalReflectiveOptimizer,
@@ -36,6 +37,7 @@ __all__ = [
     "ChatPrompt",
     "FewShotBayesianOptimizer",
     "GepaOptimizer",
+    "GepaOptimizerAdapter",
     "MetaPromptOptimizer",
     "EvolutionaryOptimizer",
     "HierarchicalReflectiveOptimizer",

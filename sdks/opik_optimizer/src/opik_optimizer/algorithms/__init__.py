@@ -1,4 +1,5 @@
 from .gepa_optimizer import GepaOptimizer
+from .gepa_optimizer_adapter import GepaOptimizerAdapter
 from .meta_prompt_optimizer import MetaPromptOptimizer
 from .evolutionary_optimizer import EvolutionaryOptimizer
 from .hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
@@ -7,6 +8,7 @@ from .parameter_optimizer import ParameterOptimizer
 
 __all__ = [
     "GepaOptimizer",
+    "GepaOptimizerAdapter",
     "MetaPromptOptimizer",
     "EvolutionaryOptimizer",
     "HierarchicalReflectiveOptimizer",
