@@ -84,7 +84,6 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/lib/experiments";
 import { formatDuration } from "@/lib/date";
-import { formatCost } from "@/lib/money";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -476,7 +475,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Estimated cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell.Compare as never,
-        statisticDataFormater: formatCost,
         customMeta: {
           experimentsIds,
           accessor: "total_estimated_cost",
