@@ -21,5 +21,6 @@ public record MetricsAlertPayload(
         @NonNull BigDecimal metricValue,
         @NonNull BigDecimal threshold,
         long windowSeconds,
-        String projectIds) {
+        String projectIds,
+        String projectNames) {
 }
