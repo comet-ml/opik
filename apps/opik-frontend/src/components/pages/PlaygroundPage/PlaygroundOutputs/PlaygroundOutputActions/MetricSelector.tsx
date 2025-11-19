@@ -247,7 +247,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                           href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 hover:underline"
+                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="size-3.5 shrink-0" />
