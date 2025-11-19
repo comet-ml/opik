@@ -490,7 +490,11 @@ export const addAllParentIds = (
   };
 
   searchIds.forEach((id) => {
-    ensureParent(id);
+    const data = dataMap.get(id);
+    const parentId = get(data, "parent_span_id");
+    if (parentId) {
+      ensureParent(parentId);
+    }
   });
 
   return parentIds;
