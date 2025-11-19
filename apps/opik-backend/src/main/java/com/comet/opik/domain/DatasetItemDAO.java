@@ -857,48 +857,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
                 <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
-            FROM dataset_items s
-            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
-            LIMIT 1 BY s.id;
-            """;
-
-    private static final String BULK_UPDATE_BY_FILTERS = """
-            INSERT INTO dataset_items (
-                workspace_id,
-                dataset_id,
-                source,
-                trace_id,
-                span_id,
-                id,
-                input,
-                expected_output,
-                metadata,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                data,
-                tags
-            )
-            SELECT
-                s.workspace_id,
-                s.dataset_id,
-                s.source,
-                s.trace_id,
-                s.span_id,
-                s.id,
-                <if(input)> :input <else> s.input <endif> as input,
-                <if(expected_output)> :expected_output <else> s.expected_output <endif> as expected_output,
-                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
-                s.created_at,
-                now64(9) as last_updated_at,
-                s.created_by,
-                :user_name as last_updated_by,
-                <if(data)> :data <else> s.data <endif> as data,
-                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
-            FROM dataset_items s
-            WHERE s.workspace_id = :workspace_id
+            FROM dataset_items AS s FINAL
+            WHERE <if(ids)>s.id IN :ids AND <endif>s.workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
@@ -1539,6 +1499,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Bulk updating '{}' dataset items", ids.size());
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        template.add("ids", true); // Add flag to indicate we're using IDs
         var query = template.render();
 
         return asyncTemplate.nonTransaction(connection -> {
@@ -1596,19 +1557,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(filters), "filters must not be empty");
         log.info("Bulk updating dataset items by filters");
 
-        var template = newBulkUpdateTemplate(update, BULK_UPDATE_BY_FILTERS, mergeTags);
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
 
         // Add filters to template
-        var analyticsDbFilters = filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
-        if (analyticsDbFilters.isPresent()) {
-            log.info("Generated filter SQL: {}", analyticsDbFilters.get());
-            template.add("dataset_item_filters", analyticsDbFilters.get());
-        } else {
-            log.warn("No filters were generated from the provided filters");
-        }
+        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
 
         var query = template.render();
-        log.info("Generated SQL query: {}", query);
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(query);
