@@ -149,8 +149,11 @@ const PlaygroundOutputActions = ({
     return datasets.map((ds) => ({
       label: ds.name,
       value: ds.id,
+      action: {
+        href: `/${workspaceName}/datasets/${ds.id}`,
+      },
     }));
-  }, [datasets]);
+  }, [datasets, workspaceName]);
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
