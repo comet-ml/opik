@@ -113,7 +113,7 @@ def test_langchain__google_genai_llm_is_used__token_usage_is_logged__happy_flow(
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
+    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
     google_helpers.assert_usage_validity(llm_call_span.usage)
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
