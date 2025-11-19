@@ -85,15 +85,14 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   return (
     <div className="flex items-center gap-2">
-      {type === TRACE_DATA_TYPE.traces && (
-        <BatchAnnotateDialog
-          key={`annotate-${resetKeyRef.current}`}
-          rows={selectedRows as Trace[]}
-          open={open === 1}
-          setOpen={setOpen}
-          projectId={projectId}
-        />
-      )}
+      <BatchAnnotateDialog
+        key={`annotate-${resetKeyRef.current}`}
+        rows={selectedRows}
+        type={type}
+        open={open === 1}
+        setOpen={setOpen}
+        projectId={projectId}
+      />
       <BatchCommentDialog
         key={`comment-${resetKeyRef.current}`}
         rows={selectedRows}
@@ -136,38 +135,34 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
-      {type === TRACE_DATA_TYPE.traces && (
-        <TooltipWrapper content="Annotate">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            disabled={disabled}
-          >
-            <PencilLine className="mr-2 size-4" />
-            Annotate
-          </Button>
-        </TooltipWrapper>
-      )}
-      {type === TRACE_DATA_TYPE.traces && (
-        <TooltipWrapper content="Comment">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setOpen(5);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            disabled={disabled}
-          >
-            <MessageSquarePlus className="mr-2 size-4" />
-            Comment
-          </Button>
-        </TooltipWrapper>
-      )}
+      <TooltipWrapper content="Annotate">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(1);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <PencilLine className="mr-2 size-4" />
+          Annotate
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Comment">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(5);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <MessageSquarePlus className="mr-2 size-4" />
+          Comment
+        </Button>
+      </TooltipWrapper>
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
