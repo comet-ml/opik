@@ -121,6 +121,12 @@ const useActionButtonActions = ({
           queryKey: [PROJECTS_KEY],
         });
       },
+      onExperimentItemsComplete: () => {
+        // Invalidate experiments to refresh the experiments list
+        queryClient.invalidateQueries({
+          queryKey: ["experiments"],
+        });
+      },
     };
   }, [
     queryClient,
@@ -168,6 +174,9 @@ const useActionButtonActions = ({
       async (combination: DatasetItemPromptCombination) =>
         processCombination(combination, logProcessor),
       () => {
+        // Signal that all logs have been sent
+        logProcessor.finishLogging();
+
         setIsRunning(false);
         isToStopRef.current = false;
         abortControllersRef.current.clear();
