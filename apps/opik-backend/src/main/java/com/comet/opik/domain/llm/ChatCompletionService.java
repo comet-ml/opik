@@ -167,7 +167,15 @@ public class ChatCompletionService {
                 }
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-                var errorMessage = new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+                // Build detailed error message including the underlying exception
+                String detailedMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+                String exceptionDetails = extractErrorDetails(throwable);
+                if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
+                    detailedMessage = detailedMessage + ": " + exceptionDetails;
+                }
+
+                var errorMessage = new ErrorMessage(detailedMessage);
                 handlers.handleError(errorMessage);
             }
         };
