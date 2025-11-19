@@ -225,7 +225,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               {filteredRules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                  className="group flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                   onClick={() => handleSelect(rule.id)}
                 >
                   <Checkbox
@@ -237,15 +237,22 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   </div>
                   <div className="flex shrink-0 items-center justify-center rounded">
                     <TooltipWrapper content="Open in a new tab">
-                      <a
-                        href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-light-slate hover:underline"
-                        onClick={(e) => e.stopPropagation()}
+                      <Button
+                        type="button"
+                        variant="minimal"
+                        size="icon-xs"
+                        asChild
                       >
-                        <ExternalLink className="size-3.5 shrink-0" />
-                      </a>
+                        <a
+                          href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="size-3.5 shrink-0" />
+                        </a>
+                      </Button>
                     </TooltipWrapper>
                   </div>
                 </div>
