@@ -484,14 +484,27 @@ export const getVisibleIdsForMatches = (
 ): Set<string> => {
   const visibleIds = new Set<string>();
 
+  console.log('=== DEBUG: getVisibleIdsForMatches ===');
+  console.log('Matched IDs:', Array.from(matchedIds));
+  console.log('DataMap entries:', Array.from(dataMap.entries()).map(([id, data]) => ({
+    id,
+    name: (data as any).name,
+    type: (data as any).type,
+    parent_span_id: get(data, "parent_span_id"),
+  })));
+
   // Add all matched IDs
-  matchedIds.forEach((id) => visibleIds.add(id));
+  matchedIds.forEach((id) => {
+    console.log('Adding matched ID:', id);
+    visibleIds.add(id);
+  });
 
   // For each matched span, add all its ancestors
   const addAncestors = (id: string): void => {
     const data = dataMap.get(id);
     const parentId = get(data, "parent_span_id");
     if (parentId && !visibleIds.has(parentId)) {
+      console.log(`Adding ancestor ${parentId} (parent of ${id})`);
       visibleIds.add(parentId);
       addAncestors(parentId);
     }
@@ -504,6 +517,7 @@ export const getVisibleIdsForMatches = (
     dataMap.forEach((data, id) => {
       const dataParentId = get(data, "parent_span_id");
       if (dataParentId === parentId && !visibleIds.has(id)) {
+        console.log(`Adding descendant ${id} (child of ${parentId})`);
         visibleIds.add(id);
         addDescendants(id);
       }
@@ -511,6 +525,9 @@ export const getVisibleIdsForMatches = (
   };
 
   matchedIds.forEach((id) => addDescendants(id));
+
+  console.log('Final visible IDs:', Array.from(visibleIds));
+  console.log('=== END DEBUG ===');
 
   return visibleIds;
 };
