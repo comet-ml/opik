@@ -476,7 +476,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Estimated cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell.Compare as never,
-        statisticDataFormater: formatCost,
         customMeta: {
           experimentsIds,
           accessor: "total_estimated_cost",
