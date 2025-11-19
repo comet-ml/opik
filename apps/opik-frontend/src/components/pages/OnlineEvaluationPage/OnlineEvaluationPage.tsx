@@ -235,14 +235,13 @@ export const OnlineEvaluationPage: React.FC = () => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  const handleEditRule = useCallback((rule: EvaluatorsRule) => {
-    setEditingRule(rule);
-  }, []);
-
-  const handleOpenEditDialog = useCallback((ruleId: string) => {
-    setEditRuleId(ruleId);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
+  const handleOpenEditDialog = useCallback(
+    (ruleId: string) => {
+      setEditRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setEditRuleId],
+  );
 
   // handle opening edit dialog from query parameter
   useEffect(() => {
@@ -297,13 +296,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         ),
       }),
     ];
-  }, [
-    columnsOrder,
-    selectedColumns,
-    sortableBy,
-    handleOpenEditDialog,
-    handleEditRule,
-  ]);
+  }, [columnsOrder, selectedColumns, sortableBy, handleOpenEditDialog]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -328,15 +321,18 @@ export const OnlineEvaluationPage: React.FC = () => {
     setEditingRule(undefined);
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
+  }, [setEditingRule]);
 
-  const handleCloseDialog = useCallback((open: boolean) => {
-    setOpenDialog(open);
-    if (!open) {
-      setEditRuleId(undefined);
-      setEditingRule(undefined);
-    }
-  }, []);
+  const handleCloseDialog = useCallback(
+    (open: boolean) => {
+      setOpenDialog(open);
+      if (!open) {
+        setEditRuleId(undefined);
+        setEditingRule(undefined);
+      }
+    },
+    [setEditRuleId, setEditingRule],
+  );
 
   // Filter out "type" (Scope), "enabled" (Status), and "sampling_rate" from filter options
   const filterableColumns = useMemo(

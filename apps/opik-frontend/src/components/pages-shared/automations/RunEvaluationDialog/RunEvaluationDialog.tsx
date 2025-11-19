@@ -304,12 +304,14 @@ const RunEvaluationDialog: React.FunctionComponent<
               selected {entityLabel}. Each rule will generate new scores based
               on its configuration.
             </p>
-            {rules.length !== 0 &&<div className="mb-4 flex justify-end">
-              <Button variant="outline" size="sm" onClick={handleCreateRule}>
-                <Plus className="mr-1 size-4" />
-                Create a new rule
-              </Button>
-            </div>}
+            {rules.length !== 0 && (
+              <div className="mb-4 flex justify-end">
+                <Button variant="outline" size="sm" onClick={handleCreateRule}>
+                  <Plus className="mr-1 size-4" />
+                  Create a new rule
+                </Button>
+              </div>
+            )}
             <div className="my-4 flex max-h-[500px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderRulesList()}
             </div>

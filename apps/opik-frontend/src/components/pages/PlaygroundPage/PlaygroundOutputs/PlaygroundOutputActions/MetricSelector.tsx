@@ -235,13 +235,14 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="comet-body-s truncate">{rule.name}</div>
                   </div>
-                  <div className="flex shrink-0 items-center justify-center rounded hover:bg-primary-foreground-hover">
+                  {/* rounded */}
+                  <div className="flex shrink-0 items-center justify-center rounded">
                     <TooltipWrapper content="Open in a new tab">
                       <a
                         href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-light-slate hover:underline "
+                        className="inline-flex items-center gap-1 text-light-slate hover:underline"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <ExternalLink className="size-3.5 shrink-0" />

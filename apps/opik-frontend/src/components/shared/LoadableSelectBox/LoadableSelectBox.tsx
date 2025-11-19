@@ -327,7 +327,7 @@ export const LoadableSelectBox = ({
                           href={option.action.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-light-slate hover:underline "
+                          className="inline-flex items-center gap-1 text-light-slate"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="size-3.5 shrink-0" />

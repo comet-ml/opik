@@ -196,7 +196,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const selectedRows: EvaluatorsRule[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
-  
 
   // handle opening edit dialog from query parameter
   useEffect(() => {
@@ -216,10 +215,13 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     }
   }, [editRuleId, rows, editingRule?.id, isPending]);
 
-  const handleOpenEditDialog = useCallback((ruleId: string) => {
-    setEditRuleId(ruleId);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, [setEditRuleId]);
+  const handleOpenEditDialog = useCallback(
+    (ruleId: string) => {
+      setEditRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setEditRuleId],
+  );
 
   const columns = useMemo(() => {
     return [
@@ -271,13 +273,16 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const handleCloseDialog = useCallback((open: boolean) => {
-    setOpenDialog(open);
-    if (!open) {
-      setEditRuleId(undefined);
-      setEditingRule(undefined);
-    }
-  }, [setEditRuleId]);
+  const handleCloseDialog = useCallback(
+    (open: boolean) => {
+      setOpenDialog(open);
+      if (!open) {
+        setEditRuleId(undefined);
+        setEditingRule(undefined);
+      }
+    },
+    [setEditRuleId],
+  );
 
   if (isPending) {
     return <Loader />;

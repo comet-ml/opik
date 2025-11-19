@@ -9,7 +9,6 @@ import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { EvaluatorsRule } from "@/types/automations";
 import { CellContext } from "@tanstack/react-table";
-import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
@@ -18,9 +17,9 @@ interface RuleRowActionsCellProps {
   openEditDialog: (ruleId: string) => void;
 }
 
-const RuleRowActionsCell: React.FC<RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>> = (
-  { openEditDialog, row, column, table },
-) => {
+const RuleRowActionsCell: React.FC<
+  RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>
+> = ({ openEditDialog, row, column, table }) => {
   const resetKeyRef = useRef(0);
   const rule = row.original;
   const [open, setOpen] = useState<boolean | number>(false);
