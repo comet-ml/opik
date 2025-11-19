@@ -59,6 +59,7 @@ import {
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -215,7 +216,7 @@ const DatasetItemsPage = () => {
     return (data?.columns ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: c.name,
+        id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
         label: c.name,
         columnType: mapDynamicColumnTypesToColumnType(c.types),
       }));
