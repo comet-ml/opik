@@ -776,6 +776,9 @@ navigation:
           - page: Anonymous usage statistics
             path: docs/self-host/configure/anonymous_usage_statistics.mdx
             slug: anonymous_usage_statistics
+          - page: Large CSV uploads
+            path: docs/self-host/configure/large_csv_uploads.mdx
+            slug: large_csv_uploads
   - tab: reference
     layout:
       - page: Overview

@@ -45,6 +45,7 @@ import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
+import io.dropwizard.forms.MultiPartBundle;
 import org.glassfish.jersey.server.ServerProperties;
 import org.jdbi.v3.jackson2.Jackson2Plugin;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
@@ -75,6 +76,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         var substitutor = new EnvironmentVariableSubstitutor(false);
         var provider = new SubstitutingSourceProvider(bootstrap.getConfigurationSourceProvider(), substitutor);
         bootstrap.setConfigurationSourceProvider(provider);
+        bootstrap.addBundle(new MultiPartBundle());
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_STATE_NAME)
                 .migrationsFileName(DB_APP_STATE_MIGRATIONS_FILE_NAME)

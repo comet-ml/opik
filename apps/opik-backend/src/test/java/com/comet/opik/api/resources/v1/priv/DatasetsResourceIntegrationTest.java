@@ -7,12 +7,15 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
@@ -26,13 +29,20 @@ import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
+import jakarta.ws.rs.core.MediaType;
 import org.glassfish.jersey.client.ChunkedInput;
+import org.glassfish.jersey.media.multipart.FormDataBodyPart;
+import org.glassfish.jersey.media.multipart.FormDataMultiPart;
+import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import reactor.core.publisher.Flux;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,14 +62,18 @@ class DatasetsResourceIntegrationTest {
     private static final DatasetExpansionService expansionService = mock(DatasetExpansionService.class);
     private static final RequestContext requestContext = mock(RequestContext.class);
     private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
+    private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
+    private static final OpikConfiguration config = mock(OpikConfiguration.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
                     service, itemService, expansionService, () -> requestContext,
                     new FiltersFactory(new FilterQueryBuilder()),
-                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService))
+                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
+                    config))
             .addProvider(JsonNodeMessageBodyWriter.class)
+            .addProvider(MultiPartFeature.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();
 
@@ -176,6 +190,34 @@ class DatasetsResourceIntegrationTest {
             assertThat(expansionResponse.model()).isEqualTo("gpt-4");
             assertThat(expansionResponse.totalGenerated()).isEqualTo(2);
             assertThat(expansionResponse.generationTime()).isNotNull();
+        }
+    }
+
+    @Test
+    void testCsvUploadFeatureToggleDisabled() {
+        // Given: Feature toggle is disabled
+        ServiceTogglesConfig serviceToggles = mock(ServiceTogglesConfig.class);
+        when(serviceToggles.isCsvUploadEnabled()).thenReturn(false);
+        when(config.getServiceToggles()).thenReturn(serviceToggles);
+
+        UUID datasetId = UUID.randomUUID();
+        String csvContent = "input,output\nQuestion,Answer\n";
+        byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
+        InputStream csvInputStream = new ByteArrayInputStream(csvBytes);
+
+        FormDataMultiPart multiPart = new FormDataMultiPart();
+        multiPart.field("dataset_id", datasetId.toString());
+        multiPart.bodyPart(new FormDataBodyPart("file", csvInputStream, MediaType.APPLICATION_OCTET_STREAM_TYPE));
+
+        // When: Attempt to upload CSV
+        try (var response = EXT.target("/v1/private/datasets/items/from-csv")
+                .register(MultiPartFeature.class)
+                .request()
+                .header("workspace", DEFAULT_WORKSPACE_NAME)
+                .post(Entity.entity(multiPart, multiPart.getMediaType()))) {
+
+            // Then: Should return 404 Not Found
+            assertThat(response.getStatus()).isEqualTo(404);
         }
     }
 
