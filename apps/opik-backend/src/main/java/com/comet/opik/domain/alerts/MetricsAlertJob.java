@@ -209,8 +209,8 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                             var metricsPayload = MetricsAlertPayload.builder()
                                     .eventType(trigger.eventType().name())
                                     .metricName(trigger.eventType().getValue())
-                                    .metricValue(metricValueFinal)
-                                    .threshold(config.threshold())
+                                    .metricValue(formatDecimal(metricValueFinal))
+                                    .threshold(formatDecimal(config.threshold()))
                                     .windowSeconds(config.windowSeconds())
                                     .projectIds(config.projectIds() != null
                                             ? config.projectIds().stream().map(UUID::toString)
@@ -296,6 +296,17 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         long windowSeconds = Long.parseLong(windowString);
 
         return new TriggerConfig(projectIds, threshold, windowSeconds);
+    }
+
+    /**
+     * Formats decimal number to 4 decimal places.
+     */
+    private static String formatDecimal(BigDecimal value) {
+        if (value.stripTrailingZeros().scale() <= 0) {
+            // It's an integer
+            return value.toBigInteger().toString();
+        }
+        return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 
     private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds) {

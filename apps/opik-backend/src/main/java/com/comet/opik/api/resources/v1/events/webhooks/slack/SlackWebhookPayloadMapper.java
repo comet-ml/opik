@@ -14,8 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -333,10 +331,10 @@ public class SlackWebhookPayloadMapper {
                     "  *Scope:* %s",
                     type,
                     valuePrefix,
-                    formatDecimal(payload.metricValue()),
+                    payload.metricValue(),
                     valueSuffix,
                     valuePrefix,
-                    formatDecimal(payload.threshold()),
+                    payload.threshold(),
                     valueSuffix,
                     windowDuration,
                     scope);
@@ -364,17 +362,6 @@ public class SlackWebhookPayloadMapper {
         } else {
             return seconds + " second" + (seconds != 1 ? "s" : "");
         }
-    }
-
-    /**
-     * Formats decimal number to 4 decimal places.
-     */
-    private static String formatDecimal(BigDecimal value) {
-        if (value.stripTrailingZeros().scale() <= 0) {
-            // It's an integer
-            return value.toBigInteger().toString();
-        }
-        return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,

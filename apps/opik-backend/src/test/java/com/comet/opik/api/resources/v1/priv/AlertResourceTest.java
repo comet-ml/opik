@@ -1709,8 +1709,8 @@ class AlertResourceTest {
                 String threshold, String windowSeconds, UUID projectId, String projectName) {
             assertThat(payload.eventType()).isEqualTo(eventType);
 
-            assertThat(payload.metricValue().compareTo(new BigDecimal(metricValue))).isZero();
-            assertThat(payload.threshold().compareTo(new BigDecimal(threshold))).isZero();
+            assertThat(payload.metricValue()).isEqualTo(metricValue);
+            assertThat(payload.threshold()).isEqualTo(threshold);
             assertThat(payload.windowSeconds()).isEqualTo(Long.parseLong(windowSeconds));
             assertThat(payload.projectIds()).isEqualTo(Optional.ofNullable(projectId).map(UUID::toString).orElse(""));
             assertThat(payload.projectNames()).isEqualTo(Optional.ofNullable(projectName).orElse(""));
