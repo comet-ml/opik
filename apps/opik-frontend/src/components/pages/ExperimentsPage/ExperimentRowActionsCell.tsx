@@ -53,7 +53,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
         onConfirm={deleteExperimentsHandler}
         title="Delete experiment"
         description="Deleting an experiment will remove all samples in the experiment. Related traces won’t be affected. This action can’t be undone. Are you sure you want to continue?"
-        confirmText="Delete experiments"
+        confirmText="Delete experiment"
         confirmButtonVariant="destructive"
       />
 
