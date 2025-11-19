@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMutation";
+import useDatasetItemBatchUpdateMutation from "@/api/datasets/useDatasetItemBatchUpdateMutation";
 
 type AddTagDialogProps = {
   datasetId: string;
@@ -29,8 +29,8 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const [newTag, setNewTag] = useState<string>("");
-  const updateMutation = useDatasetItemUpdateMutation();
-  const MAX_ENTITIES = 10;
+  const batchUpdateMutation = useDatasetItemBatchUpdateMutation();
+  const MAX_ENTITIES = 1000;
 
   const handleClose = () => {
     setOpen(false);
@@ -40,40 +40,30 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const handleAddTag = () => {
     if (!newTag) return;
 
-    const promises: Promise<unknown>[] = [];
+    const itemIds = rows.map((row) => row.id);
 
-    rows.forEach((row) => {
-      const currentTags = row.tags || [];
+    batchUpdateMutation.mutate(
+      {
+        datasetId,
+        itemIds,
+        item: { tags: [newTag] },
+        mergeTags: true,
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: "Success",
+            description: `Tag "${newTag}" added to ${rows.length} selected dataset items`,
+          });
 
-      if (currentTags.includes(newTag)) return;
+          if (onSuccess) {
+            onSuccess();
+          }
 
-      const newTags = [...currentTags, newTag];
-
-      promises.push(
-        updateMutation.mutateAsync({
-          datasetId,
-          itemId: row.id,
-          item: { tags: newTags },
-        }),
-      );
-    });
-
-    Promise.all(promises)
-      .then(() => {
-        toast({
-          title: "Success",
-          description: `Tag "${newTag}" added to ${rows.length} selected dataset items`,
-        });
-
-        if (onSuccess) {
-          onSuccess();
-        }
-
-        handleClose();
-      })
-      .catch(() => {
-        // Error handling is already done by the mutation hooks, this just ensures we don't close the dialog on error
-      });
+          handleClose();
+        },
+      },
+    );
   };
 
   return (

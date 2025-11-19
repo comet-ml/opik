@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
@@ -53,6 +54,8 @@ public interface DatasetItemService {
     Mono<DatasetItem> get(UUID id);
 
     Mono<Void> patch(UUID id, DatasetItem item);
+
+    Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
     Mono<Void> delete(List<UUID> ids);
 
@@ -247,6 +250,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return saveBatch(batch, existingItem.datasetId());
                 })
                 .then();
+    }
+
+    @WithSpan
+    public Mono<Void> batchUpdate(@NonNull DatasetItemBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' dataset items", batchUpdate.ids().size());
+
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), batchUpdate.mergeTags())
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' dataset items", batchUpdate.ids().size()));
     }
 
     @WithSpan

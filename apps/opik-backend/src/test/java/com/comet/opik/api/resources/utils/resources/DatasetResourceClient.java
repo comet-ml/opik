@@ -156,6 +156,32 @@ public class DatasetResourceClient {
                 .method("PATCH", Entity.entity(patchItem, MediaType.APPLICATION_JSON_TYPE));
     }
 
+    public void batchUpdateDatasetItems(com.comet.opik.api.DatasetItemBatchUpdate batchUpdate, String apiKey,
+            String workspaceName) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON_TYPE))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callBatchUpdateDatasetItems(com.comet.opik.api.DatasetItemBatchUpdate batchUpdate, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.entity(batchUpdate, MediaType.APPLICATION_JSON_TYPE));
+    }
+
     public DatasetItemPage getDatasetItems(UUID datasetId, Map<String, Object> queryParams, String apiKey,
             String workspaceName) {
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
