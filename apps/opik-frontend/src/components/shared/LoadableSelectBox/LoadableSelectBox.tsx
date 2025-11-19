@@ -333,12 +333,15 @@ export const LoadableSelectBox = ({
 
                     {option.action && (
                       <TooltipWrapper content="Open in a new tab">
-                        <div
-                          className="flex shrink-0 items-center justify-center rounded hover:bg-primary-foreground-hover"
-                          onClick={handleActionClick}
+                        <a
+                          href={option.action.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-light-slate hover:underline "
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <ExternalLink className="size-3.5 text-light-slate" />
-                        </div>
+                          <ExternalLink className="size-3.5 shrink-0" />
+                        </a>
                       </TooltipWrapper>
                     )}
                   </div>

@@ -237,17 +237,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   </div>
                   <div className="flex shrink-0 items-center justify-center rounded hover:bg-primary-foreground-hover">
                     <TooltipWrapper content="Open in a new tab">
-                      <ExternalLink
-                        className="size-3.5 text-light-slate"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.open(
-                            `/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`,
-                            "_blank",
-                            "noopener,noreferrer",
-                          );
-                        }}
-                      />
+                      <a
+                        href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-light-slate hover:underline "
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="size-3.5 shrink-0" />
+                      </a>
                     </TooltipWrapper>
                   </div>
                 </div>
