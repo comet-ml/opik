@@ -1455,6 +1455,99 @@ export class Datasets {
     }
 
     /**
+     * Partially update dataset item by id. Only provided fields will be updated.
+     *
+     * @param {string} itemId
+     * @param {OpikApi.DatasetItemWrite} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.datasets.patchDatasetItem("itemId", {
+     *         source: "manual",
+     *         data: {
+     *             "key": "value"
+     *         }
+     *     })
+     */
+    public patchDatasetItem(
+        itemId: string,
+        request: OpikApi.DatasetItemWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__patchDatasetItem(itemId, request, requestOptions));
+    }
+
+    private async __patchDatasetItem(
+        itemId: string,
+        request: OpikApi.DatasetItemWrite,
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/items/${encodeURIComponent(itemId)}`,
+            ),
+            method: "PATCH",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.DatasetItemWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PATCH /v1/private/datasets/items/{itemId}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get dataset items
      *
      * @param {string} id

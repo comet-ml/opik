@@ -18,6 +18,7 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemPublicSource,
     data: JsonNode,
+    tags: core.serialization.list(core.serialization.string()).optional(),
     experimentItems: core.serialization.property(
         "experiment_items",
         core.serialization.list(ExperimentItemPublic).optional(),
@@ -36,6 +37,7 @@ export declare namespace DatasetItemPublic {
         span_id?: string | null;
         source: DatasetItemPublicSource.Raw;
         data: JsonNode.Raw;
+        tags?: string[] | null;
         experiment_items?: ExperimentItemPublic.Raw[] | null;
         dataset_id?: string | null;
         created_at?: string | null;

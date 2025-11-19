@@ -10,4 +10,5 @@ export interface DatasetItemWrite {
     spanId?: string;
     source: OpikApi.DatasetItemWriteSource;
     data: OpikApi.JsonNode;
+    tags?: string[];
 }

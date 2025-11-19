@@ -16,6 +16,7 @@ class DatasetItemPublic(UniversalBaseModel):
     span_id: typing.Optional[str] = None
     source: DatasetItemPublicSource
     data: JsonNode
+    tags: typing.Optional[typing.List[str]] = None
     experiment_items: typing.Optional[typing.List[ExperimentItemPublic]] = None
     dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None

@@ -1658,6 +1658,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DatasetItem_Public"
+    patch:
+      tags:
+      - Datasets
+      summary: Partially update dataset item by id
+      description: Partially update dataset item by id. Only provided fields will
+        be updated.
+      operationId: patchDatasetItem
+      parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItem_Write"
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Dataset item not found
   /v1/private/datasets/{id}/items:
     get:
       tags:
@@ -6120,6 +6144,15 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
+    ImageUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+        detail:
+          type: string
     JsonNode:
       type: object
     LlmAsJudgeCode:
@@ -6146,7 +6179,6 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
     LlmAsJudgeMessage:
       required:
-      - content
       - role
       type: object
       properties:
@@ -6159,11 +6191,28 @@ components:
           - TOOL_EXECUTION_RESULT
           - CUSTOM
         content:
-          type: object
-        structured_content:
-          type: boolean
+          type: string
+        content_array:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessageContent"
         string_content:
           type: boolean
+        structured_content:
+          type: boolean
+    LlmAsJudgeMessageContent:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        image_url:
+          $ref: "#/components/schemas/ImageUrl"
+        video_url:
+          $ref: "#/components/schemas/VideoUrl"
     LlmAsJudgeModelParameters:
       required:
       - name
@@ -6258,6 +6307,13 @@ components:
           type: object
           additionalProperties:
             type: string
+    VideoUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluatorLlmAsJudge_Write:
       required:
       - action
@@ -6355,6 +6411,15 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
+    ImageUrl_Write:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+        detail:
+          type: string
     JsonNode_Write:
       type: object
     LlmAsJudgeCode_Write:
@@ -6379,9 +6444,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+    LlmAsJudgeMessageContent_Write:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        image_url:
+          $ref: "#/components/schemas/ImageUrl_Write"
+        video_url:
+          $ref: "#/components/schemas/VideoUrl_Write"
     LlmAsJudgeMessage_Write:
       required:
-      - content
       - role
       type: object
       properties:
@@ -6394,10 +6471,14 @@ components:
           - TOOL_EXECUTION_RESULT
           - CUSTOM
         content:
-          type: object
-        structured_content:
-          type: boolean
+          type: string
+        content_array:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -6493,6 +6574,13 @@ components:
           type: object
           additionalProperties:
             type: string
+    VideoUrl_Write:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
       - action
@@ -6631,6 +6719,15 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
+    ImageUrl_Public:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+        detail:
+          type: string
     JsonNode_Public:
       type: object
     LlmAsJudgeCode_Public:
@@ -6655,9 +6752,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+    LlmAsJudgeMessageContent_Public:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        image_url:
+          $ref: "#/components/schemas/ImageUrl_Public"
+        video_url:
+          $ref: "#/components/schemas/VideoUrl_Public"
     LlmAsJudgeMessage_Public:
       required:
-      - content
       - role
       type: object
       properties:
@@ -6670,10 +6779,14 @@ components:
           - TOOL_EXECUTION_RESULT
           - CUSTOM
         content:
-          type: object
-        structured_content:
-          type: boolean
+          type: string
+        content_array:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -6769,6 +6882,13 @@ components:
           type: object
           additionalProperties:
             type: string
+    VideoUrl_Public:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluator_Public:
       required:
       - action
@@ -7444,6 +7564,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         experiment_items:
           type: array
           readOnly: true
@@ -7668,6 +7793,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     CreateDatasetItemsFromSpansRequest:
       required:
       - enrichment_options
@@ -7943,6 +8073,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         experiment_items:
           type: array
           readOnly: true
@@ -8287,6 +8422,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         experiment_items:
           type: array
           readOnly: true

@@ -9,8 +9,10 @@ from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
 from ..types.dataset_item_write import DatasetItemWrite
+from ..types.dataset_item_write_source import DatasetItemWriteSource
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
+from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_enrichment_options import SpanEnrichmentOptions
@@ -642,6 +644,63 @@ class DatasetsClient:
         client.datasets.get_dataset_item_by_id(item_id='itemId', )
         """
         _response = self._raw_client.get_dataset_item_by_id(item_id, request_options=request_options)
+        return _response.data
+
+    def patch_dataset_item(
+        self,
+        item_id: str,
+        *,
+        source: DatasetItemWriteSource,
+        data: JsonNode,
+        id: typing.Optional[str] = OMIT,
+        trace_id: typing.Optional[str] = OMIT,
+        span_id: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Partially update dataset item by id. Only provided fields will be updated.
+
+        Parameters
+        ----------
+        item_id : str
+
+        source : DatasetItemWriteSource
+
+        data : JsonNode
+
+        id : typing.Optional[str]
+
+        trace_id : typing.Optional[str]
+
+        span_id : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.patch_dataset_item(item_id='itemId', source="manual", data={'key': 'value'
+        }, )
+        """
+        _response = self._raw_client.patch_dataset_item(
+            item_id,
+            source=source,
+            data=data,
+            id=id,
+            trace_id=trace_id,
+            span_id=span_id,
+            tags=tags,
+            request_options=request_options,
+        )
         return _response.data
 
     def get_dataset_items(
@@ -1430,6 +1489,66 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_dataset_item_by_id(item_id, request_options=request_options)
+        return _response.data
+
+    async def patch_dataset_item(
+        self,
+        item_id: str,
+        *,
+        source: DatasetItemWriteSource,
+        data: JsonNode,
+        id: typing.Optional[str] = OMIT,
+        trace_id: typing.Optional[str] = OMIT,
+        span_id: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Partially update dataset item by id. Only provided fields will be updated.
+
+        Parameters
+        ----------
+        item_id : str
+
+        source : DatasetItemWriteSource
+
+        data : JsonNode
+
+        id : typing.Optional[str]
+
+        trace_id : typing.Optional[str]
+
+        span_id : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.patch_dataset_item(item_id='itemId', source="manual", data={'key': 'value'
+            }, )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.patch_dataset_item(
+            item_id,
+            source=source,
+            data=data,
+            id=id,
+            trace_id=trace_id,
+            span_id=span_id,
+            tags=tags,
+            request_options=request_options,
+        )
         return _response.data
 
     async def get_dataset_items(

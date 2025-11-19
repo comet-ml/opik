@@ -4,16 +4,15 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .llm_as_judge_message_content import LlmAsJudgeMessageContent
-from .llm_as_judge_message_role import LlmAsJudgeMessageRole
+from .image_url_write import ImageUrlWrite
+from .video_url_write import VideoUrlWrite
 
 
-class LlmAsJudgeMessage(UniversalBaseModel):
-    role: LlmAsJudgeMessageRole
-    content: typing.Optional[str] = None
-    content_array: typing.Optional[typing.List[LlmAsJudgeMessageContent]] = None
-    string_content: typing.Optional[bool] = None
-    structured_content: typing.Optional[bool] = None
+class LlmAsJudgeMessageContentWrite(UniversalBaseModel):
+    type: str
+    text: typing.Optional[str] = None
+    image_url: typing.Optional[ImageUrlWrite] = None
+    video_url: typing.Optional[VideoUrlWrite] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
