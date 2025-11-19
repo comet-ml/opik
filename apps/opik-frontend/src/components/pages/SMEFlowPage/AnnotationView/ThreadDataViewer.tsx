@@ -147,7 +147,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
           traceId={last(traces)?.id}
           handleOpenTrace={handleOpenTrace}
         />
-      </div>
+    </div>
       <TraceDetailsPanel
         projectId={thread?.project_id || ""}
         traceId={traceId}

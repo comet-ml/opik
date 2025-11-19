@@ -13,7 +13,7 @@ import { prettifyMessage } from "@/lib/traces";
 import { cn, toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import isFunction from "lodash/isFunction";
-import { Wrench } from "lucide-react";
+import { Hammer, ListTree } from "lucide-react";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -97,6 +97,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
             size="2xs"
             onClick={() => handleOpenTrace(trace.id, false)}
           >
+            <ListTree className="mr-1 size-3" />
             View trace
           </Button>
           {trace.has_tool_spans && (
@@ -107,7 +108,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
                 size="2xs"
                 onClick={() => handleOpenTrace(trace.id, true)}
               >
-                <Wrench className="mr-1 size-3" />
+                <Hammer className="mr-1 size-3" />
                 View tool calls
               </Button>
             </>
