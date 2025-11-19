@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   JsonParam,
   NumberParam,
@@ -142,8 +148,15 @@ const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [editingRule, setEditingRule] = useState<EvaluatorsRule | undefined>(
+    undefined,
+  );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [editRuleId, setEditRuleId] = useQueryParam("editRule", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -222,6 +235,33 @@ export const OnlineEvaluationPage: React.FC = () => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  const handleEditRule = useCallback((rule: EvaluatorsRule) => {
+    setEditingRule(rule);
+  }, []);
+
+  const handleOpenEditDialog = useCallback((ruleId: string) => {
+    setEditRuleId(ruleId);
+    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+  }, []);
+
+  // handle opening edit dialog from query parameter
+  useEffect(() => {
+    if (
+      editRuleId &&
+      rows.length > 0 &&
+      editingRule?.id !== editRuleId &&
+      !isPending
+    ) {
+      const ruleToEdit = rows.find((rule) => rule.id === editRuleId);
+
+      if (ruleToEdit) {
+        setEditingRule(ruleToEdit);
+        setOpenDialog(true);
+        resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+      }
+    }
+  }, [editRuleId, rows, editingRule?.id, isPending]);
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
@@ -248,11 +288,22 @@ export const OnlineEvaluationPage: React.FC = () => {
         enableHiding: false,
         enableSorting: false,
       } as ColumnDef<EvaluatorsRule>,
-      generateActionsColumDef({
-        cell: RuleRowActionsCell,
+      generateActionsColumDef<EvaluatorsRule>({
+        cell: (props) => (
+          <RuleRowActionsCell
+            {...props}
+            openEditDialog={handleOpenEditDialog}
+          />
+        ),
       }),
     ];
-  }, [columnsOrder, selectedColumns, sortableBy]);
+  }, [
+    columnsOrder,
+    selectedColumns,
+    sortableBy,
+    handleOpenEditDialog,
+    handleEditRule,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -274,8 +325,17 @@ export const OnlineEvaluationPage: React.FC = () => {
   );
 
   const handleNewRuleClick = useCallback(() => {
+    setEditingRule(undefined);
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+  }, []);
+
+  const handleCloseDialog = useCallback((open: boolean) => {
+    setOpenDialog(open);
+    if (!open) {
+      setEditRuleId(undefined);
+      setEditingRule(undefined);
+    }
   }, []);
 
   // Filter out "type" (Scope), "enabled" (Status), and "sampling_rate" from filter options
@@ -301,7 +361,8 @@ export const OnlineEvaluationPage: React.FC = () => {
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
           open={openDialog}
-          setOpen={setOpenDialog}
+          setOpen={handleCloseDialog}
+          rule={editingRule}
         />
       </>
     );
@@ -373,7 +434,8 @@ export const OnlineEvaluationPage: React.FC = () => {
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
-        setOpen={setOpenDialog}
+        setOpen={handleCloseDialog}
+        rule={editingRule}
       />
     </div>
   );

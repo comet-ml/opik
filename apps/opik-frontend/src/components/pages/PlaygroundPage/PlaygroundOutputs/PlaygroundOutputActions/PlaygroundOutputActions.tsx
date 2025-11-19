@@ -533,6 +533,7 @@ const PlaygroundOutputActions = ({
             onSelectionChange={setSelectedRuleIds}
             datasetId={datasetId}
             onCreateRuleClick={handleCreateRuleClick}
+            workspaceName={workspaceName}
           />
         </div>
         <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
