@@ -59,6 +59,7 @@ component:
         repository: curlimages/curl
         tag: 8.12.1
     waitForMysql:
+      enabled: false
       mysql:
         host: opik-mysql
         port: 3306
