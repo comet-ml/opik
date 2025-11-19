@@ -28,11 +28,11 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useAppStore from "@/store/AppStore";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
 import {
-  AggregatedFeedbackScore,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
@@ -42,7 +42,6 @@ import {
   COLUMN_COMMENTS_ID,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
-import { formatNumericData } from "@/lib/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/components/ui/separator";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -180,22 +179,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) => {
-      const feedbackScores = (
-        get(row, "feedback_scores", []) as AggregatedFeedbackScore[]
-      ).map((score) => ({
-        ...score,
-        name: `${score.name} (avg)`,
-        value: formatNumericData(score.value),
-      }));
-      const experimentScores = (
-        get(row, "experiment_scores", []) as AggregatedFeedbackScore[]
-      ).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      }));
-      return [...feedbackScores, ...experimentScores];
-    },
+    accessorFn: transformExperimentScores,
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {

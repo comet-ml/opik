@@ -47,7 +47,7 @@ def _compute_experiment_scores(
     test_results: List[test_result.TestResult],
 ) -> List[score_result.ScoreResult]:
     """Compute experiment-level scores from test results."""
-    if not experiment_scoring_functions or not test_results:
+    if not experiment_scoring_functions:
         return []
 
     all_scores: List[score_result.ScoreResult] = []

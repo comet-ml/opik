@@ -2,16 +2,14 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.DeleteFeedbackScore;
-import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
@@ -28,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -39,7 +36,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
 import static com.comet.opik.api.AlertEventType.TRACE_THREAD_FEEDBACK_SCORE;
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -236,17 +232,85 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private static final String SELECT_EXPERIMENT_SCORES_JSON = """
-            SELECT experiment_scores
-            FROM experiments
-            WHERE workspace_id = :workspace_id
-              AND experiment_scores IS NOT NULL
-              AND experiment_scores != ''
-              <if(experiment_ids)>
-              AND id IN :experiment_ids
-              <endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
+    private static final String SELECT_EXPERIMENTS_ALL_SCORE_NAMES = """
+            WITH experiments_dedup AS (
+                SELECT *
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                <if(experiment_ids)>
+                AND id IN :experiment_ids
+                <endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ),
+            experiment_score_names AS (
+                SELECT DISTINCT
+                    JSON_VALUE(score, '$.name') AS name,
+                    'experiment_scores' AS type
+                FROM experiments_dedup AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            ),
+            feedback_score_names AS (
+                SELECT
+                    distinct name
+                FROM (
+                    SELECT
+                        name
+                    FROM feedback_scores
+                    WHERE workspace_id = :workspace_id
+                    <if(project_ids)>
+                    AND project_id IN :project_ids
+                    <endif>
+                    <if(experiment_ids)>
+                    AND entity_id IN (
+                        SELECT DISTINCT ei.trace_id
+                        FROM (
+                            SELECT
+                                trace_id
+                            FROM experiment_items
+                            WHERE workspace_id = :workspace_id
+                            AND experiment_id IN :experiment_ids
+                            ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) ei
+                    )
+                    <endif>
+                    AND entity_type = :entity_type
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                    UNION ALL
+                    SELECT
+                        name
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                    <if(project_ids)>
+                    AND project_id IN :project_ids
+                    <endif>
+                    <if(experiment_ids)>
+                    AND entity_id IN (
+                        SELECT DISTINCT ei.trace_id
+                        FROM (
+                            SELECT
+                                trace_id
+                            FROM experiment_items
+                            WHERE workspace_id = :workspace_id
+                            AND experiment_id IN :experiment_ids
+                            ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) ei
+                    )
+                    <endif>
+                    AND entity_type = :entity_type
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, author, name
+                ) AS names
+            )
+            SELECT name, type FROM experiment_score_names
+            UNION ALL
+            SELECT name, 'feedback_scores' AS type FROM feedback_score_names
+            ORDER BY name
             ;
             """;
 
@@ -591,67 +655,16 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @WithSpan
     public Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
-            // Query 1: Get feedback_scores names from traces
-            ST feedbackScoresTemplate = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
-            bindTemplateParam(null, true, experimentIds, feedbackScoresTemplate);
-            var feedbackScoresStatement = connection.createStatement(feedbackScoresTemplate.render());
-            bindStatementParam(null, experimentIds, feedbackScoresStatement, EntityType.TRACE);
+            ST template = new ST(SELECT_EXPERIMENTS_ALL_SCORE_NAMES);
+            bindTemplateParam(null, true, experimentIds, template);
+            var statement = connection.createStatement(template.render());
+            bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
-            // Query 2: Get experiment_scores JSON from experiments table
-            ST experimentScoresTemplate = new ST(SELECT_EXPERIMENT_SCORES_JSON);
-            if (CollectionUtils.isNotEmpty(experimentIds)) {
-                experimentScoresTemplate.add("experiment_ids", experimentIds);
-            }
-            var experimentScoresStatement = connection.createStatement(experimentScoresTemplate.render());
-            if (CollectionUtils.isNotEmpty(experimentIds)) {
-                experimentScoresStatement.bind("experiment_ids", experimentIds);
-            }
-
-            // Execute both queries
-            Mono<List<ScoreNameWithType>> feedbackScoresNames = makeMonoContextAware(
-                    bindWorkspaceIdToMono(feedbackScoresStatement))
-                    .flatMapMany(result -> result.map((row,
-                            rowMetadata) -> new ScoreNameWithType(row.get("name", String.class), "feedback_scores")))
-                    .distinct()
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> new ScoreNameWithType(
+                            row.get("name", String.class),
+                            row.get("type", String.class))))
                     .collect(Collectors.toList());
-
-            Mono<List<ScoreNameWithType>> experimentScoresNames = makeMonoContextAware(
-                    bindWorkspaceIdToMono(experimentScoresStatement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> {
-                        String experimentScoresJson = row.get("experiment_scores", String.class);
-                        if (experimentScoresJson == null || experimentScoresJson.isBlank()) {
-                            return List.<ScoreNameWithType>of();
-                        }
-                        try {
-                            List<ExperimentScore> scores = JsonUtils.readValue(experimentScoresJson,
-                                    new TypeReference<List<ExperimentScore>>() {
-                                    });
-                            if (scores == null || scores.isEmpty()) {
-                                return List.<ScoreNameWithType>of();
-                            }
-                            return scores.stream()
-                                    .map(ExperimentScore::name)
-                                    .filter(name -> name != null && !name.isBlank())
-                                    .map(name -> new ScoreNameWithType(name, "experiment_scores"))
-                                    .collect(Collectors.toList());
-                        } catch (Exception e) {
-                            log.warn("Failed to deserialize experiment_scores from JSON: {}", experimentScoresJson, e);
-                            return List.<ScoreNameWithType>of();
-                        }
-                    }))
-                    .flatMap(Flux::fromIterable)
-                    .distinct()
-                    .collect(Collectors.toList());
-
-            // Merge both results
-            return Mono.zip(feedbackScoresNames, experimentScoresNames)
-                    .map(tuple -> {
-                        Set<ScoreNameWithType> allScores = new java.util.HashSet<>(tuple.getT1());
-                        allScores.addAll(tuple.getT2());
-                        return allScores.stream()
-                                .sorted((a, b) -> a.name().compareTo(b.name()))
-                                .collect(Collectors.toList());
-                    });
         });
     }
 

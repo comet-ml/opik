@@ -19,7 +19,6 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -581,14 +580,12 @@ class ExperimentDAO {
                 FROM (
                     SELECT
                         e.id AS experiment_id,
-                        JSONExtractString(score, 'name') AS name,
-                        JSONExtractFloat(score, 'value') AS value
+                        JSON_VALUE(score, '$.name') AS name,
+                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
                     FROM experiments_final AS e
                     ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
-                    WHERE e.experiment_scores IS NOT NULL
-                      AND e.experiment_scores != ''
-                      AND length(e.experiment_scores) > 2
-                      AND length(JSONExtractString(score, 'name')) > 0
+                    WHERE length(e.experiment_scores) > 2
+                      AND length(JSON_VALUE(score, '$.name')) > 0
                 ) AS es
                 GROUP BY experiment_id
             ),
@@ -980,13 +977,12 @@ class ExperimentDAO {
 
     public static List<ExperimentScore> getExperimentScores(Row row) {
         String experimentScoresJson = row.get("experiment_scores", String.class);
-        if (experimentScoresJson == null || experimentScoresJson.isBlank()) {
+        if (StringUtils.isBlank(experimentScoresJson)) {
             return null;
         }
         try {
             List<ExperimentScore> scores = JsonUtils.readValue(experimentScoresJson,
-                    new TypeReference<List<ExperimentScore>>() {
-                    });
+                    ExperimentScore.LIST_TYPE_REFERENCE);
             return scores == null || scores.isEmpty() ? null : scores;
         } catch (Exception e) {
             log.warn("Failed to deserialize experiment_scores from JSON: {}", experimentScoresJson, e);
@@ -1381,7 +1377,7 @@ class ExperimentDAO {
             template.add("status", experimentUpdate.status().getValue());
         }
 
-        if (experimentUpdate.experimentScores() != null) {
+        if (CollectionUtils.isNotEmpty(experimentUpdate.experimentScores())) {
             template.add("experiment_scores", true);
         }
 
@@ -1405,11 +1401,8 @@ class ExperimentDAO {
             statement.bind("status", experimentUpdate.status().getValue());
         }
 
-        if (experimentUpdate.experimentScores() != null) {
-            statement.bind("experiment_scores", Optional.of(experimentUpdate.experimentScores())
-                    .filter(scores -> !scores.isEmpty())
-                    .map(JsonUtils::writeValueAsString)
-                    .orElse(""));
+        if (CollectionUtils.isNotEmpty(experimentUpdate.experimentScores())) {
+            statement.bind("experiment_scores", JsonUtils.writeValueAsString(experimentUpdate.experimentScores()));
         }
     }
 

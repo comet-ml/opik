@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset opik:000046_add_experiment_scores_to_experiments
+--changeset jverre:000046_add_experiment_scores_to_experiments
 --comment: Add experiment_scores field to experiments table to store precomputed metrics
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'

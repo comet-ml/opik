@@ -56,8 +56,10 @@ public class SortingQueryBuilder {
             // Extract value from experiment_scores JSON array where name matches the key
             // experiment_scores is stored as a JSON string array: [{"name": "metric1", "value": 0.5}, ...]
             // We filter the array to find the object with matching name, then extract its value
+            // Use ifNull with toFloat64OrNull to handle cases where experiment doesn't have the specific score
+            // toFloat64OrNull returns NULL on parse failure instead of throwing an error
             return String.format(
-                    "JSONExtractFloat(arrayFirst(x -> JSONExtractString(x, 'name') == :%s, JSONExtractArrayRaw(e.experiment_scores)), 'value')",
+                    "ifNull(toFloat64OrNull(JSON_VALUE(arrayFirst(x -> JSON_VALUE(x, '$.name') == :%s, JSONExtractArrayRaw(e.experiment_scores)), '$.value')), 0)",
                     bindKey);
         }
         return sortingField.dbField();

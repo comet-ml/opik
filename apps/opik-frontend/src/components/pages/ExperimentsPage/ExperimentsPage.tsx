@@ -26,8 +26,8 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
-  AggregatedFeedbackScore,
   COLUMN_COMMENTS_ID,
   COLUMN_DATASET_ID,
   COLUMN_FEEDBACK_SCORES_ID,
@@ -66,7 +66,6 @@ import {
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { formatNumericData } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -194,22 +193,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) => {
-      const feedbackScores = (
-        get(row, "feedback_scores", []) as AggregatedFeedbackScore[]
-      ).map((score) => ({
-        ...score,
-        name: `${score.name} (avg)`,
-        value: formatNumericData(score.value),
-      }));
-      const experimentScores = (
-        get(row, "experiment_scores", []) as AggregatedFeedbackScore[]
-      ).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      }));
-      return [...feedbackScores, ...experimentScores];
-    },
+    accessorFn: transformExperimentScores,
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {

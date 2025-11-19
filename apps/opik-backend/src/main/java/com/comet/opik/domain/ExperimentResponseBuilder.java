@@ -174,31 +174,11 @@ public class ExperimentResponseBuilder {
                 }
             }
 
-            // For feedback scores (weighted average per name)
-            if (childAgg.feedbackScores() != null) {
-                for (FeedbackScoreAverage score : childAgg.feedbackScores()) {
-                    String name = score.name();
-                    BigDecimal value = score.value();
+            // Accumulate feedback scores
+            accumulateScores(childAgg.feedbackScores(), expCount, feedbackScoreSums, feedbackScoreCounts);
 
-                    if (value != null && name != null) {
-                        feedbackScoreSums.merge(name, value.multiply(BigDecimal.valueOf(expCount)), BigDecimal::add);
-                        feedbackScoreCounts.merge(name, expCount, Long::sum);
-                    }
-                }
-            }
-
-            // For experiment scores (weighted average per name)
-            if (childAgg.experimentScores() != null) {
-                for (FeedbackScoreAverage score : childAgg.experimentScores()) {
-                    String name = score.name();
-                    BigDecimal value = score.value();
-
-                    if (value != null && name != null) {
-                        experimentScoreSums.merge(name, value.multiply(BigDecimal.valueOf(expCount)), BigDecimal::add);
-                        experimentScoreCounts.merge(name, expCount, Long::sum);
-                    }
-                }
-            }
+            // Accumulate experiment scores
+            accumulateScores(childAgg.experimentScores(), expCount, experimentScoreSums, experimentScoreCounts);
         }
 
         // Calculate averages
@@ -227,6 +207,35 @@ public class ExperimentResponseBuilder {
                 .feedbackScores(avgFeedbackScores)
                 .experimentScores(avgExperimentScores)
                 .build();
+    }
+
+    /**
+     * Accumulate scores for weighted average calculation.
+     *
+     * @param scores List of scores to accumulate
+     * @param experimentCount Number of experiments contributing to these scores
+     * @param scoreSums Map to accumulate weighted sums
+     * @param scoreCounts Map to track total experiment counts per score name
+     */
+    private void accumulateScores(
+            List<FeedbackScoreAverage> scores,
+            long experimentCount,
+            Map<String, BigDecimal> scoreSums,
+            Map<String, Long> scoreCounts) {
+
+        if (scores == null) {
+            return;
+        }
+
+        for (FeedbackScoreAverage score : scores) {
+            String name = score.name();
+            BigDecimal value = score.value();
+
+            if (value != null && name != null) {
+                scoreSums.merge(name, value.multiply(BigDecimal.valueOf(experimentCount)), BigDecimal::add);
+                scoreCounts.merge(name, experimentCount, Long::sum);
+            }
+        }
     }
 
     private List<FeedbackScoreAverage> buildAvgFeedbackScores(Map<String, BigDecimal> feedbackScoreSums,
