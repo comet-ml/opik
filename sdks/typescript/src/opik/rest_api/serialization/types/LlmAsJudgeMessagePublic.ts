@@ -6,22 +6,28 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { LlmAsJudgeMessagePublicRole } from "./LlmAsJudgeMessagePublicRole";
+import { LlmAsJudgeMessageContentPublic } from "./LlmAsJudgeMessageContentPublic";
 
 export const LlmAsJudgeMessagePublic: core.serialization.ObjectSchema<
     serializers.LlmAsJudgeMessagePublic.Raw,
     OpikApi.LlmAsJudgeMessagePublic
 > = core.serialization.object({
     role: LlmAsJudgeMessagePublicRole,
-    content: core.serialization.record(core.serialization.string(), core.serialization.unknown()),
-    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
+    content: core.serialization.string().optional(),
+    contentArray: core.serialization.property(
+        "content_array",
+        core.serialization.list(LlmAsJudgeMessageContentPublic).optional(),
+    ),
     stringContent: core.serialization.property("string_content", core.serialization.boolean().optional()),
+    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
 });
 
 export declare namespace LlmAsJudgeMessagePublic {
     export interface Raw {
         role: LlmAsJudgeMessagePublicRole.Raw;
-        content: Record<string, unknown>;
-        structured_content?: boolean | null;
+        content?: string | null;
+        content_array?: LlmAsJudgeMessageContentPublic.Raw[] | null;
         string_content?: boolean | null;
+        structured_content?: boolean | null;
     }
 }
