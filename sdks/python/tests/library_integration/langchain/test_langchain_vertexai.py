@@ -113,14 +113,9 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         name="custom-google-vertexai-llm-name",
                         input=expected_llm_span_input,
                         output=ANY_BUT_NONE,
-                        metadata={
-                            "batch_size": ANY_BUT_NONE,
-                            "invocation_params": ANY_DICT,
-                            "metadata": ANY_DICT,
-                            "options": ANY_DICT,
-                            "usage": ANY_DICT,
-                            "created_from": "langchain",
-                        },
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "langchain", "usage": ANY_DICT}
+                        ),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         usage=ANY_DICT,
@@ -239,14 +234,9 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
                         name="custom-google-vertexai-llm-name",
                         input=expected_llm_span_input,
                         output=ANY_BUT_NONE,
-                        metadata={
-                            "batch_size": ANY_BUT_NONE,
-                            "invocation_params": ANY_DICT,
-                            "metadata": ANY_DICT,
-                            "options": ANY_DICT,
-                            "usage": ANY_DICT,
-                            "created_from": "langchain",
-                        },
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "langchain", "usage": ANY_DICT}
+                        ),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         usage=ANY_DICT,

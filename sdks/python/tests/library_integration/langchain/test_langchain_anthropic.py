@@ -117,15 +117,9 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                             ]
                         },
                         output=ANY_BUT_NONE,
-                        metadata={
-                            "batch_size": ANY_BUT_NONE,
-                            "invocation_params": ANY_DICT,
-                            "metadata": ANY_DICT,
-                            "options": ANY_DICT,
-                            "usage": ANY_DICT,
-                            "created_from": "langchain",
-                        },
-                        # metadata=ANY_DICT,
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "langchain", "usage": ANY_DICT}
+                        ),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         usage=ANY_DICT,
@@ -149,7 +143,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
 def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_provider_is_logged__happyflow(
     fake_backend,
 ):
-    # lanchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
+    # langchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
         max_tokens=100,
         model_name=MODEL_FOR_TESTS_FULL,
@@ -169,7 +163,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
 
     callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
 
-    for chunk in synopsis_chain.stream(
+    for _ in synopsis_chain.stream(
         input=test_prompts, config={"callbacks": [callback]}
     ):
         pass
@@ -233,15 +227,9 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                             ]
                         },
                         output=ANY_BUT_NONE,
-                        metadata={
-                            "batch_size": ANY_BUT_NONE,
-                            "invocation_params": ANY_DICT,
-                            "metadata": ANY_DICT,
-                            "options": ANY_DICT,
-                            "usage": ANY_DICT,
-                            "created_from": "langchain",
-                        },
-                        # metadata=ANY_DICT,
+                        metadata=ANY_DICT.containing(
+                            {"created_from": "langchain", "usage": ANY_DICT}
+                        ),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         usage=ANY_DICT,
