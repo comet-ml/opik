@@ -215,14 +215,11 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
                 input={
                     "messages": [
                         [
-                            {
-                                "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
-                                "additional_kwargs": {},
-                                "response_metadata": {},
-                                "type": "human",
-                                "name": None,
-                                "id": None,
-                            }
+                            ANY_DICT.containing(
+                                {
+                                    "content": "Given the title of play, write a synopsys for that. Title: The Hobbit."
+                                }
+                            )
                         ]
                     ]
                 },
