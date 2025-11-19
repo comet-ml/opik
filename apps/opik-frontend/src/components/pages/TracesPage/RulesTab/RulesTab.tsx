@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -122,8 +128,15 @@ type RulesTabProps = {
 export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [editingRule, setEditingRule] = useState<EvaluatorsRule | undefined>(
+    undefined,
+  );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [editRuleId, setEditRuleId] = useQueryParam("editRule", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -184,6 +197,32 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  // handle opening edit dialog from query parameter
+  useEffect(() => {
+    if (
+      editRuleId &&
+      rows.length > 0 &&
+      editingRule?.id !== editRuleId &&
+      !isPending
+    ) {
+      const ruleToEdit = rows.find((rule) => rule.id === editRuleId);
+
+      if (ruleToEdit) {
+        setEditingRule(ruleToEdit);
+        setOpenDialog(true);
+        resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+      }
+    }
+  }, [editRuleId, rows, editingRule?.id, isPending]);
+
+  const handleOpenEditDialog = useCallback(
+    (ruleId: string) => {
+      setEditRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setEditRuleId],
+  );
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
@@ -208,11 +247,16 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         enableHiding: false,
         enableSorting: false,
       } as ColumnDef<EvaluatorsRule>,
-      generateActionsColumDef({
-        cell: RuleRowActionsCell,
+      generateActionsColumDef<EvaluatorsRule>({
+        cell: (props) => (
+          <RuleRowActionsCell
+            {...props}
+            openEditDialog={handleOpenEditDialog}
+          />
+        ),
       }),
     ];
-  }, [columnsOrder, selectedColumns]);
+  }, [columnsOrder, selectedColumns, handleOpenEditDialog]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -224,9 +268,21 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   );
 
   const handleNewRuleClick = useCallback(() => {
+    setEditingRule(undefined);
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
+
+  const handleCloseDialog = useCallback(
+    (open: boolean) => {
+      setOpenDialog(open);
+      if (!open) {
+        setEditRuleId(undefined);
+        setEditingRule(undefined);
+      }
+    },
+    [setEditRuleId],
+  );
 
   if (isPending) {
     return <Loader />;
@@ -245,7 +301,8 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           key={resetDialogKeyRef.current}
           open={openDialog}
           projectId={projectId}
-          setOpen={setOpenDialog}
+          setOpen={handleCloseDialog}
+          rule={editingRule}
         />
       </>
     );
@@ -319,7 +376,8 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         projectId={projectId}
-        setOpen={setOpenDialog}
+        setOpen={handleCloseDialog}
+        rule={editingRule}
       />
     </>
   );

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, ExternalLink, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ interface MetricSelectorProps {
   onSelectionChange: (ruleIds: string[] | null) => void;
   datasetId: string | null;
   onCreateRuleClick?: () => void;
+  workspaceName: string;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -29,6 +30,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   onSelectionChange,
   datasetId,
   onCreateRuleClick,
+  workspaceName,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -232,6 +234,20 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="comet-body-s truncate">{rule.name}</div>
+                  </div>
+                  {/* rounded */}
+                  <div className="flex shrink-0 items-center justify-center rounded">
+                    <TooltipWrapper content="Open in a new tab">
+                      <a
+                        href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-light-slate hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="size-3.5 shrink-0" />
+                      </a>
+                    </TooltipWrapper>
                   </div>
                 </div>
               ))}

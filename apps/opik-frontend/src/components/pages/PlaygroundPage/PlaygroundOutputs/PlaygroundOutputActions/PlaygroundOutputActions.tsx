@@ -149,8 +149,11 @@ const PlaygroundOutputActions = ({
     return datasets.map((ds) => ({
       label: ds.name,
       value: ds.id,
+      action: {
+        href: `/${workspaceName}/datasets/${ds.id}`,
+      },
     }));
-  }, [datasets]);
+  }, [datasets, workspaceName]);
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
@@ -530,6 +533,7 @@ const PlaygroundOutputActions = ({
             onSelectionChange={setSelectedRuleIds}
             datasetId={datasetId}
             onCreateRuleClick={handleCreateRuleClick}
+            workspaceName={workspaceName}
           />
         </div>
         <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">

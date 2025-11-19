@@ -2,7 +2,7 @@ import React, { ReactElement, useCallback, useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import isArray from "lodash/isArray";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ExternalLink } from "lucide-react";
 
 import {
   Popover,
@@ -270,52 +270,73 @@ export const LoadableSelectBox = ({
           )}
           {hasFilteredOptions ? (
             <>
-              {filteredOptions.map((option) => (
-                <div
-                  key={option.value}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
-                    option.description ? "min-h-12 py-2" : "h-10",
-                  )}
-                  onClick={() => {
-                    if (multiselect) {
-                      const newSelectedValues = isSelected(option.value)
-                        ? selectedValues.filter((v) => v !== option.value)
-                        : [...selectedValues, option.value];
-                      onChange &&
-                        (onChange as (value: string[]) => void)(
-                          newSelectedValues,
-                        );
-                    } else {
-                      onChange &&
-                        (onChange as (value: string) => void)(option.value);
-                      openChangeHandler(false);
-                    }
-                  }}
-                >
-                  {multiselect ? (
-                    <Checkbox
-                      checked={isSelected(option.value)}
-                      className="shrink-0"
-                    />
-                  ) : (
-                    <div className="min-w-4">
-                      {isSelected(option.value) && (
-                        <Check className="size-3.5 shrink-0" strokeWidth="3" />
-                      )}
-                    </div>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate">{option.label}</div>
-                    {option.description && (
-                      <div className="comet-body-xs truncate text-muted-foreground">
-                        {option.description}
+              {filteredOptions.map((option) => {
+                return (
+                  <div
+                    key={option.value}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
+                      option.description ? "min-h-12 py-2" : "h-10",
+                    )}
+                    onClick={() => {
+                      if (multiselect) {
+                        const newSelectedValues = isSelected(option.value)
+                          ? selectedValues.filter((v) => v !== option.value)
+                          : [...selectedValues, option.value];
+                        onChange &&
+                          (onChange as (value: string[]) => void)(
+                            newSelectedValues,
+                          );
+                      } else {
+                        onChange &&
+                          (onChange as (value: string) => void)(option.value);
+                        openChangeHandler(false);
+                      }
+                    }}
+                  >
+                    {multiselect ? (
+                      <Checkbox
+                        checked={isSelected(option.value)}
+                        className="shrink-0"
+                      />
+                    ) : (
+                      <div className="min-w-4">
+                        {isSelected(option.value) && (
+                          <Check
+                            className="size-3.5 shrink-0"
+                            strokeWidth="3"
+                          />
+                        )}
                       </div>
                     )}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="comet-body-s truncate">
+                        {option.label}
+                      </div>
+                      {option.description && (
+                        <div className="comet-body-xs truncate text-muted-foreground">
+                          {option.description}
+                        </div>
+                      )}
+                    </div>
+
+                    {option.action && (
+                      <TooltipWrapper content="Open in a new tab">
+                        <a
+                          href={option.action.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-light-slate"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="size-3.5 shrink-0" />
+                        </a>
+                      </TooltipWrapper>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </>
           ) : emptyState ? (
             emptyState
