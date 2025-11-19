@@ -10,7 +10,6 @@ from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
-    ANY,
     SpanModel,
     TraceModel,
     assert_equal,
@@ -109,41 +108,29 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=ANY_BUT_NONE,
-                tags=["tag1", "tag2"],
-                metadata={"a": "b", "created_from": "langchain"},
+                output={"output": ANY_BUT_NONE},
+                metadata={"created_from": "langchain"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_BUT_NONE},
-                        metadata={"created_from": "langchain"},
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="custom-openai-llm-name",
-                        input=expected_llm_span_input,
-                        output=ANY_BUT_NONE,
-                        metadata=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        usage=expected_usage,
-                        spans=[],
-                        provider="openai",
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
-                    ),
-                ],
-            )
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="custom-openai-llm-name",
+                input=expected_llm_span_input,
+                output=ANY_BUT_NONE,
+                metadata=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=expected_usage,
+                spans=[],
+                provider="openai",
+                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+            ),
         ],
     )
 
@@ -156,14 +143,13 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
     fake_backend,
     ensure_openai_configured,
 ):
-    input_prompt = "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
-
     callback = OpikTracer(
         tags=["tag3", "tag4"],
         metadata={"c": "d"},
     )
 
     model = langchain_openai.ChatOpenAI(
+        model="gpt-4o",
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
@@ -173,41 +159,33 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
         stream_usage=True,
     )
 
-    chunks = []
-    for chunk in model.stream(input_prompt):
-        chunks.append(chunk)
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    chain = prompt_template | model
+
+    def stream_generator(chain, inputs):
+        for chunk in chain.stream(inputs, config={"callbacks": [callback]}):
+            yield chunk
+
+    def invoke_generator(chain, inputs):
+        for chunk in stream_generator(chain, inputs):
+            print(chunk)
+
+    inputs = {"title": "The Hobbit"}
+
+    invoke_generator(chain, inputs)
 
     callback.flush()
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="custom-openai-llm-name",
-        input={
-            "messages": [
-                [
-                    ANY_DICT.containing(
-                        {
-                            "content": input_prompt,
-                            "type": "human",
-                        }
-                    ),
-                ]
-            ]
-        },
-        output={
-            "generations": ANY_BUT_NONE,
-            "llm_output": None,
-            "run": None,
-            "type": "LLMResult",
-        },
+        name="RunnableSequence",
+        input={"title": "The Hobbit"},
+        output=ANY_DICT,
         tags=["tag3", "tag4"],
         metadata={
             "c": "d",
-            "ls_max_tokens": 10,
-            "ls_model_name": "gpt-3.5-turbo",
-            "ls_model_type": "chat",
-            "ls_provider": "openai",
-            "ls_temperature": ANY,
             "created_from": "langchain",
         },
         start_time=ANY_BUT_NONE,
@@ -216,39 +194,48 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
+                name="PromptTemplate",
+                input={"title": "The Hobbit"},
+                output=ANY_BUT_NONE,
+                tags=None,
+                metadata={
+                    "created_from": "langchain",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="tool",
+                model=None,
+                provider=None,
+                usage=None,
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
                 name="custom-openai-llm-name",
                 input={
                     "messages": [
                         [
-                            ANY_DICT.containing(
-                                {
-                                    "content": input_prompt,
-                                    "type": "human",
-                                }
-                            ),
+                            {
+                                "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                "additional_kwargs": {},
+                                "response_metadata": {},
+                                "type": "human",
+                                "name": None,
+                                "id": None,
+                            }
                         ]
                     ]
                 },
                 output=ANY_BUT_NONE,
-                tags=["tag3", "tag4"],
-                metadata={
-                    "c": "d",
-                    "ls_max_tokens": 10,
-                    "ls_model_name": "gpt-3.5-turbo",
-                    "ls_model_type": "chat",
-                    "ls_provider": "openai",
-                    "ls_temperature": ANY,
-                    "created_from": "langchain",
-                    "usage": ANY_DICT,
-                },
+                tags=None,
+                metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[],
                 type="llm",
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with("gpt-4o"),
                 provider="openai",
                 usage=ANY_DICT.containing(EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT),
-            )
+            ),
         ],
     )
 
@@ -319,66 +306,47 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                name="PromptTemplate",
                 input={"title": "The Hobbit"},
                 output=ANY_BUT_NONE,
-                tags=["tag3", "tag4"],
+                tags=None,
                 metadata={
-                    "c": "d",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                type="general",
+                type="tool",
                 model=None,
                 provider=None,
                 usage=None,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="PromptTemplate",
-                        input={"title": "The Hobbit"},
-                        output=ANY_BUT_NONE,
-                        tags=None,
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        type="tool",
-                        model=None,
-                        provider=None,
-                        usage=None,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="custom-openai-llm-name",
-                        input={
-                            "messages": [
-                                [
-                                    ANY_DICT.containing(
-                                        {
-                                            "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
-                                            "type": "human",
-                                        }
-                                    ),
-                                ]
-                            ]
-                        },
-                        output=ANY_BUT_NONE,
-                        tags=None,
-                        metadata=ANY_DICT,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        type="llm",
-                        model=ANY_STRING.starting_with("gpt-4o"),
-                        provider="openai",
-                        usage=None,
-                        spans=[],
-                    ),
-                ],
-            )
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="custom-openai-llm-name",
+                input={
+                    "messages": [
+                        [
+                            ANY_DICT.containing(
+                                {
+                                    "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                    "type": "human",
+                                }
+                            ),
+                        ]
+                    ]
+                },
+                output=ANY_BUT_NONE,
+                tags=None,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                model=ANY_STRING.starting_with("gpt-4o"),
+                provider="openai",
+                usage=None,
+                spans=[],
+            ),
         ],
     )
 
@@ -446,69 +414,50 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                name="PromptTemplate",
                 input={"title": "The Hobbit"},
                 output=ANY_BUT_NONE,
-                tags=["tag3", "tag4"],
+                tags=None,
                 metadata={
-                    "c": "d",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                type="general",
+                type="tool",
                 model=None,
                 provider=None,
                 usage=None,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="PromptTemplate",
-                        input={"title": "The Hobbit"},
-                        output=ANY_BUT_NONE,
-                        tags=None,
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        type="tool",
-                        model=None,
-                        provider=None,
-                        usage=None,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="custom-openai-llm-name",
-                        input={
-                            "messages": [
-                                [
-                                    {
-                                        "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
-                                        "additional_kwargs": {},
-                                        "response_metadata": {},
-                                        "type": "human",
-                                        "name": None,
-                                        "id": None,
-                                        "example": False,
-                                    }
-                                ]
-                            ]
-                        },
-                        output=ANY_BUT_NONE,
-                        tags=None,
-                        metadata=ANY_DICT,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        type="llm",
-                        model=ANY_STRING.starting_with("gpt-4o"),
-                        provider="openai",
-                        usage=None,
-                        spans=[],
-                    ),
-                ],
-            )
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="custom-openai-llm-name",
+                input={
+                    "messages": [
+                        [
+                            {
+                                "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                "additional_kwargs": {},
+                                "response_metadata": {},
+                                "type": "human",
+                                "name": None,
+                                "id": None,
+                                "example": False,
+                            }
+                        ]
+                    ]
+                },
+                output=ANY_BUT_NONE,
+                tags=None,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="llm",
+                model=ANY_STRING.starting_with("gpt-4o"),
+                provider="openai",
+                usage=None,
+                spans=[],
+            ),
         ],
     )
 
@@ -558,58 +507,38 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=None,
-                tags=["tag1", "tag2"],
+                output={"output": ANY_BUT_NONE},
                 metadata={
-                    "a": "b",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="custom-openai-llm-name",
+                input={
+                    "prompts": [
+                        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                    ]
+                },
+                output=None,
+                metadata=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=None,
                 error_info={
                     "exception_type": ANY_STRING,
                     "traceback": ANY_STRING,
                     "message": None,
                 },
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_BUT_NONE},
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="custom-openai-llm-name",
-                        input={
-                            "prompts": [
-                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
-                            ]
-                        },
-                        output=None,
-                        metadata=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        usage=None,
-                        error_info={
-                            "exception_type": ANY_STRING,
-                            "traceback": ANY_STRING,
-                            "message": None,
-                        },
-                        spans=[],
-                    ),
-                ],
-            )
+                spans=[],
+            ),
         ],
     )
 

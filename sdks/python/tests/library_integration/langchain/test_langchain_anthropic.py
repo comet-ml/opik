@@ -39,7 +39,7 @@ MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
 def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__happyflow(
     fake_backend,
 ):
-    # lanchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
+    # langchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
         max_tokens=100,
         model_name=MODEL_FOR_TESTS_FULL,
@@ -76,65 +76,48 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=ANY_BUT_NONE,
-                tags=["tag1", "tag2"],
+                output={"output": ANY_BUT_NONE},
                 metadata={
-                    "a": "b",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_BUT_NONE},
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="custom-anthropic-llm-name",
-                        input={
-                            "messages": [
-                                [
-                                    ANY_DICT.containing(
-                                        {
-                                            "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                            "type": "human",
-                                        }
-                                    ),
-                                ]
-                            ]
-                        },
-                        output=ANY_BUT_NONE,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "langchain", "usage": ANY_DICT}
-                        ),
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        usage=ANY_DICT,
-                        spans=[],
-                        provider="anthropic",
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
-                    ),
-                ],
-            )
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="custom-anthropic-llm-name",
+                input={
+                    "messages": [
+                        [
+                            ANY_DICT.containing(
+                                {
+                                    "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                    "type": "human",
+                                }
+                            ),
+                        ]
+                    ]
+                },
+                output=ANY_BUT_NONE,
+                metadata=ANY_DICT.containing(
+                    {"created_from": "langchain", "usage": ANY_DICT}
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=ANY_DICT,
+                provider="anthropic",
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+            ),
         ],
     )
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
+    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
     _assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
@@ -186,65 +169,48 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=ANY_BUT_NONE,
-                tags=["tag1", "tag2"],
+                output={"output": ANY_BUT_NONE},
                 metadata={
-                    "a": "b",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_BUT_NONE},
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="custom-anthropic-llm-name",
-                        input={
-                            "messages": [
-                                [
-                                    ANY_DICT.containing(
-                                        {
-                                            "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                            "type": "human",
-                                        }
-                                    ),
-                                ]
-                            ]
-                        },
-                        output=ANY_BUT_NONE,
-                        metadata=ANY_DICT.containing(
-                            {"created_from": "langchain", "usage": ANY_DICT}
-                        ),
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        usage=ANY_DICT,
-                        spans=[],
-                        provider="anthropic",
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
-                    ),
-                ],
-            )
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="custom-anthropic-llm-name",
+                input={
+                    "messages": [
+                        [
+                            ANY_DICT.containing(
+                                {
+                                    "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                    "type": "human",
+                                }
+                            ),
+                        ]
+                    ]
+                },
+                output=ANY_BUT_NONE,
+                metadata=ANY_DICT.containing(
+                    {"created_from": "langchain", "usage": ANY_DICT}
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=ANY_DICT,
+                provider="anthropic",
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+            ),
         ],
     )
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
+    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
     _assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
