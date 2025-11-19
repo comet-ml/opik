@@ -249,8 +249,11 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         <div className="fixed inset-0 bg-black/10" onClick={onClose} />
       )}
       <div
-        className="fixed inset-0 translate-x-0 bg-background shadow-xl transition-[left] duration-150"
-        style={{ left: open ? left + "px" : window.innerWidth + "px" }}
+        className="fixed inset-0 bg-background shadow-xl transition-transform duration-150 will-change-transform"
+        style={{
+          left: left + "px",
+          transform: open ? "translateX(0)" : "translateX(100%)",
+        }}
         data-testid={panelId}
       >
         {open && (

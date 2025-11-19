@@ -129,7 +129,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         }}
       >
         <Sparkles className="mr-2 size-4" />
-        Expand dataset with AI
+        Expand with AI
       </Button>
 
       <TooltipWrapper content="Add tags">
