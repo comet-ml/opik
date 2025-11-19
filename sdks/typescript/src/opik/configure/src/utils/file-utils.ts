@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import type { FileChange, WizardOptions } from './types';
 import clack from './clack';
-import z from 'zod';
+import { z } from 'zod';
 import { query } from './query';
 import fg from 'fast-glob';
 import { Integration } from '../lib/constants';
