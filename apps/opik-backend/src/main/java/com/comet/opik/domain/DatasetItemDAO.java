@@ -13,6 +13,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -820,7 +821,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private static final String BULK_UPDATE = """
-            INSERT INTO dataset_items
+            INSERT INTO dataset_items (
+                workspace_id,
+                dataset_id,
+                source,
+                trace_id,
+                span_id,
+                id,
+                input,
+                expected_output,
+                metadata,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                data,
+                tags
+            )
             SELECT
                 s.workspace_id,
                 s.dataset_id,
@@ -828,9 +845,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 s.trace_id,
                 s.span_id,
                 s.id,
-                s.input,
-                s.expected_output,
-                s.metadata,
+                <if(input)> :input <else> s.input <endif> as input,
+                <if(expected_output)> :expected_output <else> s.expected_output <endif> as expected_output,
+                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
                 s.created_at,
                 now64(9) as last_updated_at,
                 s.created_by,
@@ -839,7 +856,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
             FROM dataset_items s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-            ORDER BY (s.workspace_id, s.dataset_id, s.id) DESC, s.last_updated_at DESC
+            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
             """;
 
@@ -1474,7 +1491,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @WithSpan
     public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull DatasetItemUpdate update,
             boolean mergeTags) {
-        com.google.common.base.Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
         log.info("Bulk updating '{}' dataset items", ids.size());
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
@@ -1498,6 +1515,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags) {
         var template = TemplateUtils.newST(sql);
 
+        Optional.ofNullable(update.input())
+                .ifPresent(input -> template.add("input", input));
+        Optional.ofNullable(update.expectedOutput())
+                .ifPresent(expectedOutput -> template.add("expected_output", expectedOutput));
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> template.add("data", data.toString()));
         Optional.ofNullable(update.tags())
@@ -1510,6 +1533,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private void bindBulkUpdateParams(com.comet.opik.api.DatasetItemUpdate update, Statement statement) {
+        Optional.ofNullable(update.input())
+                .ifPresent(input -> statement.bind("input", input));
+        Optional.ofNullable(update.expectedOutput())
+                .ifPresent(expectedOutput -> statement.bind("expected_output", expectedOutput));
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", DatasetItemResultMapper.getOrDefault(metadata)));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
         Optional.ofNullable(update.tags())
