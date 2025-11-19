@@ -9,6 +9,9 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  action?: {
+    href?: string;
+  };
 };
 
 export const COLUMN_ID_ID = "id";
