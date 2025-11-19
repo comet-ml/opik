@@ -61,10 +61,10 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class MetricsAlertJob extends Job implements InterruptableJob {
 
-    private static final LockService.Lock METRICS_ALERT_LOCK_KEY = new LockService.Lock("metrics_alert_job:scan_lock");
-    private static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
+    public static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
             AlertEventType.TRACE_COST,
-            AlertEventType.TRACE_LATENCY);
+            AlertEventType.TRACE_LATENCY,
+            AlertEventType.TRACE_ERRORS);
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
     private volatile boolean interrupted = false;
 
@@ -171,6 +171,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                     config.projectIds(),
                     startTime,
                     endTime);
+            case TRACE_ERRORS -> projectMetricsDAO.getTotalTraceErrors(
+                    config.projectIds(),
+                    startTime,
+                    endTime);
             default -> Mono.just(BigDecimal.ZERO);
         };
 
@@ -253,6 +257,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
             case TRACE_COST -> AlertTriggerConfigType.THRESHOLD_COST;
             case TRACE_LATENCY -> AlertTriggerConfigType.THRESHOLD_LATENCY;
+            case TRACE_ERRORS -> AlertTriggerConfigType.THRESHOLD_ERRORS;
             default -> throw new IllegalArgumentException(
                     "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
         };
