@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 
 import useTraceCommentsBatchCreateMutation from "@/api/traces/useTraceCommentsBatchCreateMutation";
+import useSpanCommentsBatchCreateMutation from "@/api/traces/useSpanCommentsBatchCreateMutation";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { Trace, Span } from "@/types/traces";
 
@@ -37,6 +38,7 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
   const { toast } = useToast();
 
   const batchCreateTraceComments = useTraceCommentsBatchCreateMutation();
+  const batchCreateSpanComments = useSpanCommentsBatchCreateMutation();
 
   const [commentText, setCommentText] = useState<string>("");
 
@@ -47,12 +49,17 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
 
   const handleAddComments = async () => {
     try {
-      if (type !== TRACE_DATA_TYPE.traces) {
-        throw new Error("Batch comments are only supported for traces.");
-      }
-
       const ids = rows.map((r) => r.id);
-      await batchCreateTraceComments.mutateAsync({ ids, text: commentText });
+
+      if (type === TRACE_DATA_TYPE.traces) {
+        await batchCreateTraceComments.mutateAsync({ ids, text: commentText });
+      } else {
+        await batchCreateSpanComments.mutateAsync({
+          ids,
+          text: commentText,
+          projectId,
+        });
+      }
 
       if (onSuccess) onSuccess();
 
@@ -69,13 +76,17 @@ const BatchCommentDialog: React.FunctionComponent<BatchCommentDialogProps> = ({
   const disabled =
     !commentText.trim() ||
     rows.length > MAX_ENTITIES ||
-    batchCreateTraceComments.isPending;
+    batchCreateTraceComments.isPending ||
+    batchCreateSpanComments.isPending;
 
   return (
     <Dialog open={Boolean(open)} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Add comment to {rows.length} traces</DialogTitle>
+          <DialogTitle>
+            Add comment to {rows.length}{" "}
+            {type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+          </DialogTitle>
         </DialogHeader>
 
         {rows.length > MAX_ENTITIES && (

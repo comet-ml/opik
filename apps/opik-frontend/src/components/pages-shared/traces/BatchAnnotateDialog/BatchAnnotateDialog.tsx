@@ -7,11 +7,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import FeedbackScoresEditor from "@/components/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
 import { Trace } from "@/types/traces";
 import React, { useState } from "react";
+import { UpdateFeedbackScoreData } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
 
 type BatchAnnotateDialogProps = {
     rows: Trace[];
@@ -31,33 +31,30 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
     onSuccess,
 }) => {
     const { toast } = useToast();
-    const [scoreName, setScoreName] = useState<string>("");
-    const [value, setValue] = useState<number | undefined>(undefined);
-    const [categoryName, setCategoryName] = useState<string>("");
-    const [reason, setReason] = useState<string>("");
+    const [selectedScore, setSelectedScore] = useState<UpdateFeedbackScoreData | null>(null);
 
     const batchMutation = useTracesBatchFeedbackScoresMutation();
 
     const handleClose = () => {
         setOpen(false);
-        setScoreName("");
-        setValue(undefined);
-        setCategoryName("");
-        setReason("");
+        setSelectedScore(null);
     };
 
     const disabled =
-        !scoreName || value === undefined || rows.length > MAX_ENTITIES || batchMutation.isPending;
+        !selectedScore || rows.length > MAX_ENTITIES || batchMutation.isPending;
 
     const handleAnnotate = async () => {
         try {
+            if (!selectedScore) {
+                return;
+            }
             await batchMutation.mutateAsync({
                 projectId,
                 traceIds: rows.map((r) => r.id),
-                name: scoreName,
-                value: value as number,
-                categoryName: categoryName || undefined,
-                reason: reason || undefined,
+                name: selectedScore.name,
+                value: selectedScore.value,
+                categoryName: selectedScore.categoryName,
+                reason: selectedScore.reason,
             });
             if (onSuccess) onSuccess();
             handleClose();
@@ -68,6 +65,14 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
                 variant: "destructive",
             });
         }
+    };
+
+    const handleUpdateFeedbackScore = (update: UpdateFeedbackScoreData) => {
+        setSelectedScore(update);
+    };
+
+    const handleDeleteFeedbackScore = () => {
+        setSelectedScore(null);
     };
 
     return (
@@ -81,39 +86,12 @@ const BatchAnnotateDialog: React.FunctionComponent<BatchAnnotateDialogProps> = (
                         You can annotate up to {MAX_ENTITIES} traces at a time. Please reduce your selection.
                     </div>
                 )}
-                <div className="grid gap-4 py-4">
-                    <Input
-                        placeholder="Score name"
-                        value={scoreName}
-                        onChange={(e) => setScoreName(e.target.value)}
-                        disabled={rows.length > MAX_ENTITIES}
-                    />
-                    <Input
-                        placeholder="Value"
-                        type="number"
-                        value={value ?? ""}
-                        onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "") {
-                                setValue(undefined);
-                                return;
-                            }
-                            const parsed = Number(v);
-                            setValue(Number.isNaN(parsed) ? undefined : parsed);
-                        }}
-                        disabled={rows.length > MAX_ENTITIES}
-                    />
-                    <Input
-                        placeholder="Category name (optional)"
-                        value={categoryName}
-                        onChange={(e) => setCategoryName(e.target.value)}
-                        disabled={rows.length > MAX_ENTITIES}
-                    />
-                    <Textarea
-                        placeholder="Reason (optional)"
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        disabled={rows.length > MAX_ENTITIES}
+                <div className="py-4">
+                    <FeedbackScoresEditor
+                        feedbackScores={[]}
+                        onUpdateFeedbackScore={handleUpdateFeedbackScore}
+                        onDeleteFeedbackScore={handleDeleteFeedbackScore}
+                        entityCopy="traces"
                     />
                 </div>
                 <DialogFooter>
