@@ -1,13 +1,12 @@
 import React from "react";
-import { ColumnData } from "@/types/shared";
-import { DatasetItem } from "@/types/datasets";
+import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { DatasetItemEditorProvider } from "./DatasetItemEditorContext";
 import DatasetItemEditorLayout from "./DatasetItemEditorLayout";
 
 interface DatasetItemEditorProps {
   datasetItemId: string;
   datasetId: string;
-  columns: ColumnData<DatasetItem>[];
+  columns: DatasetItemColumn[];
   onClose: () => void;
   isOpen: boolean;
   rows: DatasetItem[];

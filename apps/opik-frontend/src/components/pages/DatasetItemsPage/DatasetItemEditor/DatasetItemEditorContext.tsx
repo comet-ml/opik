@@ -7,8 +7,11 @@ import React, {
 } from "react";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import { ColumnData } from "@/types/shared";
-import { DATASET_ITEM_SOURCE, DatasetItem } from "@/types/datasets";
+import {
+  DATASET_ITEM_SOURCE,
+  DatasetItem,
+  DatasetItemColumn,
+} from "@/types/datasets";
 import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useAppStore from "@/store/AppStore";
@@ -56,7 +59,7 @@ const DatasetItemEditorContext = createContext<
 interface DatasetItemEditorProviderProps {
   datasetItemId?: string;
   datasetId: string;
-  columns: ColumnData<DatasetItem>[];
+  columns: DatasetItemColumn[];
   rows?: DatasetItem[];
   setActiveRowId?: (id: string) => void;
   children: React.ReactNode;
