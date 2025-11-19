@@ -106,7 +106,7 @@ const PlaygroundOutputTable = ({
       .map(
         (c, i) =>
           ({
-            id: c.name,
+            id: `variables.${c.name}`,
             label: c.name,
             type: mapDynamicColumnTypesToColumnType(c.types),
             customMeta: {
