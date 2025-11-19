@@ -5,10 +5,12 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -38,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -72,6 +75,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private final @NonNull LockService lockService;
     private final @NonNull AlertService alertService;
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
+    private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull AlertWebhookSender alertWebhookSender;
 
@@ -210,6 +214,13 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                     .windowSeconds(config.windowSeconds())
                                     .projectIds(config.projectIds() != null
                                             ? config.projectIds().stream().map(UUID::toString)
+                                                    .collect(Collectors.joining(","))
+                                            : "")
+                                    .projectNames(config.projectIds() != null
+                                            ? projectService
+                                                    .findByIds(alert.workspaceId(), Set.copyOf(config.projectIds()))
+                                                    .stream()
+                                                    .map(Project::name)
                                                     .collect(Collectors.joining(","))
                                             : "")
                                     .build();

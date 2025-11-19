@@ -40,7 +40,7 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   [ALERT_EVENT_TYPE.trace_errors]: {
     title: "Trace errors threshold",
     description:
-      "Triggered when trace errors count exceeds the specified threshold in the selected projects.",
+      "Triggered when the number of trace errors exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_guardrails_triggered]: {

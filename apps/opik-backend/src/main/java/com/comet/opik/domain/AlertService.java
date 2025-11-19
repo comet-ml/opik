@@ -103,7 +103,8 @@ class AlertServiceImpl implements AlertService {
                       "metric_value": "15",
                       "threshold": "10",
                       "window_seconds": "3600",
-                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb"
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
                     }
                     """,
             AlertEventType.TRACE_FEEDBACK_SCORE,
@@ -228,7 +229,8 @@ class AlertServiceImpl implements AlertService {
                       "metric_value": "150.75",
                       "threshold": "100.00",
                       "window_seconds": "3600",
-                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb"
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
                     }
                     """,
             AlertEventType.TRACE_LATENCY,
@@ -239,7 +241,8 @@ class AlertServiceImpl implements AlertService {
                       "metric_value": "5250.5000",
                       "threshold": "5",
                       "window_seconds": "1800",
-                      "project_ids": ""
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
                     }
                     """));
 

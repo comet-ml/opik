@@ -15,6 +15,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -320,7 +321,7 @@ public class SlackWebhookPayloadMapper {
             // Build scope description
             String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
                     ? "*Workspace-wide*"
-                    : String.format("*Projects:* `%s`", payload.projectIds());
+                    : String.format("*Projects:* `%s`", payload.projectNames());
 
             // Format based on metric type
             String valuePrefix = type.equals("Cost") ? "$" : "";
@@ -369,7 +370,11 @@ public class SlackWebhookPayloadMapper {
      * Formats decimal number to 4 decimal places.
      */
     private static String formatDecimal(BigDecimal value) {
-        return String.format("%.4f", value.doubleValue());
+        if (value.stripTrailingZeros().scale() <= 0) {
+            // It's an integer
+            return value.toBigInteger().toString();
+        }
+        return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,

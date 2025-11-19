@@ -1474,7 +1474,8 @@ class AlertResourceTest {
             // Verify payload contains error metrics information
             MetricsAlertPayload errorPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(errorPayload, "TRACE_ERRORS", "3", "2", "60", isProjectScoped ? projectId : null);
+            verifyMetricsPayload(errorPayload, "TRACE_ERRORS", "3", "2", "60", isProjectScoped ? projectId : null,
+                    isProjectScoped ? projectName : null);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1646,7 +1647,7 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             MetricsAlertPayload costPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId);
+            verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId, projectName);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1694,7 +1695,7 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             MetricsAlertPayload latencyPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3.0", "2", "60", projectId);
+            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3.0", "2", "60", projectId, projectName);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1705,13 +1706,14 @@ class AlertResourceTest {
         }
 
         private void verifyMetricsPayload(MetricsAlertPayload payload, String eventType, String metricValue,
-                String threshold, String windowSeconds, UUID projectId) {
+                String threshold, String windowSeconds, UUID projectId, String projectName) {
             assertThat(payload.eventType()).isEqualTo(eventType);
 
             assertThat(payload.metricValue().compareTo(new BigDecimal(metricValue))).isZero();
             assertThat(payload.threshold().compareTo(new BigDecimal(threshold))).isZero();
             assertThat(payload.windowSeconds()).isEqualTo(Long.parseLong(windowSeconds));
             assertThat(payload.projectIds()).isEqualTo(Optional.ofNullable(projectId).map(UUID::toString).orElse(""));
+            assertThat(payload.projectNames()).isEqualTo(Optional.ofNullable(projectName).orElse(""));
         }
 
         private String verifyWebhookCalledAndGetPayload(Alert alert) {
