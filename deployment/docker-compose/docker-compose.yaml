@@ -240,11 +240,8 @@ services:
     pull_policy: always
     profiles:
       - opik
-<<<<<<< HEAD
       - local-be-fe
       - local-be
-=======
->>>>>>> 75103fb32 (revert the configs to original values)
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -266,10 +263,7 @@ services:
     pull_policy: always
     profiles:
       - opik
-<<<<<<< HEAD
       - local-be
-=======
->>>>>>> 75103fb32 (revert the configs to original values)
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile

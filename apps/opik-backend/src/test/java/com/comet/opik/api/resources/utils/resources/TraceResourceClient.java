@@ -202,14 +202,14 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .post(Entity.json(TraceBatch.builder().traces(traces).build()));
     }
 
-    public Response callTraceCommentsBatchCreate(List<UUID> ids, String text, String apiKey, String workspaceName) {
+    public Response callTraceCommentsBatchCreate(Set<UUID> ids, String text, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("comments")
                 .path("batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(CommentsBatchCreate.builder().ids(Set.copyOf(ids)).text(text).build()));
+                .post(Entity.json(CommentsBatchCreate.builder().ids(ids).text(text).build()));
     }
 
     public Trace getById(UUID id, String workspaceName, String apiKey) {

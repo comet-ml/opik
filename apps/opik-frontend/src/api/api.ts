@@ -19,7 +19,6 @@ export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
 export const FEEDBACK_DEFINITIONS_REST_ENDPOINT =
   "/v1/private/feedback-definitions/";
 export const TRACES_REST_ENDPOINT = "/v1/private/traces/";
-export const TRACES_BATCH_FEEDBACK_SCORES_ENDPOINT = "/v1/private/traces/feedback-scores";
 export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";

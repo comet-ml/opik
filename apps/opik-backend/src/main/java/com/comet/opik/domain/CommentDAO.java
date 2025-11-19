@@ -176,7 +176,7 @@ class CommentDAOImpl implements CommentDAO {
     @Override
     public Mono<Long> addCommentsBatch(@NonNull EntityType entityType, @NonNull List<UUID> entityIds,
             @NonNull List<UUID> commentIds, @NonNull List<UUID> projectIds, @NonNull Comment comment) {
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+        return asyncTemplate.nonTransaction(connection -> {
             var items = TemplateUtils.getQueryItemPlaceHolder(entityIds.size());
             var template = new ST(INSERT_COMMENTS_BATCH).add("items", items);
 
@@ -192,7 +192,7 @@ class CommentDAOImpl implements CommentDAO {
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        }));
+        });
     }
 
     @Override
