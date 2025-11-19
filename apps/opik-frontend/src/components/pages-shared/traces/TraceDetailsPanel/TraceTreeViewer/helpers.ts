@@ -495,3 +495,26 @@ export const addAllParentIds = (
 
   return parentIds;
 };
+
+export const addAllDescendantIds = (
+  searchIds: Set<string>,
+  dataMap: Map<string, Span | Trace>,
+): Set<string> => {
+  const descendantIds = new Set<string>();
+
+  const ensureDescendants = (parentId: string): void => {
+    dataMap.forEach((data, id) => {
+      const dataParentId = get(data, "parent_span_id");
+      if (dataParentId === parentId && !descendantIds.has(id)) {
+        descendantIds.add(id);
+        ensureDescendants(id);
+      }
+    });
+  };
+
+  searchIds.forEach((id) => {
+    ensureDescendants(id);
+  });
+
+  return descendantIds;
+};

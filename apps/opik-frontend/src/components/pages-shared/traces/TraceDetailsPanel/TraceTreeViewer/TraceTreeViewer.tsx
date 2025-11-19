@@ -4,6 +4,7 @@ import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 import {
   addAllParentIds,
+  addAllDescendantIds,
   constructDataMapAndSearchIds,
   filterFunction,
 } from "./helpers";
@@ -96,6 +97,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       predicate,
     );
     const parentIds = addAllParentIds(searchIds, dataMap);
+    const descendantIds = addAllDescendantIds(searchIds, dataMap);
 
     retVal.searchIds = searchIds;
     retVal.filteredTraceSpans =
@@ -103,7 +105,9 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         ? null
         : traceSpans.filter(
             (traceSpan) =>
-              searchIds.has(traceSpan.id) || parentIds.has(traceSpan.id),
+              searchIds.has(traceSpan.id) ||
+              parentIds.has(traceSpan.id) ||
+              descendantIds.has(traceSpan.id),
           );
 
     return retVal;
