@@ -11,6 +11,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -18,6 +21,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,35 +61,31 @@ class ChatCompletionServiceTest {
     @DisplayName("Create Method Error Handling:")
     class CreateMethodErrorHandling {
 
-        @Test
-        @DisplayName("when ConnectException occurs, then throw InternalServerErrorException with user-friendly message")
-        void create__whenConnectException__thenThrowWithUserFriendlyMessage() {
-            // Given
-            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
-            var workspaceId = "test-workspace-id";
-            var connectException = new ConnectException("Connection refused");
-            var runtimeException = new RuntimeException("Failed to connect", connectException);
-
-            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.generate(any(), anyString())).thenThrow(runtimeException);
-            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
-
-            // When & Then
-            assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining("Service is unreachable")
-                    .hasCauseInstanceOf(RuntimeException.class);
+        private static Stream<Arguments> connectionExceptionProvider() {
+            return Stream.of(
+                    Arguments.of(
+                            "ConnectException with 'Connection refused'",
+                            new ConnectException("Connection refused"),
+                            "Service is unreachable"),
+                    Arguments.of(
+                            "ConnectException with custom message",
+                            new ConnectException("Connection to host:8080 failed"),
+                            "Service is unreachable"),
+                    Arguments.of(
+                            "ClosedChannelException",
+                            new ClosedChannelException(),
+                            "Service is unreachable"));
         }
 
-        @Test
-        @DisplayName("when ClosedChannelException occurs, then throw InternalServerErrorException with user-friendly message")
-        void create__whenClosedChannelException__thenThrowWithUserFriendlyMessage() {
+        @ParameterizedTest(name = "when {0}, then throw InternalServerErrorException with user-friendly message")
+        @MethodSource("connectionExceptionProvider")
+        @DisplayName("Connection exceptions should produce user-friendly error messages")
+        void create__whenConnectionException__thenThrowWithUserFriendlyMessage(
+                String testName, Exception causeException, String expectedMessagePart) {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
-            var closedChannelException = new ClosedChannelException();
-            var runtimeException = new RuntimeException("Channel closed", closedChannelException);
+            var runtimeException = new RuntimeException("Connection error", causeException);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(runtimeException);
@@ -95,7 +95,7 @@ class ChatCompletionServiceTest {
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining("Service is unreachable")
+                    .hasMessageContaining(expectedMessagePart)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
@@ -205,14 +205,27 @@ class ChatCompletionServiceTest {
     @DisplayName("Error Message Construction:")
     class ErrorMessageConstruction {
 
-        @Test
-        @DisplayName("when ConnectException with 'Connection refused', then return generic unreachable message")
-        void buildDetailedErrorMessage__whenConnectionRefused__thenReturnGenericMessage() {
+        private static Stream<Arguments> exactErrorMessageProvider() {
+            return Stream.of(
+                    Arguments.of(
+                            "ConnectException with 'Connection refused'",
+                            new ConnectException("Connection refused"),
+                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL and your network connection"),
+                    Arguments.of(
+                            "ClosedChannelException",
+                            new ClosedChannelException(),
+                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL and your network connection"));
+        }
+
+        @ParameterizedTest(name = "when {0}, then return exact error message")
+        @MethodSource("exactErrorMessageProvider")
+        @DisplayName("Specific exceptions should produce exact error messages")
+        void buildDetailedErrorMessage__whenSpecificException__thenReturnExactMessage(
+                String testName, Exception causeException, String expectedMessage) {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
-            var connectException = new ConnectException("Connection refused");
-            var runtimeException = new RuntimeException("Connection failed", connectException);
+            var runtimeException = new RuntimeException("Error", causeException);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(runtimeException);
@@ -221,8 +234,7 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isInstanceOf(InternalServerErrorException.class)
-                    .hasMessage(
-                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL and your network connection");
+                    .hasMessage(expectedMessage);
         }
 
         @Test
@@ -245,26 +257,6 @@ class ChatCompletionServiceTest {
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("Service is unreachable")
                     .hasMessageContaining(customMessage);
-        }
-
-        @Test
-        @DisplayName("when ClosedChannelException, then return generic unreachable message")
-        void buildDetailedErrorMessage__whenClosedChannelException__thenReturnGenericMessage() {
-            // Given
-            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
-            var workspaceId = "test-workspace-id";
-            var closedChannelException = new ClosedChannelException();
-            var runtimeException = new RuntimeException("Channel error", closedChannelException);
-
-            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.generate(any(), anyString())).thenThrow(runtimeException);
-            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
-
-            // When & Then
-            assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .hasMessage(
-                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL and your network connection");
         }
     }
 }
