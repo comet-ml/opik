@@ -44,9 +44,9 @@ spec:
       securityContext:
         {{- toYaml . | nindent 10 }}
       {{- end }}
-      {{- if or $value.initContainers $value.waitForClickhouse (and $value.waitForMysql $value.waitForMysql.enabled) $value.run_migration }}
+      {{- if or $value.initContainers $value.waitForClickhouse $value.waitForMysql $value.run_migration }}
       initContainers:
-      {{- if and (eq $key "backend") $value.waitForMysql $value.waitForMysql.enabled }}
+      {{- if and (eq $key "backend") $value.waitForMysql }}
         - name: wait-for-mysql-service
           image: "{{ default $.Values.registry $value.waitForMysql.image.registry }}/{{ $value.waitForMysql.image.repository }}:{{ $value.waitForMysql.image.tag }}"
           imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForMysql.image.pullPolicy }}
