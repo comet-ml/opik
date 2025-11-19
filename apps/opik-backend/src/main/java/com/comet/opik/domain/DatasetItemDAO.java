@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -65,6 +66,8 @@ public interface DatasetItemDAO {
 
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
+
+    Mono<Void> bulkUpdate(Set<UUID> ids, DatasetItemUpdate update, boolean mergeTags);
 }
 
 @Singleton
@@ -816,6 +819,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String BULK_UPDATE = """
+            INSERT INTO dataset_items
+            SELECT
+                s.id,
+                s.dataset_id,
+                s.source,
+                s.trace_id,
+                s.span_id,
+                <if(data)> :data <else> s.data <endif> as data,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags,
+                s.created_at,
+                s.workspace_id,
+                s.created_by,
+                :user_name as last_updated_by
+            FROM dataset_items s
+            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+            ORDER BY (s.workspace_id, s.dataset_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
+            """;
+
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
             """
                     WITH feedback_scores_combined_raw AS (
@@ -1441,5 +1464,51 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull DatasetItemUpdate update,
+            boolean mergeTags) {
+        com.google.common.base.Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' dataset items", ids.size());
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        var query = template.render();
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(query)
+                    .bind("ids", ids);
+
+            bindBulkUpdateParams(update, statement);
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "bulk_update");
+
+            return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .then()
+                    .doOnSuccess(__ -> log.info("Completed bulk update for '{}' dataset items", ids.size()));
+        });
+    }
+
+    private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        Optional.ofNullable(update.data())
+                .ifPresent(data -> template.add("data", data.toString()));
+        Optional.ofNullable(update.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+
+        return template;
+    }
+
+    private void bindBulkUpdateParams(com.comet.opik.api.DatasetItemUpdate update, Statement statement) {
+        Optional.ofNullable(update.data())
+                .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
+        Optional.ofNullable(update.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
     }
 }
