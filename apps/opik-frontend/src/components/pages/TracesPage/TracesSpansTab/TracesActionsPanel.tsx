@@ -113,7 +113,8 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       />
       <BatchAnnotateDialog
         key={`annotate-${resetKeyRef.current}`}
-        rows={rows as Trace[]}
+        rows={rows}
+        type={type}
         open={open === 4}
         setOpen={setOpen}
         projectId={projectId}
@@ -171,7 +172,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         </Button>
       </TooltipWrapper>
 
-      <TooltipWrapper content={type === TRACE_DATA_TYPE.traces ? "Comment" : "Batch comments supported for traces only"}>
+      <TooltipWrapper content="Comment">
         <Button
           variant="outline"
           size="sm"
@@ -179,7 +180,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             setOpen(5);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled || type !== TRACE_DATA_TYPE.traces}
+          disabled={disabled}
         >
           <MessageSquarePlus className="mr-2 size-4" />
           Comment
