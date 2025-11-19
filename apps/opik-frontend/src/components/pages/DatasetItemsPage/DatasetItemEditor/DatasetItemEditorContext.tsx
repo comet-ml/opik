@@ -81,7 +81,9 @@ export const DatasetItemEditorProvider: React.FC<
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const updateMutation = useDatasetItemUpdateMutation();
+  const { mutate: updateDatasetItem } = updateMutation;
   const createMutation = useDatasetItemBatchMutation();
+  const { mutate: createDatasetItem } = createMutation;
 
   // Fetch dataset item data and parse fields
   const { fields, datasetItem, isPending } = useDatasetItemData({
@@ -109,7 +111,7 @@ export const DatasetItemEditorProvider: React.FC<
   const handleSave = useCallback(
     (data: Record<string, unknown>) => {
       if (mode === "create") {
-        createMutation.mutate(
+        createDatasetItem(
           {
             datasetId,
             datasetItems: [
@@ -131,7 +133,7 @@ export const DatasetItemEditorProvider: React.FC<
       }
 
       if (datasetItemId) {
-        updateMutation.mutate(
+        updateDatasetItem(
           {
             datasetId,
             itemId: datasetItemId,
@@ -147,8 +149,8 @@ export const DatasetItemEditorProvider: React.FC<
       }
     },
     [
-      updateMutation,
-      createMutation,
+      updateDatasetItem,
+      createDatasetItem,
       datasetId,
       datasetItemId,
       mode,
@@ -170,25 +172,25 @@ export const DatasetItemEditorProvider: React.FC<
   const handleAddTag = useCallback(
     (newTag: string) => {
       if (!datasetItemId) return;
-      updateMutation.mutate({
+      updateDatasetItem({
         datasetId,
         itemId: datasetItemId,
         item: { tags: [...tags, newTag] },
       });
     },
-    [updateMutation, datasetId, datasetItemId, tags],
+    [updateDatasetItem, datasetId, datasetItemId, tags],
   );
 
   const handleDeleteTag = useCallback(
     (tag: string) => {
       if (!datasetItemId) return;
-      updateMutation.mutate({
+      updateDatasetItem({
         datasetId,
         itemId: datasetItemId,
         item: { tags: tags.filter((t) => t !== tag) },
       });
     },
-    [updateMutation, datasetId, datasetItemId, tags],
+    [updateDatasetItem, datasetId, datasetItemId, tags],
   );
 
   const requestConfirmIfNeeded = useCallback(
@@ -276,17 +278,17 @@ export const DatasetItemEditorProvider: React.FC<
       <ConfirmDialog
         open={showConfirmDialog}
         setOpen={handleDialogOpenChange}
-        onConfirm={confirm}
-        onCancel={cancel}
+        onConfirm={cancel}
+        onCancel={confirm}
         title="Discard changes?"
         description={
           mode === "create"
             ? "You have unsaved changes. Do you want to discard them and close?"
             : "You made some changes that haven't been saved yet. Do you want to keep editing or discard them?"
         }
-        confirmText="Discard changes"
-        cancelText="Keep editing"
-        confirmButtonVariant="destructive"
+        confirmText="Keep editing"
+        cancelText="Discard changes"
+        confirmButtonVariant="default"
       />
     </DatasetItemEditorContext.Provider>
   );

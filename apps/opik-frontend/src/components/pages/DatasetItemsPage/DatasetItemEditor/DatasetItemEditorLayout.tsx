@@ -60,8 +60,8 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
           <Loader />
         </div>
       ) : (
-        <div className="relative size-full overflow-y-auto p-6 pt-4">
-          <div className="border-b pb-4">
+        <div className="relative size-full overflow-y-auto">
+          <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
             <div className="flex items-center justify-between gap-2">
               <TooltipWrapper content={datasetItemId}>
                 <div className="comet-title-xs">
@@ -104,14 +104,17 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
               align="start"
             />
           </div>
-          <DatasetItemEditorForm
-            formId={formId}
-            fields={fields}
-            isEditing={isEditing}
-            onSubmit={handleSave}
-            setHasUnsavedChanges={setHasUnsavedChanges}
-            resetKey={resetKey}
-          />
+          <div className="p-6 pt-4">
+            <DatasetItemEditorForm
+              key={datasetItemId}
+              formId={formId}
+              fields={fields}
+              isEditing={isEditing}
+              onSubmit={handleSave}
+              setHasUnsavedChanges={setHasUnsavedChanges}
+              resetKey={resetKey}
+            />
+          </div>
         </div>
       )}
     </ResizableSidePanel>

@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnData } from "@/types/shared";
 import { DatasetItem } from "@/types/datasets";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
+import { getFieldType } from "./useDatasetItemFormHelpers";
 
 export enum FIELD_TYPE {
   SIMPLE = "simple",
@@ -28,65 +28,6 @@ interface UseDatasetItemDataReturn {
   datasetItem: DatasetItem | undefined;
 }
 
-const getFieldType = (
-  value: unknown,
-): { type: FIELD_TYPE; isJsonString: boolean; value: unknown } => {
-  if (value === null || value === undefined) {
-    return {
-      type: FIELD_TYPE.SIMPLE,
-      isJsonString: false,
-      value,
-    };
-  }
-
-  const valueType = typeof value;
-
-  if (valueType === "object") {
-    return {
-      type: FIELD_TYPE.COMPLEX,
-      isJsonString: false,
-      value,
-    };
-  }
-
-  // Try to parse any string as JSON
-  if (valueType === "string") {
-    try {
-      const parsed = JSON.parse(value as string);
-      const parsedType = typeof parsed;
-
-      // If parsed result is object or array, it's complex
-      if (parsedType === "object" && parsed !== null) {
-        return {
-          type: FIELD_TYPE.COMPLEX,
-          isJsonString: true,
-          value: parsed,
-        };
-      }
-
-      // If parsed result is a primitive (number, boolean, null), keep as simple but use parsed value
-      return {
-        type: FIELD_TYPE.SIMPLE,
-        isJsonString: true,
-        value: parsed,
-      };
-    } catch {
-      // Not valid JSON, treat as regular string
-      return {
-        type: FIELD_TYPE.SIMPLE,
-        isJsonString: false,
-        value,
-      };
-    }
-  }
-
-  return {
-    type: FIELD_TYPE.SIMPLE,
-    isJsonString: false,
-    value,
-  };
-};
-
 export const useDatasetItemData = ({
   datasetItemId,
   columns,
@@ -94,7 +35,6 @@ export const useDatasetItemData = ({
   const { data: datasetItem, isPending } = useDatasetItemById(
     { datasetItemId: datasetItemId || "" },
     {
-      placeholderData: keepPreviousData,
       enabled: !!datasetItemId,
     },
   );

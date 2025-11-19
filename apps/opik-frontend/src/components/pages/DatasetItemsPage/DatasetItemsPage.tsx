@@ -64,7 +64,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at", "tags"];
 
 const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";

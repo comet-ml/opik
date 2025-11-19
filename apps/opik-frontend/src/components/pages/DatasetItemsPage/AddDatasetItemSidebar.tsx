@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { ColumnData } from "@/types/shared";
 import { DatasetItem } from "@/types/datasets";
 import { DatasetItemEditorProvider } from "./DatasetItemEditor/DatasetItemEditorContext";
@@ -17,7 +17,7 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
   setOpen,
   columns,
 }) => {
-  const handleClose = () => setOpen(false);
+  const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
   return (
     <DatasetItemEditorProvider

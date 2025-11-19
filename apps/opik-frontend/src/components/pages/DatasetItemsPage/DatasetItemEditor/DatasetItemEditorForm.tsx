@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { FormProvider, useForm, useFormContext } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import TextareaAutosize from "react-textarea-autosize";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DatasetField, FIELD_TYPE } from "./hooks/useDatasetItemData";
 import JsonFieldEditor from "./JsonFieldEditor";
@@ -37,18 +37,23 @@ const FieldInput: React.FC<{ field: DatasetField; isEditing: boolean }> = ({
     fieldValue !== null && fieldValue !== undefined ? String(fieldValue) : "";
 
   return (
-    <Input
-      value={displayValue}
-      onChange={(e) =>
-        form.setValue(field.id, e.target.value, { shouldDirty: true })
-      }
-      readOnly={!isEditing}
-      placeholder={isEditing ? "Enter text for this field…" : undefined}
-      className={cn(
-        "min-h-[40px] font-mono",
-        !isEditing && "cursor-text bg-[var(--codemirror-background)]",
-      )}
-    />
+    <div className="flex min-h-0 w-full flex-1">
+      <TextareaAutosize
+        value={displayValue}
+        onChange={(e) =>
+          form.setValue(field.id, e.target.value, { shouldDirty: true })
+        }
+        readOnly={!isEditing}
+        placeholder={isEditing ? "Enter text for this field…" : undefined}
+        className={cn(
+          "flex w-full rounded-md resize-none border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 font-mono",
+          isEditing
+            ? "hover:shadow-sm focus-visible:border-primary"
+            : "cursor-text bg-[var(--codemirror-background)]",
+        )}
+        minRows={1}
+      />
+    </div>
   );
 };
 
