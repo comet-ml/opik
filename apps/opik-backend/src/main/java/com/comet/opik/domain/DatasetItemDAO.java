@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -12,6 +13,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -65,6 +67,8 @@ public interface DatasetItemDAO {
 
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
+
+    Mono<Void> bulkUpdate(Set<UUID> ids, DatasetItemUpdate update, boolean mergeTags);
 }
 
 @Singleton
@@ -816,6 +820,46 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String BULK_UPDATE = """
+            INSERT INTO dataset_items (
+                workspace_id,
+                dataset_id,
+                source,
+                trace_id,
+                span_id,
+                id,
+                input,
+                expected_output,
+                metadata,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                data,
+                tags
+            )
+            SELECT
+                s.workspace_id,
+                s.dataset_id,
+                s.source,
+                s.trace_id,
+                s.span_id,
+                s.id,
+                <if(input)> :input <else> s.input <endif> as input,
+                <if(expected_output)> :expected_output <else> s.expected_output <endif> as expected_output,
+                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
+                s.created_at,
+                now64(9) as last_updated_at,
+                s.created_by,
+                :user_name as last_updated_by,
+                <if(data)> :data <else> s.data <endif> as data,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
+            FROM dataset_items s
+            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
+            """;
+
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
             """
                     WITH feedback_scores_combined_raw AS (
@@ -1441,5 +1485,63 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull DatasetItemUpdate update,
+            boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' dataset items", ids.size());
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        var query = template.render();
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(query)
+                    .bind("ids", ids);
+
+            bindBulkUpdateParams(update, statement);
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "bulk_update");
+
+            return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .then()
+                    .doOnSuccess(__ -> log.info("Completed bulk update for '{}' dataset items", ids.size()));
+        });
+    }
+
+    private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        Optional.ofNullable(update.input())
+                .ifPresent(input -> template.add("input", input));
+        Optional.ofNullable(update.expectedOutput())
+                .ifPresent(expectedOutput -> template.add("expected_output", expectedOutput));
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        Optional.ofNullable(update.data())
+                .ifPresent(data -> template.add("data", data.toString()));
+        Optional.ofNullable(update.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+
+        return template;
+    }
+
+    private void bindBulkUpdateParams(com.comet.opik.api.DatasetItemUpdate update, Statement statement) {
+        Optional.ofNullable(update.input())
+                .ifPresent(input -> statement.bind("input", input));
+        Optional.ofNullable(update.expectedOutput())
+                .ifPresent(expectedOutput -> statement.bind("expected_output", expectedOutput));
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", DatasetItemResultMapper.getOrDefault(metadata)));
+        Optional.ofNullable(update.data())
+                .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
+        Optional.ofNullable(update.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
     }
 }
