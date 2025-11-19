@@ -18,8 +18,10 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.net.ConnectException;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -168,7 +170,7 @@ public class ChatCompletionService {
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-                // Build detailed error message including the underlying exception
+                // Build a detailed error message including the underlying exception
                 String detailedMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
                 String exceptionDetails = extractErrorDetails(throwable);
                 if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
@@ -201,22 +203,24 @@ public class ChatCompletionService {
         // Use the most specific exception (root cause if available)
         Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
 
-        // Provide user-friendly messages based on exception type
+        // Provide user-friendly messages based on an exception type
         return switch (exceptionToHandle) {
-            case java.net.ConnectException connectException -> {
+            case ConnectException connectException -> {
                 // Extract host/URL from the exception message if available
                 String message = connectException.getMessage();
                 if (message != null && message.contains("Connection refused")) {
-                    yield "Service is unreachable. Please check if the LLM provider service is running";
+                    yield "Service is unreachable. Please check the provider URL and your network connection";
                 }
                 yield "Service is unreachable: " + message;
             }
             case java.nio.channels.ClosedChannelException closedChannelException ->
-                "Service is unreachable. Please check if the LLM provider service is running";
-            case null, default -> {
+                "Service is unreachable. Please check the provider URL and your network connection";
+            // For other exceptions, use the exception message
+            // Fallback to exception class name if no message
+            default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();
-                if (message != null && !message.isEmpty()) {
+                if (StringUtils.isNotBlank(message)) {
                     yield message;
                 }
                 // Fallback to exception class name if no message
