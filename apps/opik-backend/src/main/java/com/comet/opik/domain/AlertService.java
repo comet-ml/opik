@@ -99,7 +99,7 @@ class AlertServiceImpl implements AlertService {
             """
                     {
                       "event_type": "TRACE_ERRORS",
-                      "metric_name": "trace:cost",
+                      "metric_name": "trace:errors",
                       "metric_value": "15",
                       "threshold": "10",
                       "window_seconds": "3600",
