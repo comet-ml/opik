@@ -5,10 +5,12 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -38,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -61,10 +64,10 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class MetricsAlertJob extends Job implements InterruptableJob {
 
-    private static final LockService.Lock METRICS_ALERT_LOCK_KEY = new LockService.Lock("metrics_alert_job:scan_lock");
-    private static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
+    public static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
             AlertEventType.TRACE_COST,
-            AlertEventType.TRACE_LATENCY);
+            AlertEventType.TRACE_LATENCY,
+            AlertEventType.TRACE_ERRORS);
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
     private volatile boolean interrupted = false;
 
@@ -72,6 +75,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private final @NonNull LockService lockService;
     private final @NonNull AlertService alertService;
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
+    private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull AlertWebhookSender alertWebhookSender;
 
@@ -171,6 +175,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                     config.projectIds(),
                     startTime,
                     endTime);
+            case TRACE_ERRORS -> projectMetricsDAO.getTotalTraceErrors(
+                    config.projectIds(),
+                    startTime,
+                    endTime);
             default -> Mono.just(BigDecimal.ZERO);
         };
 
@@ -201,11 +209,18 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                             var metricsPayload = MetricsAlertPayload.builder()
                                     .eventType(trigger.eventType().name())
                                     .metricName(trigger.eventType().getValue())
-                                    .metricValue(metricValueFinal)
-                                    .threshold(config.threshold())
+                                    .metricValue(formatDecimal(metricValueFinal))
+                                    .threshold(formatDecimal(config.threshold()))
                                     .windowSeconds(config.windowSeconds())
                                     .projectIds(config.projectIds() != null
                                             ? config.projectIds().stream().map(UUID::toString)
+                                                    .collect(Collectors.joining(","))
+                                            : "")
+                                    .projectNames(config.projectIds() != null
+                                            ? projectService
+                                                    .findByIds(alert.workspaceId(), Set.copyOf(config.projectIds()))
+                                                    .stream()
+                                                    .map(Project::name)
                                                     .collect(Collectors.joining(","))
                                             : "")
                                     .build();
@@ -253,6 +268,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
             case TRACE_COST -> AlertTriggerConfigType.THRESHOLD_COST;
             case TRACE_LATENCY -> AlertTriggerConfigType.THRESHOLD_LATENCY;
+            case TRACE_ERRORS -> AlertTriggerConfigType.THRESHOLD_ERRORS;
             default -> throw new IllegalArgumentException(
                     "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
         };
@@ -280,6 +296,17 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         long windowSeconds = Long.parseLong(windowString);
 
         return new TriggerConfig(projectIds, threshold, windowSeconds);
+    }
+
+    /**
+     * Formats decimal number to 4 decimal places.
+     */
+    private static String formatDecimal(BigDecimal value) {
+        if (value.stripTrailingZeros().scale() <= 0) {
+            // It's an integer
+            return value.toBigInteger().toString();
+        }
+        return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 
     private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds) {
