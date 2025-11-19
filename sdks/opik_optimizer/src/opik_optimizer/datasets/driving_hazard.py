@@ -15,48 +15,83 @@ import opik
 from typing import Any
 from PIL import Image
 
+from opik_optimizer.utils.dataset_utils import default_dataset_name, resolve_test_mode_count
+
+
+def driving_hazard(
+    *,
+    split: str = "train",
+    count: int = 50,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    max_image_size: tuple[int, int] | None = (512, 384),
+    image_quality: int = 60,
+) -> opik.Dataset:
+    """
+    Load samples from the DHPR (Driving-Hazard-Prediction-and-Reasoning) dataset.
+
+    Each record contains the hazard-detection question, its answer ("hazard"),
+    and multimodal content where the road image is encoded as OpenAI-style
+    structured content (text + base64 JPEG). Images can optionally be resized
+    and recompressed to control context size.
+
+    Args:
+        split: ``"train"`` or ``"test"`` (the DHPR dataset exposes two splits).
+        count: Number of samples streamed from the split.
+        dataset_name: Optional explicit Opik dataset name.
+        test_mode: When True, only a small sample (default 5) is loaded.
+        max_image_size: Maximum (width, height) for resizing images. ``None`` keeps
+            the original resolution. Defaults to ``(512, 384)``, which yields roughly
+            15–20k tokens per image.
+        image_quality: JPEG compression quality (1-100). Lower values reduce payload
+            size; higher values preserve more detail. Defaults to ``60``.
+
+    Returns:
+        `opik.Dataset` populated with multimodal hazard detection samples.
+    """
+    if count <= 0:
+        raise ValueError("count must be a positive integer.")
+
+    normalized_split = split.lower()
+    if normalized_split not in {"train", "test"}:
+        raise ValueError("Driving hazard dataset exposes only 'train' and 'test' splits.")
+
+    preset_name = None
+    if normalized_split == "train" and count == 50:
+        preset_name = "driving_hazard_50"
+    elif normalized_split == "train" and count == 100:
+        preset_name = "driving_hazard_100"
+    elif normalized_split == "test" and count == 100:
+        preset_name = "driving_hazard_test"
+
+    target_name = dataset_name or preset_name or default_dataset_name(
+        base="driving_hazard",
+        split=normalized_split,
+        start=0,
+        count=count,
+    )
+
+    return _load_dhpr_dataset(
+        dataset_name=target_name,
+        nb_items=count,
+        test_mode=test_mode,
+        split=normalized_split,
+        max_image_size=max_image_size,
+        image_quality=image_quality,
+    )
+
 
 def driving_hazard_50(
     test_mode: bool = False,
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
-    """
-    Dataset containing 50 samples from the DHPR driving hazard dataset.
-
-    Each sample includes:
-    - question: The hazard detection question
-    - image_content: Structured content with text and base64-encoded image
-    - hazard: Expected hazard description (ground truth)
-    - question_id: Unique identifier
-
-    Args:
-        test_mode: If True, creates a test dataset with only 5 samples
-        max_image_size: Maximum (width, height) for images. Default (512, 384)
-            gives ~15-20k tokens per image. Use None to keep original size.
-            Examples: (400, 300) for smaller, (800, 600) for larger.
-        image_quality: JPEG compression quality (1-100). Default 60 balances
-            quality and size. Lower = smaller files. Higher = better quality.
-            Examples: 40-50 (very small), 60-70 (balanced), 85+ (high quality)
-
-    Returns:
-        opik.Dataset with multimodal hazard detection samples
-
-    Example:
-        >>> # Default settings (recommended for most cases)
-        >>> dataset = driving_hazard_50()
-        >>>
-        >>> # Smaller images for low context
-        >>> dataset = driving_hazard_50(max_image_size=(400, 300), image_quality=50)
-        >>>
-        >>> # Higher quality for detailed analysis
-        >>> dataset = driving_hazard_50(max_image_size=(800, 600), image_quality=85)
-    """
-    return _load_dhpr_dataset(
-        dataset_name_prefix="driving_hazard_50",
-        nb_items=50,
-        test_mode=test_mode,
+    """Legacy helper for 50 training samples."""
+    return driving_hazard(
         split="train",
+        count=50,
+        dataset_name="driving_hazard_50",
+        test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
     )
@@ -67,24 +102,12 @@ def driving_hazard_100(
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
-    """
-    Dataset containing 100 samples from the DHPR driving hazard dataset.
-
-    Args:
-        test_mode: If True, creates a test dataset with only 5 samples
-        max_image_size: Maximum (width, height) for images. Default (512, 384)
-            gives ~15-20k tokens per image. Use None to keep original size.
-        image_quality: JPEG compression quality (1-100). Default 60 balances
-            quality and size. Lower = smaller files. Higher = better quality.
-
-    Returns:
-        opik.Dataset with multimodal hazard detection samples
-    """
-    return _load_dhpr_dataset(
-        dataset_name_prefix="driving_hazard_100",
-        nb_items=100,
-        test_mode=test_mode,
+    """Legacy helper for 100 training samples."""
+    return driving_hazard(
         split="train",
+        count=100,
+        dataset_name="driving_hazard_100",
+        test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
     )
@@ -95,31 +118,20 @@ def driving_hazard_test_split(
     max_image_size: tuple[int, int] | None = (512, 384),
     image_quality: int = 60,
 ) -> opik.Dataset:
-    """
-    Dataset containing samples from the DHPR test split.
-
-    Args:
-        test_mode: If True, loads only 5 samples; otherwise loads 100 samples
-        max_image_size: Maximum (width, height) for images. Default (512, 384)
-            gives ~15-20k tokens per image. Use None to keep original size.
-        image_quality: JPEG compression quality (1-100). Default 60 balances
-            quality and size. Lower = smaller files. Higher = better quality.
-
-    Returns:
-        opik.Dataset with multimodal hazard detection samples
-    """
-    return _load_dhpr_dataset(
-        dataset_name_prefix="driving_hazard_test",
-        nb_items=100,
-        test_mode=test_mode,
+    """Legacy helper for 100 test samples."""
+    return driving_hazard(
         split="test",
+        count=100,
+        dataset_name="driving_hazard_test",
+        test_mode=test_mode,
         max_image_size=max_image_size,
         image_quality=image_quality,
     )
 
 
 def _load_dhpr_dataset(
-    dataset_name_prefix: str,
+    *,
+    dataset_name: str,
     nb_items: int,
     test_mode: bool,
     split: str = "train",
@@ -130,10 +142,10 @@ def _load_dhpr_dataset(
     Internal function to load DHPR dataset with multimodal support.
 
     Args:
-        dataset_name_prefix: Prefix for the dataset name
+        dataset_name: Logical dataset name used within Opik
         nb_items: Number of items to load
         test_mode: Whether to create a test dataset
-        split: Dataset split to load ("train", "test", or "val")
+        split: Dataset split to load ("train" or "test")
         max_image_size: Maximum image size (width, height) for resizing.
             Set to None to keep original size. Default (512, 384).
         image_quality: JPEG compression quality (1-100). Default 60.
@@ -142,14 +154,16 @@ def _load_dhpr_dataset(
         opik.Dataset with loaded and processed samples
     """
     # Adjust for test mode
-    dataset_name = (
-        f"{dataset_name_prefix}" if not test_mode else f"{dataset_name_prefix}_test"
-    )
-    actual_nb_items = nb_items if not test_mode else 5
+    full_name = dataset_name
+    if test_mode and not full_name.endswith("_sample"):
+        full_name = f"{full_name}_sample"
+    actual_nb_items = nb_items
+    if test_mode:
+        actual_nb_items = min(nb_items, resolve_test_mode_count(None))
 
     # Get or create dataset
     client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
+    dataset = client.get_or_create_dataset(full_name)
 
     # Check if dataset already has the correct number of items
     items = dataset.get_items()
@@ -157,7 +171,7 @@ def _load_dhpr_dataset(
         return dataset
     elif len(items) != 0:
         raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {actual_nb_items}. "
+            f"Dataset {full_name} contains {len(items)} items, expected {actual_nb_items}. "
             f"We recommend deleting the dataset and re-creating it."
         )
 
