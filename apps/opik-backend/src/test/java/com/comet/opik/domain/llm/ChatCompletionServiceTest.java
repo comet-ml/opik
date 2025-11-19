@@ -210,11 +210,11 @@ class ChatCompletionServiceTest {
                     Arguments.of(
                             "ConnectException with 'Connection refused'",
                             new ConnectException("Connection refused"),
-                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL and your network connection"),
+                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL."),
                     Arguments.of(
                             "ClosedChannelException",
                             new ClosedChannelException(),
-                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL and your network connection"));
+                            "Unexpected error calling LLM provider: Service is unreachable. Please check the provider URL."));
         }
 
         @ParameterizedTest(name = "when {0}, then return exact error message")

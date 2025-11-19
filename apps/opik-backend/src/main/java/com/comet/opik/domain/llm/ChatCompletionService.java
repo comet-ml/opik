@@ -206,12 +206,12 @@ public class ChatCompletionService {
                 // Extract host/URL from the exception message if available
                 String message = connectException.getMessage();
                 if (message != null && message.contains("Connection refused")) {
-                    yield "Service is unreachable. Please check the provider URL and your network connection";
+                    yield "Service is unreachable. Please check the provider URL.";
                 }
                 yield "Service is unreachable: " + message;
             }
             case java.nio.channels.ClosedChannelException closedChannelException ->
-                "Service is unreachable. Please check the provider URL and your network connection";
+                "Service is unreachable. Please check the provider URL.";
             // For other exceptions, use the exception message
             // Fallback to exception class name if no message
             default -> {
