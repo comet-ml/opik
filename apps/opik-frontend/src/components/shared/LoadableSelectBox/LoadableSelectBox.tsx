@@ -271,16 +271,6 @@ export const LoadableSelectBox = ({
           {hasFilteredOptions ? (
             <>
               {filteredOptions.map((option) => {
-                const handleActionClick = (e: React.MouseEvent) => {
-                  e.stopPropagation();
-
-                  window.open(
-                    option.action?.href,
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
-                };
-
                 return (
                   <div
                     key={option.value}
