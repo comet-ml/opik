@@ -7,6 +7,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
@@ -78,6 +79,8 @@ public interface TraceService {
     Mono<Long> create(TraceBatch batch);
 
     Mono<Void> update(TraceUpdate trace, UUID id);
+
+    Mono<Void> batchUpdate(TraceBatchUpdate batchUpdate);
 
     Mono<Trace> get(UUID id);
 
@@ -380,6 +383,16 @@ class TraceServiceImpl implements TraceService {
                                         ctx.get(RequestContext.WORKSPACE_ID),
                                         ctx.get(RequestContext.USER_NAME)))))))
                 .then());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> batchUpdate(@NonNull TraceBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' traces", batchUpdate.ids().size());
+
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' traces", batchUpdate.ids().size()));
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {

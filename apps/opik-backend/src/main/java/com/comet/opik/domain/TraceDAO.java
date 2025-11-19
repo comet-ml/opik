@@ -31,6 +31,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -65,6 +66,7 @@ import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -127,6 +129,8 @@ interface TraceDAO {
     Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
 
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
+
+    Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags);
 }
 
 @Slf4j
@@ -2412,6 +2416,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
     @WithSpan
@@ -3523,6 +3528,124 @@ class TraceDAOImpl implements TraceDAO {
                     log.info("Closing trace search stream");
                     endSegment(segment);
                 });
+    }
+
+    private static final String BULK_UPDATE = """
+            INSERT INTO traces (
+                id,
+                project_id,
+                workspace_id,
+                name,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                tags,
+                error_info,
+                created_at,
+                created_by,
+                last_updated_by,
+                thread_id,
+                visibility_mode,
+                truncation_threshold
+            )
+            SELECT
+                t.id,
+                t.project_id,
+                t.workspace_id,
+                <if(name)> :name <else> t.name <endif> as name,
+                t.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> t.end_time <endif> as end_time,
+                <if(input)> :input <else> t.input <endif> as input,
+                <if(output)> :output <else> t.output <endif> as output,
+                <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
+                <if(tags)><if(merge_tags)>arrayConcat(t.tags, :tags)<else>:tags<endif><else>t.tags<endif> as tags,
+                <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
+                t.created_at,
+                t.created_by,
+                :user_name as last_updated_by,
+                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
+                t.visibility_mode,
+                :truncation_threshold as truncation_threshold
+            FROM traces t
+            WHERE t.id IN :ids AND t.workspace_id = :workspace_id
+            ORDER BY t.last_updated_at DESC
+            LIMIT 1 BY t.id;""";
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' traces", ids.size());
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        var query = template.render();
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids);
+
+                    bindBulkUpdateParams(update, statement);
+                    TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+
+                    Segment segment = startSegment("traces", "Clickhouse", "bulk_update");
+
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' traces", ids.size()));
+    }
+
+    private ST newBulkUpdateTemplate(TraceUpdate traceUpdate, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        if (StringUtils.isNotBlank(traceUpdate.name())) {
+            template.add("name", traceUpdate.name());
+        }
+        Optional.ofNullable(traceUpdate.input())
+                .ifPresent(input -> template.add("input", input.toString()));
+        Optional.ofNullable(traceUpdate.output())
+                .ifPresent(output -> template.add("output", output.toString()));
+        Optional.ofNullable(traceUpdate.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+        Optional.ofNullable(traceUpdate.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        Optional.ofNullable(traceUpdate.endTime())
+                .ifPresent(endTime -> template.add("end_time", endTime.toString()));
+        Optional.ofNullable(traceUpdate.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+        if (StringUtils.isNotBlank(traceUpdate.threadId())) {
+            template.add("thread_id", traceUpdate.threadId());
+        }
+
+        return template;
+    }
+
+    private void bindBulkUpdateParams(TraceUpdate traceUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(traceUpdate.name())) {
+            statement.bind("name", traceUpdate.name());
+        }
+        Optional.ofNullable(traceUpdate.input())
+                .ifPresent(input -> statement.bind("input", input.toString()));
+        Optional.ofNullable(traceUpdate.output())
+                .ifPresent(output -> statement.bind("output", output.toString()));
+        Optional.ofNullable(traceUpdate.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(traceUpdate.endTime())
+                .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
+        Optional.ofNullable(traceUpdate.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+        Optional.ofNullable(traceUpdate.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
+        if (StringUtils.isNotBlank(traceUpdate.threadId())) {
+            statement.bind("thread_id", traceUpdate.threadId());
+        }
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {
