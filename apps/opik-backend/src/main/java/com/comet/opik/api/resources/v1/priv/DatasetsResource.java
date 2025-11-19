@@ -318,13 +318,22 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Batch updating '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        if (batchUpdate.ids() != null) {
+            log.info("Batch updating '{}' dataset items by IDs on workspaceId '{}'", batchUpdate.ids().size(),
+                    workspaceId);
+        } else {
+            log.info("Batch updating dataset items by filters on workspaceId '{}'", workspaceId);
+        }
 
         itemService.batchUpdate(batchUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Batch updated '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        if (batchUpdate.ids() != null) {
+            log.info("Batch updated '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        } else {
+            log.info("Batch updated dataset items by filters on workspaceId '{}'", workspaceId);
+        }
 
         return Response.noContent().build();
     }

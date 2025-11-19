@@ -69,6 +69,9 @@ public interface DatasetItemDAO {
             List<ExperimentsComparisonFilter> filters);
 
     Mono<Void> bulkUpdate(Set<UUID> ids, DatasetItemUpdate update, boolean mergeTags);
+
+    Mono<Void> bulkUpdateByFilters(List<com.comet.opik.api.filter.DatasetItemFilter> filters,
+            DatasetItemUpdate update, boolean mergeTags);
 }
 
 @Singleton
@@ -860,6 +863,47 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             LIMIT 1 BY s.id;
             """;
 
+    private static final String BULK_UPDATE_BY_FILTERS = """
+            INSERT INTO dataset_items (
+                workspace_id,
+                dataset_id,
+                source,
+                trace_id,
+                span_id,
+                id,
+                input,
+                expected_output,
+                metadata,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                data,
+                tags
+            )
+            SELECT
+                s.workspace_id,
+                s.dataset_id,
+                s.source,
+                s.trace_id,
+                s.span_id,
+                s.id,
+                <if(input)> :input <else> s.input <endif> as input,
+                <if(expected_output)> :expected_output <else> s.expected_output <endif> as expected_output,
+                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
+                s.created_at,
+                now64(9) as last_updated_at,
+                s.created_by,
+                :user_name as last_updated_by,
+                <if(data)> :data <else> s.data <endif> as data,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
+            FROM dataset_items s
+            WHERE s.workspace_id = :workspace_id
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
+            """;
+
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
             """
                     WITH feedback_scores_combined_raw AS (
@@ -1543,5 +1587,43 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdateByFilters(@NonNull List<com.comet.opik.api.filter.DatasetItemFilter> filters,
+            @NonNull DatasetItemUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(filters), "filters must not be empty");
+        log.info("Bulk updating dataset items by filters");
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE_BY_FILTERS, mergeTags);
+
+        // Add filters to template
+        var analyticsDbFilters = filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM);
+        if (analyticsDbFilters.isPresent()) {
+            log.info("Generated filter SQL: {}", analyticsDbFilters.get());
+            template.add("dataset_item_filters", analyticsDbFilters.get());
+        } else {
+            log.warn("No filters were generated from the provided filters");
+        }
+
+        var query = template.render();
+        log.info("Generated SQL query: {}", query);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(query);
+
+            bindBulkUpdateParams(update, statement);
+
+            // Bind filter parameters
+            filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+
+            Segment segment = startSegment("dataset_items", "Clickhouse", "bulk_update_by_filters");
+
+            return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .then()
+                    .doOnSuccess(__ -> log.info("Completed bulk update for dataset items matching filters"));
+        });
     }
 }

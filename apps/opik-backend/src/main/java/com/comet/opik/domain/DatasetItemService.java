@@ -254,10 +254,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Mono<Void> batchUpdate(@NonNull DatasetItemBatchUpdate batchUpdate) {
-        log.info("Batch updating '{}' dataset items", batchUpdate.ids().size());
-
-        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), batchUpdate.mergeTags())
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' dataset items", batchUpdate.ids().size()));
+        if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
+            log.info("Batch updating '{}' dataset items by IDs", batchUpdate.ids().size());
+            return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), batchUpdate.mergeTags())
+                    .doOnSuccess(
+                            __ -> log.info("Completed batch update for '{}' dataset items", batchUpdate.ids().size()));
+        } else if (batchUpdate.filters() != null && !batchUpdate.filters().isEmpty()) {
+            log.info("Batch updating dataset items by filters");
+            return dao.bulkUpdateByFilters(batchUpdate.filters(), batchUpdate.update(), batchUpdate.mergeTags())
+                    .doOnSuccess(__ -> log.info("Completed batch update for dataset items matching filters"));
+        } else {
+            return Mono.error(new IllegalArgumentException("Either ids or filters must be provided"));
+        }
     }
 
     @WithSpan
