@@ -527,7 +527,7 @@ describe("Opik experiment operations", () => {
       const experimentId = "experiment-to-update-id";
 
       const spy = vi
-        .spyOn(client.api.experiments, "updateExperimentById")
+        .spyOn(client.api.experiments, "updateExperiment")
         .mockImplementation(() => createMockHttpResponsePromise(undefined)); // returns void
 
       await client.updateExperiment(experimentId, "updated-name", { k: "v" });
@@ -542,7 +542,7 @@ describe("Opik experiment operations", () => {
       const experimentId = "experiment-to-update-error";
 
       const spy = vi
-        .spyOn(client.api.experiments, "updateExperimentById")
+        .spyOn(client.api.experiments, "updateExperiment")
         .mockImplementation(() => {
           throw new Error("Failed to update experiment");
         });
@@ -557,31 +557,4 @@ describe("Opik experiment operations", () => {
       });
     });
   });
-
-  describe("updateExperiment (integration)", () => {
-  it("should actually update an experiment and verify the change", async ({ expect }) => {
-    const client = new Opik({
-      projectName: "opik-sdk-typescript",
-      workspaceName: "default",
-      apiUrl: 'http://localhost:8080/'
-    });
-
-    // Step 1: create a real experiment
-    const created = await client.createExperiment({
-      name: "original-exp",
-      datasetName: "test-dataset",
-    });
-
-    console.log(JSON.stringify(created))
-    // Step 2: update it
-    await client.updateExperiment('0198ec0a-b14e-710b-bccb-cb52c9f64fa9', "updated-exp", { k: "v", num: 1 });
-
-    // Step 3: fetch it back
-    const updated = await client.getExperimentById('0198ec0a-b14e-710b-bccb-cb52c9f64fa9');
-
-    // Step 4: verify
-    expect(updated.name).toBe("updated-exp");
-    //expect(updated.metadata).toEqual({ k: "v", num: 1 });
-  });
-});
 });
