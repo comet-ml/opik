@@ -64,12 +64,13 @@ public class ChatCompletionService {
 
             // Build detailed error message including the underlying exception
             String errorMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
-            if (runtimeException.getMessage() != null && !runtimeException.getMessage().isEmpty()) {
-                errorMessage = errorMessage + ": " + runtimeException.getMessage();
+            String exceptionDetails = extractErrorDetails(runtimeException);
+            if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
+                errorMessage = errorMessage + ": " + exceptionDetails;
             }
 
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(errorMessage);
+            throw new InternalServerErrorException(errorMessage, runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -121,12 +122,13 @@ public class ChatCompletionService {
 
             // Build detailed error message including the underlying exception
             String errorMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
-            if (runtimeException.getMessage() != null && !runtimeException.getMessage().isEmpty()) {
-                errorMessage = errorMessage + ": " + runtimeException.getMessage();
+            String exceptionDetails = extractErrorDetails(runtimeException);
+            if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
+                errorMessage = errorMessage + ": " + exceptionDetails;
             }
 
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(errorMessage);
+            throw new InternalServerErrorException(errorMessage, runtimeException);
         }
     }
 
@@ -169,5 +171,30 @@ public class ChatCompletionService {
                 handlers.handleError(errorMessage);
             }
         };
+    }
+
+    /**
+     * Extracts meaningful error details from an exception chain.
+     * Walks through the exception chain to find the most informative error message,
+     * preferring root causes over wrapper exceptions.
+     */
+    private String extractErrorDetails(Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+
+        // Try to get the root cause message first
+        Throwable rootCause = throwable;
+        while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+            rootCause = rootCause.getCause();
+        }
+
+        // Use root cause message if it's more informative
+        if (rootCause != throwable && rootCause.getMessage() != null && !rootCause.getMessage().isEmpty()) {
+            return rootCause.getMessage();
+        }
+
+        // Otherwise use the original exception message
+        return throwable.getMessage();
     }
 }
