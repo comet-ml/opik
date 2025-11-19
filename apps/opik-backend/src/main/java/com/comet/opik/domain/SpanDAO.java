@@ -2253,6 +2253,168 @@ class SpanDAO {
         }
     }
 
+    private static final String BULK_UPDATE = """
+            INSERT INTO spans (
+                id,
+                project_id,
+                workspace_id,
+                trace_id,
+                parent_span_id,
+                name,
+                type,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                model,
+                provider,
+                total_estimated_cost,
+                total_estimated_cost_version,
+                tags,
+                usage,
+                error_info,
+                created_at,
+                created_by,
+                last_updated_by,
+                truncation_threshold
+            )
+            SELECT
+                s.id,
+                s.project_id,
+                s.workspace_id,
+                s.trace_id,
+                s.parent_span_id,
+                <if(name)> :name <else> s.name <endif> as name,
+                <if(type)> :type <else> s.type <endif> as type,
+                s.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> s.end_time <endif> as end_time,
+                <if(input)> :input <else> s.input <endif> as input,
+                <if(output)> :output <else> s.output <endif> as output,
+                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
+                <if(model)> :model <else> s.model <endif> as model,
+                <if(provider)> :provider <else> s.provider <endif> as provider,
+                <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
+                <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags,
+                <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+                <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
+                s.created_at,
+                s.created_by,
+                :user_name as last_updated_by,
+                :truncation_threshold
+            FROM spans s
+            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+            ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
+            """;
+
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull SpanUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' spans", ids.size());
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        var query = template.render();
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids);
+
+                    bindBulkUpdateParams(update, statement);
+                    TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "bulk_update");
+
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", ids.size()));
+    }
+
+    private ST newBulkUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        if (StringUtils.isNotBlank(spanUpdate.name())) {
+            template.add("name", spanUpdate.name());
+        }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> template.add("type", type.toString()));
+        Optional.ofNullable(spanUpdate.input())
+                .ifPresent(input -> template.add("input", input.toString()));
+        Optional.ofNullable(spanUpdate.output())
+                .ifPresent(output -> template.add("output", output.toString()));
+        Optional.ofNullable(spanUpdate.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+        Optional.ofNullable(spanUpdate.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        if (StringUtils.isNotBlank(spanUpdate.model())) {
+            template.add("model", spanUpdate.model());
+        }
+        if (StringUtils.isNotBlank(spanUpdate.provider())) {
+            template.add("provider", spanUpdate.provider());
+        }
+        Optional.ofNullable(spanUpdate.endTime())
+                .ifPresent(endTime -> template.add("end_time", endTime.toString()));
+        Optional.ofNullable(spanUpdate.usage())
+                .ifPresent(usage -> template.add("usage", usage.toString()));
+        Optional.ofNullable(spanUpdate.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+
+        if (spanUpdate.totalEstimatedCost() != null) {
+            template.add("total_estimated_cost", "total_estimated_cost");
+            template.add("total_estimated_cost_version", "total_estimated_cost_version");
+        }
+        return template;
+    }
+
+    private void bindBulkUpdateParams(SpanUpdate spanUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(spanUpdate.name())) {
+            statement.bind("name", spanUpdate.name());
+        }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> statement.bind("type", type.toString()));
+        Optional.ofNullable(spanUpdate.input())
+                .ifPresent(input -> statement.bind("input", input.toString()));
+        Optional.ofNullable(spanUpdate.output())
+                .ifPresent(output -> statement.bind("output", output.toString()));
+        Optional.ofNullable(spanUpdate.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(spanUpdate.usage())
+                .ifPresent(usage -> {
+                    var usageKeys = new ArrayList<String>();
+                    var usageValues = new ArrayList<Integer>();
+                    for (var entry : usage.entrySet()) {
+                        usageKeys.add(entry.getKey());
+                        usageValues.add(entry.getValue());
+                    }
+                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
+                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
+                });
+        Optional.ofNullable(spanUpdate.endTime())
+                .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
+        Optional.ofNullable(spanUpdate.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+        if (StringUtils.isNotBlank(spanUpdate.model())) {
+            statement.bind("model", spanUpdate.model());
+        }
+        if (StringUtils.isNotBlank(spanUpdate.provider())) {
+            statement.bind("provider", spanUpdate.provider());
+        }
+        Optional.ofNullable(spanUpdate.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
+
+        if (spanUpdate.totalEstimatedCost() != null) {
+            statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
+            statement.bind("total_estimated_cost_version", "");
+        }
+    }
+
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
         // Parse base metadata from database
         JsonNode baseMetadata = Optional

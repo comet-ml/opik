@@ -23,7 +23,6 @@ type TracesActionsPanelProps = {
   columnsToExport: string[];
   projectName: string;
   projectId: string;
-  onClearSelection?: () => void;
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
@@ -33,7 +32,6 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   columnsToExport,
   projectName,
   projectId,
-  onClearSelection,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
@@ -103,7 +101,6 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         setOpen={setOpen}
         projectId={projectId}
         type={type}
-        onSuccess={onClearSelection}
       />
       {type === TRACE_DATA_TYPE.traces && (
         <RunEvaluationDialog

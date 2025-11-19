@@ -16,9 +16,11 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
+import com.comet.opik.api.TraceThreadBatchUpdate;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -112,6 +114,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -3604,6 +3607,182 @@ class TracesResourceTest {
     }
 
     @Nested
+    @DisplayName("Batch Update Traces Tags:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchUpdateTraces {
+
+        Stream<Arguments> mergeTagsTestCases() {
+            return Stream.of(
+                    Arguments.of(true, "merge"),
+                    Arguments.of(false, "replace"));
+        }
+
+        @ParameterizedTest(name = "Success: batch update tags with {1} mode")
+        @MethodSource("mergeTagsTestCases")
+        @DisplayName("Success: batch update tags for multiple traces")
+        void batchUpdate__success(boolean mergeTags, String mode) {
+            // Create traces with existing tags
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .tags(mergeTags ? Set.of("existing-tag-1", "existing-tag-2") : Set.of("old-tag-1", "old-tag-2"))
+                    .feedbackScores(null)
+                    .build();
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .tags(mergeTags ? Set.of("existing-tag-3") : Set.of("old-tag-3"))
+                    .feedbackScores(null)
+                    .build();
+            var trace3 = mergeTags
+                    ? factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .tags(null)
+                            .feedbackScores(null)
+                            .build()
+                    : null;
+
+            var id1 = traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+            var id2 = traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
+            var id3 = mergeTags ? traceResourceClient.createTrace(trace3, API_KEY, TEST_WORKSPACE) : null;
+
+            // Batch update with new tags
+            var newTags = mergeTags ? Set.of("new-tag-1", "new-tag-2") : Set.of("new-tag");
+            var ids = mergeTags ? Set.of(id1, id2, id3) : Set.of(id1, id2);
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(ids)
+                    .update(TraceUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .tags(newTags)
+                            .build())
+                    .mergeTags(mergeTags)
+                    .build();
+
+            traceResourceClient.batchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify traces were updated
+            var updatedTrace1 = traceResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
+            if (mergeTags) {
+                assertThat(updatedTrace1.tags()).containsExactlyInAnyOrder(
+                        "existing-tag-1", "existing-tag-2", "new-tag-1", "new-tag-2");
+            } else {
+                assertThat(updatedTrace1.tags()).containsExactly("new-tag");
+            }
+
+            var updatedTrace2 = traceResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
+            if (mergeTags) {
+                assertThat(updatedTrace2.tags()).containsExactlyInAnyOrder("existing-tag-3", "new-tag-1", "new-tag-2");
+            } else {
+                assertThat(updatedTrace2.tags()).containsExactly("new-tag");
+            }
+
+            if (mergeTags) {
+                var updatedTrace3 = traceResourceClient.getById(id3, TEST_WORKSPACE, API_KEY);
+                assertThat(updatedTrace3.tags()).containsExactlyInAnyOrder("new-tag-1", "new-tag-2");
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with empty IDs, then return 400")
+        void batchUpdate__whenEmptyIds__thenReturn400() {
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(Set.of())
+                    .update(TraceUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var error = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).anySatisfy(msg -> assertThat(msg).contains("ids"));
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with too many IDs, then return 400")
+        void batchUpdate__whenTooManyIds__thenReturn400() {
+            // Create 1001 IDs (exceeds max of 1000)
+            var ids = new HashSet<UUID>();
+            for (int i = 0; i < 1001; i++) {
+                ids.add(generator.generate());
+            }
+
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(ids)
+                    .update(TraceUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var error = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).anySatisfy(msg -> assertThat(msg).contains("ids"));
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with null update, then return 400")
+        void batchUpdate__whenNullUpdate__thenReturn400() {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+            var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(Set.of(id))
+                    .update(null)
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with max size (1000), then success")
+        void batchUpdate__whenMaxSize__thenSuccess() {
+            // Create 1000 traces
+            var ids = new HashSet<UUID>();
+            for (int i = 0; i < 1000; i++) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(DEFAULT_PROJECT)
+                        .tags(Set.of("old-tag"))
+                        .feedbackScores(null)
+                        .build();
+                var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                ids.add(id);
+            }
+
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(ids)
+                    .update(TraceUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .tags(Set.of("new-tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            traceResourceClient.batchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify a sample of traces
+            var sampleIds = ids.stream().limit(10).toList();
+            for (var id : sampleIds) {
+                var trace = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+                assertThat(trace.tags()).containsExactlyInAnyOrder("old-tag", "new-tag");
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Comment:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TraceComment {
@@ -5793,6 +5972,173 @@ class TracesResourceTest {
                         // Verify manual scores have been deleted, but automatic scores remain
                         TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
                     });
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch Update Threads Tags:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchUpdateThreads {
+
+        Stream<Arguments> mergeTagsTestCases() {
+            return Stream.of(
+                    Arguments.of(true, "merge", 3),
+                    Arguments.of(false, "replace", 2));
+        }
+
+        @ParameterizedTest(name = "Success: batch update tags with {1} mode")
+        @MethodSource("mergeTagsTestCases")
+        @DisplayName("Success: batch update tags for multiple threads")
+        void batchUpdate__success(boolean mergeTags, String mode, int threadCount) {
+            // Create thread IDs
+            var threadId1 = UUID.randomUUID().toString();
+            var threadId2 = UUID.randomUUID().toString();
+            var threadId3 = mergeTags ? UUID.randomUUID().toString() : null;
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var projectId = projectResourceClient.getByName(projectName, API_KEY, TEST_WORKSPACE).id();
+
+            // Create traces to create threads
+            create(createTrace().toBuilder().projectName(projectName).threadId(threadId1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            create(createTrace().toBuilder().projectName(projectName).threadId(threadId2).build(), API_KEY,
+                    TEST_WORKSPACE);
+            if (mergeTags) {
+                create(createTrace().toBuilder().projectName(projectName).threadId(threadId3).build(), API_KEY,
+                        TEST_WORKSPACE);
+            }
+
+            // Wait for threads to be created
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var threads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                                null, null, null);
+                        assertThat(threads.content()).hasSize(threadCount);
+                    });
+
+            var threads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    null, null, null);
+            var threadModelId1 = threads.content().stream().filter(t -> t.id().equals(threadId1)).findFirst()
+                    .get().threadModelId();
+            var threadModelId2 = threads.content().stream().filter(t -> t.id().equals(threadId2)).findFirst()
+                    .get().threadModelId();
+            var threadModelId3 = mergeTags
+                    ? threads.content().stream().filter(t -> t.id().equals(threadId3)).findFirst()
+                            .get().threadModelId()
+                    : null;
+
+            // Update threads with existing tags
+            if (mergeTags) {
+                traceResourceClient.updateThread(TraceThreadUpdate.builder().tags(Set.of("existing-tag-1")).build(),
+                        threadModelId1, API_KEY, TEST_WORKSPACE, 204);
+                traceResourceClient.updateThread(TraceThreadUpdate.builder().tags(Set.of("existing-tag-2")).build(),
+                        threadModelId2, API_KEY, TEST_WORKSPACE, 204);
+            } else {
+                traceResourceClient.updateThread(
+                        TraceThreadUpdate.builder().tags(Set.of("old-tag-1", "old-tag-2")).build(),
+                        threadModelId1, API_KEY, TEST_WORKSPACE, 204);
+                traceResourceClient.updateThread(TraceThreadUpdate.builder().tags(Set.of("old-tag-3")).build(),
+                        threadModelId2, API_KEY, TEST_WORKSPACE, 204);
+            }
+
+            // Batch update with new tags
+            var newTags = mergeTags ? Set.of("new-tag-1", "new-tag-2") : Set.of("new-tag");
+            var ids = mergeTags
+                    ? Set.of(threadModelId1, threadModelId2, threadModelId3)
+                    : Set.of(threadModelId1, threadModelId2);
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(ids)
+                    .update(TraceThreadUpdate.builder()
+                            .tags(newTags)
+                            .build())
+                    .mergeTags(mergeTags)
+                    .build();
+
+            traceResourceClient.batchUpdateThreads(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify threads were updated
+            var thread1 = traceResourceClient.getTraceThread(threadId1, projectId, API_KEY, TEST_WORKSPACE);
+            if (mergeTags) {
+                assertThat(thread1.tags()).containsExactlyInAnyOrder("existing-tag-1", "new-tag-1", "new-tag-2");
+            } else {
+                assertThat(thread1.tags()).containsExactly("new-tag");
+            }
+
+            var thread2 = traceResourceClient.getTraceThread(threadId2, projectId, API_KEY, TEST_WORKSPACE);
+            if (mergeTags) {
+                assertThat(thread2.tags()).containsExactlyInAnyOrder("existing-tag-2", "new-tag-1", "new-tag-2");
+            } else {
+                assertThat(thread2.tags()).containsExactly("new-tag");
+            }
+
+            if (mergeTags) {
+                var thread3 = traceResourceClient.getTraceThread(threadId3, projectId, API_KEY, TEST_WORKSPACE);
+                assertThat(thread3.tags()).containsExactlyInAnyOrder("new-tag-1", "new-tag-2");
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with empty IDs, then return 400")
+        void batchUpdate__whenEmptyIds__thenReturn400() {
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of())
+                    .update(TraceThreadUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchUpdateThreads(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var error = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).anySatisfy(msg -> assertThat(msg).contains("ids"));
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with too many IDs, then return 400")
+        void batchUpdate__whenTooManyIds__thenReturn400() {
+            // Create 1001 IDs (exceeds max of 1000)
+            var ids = new HashSet<UUID>();
+            for (int i = 0; i < 1001; i++) {
+                ids.add(generator.generate());
+            }
+
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(ids)
+                    .update(TraceThreadUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchUpdateThreads(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var error = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).anySatisfy(msg -> assertThat(msg).contains("ids"));
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with null update, then return 400")
+        void batchUpdate__whenNullUpdate__thenReturn400() {
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(generator.generate()))
+                    .update(null)
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchUpdateThreads(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+            }
         }
     }
 
