@@ -472,6 +472,50 @@ export const constructDataMapAndSearchIds = (
   return [dataMap, searchIds];
 };
 
+/**
+ * Given a set of matched span IDs and a data map, returns all IDs that should be visible:
+ * - The matched spans themselves
+ * - All ancestors (parents) of matched spans
+ * - All descendants (children) of matched spans
+ */
+export const getVisibleIdsForMatches = (
+  matchedIds: Set<string>,
+  dataMap: Map<string, Span | Trace>,
+): Set<string> => {
+  const visibleIds = new Set<string>();
+
+  // Add all matched IDs
+  matchedIds.forEach((id) => visibleIds.add(id));
+
+  // For each matched span, add all its ancestors
+  const addAncestors = (id: string): void => {
+    const data = dataMap.get(id);
+    const parentId = get(data, "parent_span_id");
+    if (parentId && !visibleIds.has(parentId)) {
+      visibleIds.add(parentId);
+      addAncestors(parentId);
+    }
+  };
+
+  matchedIds.forEach((id) => addAncestors(id));
+
+  // For each matched span, add all its descendants
+  const addDescendants = (parentId: string): void => {
+    dataMap.forEach((data, id) => {
+      const dataParentId = get(data, "parent_span_id");
+      if (dataParentId === parentId && !visibleIds.has(id)) {
+        visibleIds.add(id);
+        addDescendants(id);
+      }
+    });
+  };
+
+  matchedIds.forEach((id) => addDescendants(id));
+
+  return visibleIds;
+};
+
+// Keep old functions for backward compatibility (deprecated)
 export const addAllParentIds = (
   searchIds: Set<string>,
   dataMap: Map<string, Span | Trace>,
