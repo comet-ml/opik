@@ -1647,7 +1647,7 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             MetricsAlertPayload costPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(costPayload, "TRACE_COST", "60.00", "50.00", "60", projectId, projectName);
+            verifyMetricsPayload(costPayload, "TRACE_COST", "60", "50", "60", projectId, projectName);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1695,7 +1695,7 @@ class AlertResourceTest {
             @SuppressWarnings("unchecked")
             MetricsAlertPayload latencyPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3.0", "2", "60", projectId, projectName);
+            verifyMetricsPayload(latencyPayload, "TRACE_LATENCY", "3", "2", "60", projectId, projectName);
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
