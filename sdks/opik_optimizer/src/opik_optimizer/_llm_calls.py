@@ -1,4 +1,5 @@
 from typing import Any
+import os
 from pydantic import BaseModel
 import sys
 from types import FrameType
@@ -124,6 +125,9 @@ def _prepare_model_params(
     # Add structured output support
     if response_model is not None:
         final_params["response_format"] = response_model
+
+        # TODO: Terrible workaround to support response_format with litellm.completion
+        os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
     return final_params
 
