@@ -65,7 +65,7 @@ export const createDynamicSchema = (fields: DatasetField[]) => {
 
   fields.forEach((field) => {
     if (field.type === FIELD_TYPE.COMPLEX) {
-      schemaShape[field.id] = z.string().refine(
+      schemaShape[field.key] = z.string().refine(
         (val) => {
           const trimmed = val.trim();
           if (trimmed === "") return true;
@@ -79,7 +79,7 @@ export const createDynamicSchema = (fields: DatasetField[]) => {
         { message: "Must be a valid JSON object or array" },
       );
     } else {
-      schemaShape[field.id] = z.any();
+      schemaShape[field.key] = z.any();
     }
   });
 
