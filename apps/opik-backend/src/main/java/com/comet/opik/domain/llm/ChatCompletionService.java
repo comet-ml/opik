@@ -64,15 +64,8 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            // Build detailed error message including the underlying exception
-            String errorMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
-            String exceptionDetails = extractErrorDetails(runtimeException);
-            if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
-                errorMessage = errorMessage + ": " + exceptionDetails;
-            }
-
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(errorMessage, runtimeException);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -122,15 +115,8 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            // Build detailed error message including the underlying exception
-            String errorMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
-            String exceptionDetails = extractErrorDetails(runtimeException);
-            if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
-                errorMessage = errorMessage + ": " + exceptionDetails;
-            }
-
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(errorMessage, runtimeException);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
     }
 
@@ -170,17 +156,25 @@ public class ChatCompletionService {
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-                // Build a detailed error message including the underlying exception
-                String detailedMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
-                String exceptionDetails = extractErrorDetails(throwable);
-                if (exceptionDetails != null && !exceptionDetails.isEmpty()) {
-                    detailedMessage = detailedMessage + ": " + exceptionDetails;
-                }
-
-                var errorMessage = new ErrorMessage(detailedMessage);
+                var errorMessage = new ErrorMessage(buildDetailedErrorMessage(throwable));
                 handlers.handleError(errorMessage);
             }
         };
+    }
+
+    /**
+     * Builds a detailed error message by combining the base error message with exception details.
+     * Extracts meaningful error information from the exception chain.
+     *
+     * @param throwable the exception to extract details from
+     * @return a detailed error message combining the base message with exception details
+     */
+    private String buildDetailedErrorMessage(Throwable throwable) {
+        String exceptionDetails = extractErrorDetails(throwable);
+        if (StringUtils.isNotBlank(exceptionDetails)) {
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
+        }
+        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
     }
 
     /**
@@ -188,6 +182,9 @@ public class ChatCompletionService {
      * Walks through the exception chain to find the most informative error message,
      * preferring root causes over wrapper exceptions.
      * Provides user-friendly messages for common exception types.
+     *
+     * @param throwable the exception to extract details from
+     * @return the extracted error details, or null if no meaningful details found
      */
     private String extractErrorDetails(Throwable throwable) {
         if (throwable == null) {
