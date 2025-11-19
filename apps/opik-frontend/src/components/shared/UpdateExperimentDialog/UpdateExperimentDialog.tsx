@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { jsonLanguage } from "@codemirror/lang-json";
 import { 
   Dialog, 
   DialogContent, 
@@ -7,10 +9,12 @@ import {
   DialogAutoScrollBody, 
   DialogFooter 
 } from "@/components/ui/dialog";
-import Editor from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { DialogClose } from "@radix-ui/react-dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 
 interface UpdateExperimentDialogProps {
   open: boolean;
@@ -28,6 +32,9 @@ export function UpdateExperimentDialog({
   latestMetadata
 }: UpdateExperimentDialogProps) {
   const { toast } = useToast();
+  const theme = useCodemirrorTheme({
+    editable: true,
+  });
   const [name, setName] = useState("");
   const [metadata, setMetadata] = useState(
     JSON.stringify(latestMetadata || {}, null, 2)
@@ -58,10 +65,10 @@ export function UpdateExperimentDialog({
         </DialogHeader>
         <DialogAutoScrollBody className="space-y-4">
           <div className="flex flex-col gap-2 pb-4">
-            <label className="block text-sm font-medium mb-1">Name</label>
-            <input
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
               type="text"
-              className="w-full border rounded-md px-3 py-1 text-sm focus:outline-none focus:ring focus:ring-ring"
               placeholder={latestName}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -69,34 +76,19 @@ export function UpdateExperimentDialog({
           </div>
 
           <div className="flex flex-col gap-2 pb-4">
-            <label className="block text-sm font-medium mb-1">Metadata</label>
-            <Editor
-              height="160px"
-              defaultLanguage="json"
-              value={metadata}
-              onChange={(val) => setMetadata(val || "")}
-              options={{
-                minimap: { enabled: false },
-                lineNumbers: "off",
-                glyphMargin: false,
-                folding: false,
-                lineDecorationsWidth: 0,
-                lineNumbersMinChars: 0,
-                renderLineHighlight: "none",
-                overviewRulerLanes: 0,
-                scrollbar: {
-                  verticalScrollbarSize: 6,
-                  horizontalScrollbarSize: 6,
-                },
-                fontSize: 13,
-                wordWrap: "on",
-                scrollBeyondLastLine: false,
-                guides: {
-                  indentation: false
-                } 
-              }}
-              className="rounded-md border border-gray-300 text-sm"
-            />
+            <Label htmlFor="metadata">Metadata</Label>
+            <div className="max-h-52 overflow-y-auto rounded-md">
+              <CodeMirror
+                theme={theme}
+                value={metadata}
+                onChange={setMetadata}
+                extensions={[jsonLanguage]}
+                basicSetup={{
+                  lineNumbers: false,
+                  foldGutter: false,
+                }}
+              />
+            </div>
           </div>
         </DialogAutoScrollBody>
         <DialogFooter>

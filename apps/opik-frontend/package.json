@@ -34,7 +34,6 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",
-    "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",
