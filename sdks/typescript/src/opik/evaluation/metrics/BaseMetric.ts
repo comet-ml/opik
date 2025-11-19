@@ -3,9 +3,11 @@ import { EvaluationScoreResult } from "../types";
 import { SpanType } from "@/rest_api/api";
 import { z } from "zod";
 
-// Use ZodObject for compatibility with both Zod 3 and 4
-// In Zod 4, AnyZodObject was replaced with ZodObject<any>
-export abstract class BaseMetric<T extends z.ZodObject<any> = z.ZodObject<any>> {
+// Use ZodObject with ZodRawShape for compatibility with both Zod 3 and 4
+// In Zod 4, AnyZodObject was replaced with ZodObject
+export abstract class BaseMetric<
+  T extends z.ZodObject<z.ZodRawShape> = z.ZodObject<z.ZodRawShape>
+> {
   /**
    * The name of the metric
    */
