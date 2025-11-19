@@ -20,7 +20,6 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
@@ -63,7 +62,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.AlertEventType.TRACE_ERRORS;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
@@ -166,39 +164,8 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                                        raiseAlertEventIfApplicable(List.of(savedTrace), workspaceId, workspaceName,
-                                                userName);
                                     }));
                 }));
-    }
-
-    private void raiseAlertEventIfApplicable(List<Trace> traces, String workspaceId, String workspaceName,
-            String userName) {
-        if (CollectionUtils.isEmpty(traces)) {
-            return;
-        }
-
-        var tracesWithErrors = traces.stream()
-                .filter(trace -> trace.errorInfo() != null)
-                .map(trace -> trace.toBuilder()
-                        .createdBy(userName)
-                        .createdAt(Instant.now())
-                        .lastUpdatedBy(userName)
-                        .lastUpdatedAt(Instant.now())
-                        .build())
-                .toList();
-
-        if (CollectionUtils.isNotEmpty(tracesWithErrors)) {
-            var projectId = traces.getFirst().projectId();
-            eventBus.post(AlertEvent.builder()
-                    .eventType(TRACE_ERRORS)
-                    .workspaceId(workspaceId)
-                    .workspaceName(workspaceName)
-                    .userName(userName)
-                    .projectId(projectId)
-                    .payload(tracesWithErrors)
-                    .build());
-        }
     }
 
     @WithSpan
@@ -244,24 +211,8 @@ class TraceServiceImpl implements TraceService {
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName));
-                                        raiseAlertEventIfApplicableForBatch(traces, workspaceId, workspaceName,
-                                                userName);
                                     }));
                 }));
-    }
-
-    // Traces could belong to different projects
-    private void raiseAlertEventIfApplicableForBatch(List<Trace> traces, String workspaceId, String workspaceName,
-            String userName) {
-        if (CollectionUtils.isEmpty(traces)) {
-            return;
-        }
-
-        traces.stream()
-                .collect(Collectors.groupingBy(Trace::projectId))
-                .values()
-                .forEach(tracesPerProject -> raiseAlertEventIfApplicable(tracesPerProject, workspaceId, workspaceName,
-                        userName));
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {

@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
@@ -304,6 +305,28 @@ public class DatasetsResource {
         log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 
         return Response.ok(datasetItem).build();
+    }
+
+    @PATCH
+    @Path("/items/batch")
+    @Operation(operationId = "batchUpdateDatasetItems", summary = "Batch update dataset items", description = "Update multiple dataset items", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatchUpdate.class))) @Valid @NotNull DatasetItemBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        itemService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        return Response.noContent().build();
     }
 
     @PATCH
