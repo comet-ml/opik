@@ -185,24 +185,41 @@ public class ChatCompletionService {
      * Extracts meaningful error details from an exception chain.
      * Walks through the exception chain to find the most informative error message,
      * preferring root causes over wrapper exceptions.
+     * Provides user-friendly messages for common exception types.
      */
     private String extractErrorDetails(Throwable throwable) {
         if (throwable == null) {
             return null;
         }
 
-        // Try to get the root cause message first
+        // Try to get the root cause first
         Throwable rootCause = throwable;
         while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
             rootCause = rootCause.getCause();
         }
 
-        // Use root cause message if it's more informative
-        if (rootCause != throwable && rootCause.getMessage() != null && !rootCause.getMessage().isEmpty()) {
-            return rootCause.getMessage();
-        }
+        // Use the most specific exception (root cause if available)
+        Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
 
-        // Otherwise use the original exception message
-        return throwable.getMessage();
+        // Provide user-friendly messages based on exception type
+        return switch (exceptionToHandle) {
+            case java.net.ConnectException connectException -> {
+                // Extract host/URL from the exception message if available
+                String message = connectException.getMessage();
+                if (message != null && message.contains("Connection refused")) {
+                    yield "Service is unreachable. Please check if the LLM provider service is running";
+                }
+                yield "Service is unreachable: " + message;
+            }
+            case null, default -> {
+                // For other exceptions, use the exception message
+                String message = exceptionToHandle.getMessage();
+                if (message != null && !message.isEmpty()) {
+                    yield message;
+                }
+                // Fallback to exception class name if no message
+                yield exceptionToHandle.getClass().getSimpleName();
+            }
+        };
     }
 }
