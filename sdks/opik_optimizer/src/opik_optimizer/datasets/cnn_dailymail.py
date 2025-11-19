@@ -1,44 +1,59 @@
+from __future__ import annotations
+
+from typing import Any
+from functools import lru_cache
+
 import opik
 
+from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
 
-def cnn_dailymail(test_mode: bool = False) -> opik.Dataset:
+
+@lru_cache(maxsize=1)
+def _get_cnn_dailymail_loader() -> OptimizerDatasetLoader:
+    return OptimizerDatasetLoader(
+        base_name="cnn_dailymail",
+        default_source_split="validation",
+        load_kwargs_resolver=lambda split: {
+            "path": "cnn_dailymail",
+            "name": "3.0.0",
+            "split": split,
+        },
+        presets={
+            "validation": {
+                "source_split": "validation",
+                "start": 0,
+                "count": 100,
+                "dataset_name": "cnn_dailymail_train",
+            }
+        },
+        prefer_presets=True,
+    )
+
+
+def cnn_dailymail(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
     """
-    Dataset containing the first 100 samples of the CNN Daily Mail dataset.
+    Load slices of the CNN/DailyMail summarization benchmark.
+
+    The default call returns the first 100 items from the validation split to
+    mirror earlier demo behavior. Provide explicit `split`, `count`, or `start`
+    arguments to stream any region of the dataset.
     """
-    dataset_name = "cnn_dailymail_train" if not test_mode else "cnn_dailymail_sample"
-    nb_items = 100 if not test_mode else 5
-
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
-
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import datasets as ds
-
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
-        hf_dataset = ds.load_dataset(
-            "cnn_dailymail", "3.0.0", streaming=True, download_config=download_config
-        )
-
-        data = []
-        for i, item in enumerate(hf_dataset["validation"]):
-            if i >= nb_items:
-                break
-            data.append(
-                {
-                    "article": item["article"],
-                    "highlights": item["highlights"],
-                }
-            )
-        ds.enable_progress_bar()
-
-        dataset.insert(data)
-
-        return dataset
+    loader = _get_cnn_dailymail_loader()
+    return loader(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
+    )

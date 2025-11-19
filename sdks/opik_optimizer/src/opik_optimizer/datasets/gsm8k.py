@@ -1,45 +1,52 @@
+from __future__ import annotations
+
+from functools import lru_cache
+
 import opik
 
+from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
 
-def gsm8k(test_mode: bool = False) -> opik.Dataset:
-    """
-    Dataset containing the first 300 samples of the GSM8K dataset.
-    """
-    dataset_name = "gsm8k_train" if not test_mode else "gsm8k_sample"
-    nb_items = 300 if not test_mode else 5
 
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
+@lru_cache(maxsize=1)
+def _get_gsm8k_loader() -> OptimizerDatasetLoader:
+    return OptimizerDatasetLoader(
+        base_name="gsm8k",
+        default_source_split="train",
+        load_kwargs_resolver=lambda split: {
+            "path": "gsm8k",
+            "name": "main",
+            "split": split,
+        },
+        presets={
+            "train": {
+                "source_split": "train",
+                "start": 0,
+                "count": 300,
+                "dataset_name": "gsm8k_train",
+            }
+        },
+        prefer_presets=True,
+    )
 
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import datasets as ds
 
-        # Load data from file and insert into the dataset
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
-        hf_dataset = ds.load_dataset(
-            "gsm8k", "main", streaming=True, download_config=download_config
-        )
-
-        data = []
-        for i, item in enumerate(hf_dataset["train"]):
-            if i >= nb_items:
-                break
-            data.append(
-                {
-                    "question": item["question"],
-                    "answer": item["answer"],
-                }
-            )
-        ds.enable_progress_bar()
-
-        dataset.insert(data)
-
-        return dataset
+def gsm8k(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
+    """Grade-school math word problems (GSM8K) slices."""
+    loader = _get_gsm8k_loader()
+    return loader(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
+    )

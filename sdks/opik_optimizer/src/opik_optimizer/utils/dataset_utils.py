@@ -7,16 +7,11 @@ import time
 from functools import lru_cache
 from importlib import resources
 from typing import Any
--from collections.abc import Sequence
--from collections.abc import Callable, Iterable
--
--import opik
--from datasets import load_dataset
-+from collections.abc import Sequence
-+from collections.abc import Callable, Iterable
-+
-+import opik
-+from datasets import load_dataset
+from collections.abc import Sequence
+from collections.abc import Callable, Iterable
+
+import opik
+from datasets import load_dataset
 
 
 @lru_cache(maxsize=None)
@@ -219,6 +214,7 @@ def load_hf_dataset_slice(
     seed: int | None = None,
     test_mode_count: int | None = None,
     prefer_presets: bool | None = None,
+    records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
 ) -> opik.Dataset:
     """Shared helper to download an HF slice and create an Opik dataset."""
     use_presets = (
@@ -249,6 +245,10 @@ def load_hf_dataset_slice(
 
     slice_size = len(records)
     expected_items = effective_test_count if test_mode else slice_size
+    if records_transform is not None:
+        records = records_transform(records)
+        slice_size = len(records)
+        expected_items = effective_test_count if test_mode else slice_size
     if test_mode:
         records = records[:expected_items]
 
@@ -258,6 +258,65 @@ def load_hf_dataset_slice(
         expected_size=expected_items,
         test_mode=test_mode,
     )
+
+
+class OptimizerDatasetLoader:
+    """Convenience wrapper for HuggingFace datasets with optional split presets."""
+
+    def __init__(
+        self,
+        *,
+        base_name: str,
+        default_source_split: str = "train",
+        load_kwargs_resolver: Callable[[str], dict[str, Any]],
+        presets: dict[str, dict[str, Any]] | None = None,
+        prefer_presets: bool = False,
+        records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+    ) -> None:
+        self.base_name = base_name
+        self.default_source_split = default_source_split
+        self.load_kwargs_resolver = load_kwargs_resolver
+        self.presets = presets or {}
+        self.prefer_presets = prefer_presets
+        self.records_transform = records_transform
+
+    def __call__(
+        self,
+        *,
+        split: str | None = None,
+        count: int | None = None,
+        start: int | None = None,
+        dataset_name: str | None = None,
+        test_mode: bool = False,
+        seed: int | None = None,
+        test_mode_count: int | None = None,
+        prefer_presets: bool | None = None,
+    ) -> opik.Dataset:
+        if prefer_presets is None:
+            no_overrides = (
+                split is None
+                and start is None
+                and count is None
+                and dataset_name is None
+            )
+            pref = self.prefer_presets and no_overrides
+        else:
+            pref = prefer_presets
+        return load_hf_dataset_slice(
+            base_name=self.base_name,
+            requested_split=split,
+            presets=self.presets,
+            default_source_split=self.default_source_split,
+            load_kwargs_resolver=self.load_kwargs_resolver,
+            start=start,
+            count=count,
+            dataset_name=dataset_name,
+            test_mode=test_mode,
+            seed=seed,
+            test_mode_count=test_mode_count,
+            prefer_presets=pref,
+            records_transform=self.records_transform,
+        )
 
 
 __all__ = [
@@ -271,4 +330,5 @@ __all__ = [
     "default_dataset_name",
     "resolve_preset_split",
     "load_hf_dataset_slice",
+    "OptimizerDatasetLoader",
 ]

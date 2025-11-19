@@ -1,113 +1,93 @@
-import opik
+from __future__ import annotations
+
 from typing import Any
 
+import opik
 
-def truthful_qa(test_mode: bool = False) -> opik.Dataset:
-    """
-    Dataset containing the first 300 samples of the TruthfulQA dataset.
-    """
-    dataset_name = "truthful_qa_train" if not test_mode else "truthful_qa_sample"
-    nb_items = 300 if not test_mode else 5
+from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
 
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
 
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import datasets as ds
+def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    data: list[dict[str, Any]] = []
+    for rec in records:
+        gen_item = rec["gen"]
+        mc_item = rec["mc"]
+        correct_answers = set(gen_item["correct_answers"])
+        for target in ("mc1_targets", "mc2_targets"):
+            if target in mc_item:
+                choices = mc_item[target]["choices"]
+                labels = mc_item[target]["labels"]
+                correct_answers.update(choice for choice, label in zip(choices, labels) if label == 1)
+        all_answers = set(gen_item["correct_answers"] + gen_item["incorrect_answers"])
+        for target in ("mc1_targets", "mc2_targets"):
+            if target in mc_item:
+                all_answers.update(mc_item[target]["choices"])
+        example = {
+            "question": gen_item["question"],
+            "answer": gen_item["best_answer"],
+            "choices": list(all_answers),
+            "correct_answer": gen_item["best_answer"],
+            "input": gen_item["question"],
+            "output": gen_item["best_answer"],
+            "context": gen_item.get("source", ""),
+            "type": "TEXT",
+            "category": gen_item["category"],
+            "source": "MANUAL",
+            "correct_answers": list(correct_answers),
+            "incorrect_answers": gen_item["incorrect_answers"],
+        }
+        data.append(example)
+    return data
 
-        # Load data from file and insert into the dataset
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
 
-        gen_dataset = ds.load_dataset(
-            "truthful_qa", "generation", download_config=download_config
-        )
-        mc_dataset = ds.load_dataset(
-            "truthful_qa", "multiple_choice", download_config=download_config
-        )
+def _truthful_load_kwargs(split: str) -> dict[str, Any]:
+    return {"path": "truthful_qa", "name": "generation", "split": split}
 
-        data: list[dict[str, Any]] = []
-        for gen_item, mc_item in zip(
-            gen_dataset["validation"], mc_dataset["validation"]
-        ):
-            if len(data) >= nb_items:
-                break
 
-            # Get correct answers from both configurations
-            correct_answers = set(gen_item["correct_answers"])
-            if "mc1_targets" in mc_item:
-                correct_answers.update(
-                    [
-                        choice
-                        for choice, label in zip(
-                            mc_item["mc1_targets"]["choices"],
-                            mc_item["mc1_targets"]["labels"],
-                        )
-                        if label == 1
-                    ]
-                )
-            if "mc2_targets" in mc_item:
-                correct_answers.update(
-                    [
-                        choice
-                        for choice, label in zip(
-                            mc_item["mc2_targets"]["choices"],
-                            mc_item["mc2_targets"]["labels"],
-                        )
-                        if label == 1
-                    ]
-                )
+def _truthful_records_loader(split: str, start: int, count: int) -> list[dict[str, Any]]:
+    import datasets as ds
 
-            # Get all possible answers
-            all_answers = set(
-                gen_item["correct_answers"] + gen_item["incorrect_answers"]
-            )
-            if "mc1_targets" in mc_item:
-                all_answers.update(mc_item["mc1_targets"]["choices"])
-            if "mc2_targets" in mc_item:
-                all_answers.update(mc_item["mc2_targets"]["choices"])
+    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
+    gen_dataset = ds.load_dataset("truthful_qa", "generation", download_config=download_config)[split]
+    mc_dataset = ds.load_dataset("truthful_qa", "multiple_choice", download_config=download_config)[split]
+    pairs = list(zip(gen_dataset.select(range(start, start + count)), mc_dataset.select(range(start, start + count))))
+    return [{"gen": gen, "mc": mc} for gen, mc in pairs]
 
-            # Create a single example with all necessary fields
-            example = {
-                "question": gen_item["question"],
-                "answer": gen_item["best_answer"],
-                "choices": list(all_answers),
-                "correct_answer": gen_item["best_answer"],
-                "input": gen_item["question"],  # For AnswerRelevance metric
-                "output": gen_item["best_answer"],  # For output_key requirement
-                "context": gen_item.get("source", ""),  # Use source as context
-                "type": "TEXT",  # Set type to TEXT as required by Opik
-                "category": gen_item["category"],
-                "source": "MANUAL",  # Set source to MANUAL as required by Opik
-                "correct_answers": list(
-                    correct_answers
-                ),  # Keep track of all correct answers
-                "incorrect_answers": gen_item[
-                    "incorrect_answers"
-                ],  # Keep track of incorrect answers
-            }
 
-            # Ensure all required fields are present
-            required_fields = [
-                "question",
-                "answer",
-                "choices",
-                "correct_answer",
-                "input",
-                "output",
-                "context",
-            ]
-            if all(field in example and example[field] for field in required_fields):
-                data.append(example)
-        ds.enable_progress_bar()
+_TRUTHFUL_LOADER = OptimizerDatasetLoader(
+    base_name="truthful_qa",
+    default_source_split="validation",
+    load_kwargs_resolver=lambda split: {"path": "truthful_qa", "name": "generation", "split": split},
+    presets={
+        "validation": {
+            "source_split": "validation",
+            "start": 0,
+            "count": 300,
+            "dataset_name": "truthful_qa_train",
+        }
+    },
+    prefer_presets=True,
+    records_transform=_truthful_transform,
+)
 
-        dataset.insert(data)
 
-        return dataset
+def truthful_qa(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
+    """TruthfulQA slices combining generation and multiple-choice views."""
+    return _TRUTHFUL_LOADER(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
+    )
