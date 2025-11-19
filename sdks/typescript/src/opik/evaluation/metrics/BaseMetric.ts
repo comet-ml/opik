@@ -3,7 +3,9 @@ import { EvaluationScoreResult } from "../types";
 import { SpanType } from "@/rest_api/api";
 import { z } from "zod";
 
-export abstract class BaseMetric<T extends z.AnyZodObject = z.AnyZodObject> {
+// Use ZodObject for compatibility with both Zod 3 and 4
+// In Zod 4, AnyZodObject was replaced with ZodObject<any>
+export abstract class BaseMetric<T extends z.ZodObject<any> = z.ZodObject<any>> {
   /**
    * The name of the metric
    */
