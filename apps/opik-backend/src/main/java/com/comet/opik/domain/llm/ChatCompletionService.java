@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.google.common.base.Throwables;
 import dev.langchain4j.internal.RetryUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -22,6 +23,7 @@ import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.ConnectException;
+import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -191,16 +193,12 @@ public class ChatCompletionService {
             return null;
         }
 
-        // Try to get the root cause first
-        Throwable rootCause = throwable;
-        while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
-            rootCause = rootCause.getCause();
-        }
+        Throwable rootCause = Throwables.getRootCause(throwable);
 
         // Use the most specific exception (root cause if available)
         Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
 
-        // Provide user-friendly messages based on an exception type
+        // Provide user-friendly messages based on exception type
         return switch (exceptionToHandle) {
             case ConnectException connectException -> {
                 // Extract host/URL from the exception message if available
@@ -210,10 +208,8 @@ public class ChatCompletionService {
                 }
                 yield "Service is unreachable: " + message;
             }
-            case java.nio.channels.ClosedChannelException closedChannelException ->
+            case ClosedChannelException closedChannelException ->
                 "Service is unreachable. Please check the provider URL.";
-            // For other exceptions, use the exception message
-            // Fallback to exception class name if no message
             default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();
