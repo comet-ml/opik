@@ -63,7 +63,7 @@ public class ChatCompletionService {
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
