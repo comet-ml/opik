@@ -4,6 +4,7 @@ import { SquareArrowOutUpRight } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
+import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import { Button } from "@/components/ui/button";
 import { Description } from "@/components/ui/description";
@@ -29,10 +30,17 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { buildDocsUrl } from "@/lib/utils";
 import { validateCsvFile } from "@/lib/file";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 const ACCEPTED_TYPE = ".csv";
-const FILE_SIZE_LIMIT_IN_MB = 20;
-const MAX_ITEMS_COUNT_LIMIT = 1000;
+
+// JSON mode (toggle OFF) - with restrictions
+const JSON_MODE_FILE_SIZE_LIMIT_IN_MB = 20;
+const JSON_MODE_MAX_ITEMS = 1000;
+
+// CSV mode (toggle ON) - no restrictions
+const CSV_MODE_FILE_SIZE_LIMIT_IN_MB = 2000;
 
 type AddEditDatasetDialogProps = {
   dataset?: Dataset;
@@ -55,13 +63,18 @@ const AddEditDatasetDialog: React.FunctionComponent<
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
+  const isCsvUploadEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CSV_UPLOAD_ENABLED,
+  );
 
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
+  const { mutate: createItemsFromCsvMutate } = useDatasetItemsFromCsvMutation();
 
   const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
+  const [csvFile, setCsvFile] = useState<File | undefined>(undefined);
   const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
     undefined,
   );
@@ -77,8 +90,9 @@ const AddEditDatasetDialog: React.FunctionComponent<
     if (!open) {
       // Reset all state when dialog closes
       setIsOverlayShown(false);
-      setCsvData(undefined);
+      setCsvFile(undefined);
       setCsvError(undefined);
+      setCsvData(undefined);
       setConfirmOpen(false);
       if (!dataset) {
         setName("");
@@ -96,67 +110,97 @@ const AddEditDatasetDialog: React.FunctionComponent<
   }, [open, dataset]);
 
   const isEdit = Boolean(dataset);
-  const hasValidCsvData = csvData && csvData.length > 0;
+  const hasValidCsvFile = csvFile && !csvError;
   // Validation: name is required, and CSV is required only if csvRequired is true
   const isValid =
     Boolean(name.length) &&
-    (isEdit || hideUpload || !csvRequired || hasValidCsvData);
+    (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
+  // Determine which mode we're in and set limits accordingly
+  const fileSizeLimit = isCsvUploadEnabled
+    ? CSV_MODE_FILE_SIZE_LIMIT_IN_MB
+    : JSON_MODE_FILE_SIZE_LIMIT_IN_MB;
+
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (hasValidCsvData && newDataset.id) {
-        // Prepare items with manual source and data fields
-        const headers = Object.keys(csvData[0]);
-        const items = csvData.map((row) => ({
-          source: DATASET_ITEM_SOURCE.manual,
-          data: headers.reduce<Record<string, unknown>>((acc, header) => {
-            acc[header] = row[header];
-            return acc;
-          }, {}),
-        }));
-
-        createItemsMutate(
-          {
-            datasetId: newDataset.id,
-            datasetItems: items,
-            workspaceName,
-          },
-          {
-            onError: (error) => {
-              console.error("Error uploading dataset items:", error);
-              toast({
-                title: "Error uploading dataset items",
-                description:
+      if (hasValidCsvFile && newDataset.id) {
+        if (isCsvUploadEnabled && csvFile) {
+          // CSV mode: Upload CSV file directly to backend
+          createItemsFromCsvMutate(
+            {
+              datasetId: newDataset.id,
+              csvFile,
+            },
+            {
+              onSuccess: () => {
+                toast({
+                  title: "CSV upload accepted",
+                  description:
+                    "Your CSV file is being processed in the background. Dataset items will appear automatically when ready. If you don't see them, try refreshing the page.",
+                });
+              },
+              onError: (error: unknown) => {
+                console.error("Error uploading CSV file:", error);
+                const errorMessage =
                   (
                     error as { response?: { data?: { errors?: string[] } } }
                   ).response?.data?.errors?.join(", ") ||
-                  error.message ||
-                  "Failed to add dataset items",
-                variant: "destructive",
-              });
+                  (error as { message?: string }).message ||
+                  "Failed to upload CSV file";
+                toast({
+                  title: "Error uploading CSV file",
+                  description: errorMessage,
+                  variant: "destructive",
+                });
+              },
+              onSettled: () => {
+                setOpen(false);
+                if (onDatasetCreated) {
+                  onDatasetCreated(newDataset);
+                }
+              },
             },
-            onSettled: () => {
-              setOpen(false);
-              if (onDatasetCreated) {
-                onDatasetCreated(newDataset);
-              }
+          );
+        } else if (!isCsvUploadEnabled && csvData) {
+          // JSON mode: Send parsed JSON data
+          createItemsMutate(
+            {
+              datasetId: newDataset.id,
+              workspaceName,
+              datasetItems: csvData.map((row) => ({
+                data: row,
+                source: DATASET_ITEM_SOURCE.manual,
+              })),
             },
-          },
-        );
+            {
+              onError: () => {
+                setOpen(false);
+              },
+              onSettled: () => {
+                if (onDatasetCreated) {
+                  onDatasetCreated(newDataset);
+                }
+              },
+            },
+          );
+        }
       } else if (onDatasetCreated) {
         onDatasetCreated(newDataset);
       }
     },
     [
-      createItemsMutate,
+      hasValidCsvFile,
+      isCsvUploadEnabled,
+      csvFile,
       csvData,
-      hasValidCsvData,
+      createItemsFromCsvMutate,
+      createItemsMutate,
+      workspaceName,
       onDatasetCreated,
       setOpen,
       toast,
-      workspaceName,
     ],
   );
 
@@ -183,14 +227,14 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
       );
     }
-    if (hasValidCsvData) {
+    if (hasValidCsvFile) {
       setIsOverlayShown(true);
     } else {
       setOpen(false);
     }
   }, [
     isEdit,
-    hasValidCsvData,
+    hasValidCsvFile,
     updateMutate,
     dataset,
     name,
@@ -200,25 +244,47 @@ const AddEditDatasetDialog: React.FunctionComponent<
     setOpen,
   ]);
 
-  const handleFileSelect = useCallback(async (file?: File) => {
-    setCsvError(undefined);
-    setCsvData(undefined);
+  const handleFileSelect = useCallback(
+    async (file?: File) => {
+      setCsvError(undefined);
+      setCsvFile(undefined);
+      setCsvData(undefined);
 
-    const { data, error } = await validateCsvFile(
-      file,
-      FILE_SIZE_LIMIT_IN_MB,
-      MAX_ITEMS_COUNT_LIMIT,
-    );
+      if (!file) {
+        return;
+      }
 
-    if (error) {
-      setCsvError(error);
-      return;
-    }
+      if (isCsvUploadEnabled) {
+        // CSV mode: Just validate size and format, don't parse
+        if (file.size > fileSizeLimit * 1024 * 1024) {
+          setCsvError(`File exceeds maximum size (${fileSizeLimit}MB).`);
+          return;
+        }
 
-    if (data) {
-      setCsvData(data);
-    }
-  }, []);
+        if (!file.name.toLowerCase().endsWith(".csv")) {
+          setCsvError("File must be in .csv format");
+          return;
+        }
+
+        setCsvFile(file);
+      } else {
+        // JSON mode: Validate and parse CSV with row limit
+        const result = await validateCsvFile(
+          file,
+          fileSizeLimit,
+          JSON_MODE_MAX_ITEMS,
+        );
+
+        if (result.error) {
+          setCsvError(result.error);
+        } else if (result.data) {
+          setCsvFile(file);
+          setCsvData(result.data);
+        }
+      }
+    },
+    [isCsvUploadEnabled, fileSizeLimit],
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -281,8 +347,17 @@ const AddEditDatasetDialog: React.FunctionComponent<
             <div className="flex flex-col gap-2 pb-4">
               <Label>Upload a CSV</Label>
               <Description className="tracking-normal">
-                Your CSV file can contain up to 1,000 rows, for larger datasets
-                use the SDK instead.
+                {isCsvUploadEnabled ? (
+                  <>
+                    Your CSV file can be up to {fileSizeLimit}MB in size. The
+                    file will be processed in the background.
+                  </>
+                ) : (
+                  <>
+                    Your CSV file can contain up to 1,000 rows, for larger
+                    datasets use the SDK instead.
+                  </>
+                )}
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
@@ -301,7 +376,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
                 onFileSelect={handleFileSelect}
                 errorText={csvError}
                 successText={
-                  csvData && !csvError ? "Valid CSV format" : undefined
+                  csvFile && !csvError ? "CSV file ready to upload" : undefined
                 }
               />
             </div>

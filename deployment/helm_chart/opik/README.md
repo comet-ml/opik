@@ -231,6 +231,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.readinessProbe.path | string | `"/health-check?name=all&type=ready"` |  |
 | component.backend.readinessProbe.port | int | `8080` |  |
 | component.backend.replicaCount | int | `1` |  |
+| component.backend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.backend.run_migration | bool | `true` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
 | component.backend.service.ports[0].port | int | `8080` |  |
@@ -249,7 +250,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
 | component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
-| component.backend.waitForMysql.enabled | bool | `true` |  |
 | component.backend.waitForMysql.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForMysql.image.repository | string | `"busybox"` |  |
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
@@ -270,11 +270,12 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
-| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
+| component.frontend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.frontend.service.ports[0].name | string | `"http"` |  |
 | component.frontend.service.ports[0].port | int | `5173` |  |
 | component.frontend.service.ports[0].protocol | string | `"TCP"` |  |

@@ -334,9 +334,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="comet-title-s">
-            Expand dataset with AI
-          </DialogTitle>
+          <DialogTitle className="comet-title-s">Expand with AI</DialogTitle>
           <p className="comet-body-s my-4 text-muted-foreground">
             This will generate synthetic samples based on your existing data
             patterns. The generated samples will be available for review before

@@ -6,8 +6,6 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 import lombok.NonNull;
 
-import java.math.BigDecimal;
-
 /**
  * Data Transfer Object for metrics alert payload.
  * Contains threshold evaluation results and metadata.
@@ -18,8 +16,9 @@ import java.math.BigDecimal;
 public record MetricsAlertPayload(
         String eventType,
         String metricName,
-        @NonNull BigDecimal metricValue,
-        @NonNull BigDecimal threshold,
+        @NonNull String metricValue,
+        @NonNull String threshold,
         long windowSeconds,
-        String projectIds) {
+        String projectIds,
+        String projectNames) {
 }

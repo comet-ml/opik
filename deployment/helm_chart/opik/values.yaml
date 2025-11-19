@@ -59,7 +59,6 @@ component:
         repository: curlimages/curl
         tag: 8.12.1
     waitForMysql:
-      enabled: true
       mysql:
         host: opik-mysql
         port: 3306
@@ -67,6 +66,9 @@ component:
         registry: docker.io
         repository: busybox
         tag: 1.36
+    resources:
+      requests:
+        ephemeral-storage: 10Gi
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
@@ -205,6 +207,9 @@ component:
       enabled: false
     backendConfigMap:
       enabled: false
+    resources:
+      requests:
+        ephemeral-storage: 10Gi
     volumeMounts:
     - mountPath: /etc/nginx/conf.d/
       name: opik-frontend-nginx

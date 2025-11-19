@@ -11,13 +11,16 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
+from ..errors.not_found_error import NotFoundError
 from ..types.dataset_expansion_response import DatasetExpansionResponse
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
 from ..types.dataset_item_write import DatasetItemWrite
+from ..types.dataset_item_write_source import DatasetItemWriteSource
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
+from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_enrichment_options import SpanEnrichmentOptions
@@ -817,6 +820,80 @@ class RawDatasetsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def patch_dataset_item(
+        self,
+        item_id: str,
+        *,
+        source: DatasetItemWriteSource,
+        data: JsonNode,
+        id: typing.Optional[str] = OMIT,
+        trace_id: typing.Optional[str] = OMIT,
+        span_id: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Partially update dataset item by id. Only provided fields will be updated.
+
+        Parameters
+        ----------
+        item_id : str
+
+        source : DatasetItemWriteSource
+
+        data : JsonNode
+
+        id : typing.Optional[str]
+
+        trace_id : typing.Optional[str]
+
+        span_id : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/items/{jsonable_encoder(item_id)}",
+            method="PATCH",
+            json={
+                "id": id,
+                "trace_id": trace_id,
+                "span_id": span_id,
+                "source": source,
+                "data": data,
+                "tags": tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1779,6 +1856,80 @@ class AsyncRawDatasetsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def patch_dataset_item(
+        self,
+        item_id: str,
+        *,
+        source: DatasetItemWriteSource,
+        data: JsonNode,
+        id: typing.Optional[str] = OMIT,
+        trace_id: typing.Optional[str] = OMIT,
+        span_id: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Partially update dataset item by id. Only provided fields will be updated.
+
+        Parameters
+        ----------
+        item_id : str
+
+        source : DatasetItemWriteSource
+
+        data : JsonNode
+
+        id : typing.Optional[str]
+
+        trace_id : typing.Optional[str]
+
+        span_id : typing.Optional[str]
+
+        tags : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/items/{jsonable_encoder(item_id)}",
+            method="PATCH",
+            json={
+                "id": id,
+                "trace_id": trace_id,
+                "span_id": span_id,
+                "source": source,
+                "data": data,
+                "tags": tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

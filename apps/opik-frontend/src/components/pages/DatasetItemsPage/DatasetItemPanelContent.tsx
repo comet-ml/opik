@@ -11,16 +11,19 @@ import Loader from "@/components/shared/Loader/Loader";
 import NoData from "@/components/shared/NoData/NoData";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
+import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMutation";
 import { processInputData } from "@/lib/images";
 
 type DatasetItemPanelContentProps = {
+  datasetId: string;
   datasetItemId: string;
 };
 
 const DatasetItemPanelContent: React.FunctionComponent<
   DatasetItemPanelContentProps
-> = ({ datasetItemId }) => {
+> = ({ datasetId, datasetItemId }) => {
   const { data, isPending } = useDatasetItemById(
     {
       datasetItemId,
@@ -29,6 +32,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
       placeholderData: keepPreviousData,
     },
   );
+  const updateMutation = useDatasetItemUpdateMutation();
 
   const { media, formattedData } = useMemo(
     () => processInputData(data?.data),
@@ -36,6 +40,23 @@ const DatasetItemPanelContent: React.FunctionComponent<
   );
 
   const hasMedia = media.length > 0;
+  const tags = data?.tags || [];
+
+  const handleAddTag = (newTag: string) => {
+    updateMutation.mutate({
+      datasetId,
+      itemId: datasetItemId,
+      item: { tags: [...tags, newTag] },
+    });
+  };
+
+  const handleDeleteTag = (tag: string) => {
+    updateMutation.mutate({
+      datasetId,
+      itemId: datasetItemId,
+      item: { tags: tags.filter((t) => t !== tag) },
+    });
+  };
 
   if (isPending) {
     return <Loader />;
@@ -47,6 +68,16 @@ const DatasetItemPanelContent: React.FunctionComponent<
 
   return (
     <div className="relative size-full overflow-y-auto p-4">
+      <div className="mb-4">
+        <div className="mb-2 text-sm font-medium">Tags</div>
+        <TagListRenderer
+          tags={tags}
+          onAddTag={handleAddTag}
+          onDeleteTag={handleDeleteTag}
+          size="sm"
+        />
+      </div>
+
       <Accordion
         type="multiple"
         className="w-full"
