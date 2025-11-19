@@ -86,7 +86,6 @@ import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -1582,8 +1581,7 @@ class ProjectsResourceTest {
         // Use Instant.now() to match production query behavior which uses now() in ClickHouse
         // The test determinism comes from the trace UUID timestamps, not from the boundary calculation
         Instant now = Instant.now();
-        Instant lastWeekStart = now.atZone(ZoneOffset.UTC).toLocalDate().minusDays(7).atStartOfDay()
-                .toInstant(ZoneOffset.UTC);
+        Instant lastWeekStart = now.minus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
         long recentErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
                 .filter(trace -> {

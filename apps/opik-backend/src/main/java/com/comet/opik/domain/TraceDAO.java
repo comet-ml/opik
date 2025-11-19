@@ -1362,8 +1362,6 @@ class TraceDAOImpl implements TraceDAO {
                  GROUP BY trace_id
             )
             <if(project_stats)>
-            -- Note: Converting UUIDs in WHERE clause prevents index usage on id field.
-            -- Consider materializing timestamp from UUIDv7 into a separate indexed column if query performance becomes an issue.
             ,    error_count_current AS (
                     SELECT
                         project_id,
