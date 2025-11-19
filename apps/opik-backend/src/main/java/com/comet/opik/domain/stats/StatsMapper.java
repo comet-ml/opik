@@ -248,35 +248,39 @@ public class StatsMapper {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> feedbackScoresMap = row.get(FEEDBACK_SCORE, Map.class);
-        if (feedbackScoresMap != null) {
-            feedbackScoresMap.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .forEach(entry -> {
-                        double value = entry.getValue() instanceof Number number
-                                ? number.doubleValue()
-                                : 0.0;
-                        stats.add(new AvgValueStat(
-                                "%s.%s".formatted(FEEDBACK_SCORE, entry.getKey()),
-                                value));
-                    });
-        }
+        addMapStats(feedbackScoresMap, FEEDBACK_SCORE, stats);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> usageMap = row.get(USAGE, Map.class);
-        if (usageMap != null) {
-            usageMap.entrySet().stream()
+        addMapStats(usageMap, USAGE, stats);
+
+        return new ProjectStats(stats.build().toList());
+    }
+
+    /**
+     * Processes a map of values and adds them as AvgValueStat entries to the stats builder.
+     * Converts all numeric values to doubles and sorts entries by key.
+     *
+     * @param map The map to process (can be null)
+     * @param prefix The prefix for the stat key (e.g., "feedback_scores", "usage")
+     * @param statsBuilder The builder to add stats to
+     */
+    private static void addMapStats(
+            Map<String, Object> map,
+            String prefix,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        if (map != null) {
+            map.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .forEach(entry -> {
                         double value = entry.getValue() instanceof Number number
                                 ? number.doubleValue()
                                 : 0.0;
-                        stats.add(new AvgValueStat(
-                                "%s.%s".formatted(USAGE, entry.getKey()),
+                        statsBuilder.add(new AvgValueStat(
+                                "%s.%s".formatted(prefix, entry.getKey()),
                                 value));
                     });
         }
-
-        return new ProjectStats(stats.build().toList());
     }
 
     private static BigDecimal getCostValue(Row row, String columnName) {
