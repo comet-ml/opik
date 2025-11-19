@@ -215,7 +215,7 @@ const DatasetItemsPage = () => {
     return (data?.columns ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: c.name,
+        id: `data.${c.name}`,
         label: c.name,
         columnType: mapDynamicColumnTypesToColumnType(c.types),
       }));
