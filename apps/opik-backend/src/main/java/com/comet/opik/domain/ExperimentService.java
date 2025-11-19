@@ -5,8 +5,6 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.Experiment.ExperimentPage;
-import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
@@ -23,7 +21,6 @@ import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -73,7 +70,6 @@ public class ExperimentService {
     private final @NonNull PromptService promptService;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull ExperimentResponseBuilder responseBuilder;
-    private final @NonNull LockService lockService;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -544,25 +540,4 @@ public class ExperimentService {
     public Mono<Long> getDailyCreatedCount() {
         return experimentDAO.getDailyCreatedCount();
     }
-
-    public Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
-
-        if (isNoOperation(experimentUpdate)) {
-            return Mono.empty();
-        }
-
-        return Mono.defer(() -> experimentDAO.getById(id)
-                .switchIfEmpty(Mono.error(new NotFoundException("Experiment Not Found")))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(experiment -> lockService.executeWithLock(
-                        new LockService.Lock(id, "Experiment"),
-                        Mono.defer(() -> experimentDAO.update(id, experimentUpdate, experiment)))))
-                .then();
-    }
-
-    private boolean isNoOperation(ExperimentUpdate experimentUpdate) {
-        return (experimentUpdate.name() == null || experimentUpdate.name().isBlank())
-                && experimentUpdate.metadata() == null;
-    }
-
 }
