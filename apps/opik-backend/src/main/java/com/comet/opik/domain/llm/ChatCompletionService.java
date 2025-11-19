@@ -62,8 +62,14 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
+            // Build detailed error message including the underlying exception
+            String errorMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+            if (runtimeException.getMessage() != null && !runtimeException.getMessage().isEmpty()) {
+                errorMessage = errorMessage + ": " + runtimeException.getMessage();
+            }
+
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            throw new InternalServerErrorException(errorMessage);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -113,8 +119,14 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
+            // Build detailed error message including the underlying exception
+            String errorMessage = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+            if (runtimeException.getMessage() != null && !runtimeException.getMessage().isEmpty()) {
+                errorMessage = errorMessage + ": " + runtimeException.getMessage();
+            }
+
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            throw new InternalServerErrorException(errorMessage);
         }
     }
 
