@@ -12,7 +12,7 @@ const buttonVariants = cva(
         default:
           "bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-active disabled:bg-muted-gray disabled:opacity-100",
         special:
-          "bg-[#19A979] text-primary-foreground hover:bg-[#1E8A66] active:bg-[#1A7557] disabled:bg-muted-gray disabled:opacity-100",
+          "bg-[var(--special-button)] text-primary-foreground hover:bg-[var(--special-button-hover)] active:bg-[var(--special-button-active)] disabled:bg-muted-gray disabled:opacity-100",
         destructive:
           "border border-destructive bg-background text-destructive hover:bg-destructive/5 active:bg-destructive/10 disabled:border-muted-gray disabled:text-muted-gray disabled:opacity-100",
         outline:

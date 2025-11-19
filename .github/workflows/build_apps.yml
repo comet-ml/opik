@@ -21,6 +21,11 @@ on:
         required: true
         description: Is release build
         default: false
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
+        default: true
   workflow_call:
     inputs:
       version:
@@ -33,6 +38,21 @@ on:
         required: true
         description: Is release build
         default: false
+      ref:
+        type: string
+        required: false
+        description: Git ref to build from (branch, tag, or commit SHA)
+        default: ""
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
+        default: true
+        
+    outputs:
+      version:
+        description: "The version that was built"
+        value: ${{ jobs.set-version.outputs.version }}
 
 jobs:
 
@@ -45,6 +65,8 @@ jobs:
     steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
+          with:
+            ref: ${{ inputs.ref || github.ref }}
 
         - name: Set version
           id: version
@@ -75,7 +97,9 @@ jobs:
             echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
             echo "Version is ${VERSION}" >> $GITHUB_STEP_SUMMARY
 
-            if [[ "${{inputs.version}}" == ""  ]]; then
+            if [ "${{inputs.ref}}" != "" ]; then
+              echo "build_from=${{inputs.ref}}" | tee -a $GITHUB_OUTPUT
+            elif [[ "${{inputs.version}}" == "" ]]; then
               echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
             else
               echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
@@ -84,6 +108,7 @@ jobs:
   build-backend:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-backend"
@@ -96,6 +121,7 @@ jobs:
   build-sandbox-executor-python:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-sandbox-executor-python"
@@ -109,6 +135,7 @@ jobs:
     needs:
       - set-version
       - build-sandbox-executor-python
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-python-backend"
@@ -119,8 +146,10 @@ jobs:
       is_release: ${{ inputs.is_release || false }}
 
   build-guardrails-backend:
+    if: inputs.build_guardrails != false 
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-guardrails-backend"

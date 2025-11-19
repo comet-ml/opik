@@ -1,3 +1,8 @@
+---
+title: Observability for Anthropic with Opik
+description: Start here to integrate Opik into your Anthropic-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [Anthropic](https://www.anthropic.com/) is an AI safety and research company that's working to build reliable, interpretable, and steerable AI systems.
 
 This guide explains how to integrate Opik with the Anthropic Python SDK. By using the `track_anthropic` method provided by opik, you can easily track and evaluate your Anthropic API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
@@ -72,3 +77,16 @@ print("Response", response.content[0].text)
 <Frame>
   <img src="/img/cookbook/anthropic_trace_cookbook.png" />
 </Frame>
+
+## Cost Tracking
+
+The `track_anthropic` wrapper automatically tracks token usage and cost for all supported Anthropic models.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on Anthropic pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>

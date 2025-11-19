@@ -32,6 +32,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import useRulesList from "@/api/automations/useRulesList";
 import { formatDate } from "@/lib/date";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
@@ -40,7 +41,6 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
-import RuleEnabledCell from "@/components/pages-shared/automations/RuleEnabledCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -98,9 +98,9 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
   },
   {
     id: "enabled",
-    label: "State",
+    label: "Status",
     type: COLUMN_TYPE.string,
-    cell: RuleEnabledCell as never,
+    cell: StatusCell as never,
   },
 ];
 

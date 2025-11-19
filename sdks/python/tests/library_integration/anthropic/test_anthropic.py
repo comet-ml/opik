@@ -40,6 +40,8 @@ EXPECTED_ANTHROPIC_USAGE_DICT = {
     "original_usage.output_tokens": ANY_BUT_NONE,
     "original_usage.cache_creation_input_tokens": ANY_BUT_NONE,
     "original_usage.cache_read_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation.ephemeral_5m_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation.ephemeral_1h_input_tokens": ANY_BUT_NONE,
 }
 
 MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"

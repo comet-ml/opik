@@ -19,7 +19,8 @@ class LongStr:
         return str(self)
 
 
-ONE_MEGABYTE = 1024 * 1024
+ONE_KILOBYTE = 1024
+ONE_MEGABYTE = ONE_KILOBYTE * ONE_KILOBYTE
 
 
 def fake_create_trace_message_batch(

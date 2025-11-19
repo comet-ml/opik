@@ -1,8 +1,17 @@
+---
+title: Observability for Pydantic AI with Opik
+description: Start here to integrate Opik into your Pydantic AI-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [Pydantic AI](https://ai.pydantic.dev/) is a Python agent framework designed to
 build production grade applications with Generative AI.
 
 Pydantic AI's primary advantage is its integration of Pydantic's type-safe data
 validation, ensuring structured and reliable responses in AI applications.
+
+<Frame>
+  <img src="/img/tracing/pydantic-ai.png" alt="Pydantic AI tracing" />
+</Frame>
 
 ## Getting started
 
@@ -10,7 +19,7 @@ To use the Pydantic AI integration with Opik, you will need to have Pydantic AI
 and logfire installed:
 
 ```bash
-pip install --upgrade --quiet pydantic-ai logfire 'logfire[httpx]'
+pip install --upgrade pydantic-ai logfire 'logfire[httpx]'
 ```
 
 In addition you will need to set the following environment variables to make
@@ -35,6 +44,28 @@ sure the data is logged to Opik:
 
             You can also update the `Comet-Workspace` parameter to a different value if you would like to log the data
             to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
         </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
@@ -71,12 +102,6 @@ logfire.configure(
 logfire.instrument_httpx(capture_all=True)
 ```
 
-This combined with the environment variables above will log your traces to Opik:
-
-<Frame>
-  <img src="/img/tracing/pydantic-ai.png" alt="Pydantic AI tracing" />
-</Frame>
-
 ## Advanced usage
 
 You can reduce the amount of data logged to Opik by setting `capture_all` to `False`:
@@ -92,3 +117,8 @@ logfire.instrument_httpx(capture_all=False)
 
 When this parameter is set to `False`, we will not log the exact request made
 to the LLM provider.
+
+## Further improvements
+
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

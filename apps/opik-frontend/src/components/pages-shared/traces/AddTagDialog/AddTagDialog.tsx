@@ -118,7 +118,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
           </DialogTitle>
         </DialogHeader>
         {rows.length > MAX_ENTITIES && (
-          <div className="mb-2 text-sm text-red-500">
+          <div className="mb-2 text-sm text-destructive">
             You can only add tags to up to {MAX_ENTITIES} entities at a time.
             Please select fewer entities.
           </div>

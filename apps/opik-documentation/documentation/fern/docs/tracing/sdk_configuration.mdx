@@ -1,4 +1,4 @@
-The recommended approach to configuring the Python SDK is to use the `opik configure` command. This will prompt you for the necessary information and save it to a configuration file.
+The recommended approach to configuring the Python SDK is to use the `opik configure` command. This will prompt you to set up your API key and Opik instance URL (if applicable) to ensure proper routing and authentication. All details will be saved to a configuration file.
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
@@ -82,7 +82,7 @@ project_name = <Project Name>
 
 </Tabs>
 
-You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
+You can find a full list of the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
 
 <Tip>
   By default, the SDK will look for the configuration file in your home directory (`~/.opik.config`). If you would like
@@ -97,7 +97,7 @@ If you do not wish to use a configuration file, you can set environment variable
 - `OPIK_API_KEY`: The API key to use - Only required if you are using the Opik Cloud version of the platform
 - `OPIK_WORKSPACE`: The workspace to use - Only required if you are using the Opik Cloud version of the platform
 
-You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
+You can find a full list of the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
 
 ### Configuration values
 
@@ -112,6 +112,32 @@ Here is a list of the configuration values that you can set:
 | opik_track_disable         | `OPIK_TRACK_DISABLE`         | Flag to disable the tracking of traces and spans - Defaults to `false`                       |
 | default_flush_timeout      | `OPIK_DEFAULT_FLUSH_TIMEOUT` | The default flush timeout to use - Defaults to no timeout                                    |
 | opik_check_tls_certificate | `OPIK_CHECK_TLS_CERTIFICATE` | Flag to check the TLS certificate of the Opik server - Defaults to `true`                    |
+
+
+### The HTTP client advanced configuration
+
+The Opik Python SDK uses the [httpx](https://www.python-httpx.org/) library to make HTTP requests.
+The default configuration applied to the HTTP client is suitable for most use cases, but you can customize
+it by registering a custom httpx client hook as in following example:
+
+```python
+import opik.hooks
+
+def custom_auth_client_hook(client: httpx.Client) -> None:
+    client.auth = CustomAuth()
+
+hook = opik.hooks.HttpxClientHook(
+    client_init_arguments={"trust_env": False},
+    client_modifier=custom_auth_client_hook,
+)
+opik.hooks.add_httpx_client_hook(hook)
+
+# Use the Opik SDK as usual
+
+```
+
+<Icon icon="warning" color="#DB0030"/> Make sure to add the hook before using the Opik SDK.
+
 
 ### Common error messages
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
@@ -8,12 +8,36 @@ import { formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore } from "@/types/traces";
+import {
+  extractReasonsFromValueByAuthor,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
+import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
-
-  const value = feedbackScore ? feedbackScore.value : "-";
   const reason = feedbackScore?.reason;
+
+  const reasons = useMemo(() => {
+    if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
+      return extractReasonsFromValueByAuthor(feedbackScore?.value_by_author);
+    }
+
+    return reason
+      ? [
+          {
+            reason,
+            author: feedbackScore?.last_updated_by,
+            lastUpdatedAt: feedbackScore?.last_updated_at,
+          },
+        ]
+      : [];
+  }, [
+    feedbackScore?.value_by_author,
+    reason,
+    feedbackScore?.last_updated_by,
+    feedbackScore?.last_updated_at,
+  ]);
 
   return (
     <CellWrapper
@@ -21,13 +45,10 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       tableMetadata={context.table.options.meta}
       className="gap-1"
     >
-      <div className="truncate">{value}</div>
-      {reason && (
-        <FeedbackScoreReasonTooltip
-          reason={reason}
-          lastUpdatedAt={feedbackScore.last_updated_at}
-          lastUpdatedBy={feedbackScore.last_updated_by}
-        >
+      <FeedbackScoreCellValue feedbackScore={feedbackScore} />
+
+      {reasons.length > 0 && (
+        <FeedbackScoreReasonTooltip reasons={reasons}>
           <div className="flex h-[20px] items-center">
             <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
           </div>

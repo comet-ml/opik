@@ -47,6 +47,7 @@ export enum EXPLAINER_ID {
   what_happens_if_i_edit_an_ai_provider = "what_happens_if_i_edit_an_ai_provider",
   what_happens_if_i_edit_a_rule = "what_happens_if_i_edit_a_rule",
   what_happens_if_i_edit_a_thread_rule = "what_happens_if_i_edit_a_thread_rule",
+  what_happens_if_i_edit_a_feedback_definition = "what_happens_if_i_edit_a_feedback_definition",
   why_would_i_want_to_create_a_new_project = "why_would_i_want_to_create_a_new_project",
   whats_the_commit_history = "whats_the_commit_history",
   why_would_i_compare_commits = "why_would_i_compare_commits",
@@ -68,6 +69,7 @@ export enum EXPLAINER_ID {
   metric_answer_relevance = "metric_answer_relevance",
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
+  trace_opik_ai = "trace_opik_ai",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -349,6 +351,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Changes will only apply to new threads. Existing threads won't be affected.",
   },
+  [EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition]: {
+    id: EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition,
+    title: "Editing a feedback definition",
+    description:
+      "Changes will only apply to new feedback scores. Existing feedback scores won't be affected.",
+  },
   [EXPLAINER_ID.why_would_i_want_to_create_a_new_project]: {
     id: EXPLAINER_ID.why_would_i_want_to_create_a_new_project,
     description:
@@ -480,5 +488,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "The context recall metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
     docLink: "/evaluation/metrics/context_recall",
+  },
+  [EXPLAINER_ID.trace_opik_ai]: {
+    id: EXPLAINER_ID.trace_opik_ai,
+    description:
+      "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
   },
 };

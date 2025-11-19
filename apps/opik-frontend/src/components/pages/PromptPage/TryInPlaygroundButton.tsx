@@ -103,7 +103,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
           }
         }}
       >
-        <Play className="mr-2 size-3.5" />
+        <Play className="mr-1.5 size-3.5" />
         Try in the Playground
       </Button>
       <ConfirmDialog

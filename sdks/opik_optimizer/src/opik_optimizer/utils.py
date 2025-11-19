@@ -22,6 +22,8 @@ import string
 import urllib.parse
 from types import TracebackType
 
+import requests
+
 import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
@@ -354,3 +356,77 @@ def python_type_to_json_type(python_type: type) -> str:
         return "array"
     else:
         return "string"  # default fallback
+
+
+def search_wikipedia(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    from .colbert import ColBERTv2
+
+    # Try ColBERTv2 first with a short timeout
+    try:
+        colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
+        # Use a shorter timeout by modifying the max_retries parameter
+        results = colbert(query, k=3, max_retries=1)
+        return [str(item.text) for item in results if hasattr(item, "text")]
+    except Exception as e:
+        print(f"ColBERTv2 search failed: {e}")
+        # Fallback to Wikipedia API
+        try:
+            return _search_wikipedia_api(query)
+        except Exception as api_error:
+            print(f"Wikipedia API fallback also failed: {api_error}")
+            return [f"Wikipedia search unavailable. Query was: {query}"]
+
+
+def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
+    """
+    Fallback Wikipedia search using the Wikipedia API.
+    """
+    try:
+        # First, search for pages using the search API
+        search_params: Dict[str, str | int] = {
+            "action": "query",
+            "format": "json",
+            "list": "search",
+            "srsearch": query,
+            "srlimit": max_results,
+            "srprop": "snippet",
+        }
+
+        headers = {
+            "User-Agent": "OpikOptimizer/1.0 (https://github.com/opik-ai/opik-optimizer)"
+        }
+        search_response = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            params=search_params,
+            headers=headers,
+            timeout=5,
+        )
+
+        if search_response.status_code != 200:
+            raise Exception(f"Search API returned status {search_response.status_code}")
+
+        search_data = search_response.json()
+
+        results = []
+        if "query" in search_data and "search" in search_data["query"]:
+            for item in search_data["query"]["search"][:max_results]:
+                page_title = item["title"]
+                snippet = item.get("snippet", "")
+
+                # Clean up the snippet (remove HTML tags)
+                import re
+
+                clean_snippet = re.sub(r"<[^>]+>", "", snippet)
+                clean_snippet = re.sub(r"&[^;]+;", " ", clean_snippet)
+
+                if clean_snippet.strip():
+                    results.append(f"{page_title}: {clean_snippet.strip()}")
+
+        return results if results else [f"No Wikipedia results found for: {query}"]
+
+    except Exception as e:
+        raise Exception(f"Wikipedia API request failed: {e}") from e

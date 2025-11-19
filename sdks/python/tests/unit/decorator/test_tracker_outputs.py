@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import threading
 from typing import Dict
 
@@ -1876,3 +1877,60 @@ def test_track__using_distributed_headers__through_node__spans_are_created_corre
 
     trace_tree = fake_backend.trace_trees[0]
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__functools_partial_function__function_name_extracted_correctly(
+    fake_backend,
+):
+    """Test that functools.partial functions are tracked with the correct function name"""
+
+    def base_task(conversation_id, project_name, extra_param="default"):
+        return f"Processing {conversation_id} in {project_name} with {extra_param}"
+
+    # Create a partial function (similar to the user's use case that was crashing)
+    partial_task = functools.partial(base_task, project_name="test-project")
+
+    # Decorate the partial function
+    tracked_partial_task = tracker.track(partial_task)
+
+    # Execute the partial function
+    tracked_partial_task("test-conversation", extra_param="test-extra")
+
+    tracker.flush_tracker()
+
+    # Verify the function name is correctly extracted from the underlying function
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="base_task",  # Should be the name of the underlying function, not "partial"
+        input={
+            "conversation_id": "test-conversation",
+            "project_name": "test-project",  # Partial args are included in the input
+            "extra_param": "test-extra",
+        },
+        output={
+            "output": "Processing test-conversation in test-project with test-extra"
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="base_task",  # Should be the name of the underlying function
+                input={
+                    "conversation_id": "test-conversation",
+                    "project_name": "test-project",  # Partial args are included in the input
+                    "extra_param": "test-extra",
+                },
+                output={
+                    "output": "Processing test-conversation in test-project with test-extra"
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

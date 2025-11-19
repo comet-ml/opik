@@ -4,6 +4,7 @@ import isObject from "lodash/isObject";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import JsonView from "react18-json-view";
+import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
 interface CustomMeta {
   showIndex: boolean;
@@ -16,6 +17,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
   const rowIndex = context.row.index;
 
   const value = context.getValue() as string;
+  const jsonViewTheme = useJsonViewTheme();
 
   const { showIndex } = (custom ?? {}) as CustomMeta;
 
@@ -25,7 +27,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
         <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal">
           <JsonView
             src={value}
-            theme="github"
+            {...jsonViewTheme}
             collapseStringsAfterLength={10000}
           />
         </div>

@@ -60,15 +60,21 @@ export class OpikClient {
 
     this.api = new OpikApiClientTemp(apiConfig);
 
-    this.spanBatchQueue = new SpanBatchQueue(this.api);
-    this.traceBatchQueue = new TraceBatchQueue(this.api);
+    const delay = this.config.holdUntilFlush
+      ? 24 * 60 * 60 * 1000
+      : this.config.batchDelayMs;
+
+    this.spanBatchQueue = new SpanBatchQueue(this.api, delay);
+    this.traceBatchQueue = new TraceBatchQueue(this.api, delay);
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(
-      this.api
+      this.api,
+      delay
     );
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
-      this.api
+      this.api,
+      delay
     );
-    this.datasetBatchQueue = new DatasetBatchQueue(this.api);
+    this.datasetBatchQueue = new DatasetBatchQueue(this.api, delay);
 
     clients.push(this);
   }

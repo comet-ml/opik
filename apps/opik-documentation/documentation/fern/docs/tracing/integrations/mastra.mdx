@@ -1,0 +1,160 @@
+---
+title: Observability for Mastra with Opik
+description: Start here to integrate Opik into your Mastra-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+Mastra is the TypeScript agent framework designed to provide the essential primitives for building AI applications. It enables developers to create AI agents with memory and tool-calling capabilities, implement deterministic LLM workflows, and leverage RAG for knowledge integration.
+
+Mastra's primary advantage is its built-in telemetry support that automatically captures agent interactions, LLM calls, and workflow executions, making it easy to monitor and debug AI applications.
+
+<Frame>
+  <img src="/img/tracing/mastra_integration.png" alt="Mastra tracing" />
+</Frame>
+
+## Getting started
+
+### Create a Mastra project
+
+If you don't have a Mastra project yet, you can create one using the Mastra CLI:
+
+```bash
+npx create-mastra
+cd your-mastra-project
+```
+
+### Install required packages
+
+Install the necessary dependencies for Mastra and AI SDK:
+
+```bash
+npm install langfuse-vercel
+```
+
+### Add environment variables
+
+Create or update your `.env` file with the following variables:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        # Your LLM API key
+        OPENAI_API_KEY=your-openai-api-key
+        
+        # Opik configuration
+        OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        # Your LLM API key
+        OPENAI_API_KEY=your-openai-api-key
+
+        # Opik configuration
+        OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        # Your LLM API key
+        OPENAI_API_KEY=your-openai-api-key
+
+        # Opik configuration
+        OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+
+</Tabs>
+
+## Set up an agent
+
+Create an agent in your project. For example, create a file `src/mastra/index.ts`:
+
+```typescript
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+export const chefAgent = new Agent({
+  name: "chef-agent",
+  instructions:
+    "You are Michel, a practical and experienced home chef " +
+    "You help people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+});
+
+export const mastra = new Mastra({
+  agents: { chefAgent },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+  telemetry: {
+    serviceName: "ai",
+    enabled: true,
+    sampling: {
+      type: "always_on",
+    },
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+## Run Mastra development server
+
+Start the Mastra development server:
+
+```bash
+npm run dev
+```
+
+Head over to the developer playground with the provided URL and start chatting with your agent.
+
+## What gets traced
+
+With this setup, your Mastra application will automatically trace:
+
+- **Agent interactions**: Complete conversation flows with agents
+- **LLM calls**: Model requests, responses, and token usage
+- **Tool executions**: Function calls and their results
+- **Workflow steps**: Individual steps in complex workflows
+- **Memory operations**: Context and memory updates
+
+## Further improvements
+
+If you have any questions or suggestions for improving the Mastra integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

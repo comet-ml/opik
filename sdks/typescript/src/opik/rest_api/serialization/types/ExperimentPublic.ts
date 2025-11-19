@@ -5,7 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNodePublic } from "./JsonNodePublic";
+import { JsonListStringPublic } from "./JsonListStringPublic";
 import { ExperimentPublicType } from "./ExperimentPublicType";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
 import { CommentPublic } from "./CommentPublic";
@@ -20,7 +20,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
-    metadata: JsonNodePublic.optional(),
+    metadata: JsonListStringPublic.optional(),
     type: ExperimentPublicType.optional(),
     optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
     feedbackScores: core.serialization.property(
@@ -53,7 +53,7 @@ export declare namespace ExperimentPublic {
         dataset_name: string;
         dataset_id?: string | null;
         name?: string | null;
-        metadata?: JsonNodePublic.Raw | null;
+        metadata?: JsonListStringPublic.Raw | null;
         type?: ExperimentPublicType.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;

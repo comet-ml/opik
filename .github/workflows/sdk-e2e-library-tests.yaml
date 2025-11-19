@@ -41,7 +41,8 @@ jobs:
           "3.9",
           "3.10",
           "3.11",
-          "3.12"
+          "3.12",
+          "3.13"
         ]
 
     steps:
@@ -63,8 +64,8 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         shell: bash
         run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose up -d --build
+          cd ${{ github.workspace }}
+          ./opik.sh --build
 
       - name: Check Opik server availability
         shell: bash
@@ -95,6 +96,9 @@ jobs:
           python_version: ${{ matrix.python_version }}
           library_name: adk
 
+      # This workflow is used to test the external LiteLLM integration that lives in litellm repository.
+      # However, there is another, internal, integration with LiteLLM that lives in opik.integrations.litellm, it's being tested
+      # in a separate workflow: .github/workflows/lib-litellm-tests.yml
       - name: LiteLLM Tests Python ${{ matrix.python_version }}
         if: contains(fromJSON('["litellm", "all"]'), env.LIBS)
         env:
@@ -107,5 +111,5 @@ jobs:
 
       - name: Stop opik server
         run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          cd ${{ github.workspace }}
+          ./opik.sh --stop

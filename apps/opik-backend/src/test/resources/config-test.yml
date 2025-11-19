@@ -68,13 +68,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1
-
-# Configuration for ClickHouse async insert functionality
-asyncInsert:
-  # Default: false
-  # Description: Enable async insert for individual write operations to ClickHouse.
-  enabled: false
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -148,6 +142,12 @@ server:
     # Description: If true, all requests with gzip in the Accept-Encoding header will have their response entities
     # compressed and requests with gzip in the Content-Encoding header will have their request entities decompressed.
     enabled: true
+  # HTTP connector configuration for handling large request headers
+  # Default: 16KB (16000 bytes) - matches ALB/Nginx request line limit
+  # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
+  applicationConnectors:
+    - type: http
+      maxRequestHeaderSize: 16KB
 
 # Configuration for batch operations
 batchOperations:
@@ -293,6 +293,12 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
+  # Default: false
+  # Description: Whether or not OpikAI feature is enabled
+  opikAIEnabled: "false"
+  # Default: false
+  # Description: Whether or not Human Annotation feature is enabled
+  humanAnnotationEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -335,3 +341,9 @@ jobTimeout:
   # Default: 30s
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: 30
+
+# Configuration for feedback scores
+feedbackScores:
+  # Default: false
+  # Description: Whether to write feedback scores by their author or not
+  writeToAuthored: false

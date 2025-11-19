@@ -4,9 +4,12 @@ import JsonView from "react18-json-view";
 import { safelyParseJSON } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
+import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
 const CodeCell = (context: CellContext<unknown, unknown>) => {
   const value = context.getValue() as string;
+  const jsonViewTheme = useJsonViewTheme();
+
   if (!value) return "";
 
   const rowHeight =
@@ -32,7 +35,7 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
       >
         <JsonView
           src={safelyParseJSON(value)}
-          theme="github"
+          {...jsonViewTheme}
           collapseStringsAfterLength={10000}
         />
       </div>

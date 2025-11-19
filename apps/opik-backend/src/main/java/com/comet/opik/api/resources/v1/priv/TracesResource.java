@@ -42,8 +42,8 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
-import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ErrorUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -399,11 +399,13 @@ public class TracesResource {
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Delete trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-        feedbackScoreService.deleteTraceScore(id, score.name())
+        log.info("Delete trace feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
+        feedbackScoreService.deleteTraceScore(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Deleted trace feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
         return Response.noContent().build();
     }
 
@@ -422,7 +424,7 @@ public class TracesResource {
 
         feedbackScoreService.scoreBatchOfTraces(feedbackScoreBatch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
         log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", feedbackScoreBatch.scores().size(),
@@ -781,7 +783,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
     public Response updateThread(@PathParam("threadModelId") UUID threadModelId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadUpdate.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -811,7 +813,7 @@ public class TracesResource {
 
         feedbackScoreService.scoreBatchOfThreads(batch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
         log.info("Feedback scores batch for threads, size '{}' on  workspaceId '{}'", batch.scores().size(),
@@ -829,15 +831,17 @@ public class TracesResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         String projectName = scores.projectName();
 
-        log.info("Deleting feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
-                projectName, workspaceId);
+        log.info("Deleting feedback scores for threadId '{}', projectName '{}', author '{}' on workspaceId '{}'",
+                scores.threadId(),
+                projectName, scores.author(), workspaceId);
 
-        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names())
+        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names(), scores.author())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
-                projectName, workspaceId);
+        log.info("Deleted feedback scores for threadId '{}', projectName '{}', author '{}' on workspaceId '{}'",
+                scores.threadId(),
+                projectName, scores.author(), workspaceId);
 
         return Response.noContent().build();
     }

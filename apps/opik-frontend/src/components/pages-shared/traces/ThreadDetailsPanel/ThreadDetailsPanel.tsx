@@ -56,7 +56,6 @@ import ThreadComments from "./ThreadComments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import ThreadAnnotations from "./ThreadAnnotations";
-import FeedbackScoreTab from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTab";
 import SetInactiveConfirmDialog from "./SetInactiveConfirmDialog";
 import ThreadStatusTag from "@/components/shared/ThreadStatusTag/ThreadStatusTag";
 import { ThreadStatus } from "@/types/thread";
@@ -66,6 +65,7 @@ import { Separator } from "@/components/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
 import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
 import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
+import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -201,12 +201,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     });
   }, [onClose, mutate, threadId, projectId]);
 
-  const handleDeleteFeedbackScore = (name: string) => {
+  const handleDeleteFeedbackScore = (name: string, author?: string) => {
     threadFeedbackScoreDelete({
       names: [name],
       threadId,
       projectName,
       projectId,
+      author,
     });
   };
 
@@ -243,7 +244,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <Button
             variant="outline"
             size="2xs"
-            className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
+            className="hover:bg-thread-active/80 border-thread-active bg-thread-active"
           >
             <MessageCircleMore className="mr-1 size-3" /> Active
             <ChevronDown className="ml-1 size-3.5" />
@@ -283,7 +284,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2 overflow-x-hidden">
-          <div className="relative flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[#DEDEFD] text-[#1B1C7E]">
+          <div className="relative flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[var(--thread-icon-background)] text-[var(--thread-icon-text)]">
             <MessagesSquare className="size-3.5" />
           </div>
           <div className="comet-title-s truncate py-0.5">Thread</div>
@@ -369,9 +370,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </div>
         </TabsContent>
         <TabsContent value="feedback_scores" className="px-6">
-          <FeedbackScoreTab
+          <ConfigurableFeedbackScoreTable
             onDeleteFeedbackScore={handleDeleteFeedbackScore}
-            entityName="thread"
             feedbackScores={threadFeedbackScores}
             onAddHumanReview={() =>
               setActiveSection(DetailsActionSection.Annotations)

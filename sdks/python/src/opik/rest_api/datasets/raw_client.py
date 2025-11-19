@@ -11,6 +11,7 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
+from ..types.dataset_expansion_response import DatasetExpansionResponse
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
@@ -436,6 +437,78 @@ class RawDatasetsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def expand_dataset(
+        self,
+        id: str,
+        *,
+        model: str,
+        sample_count: typing.Optional[int] = OMIT,
+        preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
+        variation_instructions: typing.Optional[str] = OMIT,
+        custom_prompt: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[DatasetExpansionResponse]:
+        """
+        Generate synthetic dataset samples using LLM based on existing data patterns
+
+        Parameters
+        ----------
+        id : str
+
+        model : str
+            The model to use for synthetic data generation
+
+        sample_count : typing.Optional[int]
+            Number of synthetic samples to generate
+
+        preserve_fields : typing.Optional[typing.Sequence[str]]
+            Fields to preserve patterns from original data
+
+        variation_instructions : typing.Optional[str]
+            Additional instructions for data variation
+
+        custom_prompt : typing.Optional[str]
+            Custom prompt to use for generation instead of auto-generated one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetExpansionResponse]
+            Generated synthetic samples
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/expansions",
+            method="POST",
+            json={
+                "model": model,
+                "sample_count": sample_count,
+                "preserve_fields": preserve_fields,
+                "variation_instructions": variation_instructions,
+                "custom_prompt": custom_prompt,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExpansionResponse,
+                    parse_obj_as(
+                        type_=DatasetExpansionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1163,6 +1236,78 @@ class AsyncRawDatasetsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def expand_dataset(
+        self,
+        id: str,
+        *,
+        model: str,
+        sample_count: typing.Optional[int] = OMIT,
+        preserve_fields: typing.Optional[typing.Sequence[str]] = OMIT,
+        variation_instructions: typing.Optional[str] = OMIT,
+        custom_prompt: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[DatasetExpansionResponse]:
+        """
+        Generate synthetic dataset samples using LLM based on existing data patterns
+
+        Parameters
+        ----------
+        id : str
+
+        model : str
+            The model to use for synthetic data generation
+
+        sample_count : typing.Optional[int]
+            Number of synthetic samples to generate
+
+        preserve_fields : typing.Optional[typing.Sequence[str]]
+            Fields to preserve patterns from original data
+
+        variation_instructions : typing.Optional[str]
+            Additional instructions for data variation
+
+        custom_prompt : typing.Optional[str]
+            Custom prompt to use for generation instead of auto-generated one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetExpansionResponse]
+            Generated synthetic samples
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/expansions",
+            method="POST",
+            json={
+                "model": model,
+                "sample_count": sample_count,
+                "preserve_fields": preserve_fields,
+                "variation_instructions": variation_instructions,
+                "custom_prompt": custom_prompt,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExpansionResponse,
+                    parse_obj_as(
+                        type_=DatasetExpansionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

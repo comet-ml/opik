@@ -1,5 +1,7 @@
 from ...testlib import ANY_BUT_NONE
 
+PROJECT_NAME = "crewai-test"
+
 MODEL_NAME_SHORT = "gpt-4o-mini"
 
 EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {

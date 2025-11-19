@@ -6,21 +6,31 @@ import useProjectsList from "@/api/projects/useProjectsList";
 import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
 
-const DEFAULT_LOADED_PROJECT_ITEMS = 25;
+const DEFAULT_LOADED_PROJECT_ITEMS = 1000;
 
-type ProjectsSelectBoxProps = {
-  value: string;
-  onChange: (value: string) => void;
+interface BaseProjectsSelectBoxProps {
   className?: string;
   disabled?: boolean;
-};
+}
 
-const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = ({
-  value,
-  onChange,
-  className,
-  disabled,
-}) => {
+interface SingleSelectProjectsProps extends BaseProjectsSelectBoxProps {
+  value: string;
+  onChange: (value: string) => void;
+  multiselect?: false;
+}
+
+interface MultiSelectProjectsProps extends BaseProjectsSelectBoxProps {
+  value: string[];
+  onChange: (value: string[]) => void;
+  multiselect: true;
+}
+
+type ProjectsSelectBoxProps =
+  | SingleSelectProjectsProps
+  | MultiSelectProjectsProps;
+
+const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
+  const { className, disabled } = props;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
@@ -46,12 +56,25 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = ({
     }));
   }, [data?.content]);
 
+  const loadableSelectBoxProps = props.multiselect
+    ? {
+        options,
+        value: props.value,
+        placeholder: "Select projects",
+        onChange: props.onChange,
+        multiselect: true as const,
+      }
+    : {
+        options,
+        value: props.value,
+        placeholder: "Select a project",
+        onChange: props.onChange,
+        multiselect: false as const,
+      };
+
   return (
     <LoadableSelectBox
-      options={options}
-      value={value}
-      placeholder="Select a project"
-      onChange={onChange}
+      {...loadableSelectBoxProps}
       onLoadMore={
         total > DEFAULT_LOADED_PROJECT_ITEMS && !isLoadedMore
           ? loadMoreHandler

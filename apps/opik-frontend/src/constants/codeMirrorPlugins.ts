@@ -25,7 +25,10 @@ export const mustachePlugin = ViewPlugin.fromClass(
           const start = from + match.index;
           const end = start + match[0].length;
           widgets.push(
-            Decoration.mark({ class: "text-[#19A979]" }).range(start, end),
+            Decoration.mark({ class: "text-[var(--color-green)]" }).range(
+              start,
+              end,
+            ),
           );
         }
       }

@@ -10,6 +10,8 @@ export interface OpikConfig {
   projectName: string;
   workspaceName: string;
   requestOptions?: RequestOptions;
+  batchDelayMs?: number;
+  holdUntilFlush?: boolean;
 }
 
 // ALEX
@@ -24,6 +26,8 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions">> = {
   apiUrl: "http://localhost:5173/api",
   projectName: "Default Project",
   workspaceName: "default",
+  batchDelayMs: 300,
+  holdUntilFlush: false,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
@@ -38,6 +42,15 @@ function loadFromEnv(): Partial<OpikConfig> {
     apiUrl: process.env.OPIK_URL_OVERRIDE,
     projectName: process.env.OPIK_PROJECT_NAME,
     workspaceName: process.env.OPIK_WORKSPACE,
+    batchDelayMs: process.env.OPIK_BATCH_DELAY_MS
+      ? Number(process.env.OPIK_BATCH_DELAY_MS)
+      : undefined,
+    holdUntilFlush:
+      process.env.OPIK_HOLD_UNTIL_FLUSH === undefined
+        ? undefined
+        : ["1", "true", "yes"].includes(
+            String(process.env.OPIK_HOLD_UNTIL_FLUSH).toLowerCase()
+          ),
   });
 }
 
@@ -102,8 +115,7 @@ export function validateConfig(config: OpikConfig) {
   }
 
   if (
-    isCloudHost &&
-    (!config.workspaceName || config.workspaceName === "default")
+    isCloudHost && (!config.workspaceName)
   ) {
     throw new Error("OPIK_WORKSPACE is not set");
   }

@@ -1,6 +1,20 @@
+---
+title: Observability for Google Agent Development Kit (Python) with Opik
+description: Start here to integrate Opik into your Google Agent Development Kit-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [Agent Development Kit (ADK)](https://google.github.io/adk-docs/) is a flexible and modular framework for developing and deploying AI agents. ADK can be used with popular LLMs and open-source generative AI tools and is designed with a focus on tight integration with the Google ecosystem and Gemini models. ADK makes it easy to get started with simple agents powered by Gemini models and Google AI tools while providing the control and structure needed for more complex agent architectures and orchestration.
 
-Opik integrates with ADK to log traces for all ADK agent executions.
+Opik provides comprehensive integration with ADK, automatically logging traces for all agent executions, tool calls, and LLM interactions with detailed cost tracking and error monitoring.
+
+## Key Features
+
+- **Automatic cost tracking** for all supported LLM providers including LiteLLM models (OpenAI, Anthropic, Google AI, AWS Bedrock, and more)
+- **Full compatibility** with the `@opik.track` decorator for hybrid tracing approaches
+- **Thread support** for conversational applications using ADK sessions
+- **Automatic agent graph visualization** with Mermaid diagrams for complex multi-agent workflows
+- **Comprehensive error tracking** with detailed error information and stack traces
+- **Multi-agent instrumentation** with `track_adk_agent_recursive` for complex agent hierarchies
 
 ## Getting started
 
@@ -10,15 +24,15 @@ First, ensure you have both `opik` and `google-adk` installed:
 pip install opik google-adk
 ```
 
-You can also set up Opik by using the opik configure command. This will ask you to enter either your local server address or your API key if you're using the Cloud version:
+You can also set up Opik by using the `opik configure` CLI command. This will ask you to enter either your local server address or your API key if you're using the Cloud version:
 
 ```bash
 opik configure
 ```
 
-## Logging ADK agent executions
+## Using OpikTracer
 
-To track your ADK agent's activity, use [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html). This tracker records everything your agent does and saves it to Opik:
+The [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html) automatically captures detailed information about your ADK agent executions, including inputs, outputs, metadata, token usage, and error information. Here's a basic example:
 
 ```python
 import datetime
@@ -63,7 +77,7 @@ opik_tracer = OpikTracer()
 
 root_agent = Agent(
     name="weather_time_agent",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     description=("Agent to answer questions about the time and weather in a city."),
     instruction=("I can answer your questions about the time and weather in a city."),
     tools=[get_weather, get_current_time],
@@ -76,10 +90,143 @@ root_agent = Agent(
 )
 ```
 
-Each agent execution will now be automatically logged to the Opik platform:
+Each agent execution will now be automatically logged to the Opik platform with the detailed trace information:
 
 <Frame>
-  <img src="/img/cookbook/adk_trace_cookbook.png" />
+  <img src="/img/tracing/adk/adk_weather_time_trace_screenshot.png" />
+</Frame>
+
+## Multi-agent instrumentation with `track_adk_agent_recursive`
+
+For complex multi-agent systems, manually adding OpikTracer callbacks to every agent can be time-consuming. The [`track_adk_agent_recursive`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/track_adk_agent_recursive.html) function automatically adds OpikTracer callbacks to all agents in your hierarchy:
+
+```python
+from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
+from google.adk import agents as adk_agents
+
+opik_tracer = OpikTracer(project_name="multi-agent-system")
+
+# Create a complex multi-agent system
+translator_to_english = adk_agents.Agent(
+    name="Translator",
+    model="gemini-2.5-flash",
+    description="Translates text to English.",
+)
+
+summarizer = adk_agents.Agent(
+    name="Summarizer", 
+    model="gemini-2.5-flash",
+    description="Summarizes text to 1 sentence.",
+)
+
+root_agent = adk_agents.SequentialAgent(
+    name="TextProcessingAssistant",
+    sub_agents=[translator_to_english, summarizer],
+    description="Runs translator to english then summarizer, in order.",
+)
+
+# Automatically instrument all agents in the hierarchy
+track_adk_agent_recursive(root_agent, opik_tracer)
+
+# Now all agents will be automatically tracked
+```
+
+This approach is particularly useful for:
+- **Sequential agents** with multiple processing steps
+- **Parallel agents** executing tasks concurrently  
+- **Loop agents** with iterative workflows
+- **Agent tools** that contain nested agents
+- **Complex hierarchies** with deeply nested agent structures
+
+## Cost Tracking
+
+Opik automatically tracks token usage and cost for all LLM calls during the agent execution, not only for the Gemini LLMs, but including the models accessed via `LiteLLM`.
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>
+
+## Agent Graph Visualization
+
+Opik automatically generates visual representations of your agent workflows using Mermaid diagrams. The graph shows:
+
+- **Agent hierarchy** and relationships
+- **Sequential execution** flows
+- **Parallel processing** branches  
+- **Loop structures** and iterations
+- **Tool connections** and dependencies
+
+The graph is automatically computed and stored with each trace, providing a clear visual understanding of your agent's execution flow:
+
+For weather time agent the graph will look like that:
+
+<Frame>
+  <img src="/img/tracing/adk/adk_weather_time_graph_screenshot.png" />
+</Frame>
+
+For more complex agent architectures displaying a graph may be even more beneficial:
+
+<Frame>
+  <img src="/img/tracing/adk/adk_code_assistant_graph_screenshot.png" />
+</Frame>
+
+## Compatibility with @track Decorator
+
+The `OpikTracer` is fully compatible with the `@track` decorator, allowing you to create hybrid tracing approaches that combine ADK agent tracking with custom function tracing.
+You can both invoke your agent from inside another tracked function and call tracked functions inside your tool functions, all the spans and traces parent-child relationships will be preserved!
+
+
+## Thread Support
+
+The Opik integration automatically handles ADK sessions and maps them to Opik threads for conversational applications:
+
+```python
+from opik.integrations.adk import OpikTracer
+from google.adk import sessions as adk_sessions, runners as adk_runners
+
+# ADK session management
+session_service = adk_sessions.InMemorySessionService()
+session = session_service.create_session_sync(
+    app_name="my_app",
+    user_id="user_123", 
+    session_id="conversation_456"
+)
+
+opik_tracer = OpikTracer()
+runner = adk_runners.Runner(
+    agent=your_agent,
+    app_name="my_app", 
+    session_service=session_service
+)
+
+# All traces will be automatically grouped by session_id as thread_id
+```
+
+The integration automatically:
+- Uses the ADK session ID as the Opik thread ID
+- Groups related conversations and interactions
+- Logs app_name and user_id as metadata
+- Maintains conversation context across multiple interactions
+
+You can view your session as a whole conversation and easily navigate to any specific trace you need.
+
+<Frame>
+  <img src="/img/tracing/adk/adk_weather_time_thread_screenshot.png" />
+</Frame>
+
+## Error Tracking
+
+The `OpikTracer` provides comprehensive error tracking and monitoring:
+
+- **Automatic error capture** for agent execution failures
+- **Detailed stack traces** with full context information
+- **Tool execution errors** with input/output data
+- **Model call failures** with provider-specific error details
+
+Error information is automatically logged to spans and traces, making it easy to debug issues in production:
+
+<Frame>
+  <img src="/img/tracing/adk/adk_error_propagation_screenshot.png" />
 </Frame>
 
 ## Troubleshooting: Missing Trace
@@ -94,39 +241,21 @@ async for event in runner.run_async(user_id=user_id, session_id=session_id, new_
 ```
 
 There is an upstream discussion about how to best solve this source of confusion: https://github.com/google/adk-python/issues/1695.
+<Tip>
+  Our team tried to address those issues and make the integration as robust as possible. If you are facing similar problems, the first thing we recommend is to update both `opik` and `google-adk` to the latest versions. We are actively working on improving this integration, so with the most recent versions you'll most likely get the best UX!.
+</Tip>
 
-## Multi-agent instrumentation
+## Flushing Traces
 
-Adding OpikTracer callbacks to a multi-agent system can be time-consuming. To make this simpler, we've created an experimental feature that lets you add OpikTracer callbacks to all agents at once [`track_adk_agent_recursive`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/track_adk_agent_recursive.html):
+The `OpikTracer` object has a `flush` method that ensures all traces are logged to the Opik platform before you exit a script:
 
 ```python
-from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
+from opik.integrations.adk import OpikTracer
+
 opik_tracer = OpikTracer()
 
-translator_to_english = adk_agents.Agent(
-    name="Translator",
-    model=MODEL_NAME,
-    description="Translates text to English.",
-)
-summarizer = adk_agents.Agent(
-    name="Summarizer",
-    model=MODEL_NAME,
-    description="Summarizes text to 1 sentence.",
-)
-root_agent = adk_agents.SequentialAgent(
-    name="TextProcessingAssistant",
-    sub_agents=[translator_to_english, summarizer],
-    description="Runs translator to english then summarizer, in order.",
-)
+# Your ADK agent execution code here...
 
-track_adk_agent_recursive(root_agent, opik_tracer)
+# Ensure all traces are sent before script exits
+opik_tracer.flush()
 ```
-
-<Warning>`opik.integrations.adk.track_adk_agent_recursive` is an experimental feature. If you find any problems while using it, please [report them](https://github.com/comet-ml/opik/issues) so they can be fixed. </Warning>
-
-## Logging threads
-
-The Opik integration automatically retrieves key information from [ADK Session](https://google.github.io/adk-docs/sessions/session/):
-
-- It uses the session ID as Opik Thread ID, allowing you to easily group and review traces from the same thread
-- It logs the app_name and userId as metadata

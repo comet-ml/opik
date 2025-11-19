@@ -5,7 +5,6 @@ metadata:
   name: {{ include "opik.name" $ }}-clickhouse
   namespace: {{ .Release.namespace }}
   labels:
-    component: clickhouse
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

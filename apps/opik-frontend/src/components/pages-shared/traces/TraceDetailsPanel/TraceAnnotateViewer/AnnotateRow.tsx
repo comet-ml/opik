@@ -1,5 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import isUndefined from "lodash/isUndefined";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
 import { Copy, MessageSquareMore, Trash, X } from "lucide-react";
@@ -19,11 +24,15 @@ import { DropdownOption } from "@/types/shared";
 import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
+import {
+  categoryOptionLabelRenderer,
+  hasValuesByAuthor,
+} from "@/lib/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import copy from "clipboard-copy";
 import { useToast } from "@/components/ui/use-toast";
 import { UpdateFeedbackScoreData } from "./types";
+import { useLoggedInUserName } from "@/store/AppStore";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -44,23 +53,56 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const { toast } = useToast();
+  const userName = useLoggedInUserName();
 
-  const [categoryName, setCategoryName] = useState(
-    feedbackScore?.category_name,
+  const feedbackScoreData = useMemo(() => {
+    if (!feedbackScore) {
+      return {
+        value: "" as const,
+        reason: "",
+        category_name: "",
+      };
+    }
+
+    if (hasValuesByAuthor(feedbackScore) && userName) {
+      const rawValue = feedbackScore.value_by_author[userName]?.value;
+
+      return {
+        value: isNumber(rawValue) ? rawValue : ("" as const),
+        reason: feedbackScore.value_by_author[userName]?.reason ?? "",
+        category_name:
+          feedbackScore.value_by_author[userName]?.category_name ?? "",
+      };
+    }
+
+    const rawValue = feedbackScore?.value ?? "";
+    return {
+      value: isNumber(rawValue) ? rawValue : ("" as const),
+      reason: feedbackScore?.reason ?? "",
+      category_name: feedbackScore?.category_name ?? "",
+    };
+  }, [feedbackScore, userName]);
+
+  const [categoryName, setCategoryName] = useState<string | undefined>(
+    feedbackScoreData.category_name,
   );
   const [editReason, setEditReason] = useState(false);
 
   useEffect(() => {
-    setCategoryName(feedbackScore?.category_name);
+    setCategoryName(feedbackScoreData.category_name);
     setEditReason(false);
-  }, [feedbackScore?.category_name]);
+  }, [feedbackScoreData.category_name]);
 
-  const [value, setValue] = useState<number | "">(
-    isNumber(feedbackScore?.value) ? feedbackScore?.value : "",
-  );
+  const [value, setValue] = useState<number | "">(feedbackScoreData.value);
   useEffect(() => {
-    setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
-  }, [feedbackScore?.value]);
+    setValue(feedbackScoreData.value);
+
+    if (!feedbackScoreData.value) {
+      setEditReason(false);
+      setReasonValue(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedbackScoreData.value]);
 
   const handleChangeValue = useCallback(
     (value: number, categoryName?: string) => {
@@ -93,9 +135,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     value: reasonValue,
     onChange: onReasonChange,
     onReset: onReasonReset,
-    resetValue,
+    setInputValue: setReasonValue,
   } = useDebouncedValue({
-    initialValue: feedbackScore?.reason,
+    initialValue: feedbackScoreData.reason,
     onDebouncedChange: handleChangeReason,
     delay: SET_VALUE_DEBOUNCE_DELAY,
     onChange: onChangeTextAreaTriggered,
@@ -104,12 +146,17 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const deleteFeedbackScore = useCallback(() => {
     onDeleteFeedbackScore(name);
     setEditReason(false);
-    resetValue();
+    setReasonValue(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, resetValue]);
+  }, [name, setReasonValue]);
 
-  const handleCopyReasonClick = async (reasonValue: string) => {
-    await copy(reasonValue);
+  const toggleEditReasonHandler = useCallback(() => {
+    setEditReason(!editReason);
+    setReasonValue(feedbackScoreData?.reason);
+  }, [editReason, feedbackScoreData?.reason, setReasonValue]);
+
+  const handleCopyReasonClick = async (v: string) => {
+    await copy(v);
 
     toast({
       description: "Reason successfully copied to clipboard",
@@ -260,27 +307,27 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             {renderOptions(feedbackDefinition)}
           </div>
         ) : (
-          <div>{feedbackScore?.value}</div>
+          <div>{feedbackScoreData?.value}</div>
         )}
       </div>
       <div className="flex items-center justify-center overflow-hidden border-t border-border">
-        {!isUndefined(feedbackScore?.value) && (
+        {feedbackScoreData?.value !== "" && (
           <Button
             variant="outline"
             size="icon-sm"
             className={cn(
               "size-7 relative group/reason-btn",
               editReason &&
-                "bg-[#F3F4FE] active:bg-[#F3F4FE] hover:bg-[#F3F4FE]",
+                "bg-toggle-outline-active active:bg-toggle-outline-active hover:bg-toggle-outline-active",
             )}
-            onClick={() => setEditReason((v) => !v)}
+            onClick={toggleEditReasonHandler}
           >
-            {!!reasonValue && (
+            {!!feedbackScoreData?.reason && (
               <div
                 className={cn(
                   "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
                   editReason &&
-                    "border-[#F3F4FE] group-hover/reason-btn:border-[#F3F4FE]",
+                    "border-toggle-outline-active group-hover/reason-btn:border-toggle-outline-active",
                 )}
               />
             )}
@@ -289,7 +336,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
       <div className="flex items-center overflow-hidden border-t border-border">
-        {!isUndefined(feedbackScore?.value) && (
+        {feedbackScoreData?.value !== "" && (
           <Button
             variant="minimal"
             size="icon-sm"
@@ -313,13 +360,15 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
                 updateTextAreaHeight(e, 32);
               }}
             />
-            {reasonValue && (
+            {feedbackScoreData?.reason && (
               <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
                 <TooltipWrapper content="Copy">
                   <Button
                     size="icon-2xs"
                     variant="outline"
-                    onClick={() => handleCopyReasonClick(reasonValue)}
+                    onClick={() =>
+                      handleCopyReasonClick(feedbackScoreData.reason!)
+                    }
                   >
                     <Copy />
                   </Button>

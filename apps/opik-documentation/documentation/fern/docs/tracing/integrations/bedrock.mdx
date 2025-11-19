@@ -1,3 +1,8 @@
+---
+title: Observability for AWS Bedrock with Opik
+description: Start here to integrate Opik into your AWS Bedrock-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [AWS Bedrock](https://aws.amazon.com/bedrock/) is a fully managed service that provides access to high-performing foundation models (FMs) from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through a single API.
 
 This guide explains how to integrate Opik with the Bedrock Python SDK. By using the `track_bedrock` method provided by opik, you can easily track and evaluate your Bedrock API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
@@ -82,3 +87,16 @@ print("Response", response["output"]["message"]["content"][0]["text"])
 <Frame>
   <img src="/img/cookbook/bedrock_trace_cookbook.png" />
 </Frame>
+
+## Cost Tracking
+
+The `track_bedrock` wrapper automatically tracks token usage and cost for all supported AWS Bedrock models.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on Bedrock pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>

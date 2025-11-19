@@ -103,7 +103,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
               to="/$workspaceName"
               params={{ workspaceName: defaultWorkspace.workspaceName }}
             >
-              <div className="comet-body flex flex-row items-center justify-end text-[#5155F5]">
+              <div className="comet-body flex flex-row items-center justify-end text-[hsl(var(--primary))]">
                 <MoveLeft className="mr-2 size-4" /> Go back to your workspace
               </div>
             </Link>

@@ -2467,19 +2467,17 @@ export class Traces {
      * Update thread
      *
      * @param {string} threadModelId
-     * @param {OpikApi.Comment} request
+     * @param {OpikApi.TraceThreadUpdate} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.traces.updateThread("threadModelId", {
-     *         text: "text"
-     *     })
+     *     await client.traces.updateThread("threadModelId")
      */
     public updateThread(
         threadModelId: string,
-        request: OpikApi.Comment,
+        request: OpikApi.TraceThreadUpdate = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__updateThread(threadModelId, request, requestOptions));
@@ -2487,7 +2485,7 @@ export class Traces {
 
     private async __updateThread(
         threadModelId: string,
-        request: OpikApi.Comment,
+        request: OpikApi.TraceThreadUpdate = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -2511,7 +2509,7 @@ export class Traces {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.Comment.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.TraceThreadUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

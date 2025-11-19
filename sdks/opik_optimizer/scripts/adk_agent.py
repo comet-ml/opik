@@ -4,8 +4,10 @@ from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
 )
+from opik_optimizer.utils import search_wikipedia
 
 from opik.integrations.adk import OpikTracer
+from opik import track
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
@@ -14,20 +16,6 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from pydantic import BaseModel, Field
-
-# For wikipedia tool:
-import dspy
-
-
-def search_wikipedia(query: str) -> list[str]:
-    """
-    This agent is used to search wikipedia. It can retrieve additional details
-    about a topic.
-    """
-    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=3
-    )
-    return [item["text"] for item in results]
 
 
 # Input schema used by both agents
@@ -43,7 +31,7 @@ def create_agent(project_name: str) -> Any:
         name="wikipedia_agent_tool",
         description="Retrieves wikipedia information using a specific tool.",
         instruction="",  # We'll use the chat-prompt in this example
-        tools=[search_wikipedia],
+        tools=[track(type="tool")(search_wikipedia)],
         input_schema=SearchInput,
         output_key="wikipedia_tool_result",  # Store final text response
         before_agent_callback=opik_tracer.before_agent_callback,

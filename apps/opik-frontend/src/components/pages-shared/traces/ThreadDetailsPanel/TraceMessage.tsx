@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { prettifyMessage } from "@/lib/traces";
 import { toString } from "@/lib/utils";
+import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -21,6 +22,8 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   trace,
   handleOpenTrace,
 }) => {
+  const jsonViewTheme = useJsonViewTheme();
+
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
       (f) => f.name === USER_FEEDBACK_NAME,
@@ -34,23 +37,18 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
       return (
         <JsonView
           src={message}
-          theme="github"
+          {...jsonViewTheme}
           className="comet-code"
-          dark={true}
           collapseStringsAfterLength={10000}
           enableClipboard={false}
         />
       );
     } else if (isUndefined(message)) {
-      return <span className="text-white">-</span>;
+      return <span>-</span>;
     } else {
-      return (
-        <MarkdownPreview className="text-white">
-          {toString(message)}
-        </MarkdownPreview>
-      );
+      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input]);
+  }, [trace.input, jsonViewTheme]);
 
   const output = useMemo(() => {
     const message = prettifyMessage(trace.output, { type: "output" }).message;
@@ -60,7 +58,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
         <JsonView
           src={message}
           className="comet-code"
-          theme="github"
+          {...jsonViewTheme}
           collapseStringsAfterLength={10000}
           enableClipboard={false}
         />
@@ -70,12 +68,12 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.output]);
+  }, [trace.output, jsonViewTheme]);
 
   return (
     <div className="border-b pt-4 first:pt-0" data-trace-message-id={trace.id}>
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
-        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[#7678EF] px-4 py-2">
+        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
           {input}
         </div>
       </div>

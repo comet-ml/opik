@@ -34,6 +34,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         include_reason: Whether to include a reason for the score.
         track: Whether to track the metric. Default is True.
         project_name: The project name to track the metric in.
+        temperature: The temperature to use for the model. Defaults to 1e-8.
 
     Example:
         >>> from opik.evaluation.metrics import SessionCompletenessQuality
@@ -59,22 +60,24 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         include_reason: bool = True,
         track: bool = True,
         project_name: Optional[str] = None,
+        temperature: float = 1e-8,
     ):
         super().__init__(
             name=name,
             track=track,
             project_name=project_name,
         )
-        self._init_model(model)
         self._include_reason = include_reason
 
+        self._init_model(model, temperature=temperature)
+
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            self._model = models_factory.get(model_name=model, temperature=temperature)
 
     def score(
         self,

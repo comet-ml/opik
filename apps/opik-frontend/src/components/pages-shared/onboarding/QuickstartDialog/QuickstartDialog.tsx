@@ -1,9 +1,7 @@
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import React from "react";
-import FrameworkIntegrations from "../FrameworkIntegrations/FrameworkIntegrations";
 import { SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import EvaluationExamples from "../EvaluationExamples/EvaluationExamples";
+import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
 
 type QuickstartDialogProps = {
   open: boolean;
@@ -15,32 +13,35 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
 }) => {
   return (
     <SideDialog open={open} setOpen={setOpen}>
-      <div className="flex w-full min-w-fit flex-col pb-12">
-        <div className="pb-8">
-          <SheetTitle>Quickstart guide</SheetTitle>
-          <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select the framework and follow the instructions to integrate Opik
-            with your own code or use our ready-to-run examples on the right.
-          </div>
+      <div className="flex w-full min-w-fit flex-col px-20 pb-20">
+        <SheetTitle className="comet-title-xl my-3 text-left">
+          Quickstart guide
+        </SheetTitle>
+        <div className="comet-body-s mb-10 text-muted-slate">
+          Opik helps you improve your LLM features by tracking what happens
+          behind the scenes. Integrate Opik to unlock evaluations, experiments,
+          and debugging.
         </div>
 
-        <Tabs defaultValue="logLLM" className="flex w-full flex-1 flex-col">
-          <TabsList className="mb-8 w-auto self-center">
-            <TabsTrigger className="w-[200px]" value="logLLM">
-              Log a trace
-            </TabsTrigger>
-            <TabsTrigger className="w-[200px]" value="runEvaluations">
-              Run evaluations
-            </TabsTrigger>
-          </TabsList>
+        <IntegrationExplorer>
+          <div className="mb-8 flex items-center justify-between gap-6">
+            <IntegrationExplorer.Search />
 
-          <TabsContent value="logLLM">
-            <FrameworkIntegrations onRunCodeCallback={() => setOpen(false)} />
-          </TabsContent>
-          <TabsContent value="runEvaluations">
-            <EvaluationExamples />
-          </TabsContent>
-        </Tabs>
+            <div className="flex items-center gap-3">
+              <IntegrationExplorer.CopyApiKey />
+              <IntegrationExplorer.GetHelp />
+            </div>
+          </div>
+
+          <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <IntegrationExplorer.QuickInstall />
+            <IntegrationExplorer.TypeScriptSDK />
+          </div>
+
+          <IntegrationExplorer.Tabs>
+            <IntegrationExplorer.Grid />
+          </IntegrationExplorer.Tabs>
+        </IntegrationExplorer>
       </div>
     </SideDialog>
   );

@@ -1,7 +1,15 @@
-[AG2](https://ag2.ai/) is an open-source programming framework for building AI agents and facilitating cooperation among multiple agents to solve tasks. AG2 aims to streamline the development and research of agentic AI. It offers features such as agents capable of interacting with each other, facilitates the use of various large language models (LLMs) and tool use support, autonomous and human-in-the-loop workflows, and multi-agent conversation patterns.
+---
+title: Observability for AG2 with Opik
+description: Start here to integrate Opik into your AG2-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
 
-Opik's integration with AG2 relies on OpenTelemetry. You can learn more about Opik's OpenTelemetry features
-in our [get started guide](/tracing/opentelemetry/overview).
+[AG2](https://ag2.ai/) is an open-source programming framework for building AI agents and facilitating cooperation among multiple agents to solve tasks.
+
+AG2's primary advantage is its multi-agent conversation patterns and autonomous workflows, making it ideal for complex tasks that require collaboration between specialized agents with different roles and capabilities.
+
+<Frame>
+  <img src="/img/tracing/ag2_integration.png" alt="AG2 tracing" />
+</Frame>
 
 ## Getting started
 
@@ -22,6 +30,28 @@ configure the OpenTelemetry integration:
             
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
 
@@ -153,8 +183,7 @@ if __name__ == "__main__":
     provider.force_flush()
 ```
 
-Once the integration is set-up, you will see the trace in Opik:
+## Further improvements
 
-<Frame>
-  <img src="/img/tracing/ag2_integration.png" />
-</Frame>
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

@@ -13,8 +13,7 @@ This pip-install takes about a minute.
 
 
 ```python
-%%capture
-%pip install opik-optimizer
+%pip install opik-optimizer --quiet
 ```
 
 Let's make sure we have the correct version:
@@ -26,7 +25,7 @@ import opik_optimizer
 opik_optimizer.__version__
 ```
 
-The version should be 0.7.3 or greater.
+The version should be 1.0.6 or greater.
 
 [Comet](https://www.comet.com/site?from=llm&utm_source=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) and grab your API Key.
 
@@ -77,14 +76,14 @@ The dataset has about 113,000 such crowd-sourced questions that are constructed 
 ```python
 from opik_optimizer.demo import get_or_create_dataset
 
-opik_dataset = get_or_create_dataset("hotpot-300")
+dataset = get_or_create_dataset("hotpot-300")
 ```
 
 Let's take a look at some dataset items:
 
 
 ```python
-rows = opik_dataset.get_items()
+rows = dataset.get_items()
 rows[0]
 ```
 
@@ -145,52 +144,33 @@ For more information see: [Levenshtein Distance](https://en.wikipedia.org/wiki/L
 To create the necesary configurations for using an Opik Agent Optimizer, you'll need three things:
 
 1. An initial prompt
-2. A MetricConfig
-3. A TaskConfig
+2. A metric wrapper
 
 We're going to start with a pretty bad prompt... so we can optimize it!
 
 
 ```python
-initial_prompt = "Provide an answer to the question"
+from opik_optimizer import ChatPrompt
+
+initial_prompt = ChatPrompt(
+    system="Provide an answer to the question",
+    user="{question}",
+)
 ```
 
-The the two configurations:
+The metric wrapper:
 
 
 ```python
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_llm_response_text,
-    from_dataset_field,
-)
-
-metric_config = MetricConfig(
-    metric=LevenshteinRatio(project_name=project_name),
-    inputs={
-        "output": from_llm_response_text(),
-        "reference": from_dataset_field(name="answer"),
-    },
-)
-
-task_config = TaskConfig(
-    instruction_prompt=initial_prompt,
-    input_dataset_fields=["question"],
-    output_dataset_field="answer",
-    use_chat_prompt=True,
+def levenshtein_ratio(dataset_item, llm_output):
+    metric = LevenshteinRatio(project_name=project_name)
+    return metric.score(
+        reference=dataset_item["answer"], # This must match dataset field
+        output=llm_output,
 )
 ```
 
-As you can see the `MetricConfig` is composed of our chosen metric. In addition, we need to know what the inputs will be. The inputs here are actually the outputs from the LLM.
-
-We need two inputs for the metric:
-1. The output produced by the LLM (uses a special name)
-2. The correct answer (provided by the database item "answer")
-
-The `TaskConfig` defines how to process a prompt. We need the initial prompt, and the inputs and outputs of the dataset.
-
-In this case, we will use the chat_prompt format as our result.
+As you can see the metric wrapper is composed of our chosen metric. It takes a dataset item (a dictionary row from the dataset) and the output from the LLM. You should replace "answer" when using a different dataset.
 
 ## FewShotBayesianOptimizer
 
@@ -208,37 +188,24 @@ from opik_optimizer import (
 )
 
 optimizer = FewShotBayesianOptimizer(
-    project_name=project_name,
-    model="openai/gpt-4o-mini",
-    temperature=0.1,
-    max_tokens=5000,
+    model="openai/gpt-4o",  # LiteLLM name
+    min_examples=3,
+    max_examples=8,
+    n_threads=4,
+    seed=42,
 )
 ```
-
-### Baseline
-
-Before we optimize this prompt ("Provide an answer to the question") let's see what the bare prompt does by itself on the dataset:
-
-
-```python
-score = optimizer.evaluate_prompt(
-    dataset=opik_dataset,
-    metric_config=metric_config,
-    task_config=task_config,
-    prompt=initial_prompt,
-    n_samples=100,
-)
-score
-```
-
-In my run, it scored about 16% correct. [I say "percent correct" but because we are using edit distance, that isn't quite accurate. But we can think of it this way.] Your result may be somewhat different but is probably between 10% and 20% correct.
 
 Ok, let's optimize that prompt!
 
 
 ```python
 result = optimizer.optimize_prompt(
-    opik_dataset, metric_config, task_config, n_trials=3, n_samples=50
+    prompt=initial_prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_trials=10,
+    n_samples=50,
 )
 ```
 
@@ -247,9 +214,14 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
+
+```python
+result.get_run_link()
+```
+
 Well done optimizer!
 
-The percentage correct went from about 15% to about 50% correct.
+You should see the percentage correct going from about 15% to about 50% (or more!) correct.
 
 What did we find? The result is a series of messages:
 
@@ -266,7 +238,7 @@ If you go to your `comet.com/opik/YOURID/optimizations` page, you'll see your ru
 
 <img src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/sdks/opik_optimizer/docs/images/optimizer-ui.png" width="500px">
 
-Along the top of the page you'll see a running history of the metric scores, with the latest dataset selected. 
+Along the top of the page you'll see a running history of the metric scores, with the latest dataset selected.
 
 If you click on your run, you'll see the set of trials that ran durring this optimization run. Running across the top of this page are the scores just for this trial. On the top right you'll see the best so far:
 

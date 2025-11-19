@@ -4,7 +4,7 @@ import langchain_openai
 import pytest
 from langchain.prompts import PromptTemplate
 
-from opik.integrations.langchain.opik_tracer import OpikTracer
+from opik.integrations.langchain import OpikTracer
 
 from ...testlib import (
     ANY_BUT_NONE,
@@ -148,7 +148,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__happyflow(
+def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happyflow(
     fake_backend,
     ensure_openai_configured,
 ):
@@ -163,6 +163,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
+        streaming=True,
         # THIS PARAM IS VERY IMPORTANT!
         # if it is explicitly set to True - token usage data will be available
         stream_usage=True,
@@ -401,6 +402,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
+        streaming=True,
         # `stream_usage` param is VERY IMPORTANT!
         # if it is explicitly set to True - token usage data will be available
         # "stream_usage": True,

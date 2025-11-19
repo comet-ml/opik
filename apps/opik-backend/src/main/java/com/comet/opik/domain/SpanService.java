@@ -27,6 +27,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -212,7 +214,9 @@ public class SpanService {
 
         Preconditions.checkArgument(!batch.spans().isEmpty(), "Batch spans must not be empty");
 
-        List<String> projectNames = batch.spans()
+        List<Span> dedupedSpans = dedupSpans(batch.spans());
+
+        List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
                 .map(WorkspaceUtils::getProjectName)
@@ -224,13 +228,33 @@ public class SpanService {
         Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
                 .flatMap(projectService::getOrCreate)
                 .collectList()
-                .map(projects -> bindSpanToProjectAndId(batch, projects));
+                .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
         return resolveProjects
                 .flatMap(spanDAO::batchInsert);
     }
 
-    private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
+    private List<Span> dedupSpans(List<Span> initialSpans) {
+
+        Map<Boolean, List<Span>> shouldBeDeduped = initialSpans.stream()
+                .collect(Collectors.partitioningBy(span -> span.id() != null && span.lastUpdatedAt() != null));
+
+        List<Span> result = new ArrayList<>(shouldBeDeduped.get(false));
+
+        Collection<Span> dedupedSpans = shouldBeDeduped.get(true)
+                .stream()
+                .collect(Collectors.toMap(
+                        Span::id,
+                        Function.identity(),
+                        (span1, span2) -> span1.lastUpdatedAt().isAfter(span2.lastUpdatedAt()) ? span1 : span2))
+                .values();
+
+        result.addAll(dedupedSpans);
+
+        return result;
+    }
+
+    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         Project::name,
@@ -238,7 +262,7 @@ public class SpanService {
                         BinaryOperatorUtils.last(),
                         () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
-        return batch.spans()
+        return spans
                 .stream()
                 .map(span -> {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
@@ -286,7 +310,9 @@ public class SpanService {
 
     @WithSpan
     public Mono<SpansCountResponse> countSpansPerWorkspace() {
-        return spanDAO.countSpansPerWorkspace()
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::countSpansPerWorkspace)
                 .collectList()
                 .flatMap(items -> Mono.just(
                         SpansCountResponse.builder()
@@ -298,12 +324,13 @@ public class SpanService {
     @WithSpan
     public Mono<BiInformationResponse> getSpanBIInformation() {
         log.info("Getting span BI events daily data");
-        return spanDAO.getSpanBIInformation()
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::getSpanBIInformation)
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        BiInformationResponse.builder()
-                                .biInformation(items)
-                                .build()))
+                .map(items -> BiInformationResponse.builder()
+                        .biInformation(items)
+                        .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 }

@@ -41,8 +41,9 @@ setup(
         "click",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "rapidfuzz>=3.0.0,<4.0.0",
-        "litellm<1.75.0",
-        "openai<2.0.0",
+        # Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
+        "litellm!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5",
+        "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
         "pytest",

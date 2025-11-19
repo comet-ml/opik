@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "GitHub": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "-e",
+        "GITHUB_TOOLSETS",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}",
+        "GITHUB_TOOLSETS": "repos,pull_requests,issues"
+      }
+    },
+    "Atlassian": {
+      "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
+      "env": {},
+      "args": []
+    },
+    "Playwright": {
+      "command": "npx @playwright/mcp@latest",
+      "env": {},
+      "args": []
+    }
+  }
+}

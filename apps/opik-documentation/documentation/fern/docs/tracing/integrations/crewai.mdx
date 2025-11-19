@@ -1,6 +1,11 @@
+---
+title: Observability for CrewAI with Opik
+description: Start here to integrate Opik into your CrewAI-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [CrewAI](https://www.crewai.com/) is a cutting-edge framework for orchestrating autonomous AI agents.
 
-Opik integrates with CrewAI to log traces for all CrewAI activity.
+Opik integrates with CrewAI to log traces for all CrewAI activity, including both classic Crew/Agent/Task pipelines and the new CrewAI Flows API.
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
   <span style="margin-right: 10px;">
@@ -18,6 +23,10 @@ Opik integrates with CrewAI to log traces for all CrewAI activity.
     />
   </a>
 </div>
+
+<Frame>
+  <img src="/img/tracing/crewai/crewai_crew_kickoff_trace_example.png" />
+</Frame>
 
 ## Getting started
 
@@ -93,8 +102,59 @@ result = my_crew.kickoff()
 print(result)
 ```
 
-Each run will now be logged to the Opik platform:
+Each run will now be logged to the Opik platform.
 
-<Frame>
-  <img src="/img/cookbook/crewai_trace_cookbook.png" />
-</Frame>
+## Logging CrewAI Flows
+
+Opik also supports the CrewAI Flows API. When you enable tracking with `track_crewai`, Opik automatically:
+
+- Tracks `Flow.kickoff()` and `Flow.kickoff_async()` as the root span/trace with inputs and outputs
+- Tracks flow step methods decorated with `@start` and `@listen` as nested spans
+- Captures any LLM calls (via LiteLLM) within those steps with token usage
+- Flow methods are compatible with other Opik integrations (e.g., OpenAI, Anthropic, LangChain) and the `@opik.track` decorator. Any spans created inside flow steps are correctly attached to the flow's span tree.
+
+Example:
+
+```python
+from crewai.flow.flow import Flow, start, listen
+from opik.integrations.crewai import track_crewai
+
+track_crewai(project_name="crewai-integration-demo")
+
+class ExampleFlow(Flow):
+    model = "gpt-4o-mini"
+
+    @start()
+    def generate_city(self):
+        from litellm import completion
+        response = completion(
+            model=self.model,
+            messages=[{"role": "user", "content": "Return the name of a random city."}],
+        )
+        return response["choices"][0]["message"]["content"]
+
+    @listen(generate_city)
+    def generate_fun_fact(self, random_city):
+        from litellm import completion
+        response = completion(
+            model=self.model,
+            messages=[{"role": "user", "content": f"Tell me a fun fact about {random_city}"}],
+        )
+        return response["choices"][0]["message"]["content"]
+
+flow = ExampleFlow()
+result = flow.kickoff()
+```
+
+## Cost Tracking
+
+The `track_crewai` integration automatically tracks token usage and cost for all supported LLM models used during CrewAI agent execution.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on model pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>

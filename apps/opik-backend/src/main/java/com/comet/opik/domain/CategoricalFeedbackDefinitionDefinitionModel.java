@@ -11,6 +11,7 @@ import java.util.UUID;
 public record CategoricalFeedbackDefinitionDefinitionModel(
         UUID id,
         String name,
+        String description,
         @Json CategoricalFeedbackDetail details,
         Instant createdAt,
         String createdBy,

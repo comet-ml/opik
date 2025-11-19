@@ -32,7 +32,7 @@ const CommitHistory = ({
   };
 
   return (
-    <ul className="max-h-[500px] overflow-y-auto rounded border bg-white p-1">
+    <ul className="max-h-[500px] overflow-y-auto rounded border bg-background p-1">
       {versions?.map((version) => {
         return (
           <li

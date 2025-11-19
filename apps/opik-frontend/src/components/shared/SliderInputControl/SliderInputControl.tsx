@@ -14,7 +14,7 @@ interface SliderInputControlProps {
   max: number;
   step: number;
   defaultValue: number;
-  value: number;
+  value: number | null | undefined;
   onChange: (v: number) => void;
   id: string;
   label: string;
@@ -37,13 +37,13 @@ const SliderInputControl = ({
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
 
-  const [localValue, setLocalValue] = useState(value.toString());
-
-  const numLocalValue = toNumber(localValue);
+  const [localValue, setLocalValue] = useState(
+    (value ?? defaultValue).toString(),
+  );
 
   useEffect(() => {
-    setLocalValue(value.toString());
-  }, [value]);
+    setLocalValue((value ?? defaultValue).toString());
+  }, [value, defaultValue]);
 
   const validateAndHandleChange = (value: string) => {
     const numVal = toNumber(value);
@@ -96,7 +96,7 @@ const SliderInputControl = ({
         </div>
 
         <div className="flex items-center">
-          {!resetDisabled && numLocalValue !== defaultValue && (
+          {!resetDisabled && (value ?? defaultValue) !== defaultValue && (
             <Button variant="minimal" size="icon-sm" onClick={handleResetValue}>
               <RotateCcw />
             </Button>
@@ -120,7 +120,7 @@ const SliderInputControl = ({
       </div>
       <Slider
         id={sliderId}
-        value={[numLocalValue]}
+        value={[toNumber(localValue)]}
         onValueChange={(values) => {
           setLocalValue(values[0].toString());
         }}
@@ -129,7 +129,7 @@ const SliderInputControl = ({
         // details https://github.com/radix-ui/primitives/issues/1760
         onLostPointerCapture={() => {
           const valueToCommit = Number(localValue);
-          if (value !== valueToCommit) {
+          if ((value ?? defaultValue) !== valueToCommit) {
             onChange(valueToCommit);
           }
         }}

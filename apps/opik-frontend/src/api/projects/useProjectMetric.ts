@@ -1,6 +1,8 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { ProjectMetricTrace } from "@/types/projects";
+import { Filter } from "@/types/filters";
+import { processFiltersArray } from "@/lib/filters";
 
 export enum METRIC_NAME_TYPE {
   FEEDBACK_SCORES = "FEEDBACK_SCORES",
@@ -26,6 +28,8 @@ type UseProjectMetricsParams = {
   interval: INTERVAL_TYPE;
   intervalStart: string;
   intervalEnd: string;
+  traceFilters?: Filter[];
+  threadFilters?: Filter[];
 };
 
 interface ProjectMetricsResponse {
@@ -40,6 +44,8 @@ const getProjectMetric = async (
     interval,
     intervalStart,
     intervalEnd,
+    traceFilters,
+    threadFilters,
   }: UseProjectMetricsParams,
 ) => {
   const { data } = await api.post<ProjectMetricsResponse>(
@@ -49,6 +55,12 @@ const getProjectMetric = async (
       interval,
       interval_start: intervalStart,
       interval_end: intervalEnd,
+      trace_filters: traceFilters
+        ? processFiltersArray(traceFilters)
+        : undefined,
+      thread_filters: threadFilters
+        ? processFiltersArray(threadFilters)
+        : undefined,
     },
     {
       signal,

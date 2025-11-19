@@ -37,7 +37,7 @@ const FiltersButton = <TColumnData,>({
   columns,
   onChange,
   layout = "standard",
-  variant = "secondary",
+  variant = "outline",
   align = "start",
   disabled,
 }: FiltersButtonProps<TColumnData>) => {
@@ -137,7 +137,7 @@ const FiltersButton = <TColumnData,>({
               <span className="ml-1.5">{validFilters.length}</span>
             ) : null
           ) : (
-            <span className="ml-2">{`Filters (${validFilters.length})`}</span>
+            <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
           )}
         </Button>
       </PopoverTrigger>

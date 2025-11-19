@@ -52,7 +52,6 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -604,7 +603,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name())))) {
+                    .post(Entity.json(DeleteFeedbackScore.builder().name(feedbackScore.name()).build()))) {
 
                 assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT, errorMessage);
             }
@@ -985,7 +984,7 @@ class SpansResourceTest {
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name())))) {
+                    .post(Entity.json(DeleteFeedbackScore.builder().name(feedbackScore.name()).build()))) {
 
                 assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
                         UNAUTHORIZED_RESPONSE);
@@ -5399,6 +5398,57 @@ class SpansResourceTest {
                     List.of());
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent(
+                Function<Span, Span> spanModifier) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var id = generator.generate();
+            String projectName = UUID.randomUUID().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .id(id)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            var modifiedSpans = IntStream.range(0, spans.size())
+                    .mapToObj(i -> i == spans.size() - 1
+                            ? spanModifier.apply(spans.get(i)) // modify last item
+                            : spans.get(i))
+                    .toList();
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(modifiedSpans, API_KEY, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            getAndAssertPage(
+                    workspaceName,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    List.of(modifiedSpans.getLast()),
+                    List.of(),
+                    API_KEY,
+                    List.of(),
+                    List.of());
+        }
+
+        Stream<Arguments> batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent() {
+            return Stream.of(
+                    arguments(
+                            (Function<Span, Span>) s -> s),
+                    arguments(
+                            (Function<Span, Span>) span -> span.toBuilder()
+                                    .lastUpdatedAt(null).build()));
+        }
+
         @Test
         void batch__whenMissingFields__thenReturnNoContent() {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
@@ -6544,19 +6594,8 @@ class SpansResourceTest {
 
             var id = generator.generate();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .path("feedback-scores")
-                    .path("delete")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            spanResourceClient.deleteSpanFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id, API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @Test
@@ -6572,22 +6611,81 @@ class SpansResourceTest {
                     .build();
             createAndAssert(id, score, TEST_WORKSPACE, API_KEY);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).path(id.toString())
-                    .path("feedback-scores")
-                    .path("delete")
-                    .request()
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            spanResourceClient.deleteSpanFeedbackScore(DeleteFeedbackScore.builder().name("name").build(), id, API_KEY,
+                    TEST_WORKSPACE);
 
             expectedSpan = expectedSpan.toBuilder().feedbackScores(null).build();
             var actualEntity = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("delete span feedback score with author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithAuthorWhenWriteToAuthoredDisabled() {
+            // Create a span
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score with author (using DeleteFeedbackScore with author for the bug scenario)
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score")
+                    .value(BigDecimal.valueOf(0.85))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(actualSpan.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITH an author (this is where the bug occurs)
+            // When writeToAuthored is disabled, this should still work
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score")
+                    .author(USER) // This is the key part - including author in the delete request
+                    .build();
+
+            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was actually deleted
+            var spanAfterDeletion = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertThat(spanAfterDeletion.feedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("delete span feedback score without author when writeToAuthored is disabled should work")
+        void deleteFeedbackScoreWithoutAuthorWhenWriteToAuthoredDisabled() {
+            // Create a span
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Add a feedback score without author
+            var feedbackScore = FeedbackScore.builder()
+                    .name("test-score-2")
+                    .value(BigDecimal.valueOf(0.75))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            createAndAssert(spanId, feedbackScore, TEST_WORKSPACE, API_KEY);
+
+            // Verify the feedback score was created
+            var actualSpan = getAndAssert(span.toBuilder().feedbackScores(List.of(feedbackScore)).build(), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(actualSpan.feedbackScores()).hasSize(1);
+
+            // Try to delete the score WITHOUT an author (this should work before and after the fix)
+            var deleteRequest = DeleteFeedbackScore.builder()
+                    .name("test-score-2")
+                    // No author specified
+                    .build();
+
+            spanResourceClient.deleteSpanFeedbackScore(deleteRequest, spanId, API_KEY, TEST_WORKSPACE);
+
+            // Verify the score was deleted
+            var spanAfterDeletion = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertThat(spanAfterDeletion.feedbackScores()).isNull();
         }
     }
 

@@ -86,6 +86,10 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
+    Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
+
+    Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
+
     Mono<Project> getOrCreate(String projectName);
 
     Project retrieveByName(String projectName);
@@ -479,6 +483,33 @@ class ProjectServiceImpl implements ProjectService {
             var repository = handle.attach(ProjectDAO.class);
 
             return repository.findByNames(workspaceId, names);
+        });
+    }
+
+    @Override
+    public Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids) {
+        return findByIds(workspaceId, ids)
+                .stream()
+                .collect(Collectors.toMap(Project::id, Project::name));
+    }
+
+    public Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps() {
+        return Mono.fromCallable(() -> this.findByGlobalNames(DemoData.PROJECTS))
+                .map(projects -> projects.stream()
+                        .collect(Collectors.toMap(Project::id, Project::createdAt)))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private List<Project> findByGlobalNames(List<String> names) {
+        if (names.isEmpty()) {
+            return List.of();
+        }
+
+        return template.inTransaction(READ_ONLY, handle -> {
+
+            var repository = handle.attach(ProjectDAO.class);
+
+            return repository.findByGlobalNames(names);
         });
     }
 

@@ -6543,14 +6543,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nBuilding the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Build the Opik platform from source\ndocker compose up --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform.\n"
+                    "\n\nBuilding the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Build the Opik platform from source\n./opik.sh --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Building the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Build the Opik platform from source\ndocker compose up --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform."
+                    "Building the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Build the Opik platform from source\n./opik.sh --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform."
                 ],
                 "num_chunks": 1,
             }
@@ -6567,14 +6567,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nRunning a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest docker compose up\n```\n"
+                    "\n\nRunning a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest\n\n./opik.sh\n```\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Running a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest docker compose up\n```"
+                    "Running a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest\n\n./opik.sh\n```"
                 ],
                 "num_chunks": 1,
             }
@@ -6602,14 +6602,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nRemoving Opik\n\nTo remove Opik, you will need to remove the Opik containers and volumes:\n\n```bash\n# Remove the Opik containers and volumes\ndocker compose down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::\n"
+                    "\n\nRemoving Opik\n\nTo remove Opik, you can use the script or remove containers and volumes manually:\n\n```bash\n# Using the script (recommended)\n./opik.sh --stop\n\n# Or manually remove containers and volumes\ncd deployment/docker-compose\ndocker compose --profile opik down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Removing Opik\n\nTo remove Opik, you will need to remove the Opik containers and volumes:\n\n```bash\n# Remove the Opik containers and volumes\ndocker compose down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::"
+                    "Removing Opik\n\nTo remove Opik, you can use the script or remove containers and volumes manually:\n\n```bash\n# Using the script (recommended)\n./opik.sh --stop\n\n# Or manually remove containers and volumes\ncd deployment/docker-compose\ndocker compose --profile opik down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::"
                 ],
                 "num_chunks": 1,
             }
@@ -6626,14 +6626,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nUpgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Update the repository to pull the most recent docker compose file\ngit pull\n\n# Update the docker compose image to get the most recent version of Opik\ndocker compose pull\n\n# Restart the Opik platform with the latest changes\ndocker compose up --detach\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::\n"
+                    "\n\nUpgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik directory\ncd opik\n\n# Update the repository to pull the most recent changes\ngit pull\n\n# Restart the Opik platform with the latest changes\n./opik.sh\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Upgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Update the repository to pull the most recent docker compose file\ngit pull\n\n# Update the docker compose image to get the most recent version of Opik\ndocker compose pull\n\n# Restart the Opik platform with the latest changes\ndocker compose up --detach\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::"
+                    "Upgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik directory\ncd opik\n\n# Update the repository to pull the most recent changes\ngit pull\n\n# Restart the Opik platform with the latest changes\n./opik.sh\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::"
                 ],
                 "num_chunks": 1,
             }
@@ -6650,14 +6650,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nStarting, stopping\n\n:::note\nAll the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.\n:::\n\nThe `docker compose up` command can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\ndocker compose up --detach\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\ndocker compose down\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data.\n"
+                    "\n\nStarting, stopping\n\n:::note\nAll commands should be run from the root `opik` directory.\n:::\n\nThe `opik.sh` script can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\n./opik.sh\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\n./opik.sh --stop\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Starting, stopping\n\n:::note\nAll the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.\n:::\n\nThe `docker compose up` command can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\ndocker compose up --detach\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\ndocker compose down\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data."
+                    "Starting, stopping\n\n:::note\nAll commands should be run from the root `opik` directory.\n:::\n\nThe `opik.sh` script can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\n./opik.sh\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\n./opik.sh --stop\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data."
                 ],
                 "num_chunks": 1,
             }
@@ -6674,14 +6674,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nInstallation\n\nTo install Opik, you will need to clone the Opik repository and run the `docker-compose.yaml` file:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Start the Opik platform\ndocker compose up --detach\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.\n"
+                    "\n\nInstallation\n\nTo install Opik, you will need to clone the Opik repository and run the installation script:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Start the Opik platform\n./opik.sh\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Installation\n\nTo install Opik, you will need to clone the Opik repository and run the `docker-compose.yaml` file:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Start the Opik platform\ndocker compose up --detach\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data."
+                    "Installation\n\nTo install Opik, you will need to clone the Opik repository and run the installation script:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Start the Opik platform\n./opik.sh\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data."
                 ],
                 "num_chunks": 1,
             }

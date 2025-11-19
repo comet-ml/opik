@@ -23,7 +23,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TagList from "../TagList/TagList";
 import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
-import FeedbackScoreTab from "./FeedbackScoreTab";
 import AgentGraphTab from "./AgentGraphTab";
 import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
@@ -38,6 +37,7 @@ import TraceDataViewerHeader from "./TraceDataViewerHeader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -81,16 +81,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
-  const entityName = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
+  const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string) => {
+    (name: string, author?: string) => {
       feedbackScoreDeleteMutation.mutate({
         traceId,
         spanId,
         name,
+        author,
       });
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
@@ -241,14 +242,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <FeedbackScoreTab
+            <ConfigurableFeedbackScoreTable
               feedbackScores={data.feedback_scores}
               onDeleteFeedbackScore={onDeleteFeedbackScore}
-              entityName={entityName}
               onAddHumanReview={() =>
                 setActiveSection(DetailsActionSection.Annotations)
               }
-              entityType="trace"
+              entityType={entityType}
             />
           </TabsContent>
           <TabsContent value="metadata">

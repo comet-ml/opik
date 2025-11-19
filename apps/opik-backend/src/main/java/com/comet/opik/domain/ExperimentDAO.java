@@ -162,7 +162,16 @@ class ExperimentDAO {
                     experiment_id,
                     mapFromArrays(
                         ['p50', 'p90', 'p99'],
-                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(duration)
+                        )
                     ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
@@ -199,12 +208,14 @@ class ExperimentDAO {
                     ) AS s ON ei.trace_id = s.trace_id
                 )
                 GROUP BY experiment_id
-            ), feedback_scores_combined AS (
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
                        name,
-                       value
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
@@ -215,11 +226,36 @@ class ExperimentDAO {
                     project_id,
                     entity_id,
                     name,
-                    value
+                    value,
+                    last_updated_at,
+                    author
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
             ), feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -387,7 +423,16 @@ class ExperimentDAO {
                     experiment_id,
                     mapFromArrays(
                         ['p50', 'p90', 'p99'],
-                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(duration)
+                        )
                     ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     sum(total_estimated_cost) as total_estimated_cost_sum,
@@ -421,12 +466,14 @@ class ExperimentDAO {
                     ) AS s ON ei.trace_id = s.trace_id
                 )
                 GROUP BY experiment_id
-            ), feedback_scores_combined AS (
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
                        name,
-                       value
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
@@ -437,11 +484,36 @@ class ExperimentDAO {
                     project_id,
                     entity_id,
                     name,
-                    value
+                    value,
+                    last_updated_at,
+                    author
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -582,8 +654,7 @@ class ExperimentDAO {
             AND id NOT IN (
                 SELECT id
                 FROM experiments
-                WHERE workspace_id = :demo_workspace_id
-                AND name IN :excluded_names
+                WHERE name IN :excluded_names
             )
             GROUP BY workspace_id, created_by
             ;
@@ -954,7 +1025,6 @@ class ExperimentDAO {
 
     private Publisher<? extends Result> getBiDailyData(Connection connection) {
         return connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
-                .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
                 .bind("excluded_names", DemoData.EXPERIMENTS)
                 .execute();
     }
@@ -1036,7 +1106,6 @@ class ExperimentDAO {
     public Mono<Long> getDailyCreatedCount() {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
-                        .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
                         .bind("excluded_names", DemoData.EXPERIMENTS)
                         .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))

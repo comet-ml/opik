@@ -63,7 +63,7 @@ const WorkspaceStatisticSection = () => {
         }
       >
         <CardHeader className="flex flex-row items-center gap-3">
-          <div className="flex size-6 items-center justify-center rounded-sm bg-[#DAFBF0] text-[#295747]">
+          <div className="flex size-6 items-center justify-center rounded-sm bg-[var(--tag-green-bg)] text-[var(--tag-green-text)]">
             <LayoutGrid className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">
@@ -91,7 +91,7 @@ const WorkspaceStatisticSection = () => {
         }
       >
         <CardHeader className="flex flex-row items-center gap-3">
-          <div className="flex size-6 items-center justify-center rounded-sm bg-[#FDE2F6] text-[#72275F]">
+          <div className="flex size-6 items-center justify-center rounded-sm bg-[var(--tag-burgundy-bg)] text-[var(--tag-burgundy-text)]">
             <FlaskConical className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">
@@ -119,7 +119,7 @@ const WorkspaceStatisticSection = () => {
         }
       >
         <CardHeader className="flex flex-row items-center gap-3">
-          <div className="flex size-6 items-center justify-center rounded-sm bg-[#EFE2FD] text-[#491B7E]">
+          <div className="flex size-6 items-center justify-center rounded-sm bg-[var(--tag-purple-bg)] text-[var(--tag-purple-text)]">
             <FileTerminal className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">

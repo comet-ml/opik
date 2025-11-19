@@ -10,3 +10,4 @@ export { type GetTraceThreadsRequest } from "./GetTraceThreadsRequest";
 export { type FeedbackScoreBatchThread } from "./FeedbackScoreBatchThread";
 export { type TraceThreadSearchStreamRequest } from "./TraceThreadSearchStreamRequest";
 export { type TraceSearchStreamRequestPublic } from "./TraceSearchStreamRequestPublic";
+export { type TraceThreadUpdate } from "./TraceThreadUpdate";

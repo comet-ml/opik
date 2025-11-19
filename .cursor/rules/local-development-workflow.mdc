@@ -28,6 +28,24 @@ This workflow provides seamless build and run experience within Cursor for the O
 ./opik.sh --build --debug --port-mapping
 ```
 
+### **Service Profile Operations**
+
+```bash
+# Start only infrastructure services (databases, caches, storage etc.)
+./opik.sh --infra
+
+# Start infrastructure + backend services
+./opik.sh --backend
+
+# Start full Opik suite (infra + backend + frontend etc.) - default
+./opik.sh
+
+# Combine profiles with other options
+./opik.sh --backend --build --debug
+./opik.sh --infra --port-mapping
+./opik.sh --backend --guardrails
+```
+
 ### **Health and Status**
 
 ```bash
@@ -136,43 +154,51 @@ npm run typecheck
 ### **Full Stack with Docker Compose**
 
 ```bash
-# Start all services
-docker compose -f deployment/docker-compose/docker-compose.yaml up -d
+# Start all services (full Opik suite)
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik up -d
 
 # Start with override (port mapping)
-docker compose -f deployment/docker-compose/docker-compose.yaml -f deployment/docker-compose/docker-compose.override.yaml up -d
+docker compose -f deployment/docker-compose/docker-compose.yaml -f deployment/docker-compose/docker-compose.override.yaml --profile opik up -d
+
+# Start with specific profiles
+docker compose -f deployment/docker-compose/docker-compose.yaml up -d  # Infrastructure only (default)
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile backend up -d
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik up -d
 
 # Start with guardrails profile
-docker compose -f deployment/docker-compose/docker-compose.yaml --profile guardrails up -d
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile backend --profile guardrails up -d
 
 # View logs
 docker compose -f deployment/docker-compose/docker-compose.yaml logs -f
 
 # Stop all services
-docker compose -f deployment/docker-compose/docker-compose.yaml down
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik down
 ```
 
 ### **Individual Service Development**
 
 ```bash
-# Backend service only
-docker compose -f deployment/docker-compose/docker-compose.yaml up -d mysql redis clickhouse
+# Start only infrastructure for backend development
+./opik.sh --infra --port-mapping
 cd apps/opik-backend
 mvn exec:java -Dexec.mainClass="com.comet.opik.OpikApplication" -Dexec.args="server config.yml"
 
-# Frontend service only
-docker compose -f deployment/docker-compose/docker-compose.yaml up -d
+# Start backend services for frontend development
+./opik.sh --backend --port-mapping
 cd apps/opik-frontend
 npm start
+
+# Using Docker Compose directly
+docker compose -f deployment/docker-compose/docker-compose.yaml --profile backend up -d
 ```
 
 ## Development Workflows
 
 ### **Backend-Focused Development**
 
-1. **Start databases only:**
+1. **Start infrastructure only:**
    ```bash
-   docker compose -f deployment/docker-compose/docker-compose.yaml up -d mysql redis clickhouse
+   ./opik.sh --infra --port-mapping
    ```
 
 2. **Run backend locally:**
@@ -190,7 +216,7 @@ npm start
 
 1. **Start backend services:**
    ```bash
-   ./opik.sh --port-mapping
+   ./opik.sh --backend --port-mapping
    ```
 
 2. **Run frontend locally:**

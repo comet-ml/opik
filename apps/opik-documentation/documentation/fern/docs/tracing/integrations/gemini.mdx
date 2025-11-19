@@ -1,3 +1,8 @@
+---
+title: Observability for Google Gemini with Opik
+description: Start here to integrate Opik into your Google Gemini-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [Gemini](https://aistudio.google.com/welcome) is a family of multimodal large language models developed by Google DeepMind.
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
@@ -65,3 +70,16 @@ print(response.text)
 <Frame>
   <img src="/img/cookbook/gemini_trace_cookbook.png" />
 </Frame>
+
+## Cost Tracking
+
+The `track_genai` wrapper automatically tracks token usage and cost for all supported Google AI models.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on Google AI pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>

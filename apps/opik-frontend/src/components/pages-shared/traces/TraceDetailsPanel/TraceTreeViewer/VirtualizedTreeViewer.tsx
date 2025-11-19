@@ -352,8 +352,8 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                         <TooltipWrapper
                           content={node.data.error_info?.message ?? "Has error"}
                         >
-                          <div className="flex size-5 items-center justify-center rounded-sm bg-[#FFD2D2]">
-                            <TriangleAlert className="size-3 text-[#822C45]" />
+                          <div className="flex size-5 items-center justify-center rounded-sm bg-[var(--error-indicator-background)]">
+                            <TriangleAlert className="size-3 text-[var(--error-indicator-text)]" />
                           </div>
                         </TooltipWrapper>
                       </>

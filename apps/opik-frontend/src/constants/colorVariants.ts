@@ -16,16 +16,16 @@ export const COLOR_VARIANTS = [
 export type ColorVariant = (typeof COLOR_VARIANTS)[number];
 
 export const COLOR_VARIANTS_MAP: Record<ColorVariant, string> = {
-  gray: "#64748B",
-  purple: "#945FCF",
-  burgundy: "#BF399E",
-  pink: "#ED4A7B",
-  red: "#EF6868",
-  orange: "#FB9341",
-  yellow: "#F4B400",
-  green: "#19A979",
-  turquoise: "#12A4B4",
-  blue: "#5899DA",
+  gray: "var(--color-gray)",
+  purple: "var(--color-purple)",
+  burgundy: "var(--color-burgundy)",
+  pink: "var(--color-pink)",
+  red: "var(--color-red)",
+  orange: "var(--color-orange)",
+  yellow: "var(--color-yellow)",
+  green: "var(--color-green)",
+  turquoise: "var(--color-turquoise)",
+  blue: "var(--color-blue)",
 };
 
 export function getRandomColorByLabel(label: string): string {

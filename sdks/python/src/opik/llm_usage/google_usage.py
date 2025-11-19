@@ -1,11 +1,13 @@
 from typing import Optional, Dict, Any
+
+
 from . import base_original_provider_usage
 
 
 class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     """Google AI / VertexAI calls token usage data. Updated 11.03.2025"""
 
-    candidates_token_count: int
+    candidates_token_count: Optional[int]
     """Number of tokens in the response(s)."""
 
     prompt_token_count: int

@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
@@ -69,12 +70,16 @@ public class FilterQueryBuilder {
     private static final String LAST_UPDATED_BY_DB = "last_updated_by";
     private static final String LAST_CREATED_EXPERIMENT_AT_DB = "last_created_experiment_at";
     private static final String LAST_CREATED_OPTIMIZATION_AT_DB = "last_created_optimization_at";
+    private static final String PROJECT_ID_DB = "project_id";
+    private static final String INSTRUCTIONS_DB = "instructions";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
     private static final String STATUS_DB = "status";
+    public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
+    public static final String SCOPE_DB = "scope";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -87,13 +92,19 @@ public class FilterQueryBuilder {
                             "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
-                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
+                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.DICTIONARY,
+                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
-                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')")))
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
+                            FieldType.DICTIONARY,
+                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
-                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)")))
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
+                            FieldType.DICTIONARY,
+                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
                             FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)",
@@ -192,6 +203,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceThreadField.START_TIME, START_TIME_ANALYTICS_DB)
+                    .put(TraceThreadField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
@@ -253,6 +266,21 @@ public class FilterQueryBuilder {
                     .put(DatasetField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
+                    .build());
+
+    private static final Map<AnnotationQueueField, String> ANNOTATION_QUEUE_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AnnotationQueueField, String>builder()
+                    .put(AnnotationQueueField.ID, ID_DB)
+                    .put(AnnotationQueueField.PROJECT_ID, PROJECT_ID_DB)
+                    .put(AnnotationQueueField.NAME, NAME_DB)
+                    .put(AnnotationQueueField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(AnnotationQueueField.INSTRUCTIONS, INSTRUCTIONS_DB)
+                    .put(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES, FEEDBACK_DEFINITIONS_DB)
+                    .put(AnnotationQueueField.SCOPE, SCOPE_DB)
+                    .put(AnnotationQueueField.CREATED_AT, CREATED_AT_DB)
+                    .put(AnnotationQueueField.CREATED_BY, CREATED_BY_DB)
+                    .put(AnnotationQueueField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(AnnotationQueueField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -344,6 +372,19 @@ public class FilterQueryBuilder {
                     .add(DatasetField.LAST_CREATED_EXPERIMENT_AT)
                     .add(DatasetField.LAST_CREATED_OPTIMIZATION_AT)
                     .build()),
+            FilterStrategy.ANNOTATION_QUEUE, EnumSet.copyOf(ImmutableSet.<AnnotationQueueField>builder()
+                    .add(AnnotationQueueField.ID)
+                    .add(AnnotationQueueField.PROJECT_ID)
+                    .add(AnnotationQueueField.NAME)
+                    .add(AnnotationQueueField.DESCRIPTION)
+                    .add(AnnotationQueueField.INSTRUCTIONS)
+                    .add(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES)
+                    .add(AnnotationQueueField.SCOPE)
+                    .add(AnnotationQueueField.CREATED_AT)
+                    .add(AnnotationQueueField.CREATED_BY)
+                    .add(AnnotationQueueField.LAST_UPDATED_AT)
+                    .add(AnnotationQueueField.LAST_UPDATED_BY)
+                    .build()),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
@@ -352,6 +393,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.START_TIME)
+                    .add(TraceThreadField.END_TIME)
                     .add(TraceThreadField.STATUS)
                     .add(TraceThreadField.TAGS)
                     .build())));
@@ -378,6 +421,13 @@ public class FilterQueryBuilder {
 
     public String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
+    }
+
+    public Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+        return filters.stream()
+                .filter(filter -> filter.field() == TraceField.GUARDRAILS)
+                .findFirst()
+                .map(filter -> true);
     }
 
     public Optional<String> toAnalyticsDbFilters(
@@ -434,6 +484,7 @@ public class FilterQueryBuilder {
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
+            case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

@@ -10,3 +10,4 @@ from .metrics import score_result
 class TestResult:
     test_case: test_case.TestCase
     score_results: List[score_result.ScoreResult]
+    trial_id: int

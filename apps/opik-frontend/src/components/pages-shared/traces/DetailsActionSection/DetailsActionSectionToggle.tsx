@@ -1,7 +1,7 @@
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { DetailsActionSectionValue, DetailsActionSection } from "./types";
-import { MessageSquareMore, PenLine } from "lucide-react";
+import { MessageSquareMore, PenLine, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export enum ButtonLayoutSize {
@@ -27,6 +27,10 @@ const configMap = {
   [DetailsActionSection.Comments]: {
     icon: <MessageSquareMore className="size-3.5" />,
     tooltip: "Comments",
+  },
+  [DetailsActionSection.AIAssistants]: {
+    icon: <Sparkles className="size-3.5" />,
+    tooltip: "AI-powered trace analysis",
   },
 };
 

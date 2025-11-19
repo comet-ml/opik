@@ -1,3 +1,8 @@
+---
+title: Observability for OpenAI with Opik
+description: Start here to integrate Opik into your OpenAI-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 <Tip>
   If you are using OpenAI's Agents framework, we recommend using the [OpenAI Agents
   integration](/tracing/integrations/openai_agents) instead.
@@ -92,6 +97,19 @@ completion = azure_client.chat.completions.create(
     ],
 )
 ```
+
+## Cost Tracking
+
+The `track_openai` wrapper automatically tracks token usage and cost for all supported OpenAI models.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on OpenAI pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>
 
 ## Supported OpenAI methods
 

@@ -76,7 +76,7 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose up --detach
+          docker compose --profile opik up --detach
 
       - name: Check Docker pods are up (Local)
         run: |
@@ -100,7 +100,7 @@ jobs:
         if: always()
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          docker compose --profile opik down
 
   test-docker-compose-build:
     name: docker compose up --build (Comet docs)
@@ -130,7 +130,7 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose up -d --build
+          docker compose --profile opik up -d --build
           
       - name: Check Docker pods are up (Local)
         run: |
@@ -154,7 +154,7 @@ jobs:
         if: always()
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          docker compose --profile opik down
 
   test-docker-compose-with-version:
     name: Set version - docker compose (deployment README)
@@ -185,7 +185,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           export OPIK_VERSION=1.6.5
-          docker compose -f docker-compose.yaml up -d
+          docker compose -f docker-compose.yaml --profile opik up -d
           
       - name: Check Docker pods are up (Local)
         run: |
@@ -209,7 +209,7 @@ jobs:
         if: always()
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          docker compose --profile opik down
 
   test-docker-compose-with-pull:
     name: Docker compose pull + up (Deployment README)
@@ -239,8 +239,8 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose pull
-          docker compose -f docker-compose.yaml up -d
+          docker compose --profile opik pull
+          docker compose -f docker-compose.yaml --profile opik up -d
           
       - name: Check Docker pods are up (Local)
         run: |
@@ -264,4 +264,4 @@ jobs:
         if: always()
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          docker compose --profile opik down

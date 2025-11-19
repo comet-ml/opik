@@ -10,7 +10,7 @@ export interface Optimization {
     datasetName: string;
     objectiveName: string;
     status: OpikApi.OptimizationStatus;
-    metadata?: OpikApi.JsonNode;
+    metadata?: OpikApi.JsonListString;
     datasetId?: string;
     numTrials?: number;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];

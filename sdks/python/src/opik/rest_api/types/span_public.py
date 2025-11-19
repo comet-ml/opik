@@ -9,7 +9,6 @@ from .comment_public import CommentPublic
 from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from .json_list_string_public import JsonListStringPublic
-from .json_node_public import JsonNodePublic
 from .span_public_type import SpanPublicType
 
 
@@ -29,7 +28,7 @@ class SpanPublic(UniversalBaseModel):
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListStringPublic] = None
     output: typing.Optional[JsonListStringPublic] = None
-    metadata: typing.Optional[JsonNodePublic] = None
+    metadata: typing.Optional[JsonListStringPublic] = None
     model: typing.Optional[str] = None
     provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None

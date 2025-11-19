@@ -180,7 +180,7 @@ const LLMJudgeScore = ({
                   className="shrink-0"
                   type="button"
                 >
-                  <Check className="mr-2 size-3.5 shrink-0" />
+                  <Check className="mr-1.5 size-3.5 shrink-0" />
                   Done editing
                 </Button>
               </TooltipWrapper>

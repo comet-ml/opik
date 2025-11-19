@@ -53,7 +53,6 @@ public class ChatCompletionService {
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
             chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
-            log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         } catch (RuntimeException runtimeException) {
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 

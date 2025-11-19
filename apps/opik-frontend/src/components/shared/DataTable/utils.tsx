@@ -84,9 +84,9 @@ export const getCommonPinningStyles = <TData,>({
   return {
     boxShadow:
       isLastLeftPinnedNonGroupedColumn || forceGroup
-        ? "inset -1px 0px 0px 0px rgb(226, 232, 240)"
+        ? "inset -1px 0px 0px 0px hsl(var(--border))"
         : isFirstRightPinnedNonGroupedColumn
-          ? "inset 1px 0px 0px 0px rgb(226, 232, 240)"
+          ? "inset 1px 0px 0px 0px hsl(var(--border))"
           : undefined,
     left: forceGroup
       ? 0
@@ -112,7 +112,11 @@ export const getCommonPinningClasses = <TData,>({
 }: GetCommonPinningClassesProps<TData>): string => {
   const isPinned = column.getIsPinned();
 
-  return isPinned || forceGroup ? (isHeader ? "bg-[#FBFCFD]" : "bg-white") : "";
+  return isPinned || forceGroup
+    ? isHeader
+      ? "bg-soft-background"
+      : "bg-background"
+    : "";
 };
 
 const getRowRange = <TData,>(

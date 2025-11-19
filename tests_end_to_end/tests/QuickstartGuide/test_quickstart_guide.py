@@ -49,15 +49,15 @@ def test_quickstart_snippet(page, env_config, integration):
     quickstart_button = page.get_by_text("Quickstart guide")
     quickstart_button.click()
 
-    page.wait_for_selector(".cm-content")
+    page.wait_for_selector('text="Quickstart guide"')
 
     logger.info(f"Clicking {integration}")
-    openai_option = page.locator("li", has_text=integration)
-    openai_option.click()
+    integration_card = page.locator("div", has_text=integration).first
+    integration_card.click()
 
-    page.wait_for_selector(".cm-content")
+    page.wait_for_selector('text="Quickstart guide"')
 
-    page.get_by_role("button").nth(2).click()
+    page.get_by_role("button").nth(1).click()
     code = page.evaluate("navigator.clipboard.readText()")
 
     # Create a temporary directory for test files

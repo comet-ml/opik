@@ -1,3 +1,8 @@
+---
+title: Observability for LlamaIndex with Opik
+description: Start here to integrate Opik into your LlamaIndex-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
 [LlamaIndex](https://github.com/run-llama/llama_index) is a flexible data framework for building LLM applications:
 
     LlamaIndex is a "data framework" to help you build LLM apps. It provides the following tools:
@@ -115,3 +120,16 @@ Given that the integration with Opik has been set up, all the traces are logged 
 <Frame>
   <img src="/img/tracing/llama_index_integration.png" />
 </Frame>
+
+## Cost Tracking
+
+The Opik integration with LlamaIndex automatically tracks token usage and cost for all supported LLM models used within LlamaIndex applications.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+- Token usage details
+- Cost per request based on model pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+</Tip>

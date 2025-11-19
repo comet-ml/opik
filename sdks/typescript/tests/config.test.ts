@@ -19,7 +19,7 @@ describe("Opik client config", () => {
 
   it("should throw an error if the host is cloud and the API key is not set", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-
+    
     expect(() => {
       new Opik();
     }).toThrow("OPIK_API_KEY is not set");
@@ -29,9 +29,8 @@ describe("Opik client config", () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
 
-    expect(() => {
-      new Opik();
-    }).toThrow("OPIK_WORKSPACE is not set");
+    const opik = new Opik();
+    expect(opik.config.workspaceName).toBe("default");
   });
 
   it("should not throw an error if everything is set", async () => {
