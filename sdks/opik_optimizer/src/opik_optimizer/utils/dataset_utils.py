@@ -215,6 +215,7 @@ def load_hf_dataset_slice(
     test_mode_count: int | None = None,
     prefer_presets: bool | None = None,
     records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+    custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]] | None = None,
 ) -> opik.Dataset:
     """Shared helper to download an HF slice and create an Opik dataset."""
     use_presets = (
@@ -234,14 +235,17 @@ def load_hf_dataset_slice(
     resolved_seed = resolve_dataset_seed(seed)
     effective_test_count = resolve_test_mode_count(test_mode_count)
 
-    load_kwargs = load_kwargs_resolver(source_split)
-    records = download_and_slice_hf_dataset(
-        load_fn=load_fn,
-        load_kwargs=load_kwargs,
-        start=resolved_start,
-        count=resolved_count,
-        seed=resolved_seed,
-    )
+    if custom_loader is not None:
+        records = custom_loader(source_split, resolved_start, resolved_count, resolved_seed)
+    else:
+        load_kwargs = load_kwargs_resolver(source_split)
+        records = download_and_slice_hf_dataset(
+            load_fn=load_fn,
+            load_kwargs=load_kwargs,
+            start=resolved_start,
+            count=resolved_count,
+            seed=resolved_seed,
+        )
 
     slice_size = len(records)
     expected_items = effective_test_count if test_mode else slice_size
@@ -272,6 +276,7 @@ class OptimizerDatasetLoader:
         presets: dict[str, dict[str, Any]] | None = None,
         prefer_presets: bool = False,
         records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+        custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]] | None = None,
     ) -> None:
         self.base_name = base_name
         self.default_source_split = default_source_split
@@ -279,6 +284,7 @@ class OptimizerDatasetLoader:
         self.presets = presets or {}
         self.prefer_presets = prefer_presets
         self.records_transform = records_transform
+        self.custom_loader = custom_loader
 
     def __call__(
         self,
@@ -316,6 +322,7 @@ class OptimizerDatasetLoader:
             test_mode_count=test_mode_count,
             prefer_presets=pref,
             records_transform=self.records_transform,
+            custom_loader=self.custom_loader,
         )
 
 

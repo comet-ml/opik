@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from functools import lru_cache
 
 import opik
 
@@ -40,35 +41,41 @@ def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return data
 
 
-def _truthful_load_kwargs(split: str) -> dict[str, Any]:
-    return {"path": "truthful_qa", "name": "generation", "split": split}
-
-
-def _truthful_records_loader(split: str, start: int, count: int) -> list[dict[str, Any]]:
+def _truthful_custom_loader(source_split: str, start: int, count: int | None, seed: int) -> list[dict[str, Any]]:
     import datasets as ds
 
     download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-    gen_dataset = ds.load_dataset("truthful_qa", "generation", download_config=download_config)[split]
-    mc_dataset = ds.load_dataset("truthful_qa", "multiple_choice", download_config=download_config)[split]
-    pairs = list(zip(gen_dataset.select(range(start, start + count)), mc_dataset.select(range(start, start + count))))
+    gen_dataset = ds.load_dataset("truthful_qa", "generation", download_config=download_config)[source_split]
+    mc_dataset = ds.load_dataset("truthful_qa", "multiple_choice", download_config=download_config)[source_split]
+    available = max(0, len(gen_dataset) - start)
+    total = available if count is None else min(count, available)
+    pairs = list(
+        zip(
+            gen_dataset.select(range(start, start + total)),
+            mc_dataset.select(range(start, start + total)),
+        )
+    )
     return [{"gen": gen, "mc": mc} for gen, mc in pairs]
 
 
-_TRUTHFUL_LOADER = OptimizerDatasetLoader(
-    base_name="truthful_qa",
-    default_source_split="validation",
-    load_kwargs_resolver=lambda split: {"path": "truthful_qa", "name": "generation", "split": split},
-    presets={
-        "validation": {
-            "source_split": "validation",
-            "start": 0,
-            "count": 300,
-            "dataset_name": "truthful_qa_train",
-        }
-    },
-    prefer_presets=True,
-    records_transform=_truthful_transform,
-)
+@lru_cache(maxsize=1)
+def _get_truthful_loader() -> OptimizerDatasetLoader:
+    return OptimizerDatasetLoader(
+        base_name="truthful_qa",
+        default_source_split="validation",
+        load_kwargs_resolver=lambda split: {"path": "truthful_qa", "name": "generation", "split": split},
+        presets={
+            "validation": {
+                "source_split": "validation",
+                "start": 0,
+                "count": 300,
+                "dataset_name": "truthful_qa_train",
+            }
+        },
+        prefer_presets=True,
+        records_transform=_truthful_transform,
+        custom_loader=_truthful_custom_loader,
+    )
 
 
 def truthful_qa(
@@ -82,7 +89,8 @@ def truthful_qa(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """TruthfulQA slices combining generation and multiple-choice views."""
-    return _TRUTHFUL_LOADER(
+    loader = _get_truthful_loader()
+    return loader(
         split=split,
         count=count,
         start=start,
