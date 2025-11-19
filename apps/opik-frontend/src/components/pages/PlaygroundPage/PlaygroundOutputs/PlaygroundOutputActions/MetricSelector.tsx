@@ -235,7 +235,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="comet-body-s truncate">{rule.name}</div>
                   </div>
-                  {/* rounded */}
                   <div className="flex shrink-0 items-center justify-center rounded">
                     <TooltipWrapper content="Open in a new tab">
                       <a
