@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 import opik
+from opik.types import FeedbackScoreDict
 from rich.console import Console
 
 console = Console()
@@ -97,7 +98,7 @@ def handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
 
 def clean_feedback_scores(
     feedback_scores: Optional[List[Dict[str, Any]]],
-) -> Optional[List[Dict[str, Any]]]:
+) -> Optional[List[FeedbackScoreDict]]:
     """Clean feedback scores by removing fields that are not allowed when creating them.
 
     Exported feedback scores include read-only fields like 'source', 'created_at', etc.
@@ -108,15 +109,23 @@ def clean_feedback_scores(
     if not feedback_scores:
         return None
 
-    cleaned_scores = []
+    cleaned_scores: List[FeedbackScoreDict] = []
     for score in feedback_scores:
         if not isinstance(score, dict):
             continue
 
         # Only keep allowed fields
-        cleaned_score = {
-            "name": score.get("name"),
-            "value": score.get("value"),
+        name = score.get("name")
+        value = score.get("value")
+
+        # Only add if name and value are present
+        if not name or value is None:
+            continue
+
+        # Construct FeedbackScoreDict with required fields
+        cleaned_score: FeedbackScoreDict = {
+            "name": name,
+            "value": value,
         }
 
         # Add optional fields if they exist
@@ -125,8 +134,6 @@ def clean_feedback_scores(
         if "reason" in score:
             cleaned_score["reason"] = score.get("reason")
 
-        # Only add if name and value are present
-        if cleaned_score.get("name") and cleaned_score.get("value") is not None:
-            cleaned_scores.append(cleaned_score)
+        cleaned_scores.append(cleaned_score)
 
     return cleaned_scores if cleaned_scores else None
