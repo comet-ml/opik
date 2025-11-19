@@ -300,7 +300,11 @@ def test_llama_index_stream_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model="gpt-3.5-turbo")
+    # Configure OpenAI LLM with stream_options to include usage information
+    llm = OpenAI(
+        model="gpt-3.5-turbo",
+        additional_kwargs={"stream_options": {"include_usage": True}},
+    )
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -344,7 +348,7 @@ def test_llama_index_stream_chat__happyflow(
                     output={"output": ANY_BUT_NONE},
                     tags=None,
                     metadata=ANY_DICT.containing({"created_from": "llama_index"}),
-                    usage=None,
+                    usage=ANY_BUT_NONE,  # Usage is now tracked with stream_options
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
@@ -458,7 +462,11 @@ async def test_llama_index_async_stream_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model="gpt-3.5-turbo")
+    # Configure OpenAI LLM with stream_options to include usage information
+    llm = OpenAI(
+        model="gpt-3.5-turbo",
+        additional_kwargs={"stream_options": {"include_usage": True}},
+    )
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -497,7 +505,7 @@ async def test_llama_index_async_stream_chat__happyflow(
                     output={"output": ANY_BUT_NONE},
                     tags=None,
                     metadata=ANY_DICT.containing({"created_from": "llama_index"}),
-                    usage=None,
+                    usage=ANY_BUT_NONE,  # Usage is now tracked with stream_options
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
