@@ -101,17 +101,14 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
             View trace
           </Button>
           {trace.has_tool_spans && (
-            <>
-              <Separator orientation="vertical" className="mx-1 h-3" />
-              <Button
-                variant="ghost"
-                size="2xs"
-                onClick={() => handleOpenTrace(trace.id, true)}
-              >
-                <Hammer className="mr-1 size-3" />
-                View tool calls
-              </Button>
-            </>
+            <Button
+              variant="ghost"
+              size="2xs"
+              onClick={() => handleOpenTrace(trace.id, true)}
+            >
+              <Hammer className="mr-1 size-3" />
+              View tool calls
+            </Button>
           )}
         </div>
       )}
