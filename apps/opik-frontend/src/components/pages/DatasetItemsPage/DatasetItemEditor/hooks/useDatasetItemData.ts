@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { ColumnData } from "@/types/shared";
-import { DatasetItem } from "@/types/datasets";
+import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import { getFieldType } from "./useDatasetItemFormHelpers";
 
@@ -10,8 +9,7 @@ export enum FIELD_TYPE {
 }
 
 export type DatasetField = {
-  id: string;
-  label: string;
+  key: string;
   value: unknown; // Parsed value (not the original string if it was JSON-encoded)
   type: FIELD_TYPE;
   isJsonString?: boolean; // True if value came from a JSON-encoded string
@@ -19,7 +17,7 @@ export type DatasetField = {
 
 interface UseDatasetItemDataParams {
   datasetItemId?: string;
-  columns: ColumnData<DatasetItem>[];
+  columns: DatasetItemColumn[];
 }
 
 interface UseDatasetItemDataReturn {
@@ -41,21 +39,12 @@ export const useDatasetItemData = ({
 
   const fields = useMemo(() => {
     if (!datasetItemId) {
-      return columns
-        .filter(
-          (c) =>
-            c.id !== "tags" &&
-            c.id !== "created_at" &&
-            c.id !== "last_updated_at" &&
-            c.id !== "created_by",
-        )
-        .map((column) => ({
-          id: column.id,
-          label: column.label,
-          value: "",
-          type: FIELD_TYPE.SIMPLE,
-          isJsonString: false,
-        }));
+      return columns.map((column) => ({
+        key: column.name,
+        value: "",
+        type: FIELD_TYPE.SIMPLE,
+        isJsonString: false,
+      }));
     }
 
     if (!datasetItem?.data) {
@@ -65,7 +54,7 @@ export const useDatasetItemData = ({
     const dataObject = datasetItem.data as Record<string, unknown>;
 
     const mappedFields: (DatasetField | null)[] = columns.map((column) => {
-      const fieldName = column.id;
+      const fieldName = column.name;
       const rawValue = dataObject[fieldName];
 
       if (rawValue === undefined) {
@@ -75,8 +64,7 @@ export const useDatasetItemData = ({
       const { type, isJsonString, value } = getFieldType(rawValue);
 
       return {
-        id: fieldName,
-        label: column.label,
+        key: fieldName,
         value,
         type,
         isJsonString,
