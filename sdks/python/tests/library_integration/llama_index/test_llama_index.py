@@ -1228,3 +1228,61 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("llama-index-integration-test", "llama-index-integration-test"),
+    ],
+)
+def test_llama_index__concurrent_pipelines__thread_safe(
+    ensure_openai_configured,
+    fake_backend,
+    project_name,
+    expected_project_name,
+):
+    """Test that callback handler is thread-safe when reused by concurrent pipelines"""
+    import concurrent.futures
+    from llama_index.llms.openai import OpenAI
+    from llama_index.core.llms import ChatMessage
+
+    # Single shared callback handler
+    opik_callback_handler = LlamaIndexCallbackHandler(project_name=project_name)
+    opik_callback_manager = CallbackManager([opik_callback_handler])
+    Settings.callback_manager = opik_callback_manager
+    Settings.transformations = None
+
+    def run_pipeline(pipeline_id: int):
+        """Run a LlamaIndex pipeline with unique messages"""
+        llm = OpenAI(model="gpt-3.5-turbo")
+        messages = [
+            ChatMessage(
+                role="user", content=f"Say pipeline {pipeline_id} in one word"
+            ),
+        ]
+        response = llm.chat(messages)
+        return pipeline_id, response.message.content
+
+    # Run 3 pipelines concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(run_pipeline, i) for i in range(3)]
+        _ = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    opik_callback_handler.flush()
+
+    # Should have 3 separate traces, one for each pipeline
+    assert len(fake_backend.trace_trees) == 3
+
+    # Each trace should be properly formed with its own spans
+    for trace_tree in fake_backend.trace_trees:
+        assert trace_tree.name == "chat"
+        assert trace_tree.project_name == expected_project_name
+        assert len(trace_tree.spans) == 1  # One LLM span
+        assert trace_tree.spans[0].name == "llm"
+        assert trace_tree.spans[0].type == "llm"
+
+    # Verify all traces have different IDs (no collision)
+    trace_ids = {tree.id for tree in fake_backend.trace_trees}
+    assert len(trace_ids) == 3
