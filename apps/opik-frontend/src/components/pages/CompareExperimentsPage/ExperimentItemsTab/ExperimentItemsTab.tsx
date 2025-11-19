@@ -29,6 +29,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
+  COLUMN_USAGE_ID,
   ColumnData,
   DynamicColumn,
   OnChangeFn,
@@ -83,12 +84,14 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/lib/experiments";
 import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -397,6 +400,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...dynamicScoresColumns.map((c) => c.id),
       COLUMN_COMMENTS_ID,
       COLUMN_DURATION_ID,
+      `${COLUMN_USAGE_ID}.total_tokens`,
+      "total_estimated_cost",
     ],
     [dynamicDatasetColumns, dynamicOutputColumns, dynamicScoresColumns],
   );
@@ -453,6 +458,27 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         statisticDataFormater: formatDuration,
         customMeta: {
           experimentsIds,
+        },
+      },
+      {
+        id: `${COLUMN_USAGE_ID}.total_tokens`,
+        label: "Total tokens",
+        type: COLUMN_TYPE.number,
+        cell: CostCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+          accessor: `${COLUMN_USAGE_ID}.total_tokens`,
+          formatter: (value: number) => value.toLocaleString(),
+        },
+      },
+      {
+        id: "total_estimated_cost",
+        label: "Estimated cost",
+        type: COLUMN_TYPE.cost,
+        cell: CostCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+          accessor: "total_estimated_cost",
         },
       },
       {
