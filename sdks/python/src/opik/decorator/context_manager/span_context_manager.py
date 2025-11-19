@@ -115,7 +115,9 @@ def start_as_current_span(
         opik_context_storage = context_storage.get_current_context_instance()
         opik_context_storage.pop_span_data(ensure_id=span_creation_result.span_data.id)
         if span_creation_result.trace_data is not None:
-            opik_context_storage.pop_trace_data(ensure_id=span_creation_result.trace_data.id)
+            opik_context_storage.pop_trace_data(
+                ensure_id=span_creation_result.trace_data.id
+            )
 
         if flush:
             client.flush()

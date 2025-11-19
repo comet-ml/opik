@@ -174,7 +174,9 @@ def test_start_as_current_trace__minimal_parameters__works(fake_backend):
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
-def test_start_as_current_trace__context_cleanup__trace_removed_after_exit(fake_backend):
+def test_start_as_current_trace__context_cleanup__trace_removed_after_exit(
+    fake_backend,
+):
     """Test that the trace is properly removed from context after the context manager exits."""
     # Verify no trace exists before
     assert opik.opik_context.get_current_trace_data() is None

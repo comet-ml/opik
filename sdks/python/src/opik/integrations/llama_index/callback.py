@@ -10,7 +10,7 @@ import opik.context_storage as context_storage
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
 import opik.decorator.arguments_helpers as arguments_helpers
 import opik.decorator.span_creation_handler as span_creation_handler
-from opik.api_objects import opik_client, span, trace
+from opik.api_objects import opik_client, span
 
 from . import event_parsing_utils
 
@@ -67,7 +67,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._project_name = project_name
         self._opik_client = opik_client.get_client_cached()
         self._opik_context_storage = context_storage.get_current_context_instance()
-        
+
         # Event tracking - shared across contexts, but events have unique IDs
         self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_event_id_to_output: Dict[str, Any] = {}
@@ -160,7 +160,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         # Get root trace/span from context
         top_span = self._opik_context_storage.top_span_data()
         root_trace = self._opik_context_storage.get_trace_data()
-        
+
         # Determine which is our LlamaIndex root (wrapper span takes precedence)
         root_span = top_span if self._is_llama_index_root(top_span) else None
         if root_span is None:
