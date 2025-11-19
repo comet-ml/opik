@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogAutoScrollBody, 
-  DialogFooter 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogAutoScrollBody,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ export function UpdateExperimentDialog({
   setOpen,
   onConfirm,
   latestName,
-  latestMetadata
+  latestMetadata,
 }: UpdateExperimentDialogProps) {
   const { toast } = useToast();
   const theme = useCodemirrorTheme({
@@ -37,7 +37,7 @@ export function UpdateExperimentDialog({
   });
   const [name, setName] = useState("");
   const [metadata, setMetadata] = useState(
-    JSON.stringify(latestMetadata || {}, null, 2)
+    JSON.stringify(latestMetadata || {}, null, 2),
   );
 
   const handleUpdate = () => {
@@ -93,9 +93,7 @@ export function UpdateExperimentDialog({
         </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">
-              Cancel
-            </Button>
+            <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
             <Button type="submit" onClick={handleUpdate}>

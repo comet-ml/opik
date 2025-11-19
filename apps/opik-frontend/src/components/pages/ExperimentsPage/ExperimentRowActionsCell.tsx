@@ -24,7 +24,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
 
   const experimentBatchDeleteMutation = useExperimentBatchDeleteMutation();
   const experimentUpdateMutation = useExperimentUpdateMutation();
-  
+
   const deleteExperimentsHandler = useCallback(() => {
     experimentBatchDeleteMutation.mutate({
       ids: [experiment.id],
@@ -32,15 +32,18 @@ const ExperimentRowActionsCell: React.FunctionComponent<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [experiment]);
 
-  const updateExperimentHandler = useCallback((name: string, metadata: object) => {
-    experimentUpdateMutation.mutate({
-      experiment: {
-        id: experiment.id,
-        name: name,
-        metadata: metadata
-      }
-    });
-  }, [experiment, experimentUpdateMutation]);
+  const updateExperimentHandler = useCallback(
+    (name: string, metadata: object) => {
+      experimentUpdateMutation.mutate({
+        experiment: {
+          id: experiment.id,
+          name: name,
+          metadata: metadata,
+        },
+      });
+    },
+    [experiment, experimentUpdateMutation],
+  );
 
   return (
     <CellWrapper
