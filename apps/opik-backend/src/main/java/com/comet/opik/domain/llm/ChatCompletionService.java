@@ -211,6 +211,8 @@ public class ChatCompletionService {
                 }
                 yield "Service is unreachable: " + message;
             }
+            case java.nio.channels.ClosedChannelException closedChannelException ->
+                "Service is unreachable. Please check if the LLM provider service is running";
             case null, default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();
