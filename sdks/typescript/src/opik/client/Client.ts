@@ -489,13 +489,13 @@ export class OpikClient {
    */
   public updateExperiment = async (
     id: string,
-    name: string,
-    metadata: Record<string, unknown>
+    name?: string,
+    metadata?: Record<string, unknown>
   ): Promise<void> => {
     logger.debug(`Updating experiment with ID "${id}"`);
 
     try {
-      await this.api.experiments.updateExperimentById(id, {name, metadata });
+      await this.api.experiments.updateExperiment(id, { name, metadata });
     } catch (error) {
       logger.error(`Failed to update experiment with ID "${id}"`, { error });
       throw error;

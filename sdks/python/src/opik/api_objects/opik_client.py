@@ -860,17 +860,22 @@ class Opik:
     def update_experiment(
         self,
         id: str,
-        newName: Optional[str] = None,
-        newMetadata: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Update an experiment's name and/or metadata.
 
+        Args:
+            id: The experiment ID.
+            name: The new name for the experiment. If None, the name will not be updated.
+            metadata: The new metadata for the experiment. If None, the metadata will not be updated.
+
         Raises:
             ApiError: if the backend responds with a non-2xx status
         """
-        res = self._rest_client.experiments.update_experiment(id, newName, newMetadata)
-        LOGGER.debug("Update experiment %s response: %s", id, res)
+        self._rest_client.experiments.update_experiment(id, name=name, metadata=metadata)
+        LOGGER.debug("Updated experiment with id '%s'", id)
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """
