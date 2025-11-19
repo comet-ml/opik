@@ -301,15 +301,23 @@ const AddEditDatasetDialog: React.FunctionComponent<
                   message={
                     <div>
                       <div className="comet-body-s-accented text-center">
-                        Processing the CSV
+                        {isCsvUploadEnabled
+                          ? "Upload in progress..."
+                          : "Processing the CSV"}
                       </div>
-                      <div className="comet-body-s mt-2 text-center text-light-slate">
-                        This should take less than a minute. <br /> You can
-                        safely close this popup while we work.
-                      </div>
-                      <div className="mt-4 flex items-center justify-center">
-                        <Button onClick={() => setOpen(false)}>Close</Button>
-                      </div>
+                      {!isCsvUploadEnabled && (
+                        <>
+                          <div className="comet-body-s mt-2 text-center text-light-slate">
+                            This should take less than a minute. <br /> You can
+                            safely close this popup while we work.
+                          </div>
+                          <div className="mt-4 flex items-center justify-center">
+                            <Button onClick={() => setOpen(false)}>
+                              Close
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   }
                 />
