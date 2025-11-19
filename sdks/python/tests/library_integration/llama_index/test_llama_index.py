@@ -1258,9 +1258,7 @@ def test_llama_index__concurrent_pipelines__thread_safe(
         """Run a LlamaIndex pipeline with unique messages"""
         llm = OpenAI(model="gpt-3.5-turbo")
         messages = [
-            ChatMessage(
-                role="user", content=f"Say pipeline {pipeline_id} in one word"
-            ),
+            ChatMessage(role="user", content=f"Say pipeline {pipeline_id} in one word"),
         ]
         response = llm.chat(messages)
         return pipeline_id, response.message.content
