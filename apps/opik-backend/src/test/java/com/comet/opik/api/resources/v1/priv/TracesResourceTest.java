@@ -748,7 +748,6 @@ class TracesResourceTest {
 
         }
     }
-
     @Nested
     @DisplayName("Session Token Cookie Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1209,7 +1208,6 @@ class TracesResourceTest {
                     .isEqualTo(errorMessage);
         }
     }
-
     @Nested
     @DisplayName("Filters Test:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -2004,7 +2002,6 @@ class TracesResourceTest {
                     values.all(),
                     filters, Map.of());
         }
-
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterNameContains__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
@@ -2759,7 +2756,6 @@ class TracesResourceTest {
                     values.all(), filters, Map.of());
 
         }
-
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNumber__thenReturnTracesFiltered(String endpoint,
@@ -3531,7 +3527,6 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(), filters, Map.of());
         }
-
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageEqual__thenReturnTracesFiltered(String endpoint,
@@ -4315,7 +4310,6 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(), filters, Map.of());
         }
-
         @ParameterizedTest
         @MethodSource("getFilterInvalidOperatorForFieldTypeArgs")
         void whenFilterInvalidOperatorForFieldType__thenReturn400(String path, TraceFilter filter) {
@@ -5042,18 +5036,28 @@ class TracesResourceTest {
 
     @Test
     void createTraceCommentsBatch_Success() {
-        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class);
+        var projectName = org.apache.commons.lang3.RandomStringUtils.secure().nextAlphanumeric(10);
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                .stream()
+                .map(t -> t.toBuilder().projectName(projectName).build())
+                .toList();
         traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-        var ids = traces.stream().limit(3).map(Trace::id).toList();
-        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        var ids = traces.stream().limit(3).map(Trace::id).collect(java.util.stream.Collectors.toSet());
+        var text = org.apache.commons.lang3.RandomStringUtils.secure().nextAlphanumeric(16);
+        var response = traceResourceClient.callTraceCommentsBatchCreate(ids, text, API_KEY, TEST_WORKSPACE);
         assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_NO_CONTENT);
 
-        for (UUID id : ids) {
-            var trace = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+        var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE, List.of(), List.of(), ids.size(),
+                java.util.Map.of("page", "1"));
+
+        assertThat(page.content().size()).isGreaterThanOrEqualTo(ids.size());
+        var filtered = page.content().stream().filter(t -> ids.contains(t.id())).toList();
+        assertThat(filtered.size()).isEqualTo(ids.size());
+        for (var trace : filtered) {
             assertThat(trace.comments()).isNotNull();
             assertThat(trace.comments().size()).isEqualTo(1);
-            assertThat(trace.comments().getFirst().text()).isEqualTo("hello");
+            assertThat(trace.comments().getFirst().text()).isEqualTo(text);
         }
     }
 
@@ -5069,7 +5073,7 @@ class TracesResourceTest {
         mockTargetWorkspace(API_KEY, otherWorkspaceName, otherWorkspaceId);
         traceResourceClient.createTrace(trace2, API_KEY, otherWorkspaceName);
 
-        var ids = java.util.List.of(trace1.id(), trace2.id());
+        var ids = java.util.Set.of(trace1.id(), trace2.id());
         var response = traceResourceClient.callTraceCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
         assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
     }
@@ -5541,7 +5545,6 @@ class TracesResourceTest {
 
         return calculateEstimatedCost(spans);
     }
-
     @Nested
     @DisplayName("Find traces:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -6331,7 +6334,6 @@ class TracesResourceTest {
         getAndAssertPage(workspaceName, projectName, projectId, filters, traces, expectedTraces, unexpectedTraces,
                 apiKey, null, Set.of());
     }
-
     private void getAndAssertPage(String workspaceName, String projectName, UUID projectId,
             List<? extends Filter> filters,
             List<Trace> traces,
@@ -7124,7 +7126,6 @@ class TracesResourceTest {
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
-
     private Trace getAndAssert(Trace expectedTrace, UUID expectedProjectId, String apiKey, String workspaceName) {
         var actualTrace = traceResourceClient.getById(expectedTrace.id(), workspaceName, apiKey);
 
@@ -7924,7 +7925,6 @@ class TracesResourceTest {
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
         }
     }
-
     @Nested
     @DisplayName("Update:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -8707,7 +8707,6 @@ class TracesResourceTest {
         }
 
     }
-
     @Nested
     @DisplayName("Batch Feedback:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -9345,7 +9344,6 @@ class TracesResourceTest {
             }
         }
     }
-
     @Nested
     @DisplayName("Get Trace Threads")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -10142,7 +10140,6 @@ class TracesResourceTest {
 
         }
     }
-
     private TraceThread createThread() {
         var threadId = UUID.randomUUID().toString();
         var projectName = UUID.randomUUID().toString();

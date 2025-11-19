@@ -1,9 +1,4 @@
-import api, {
-    COMPARE_EXPERIMENTS_KEY,
-    TRACE_KEY,
-    TRACES_BATCH_FEEDBACK_SCORES_ENDPOINT,
-    TRACES_KEY,
-} from "@/api/api";
+import api, { COMPARE_EXPERIMENTS_KEY, TRACE_KEY, TRACES_REST_ENDPOINT, TRACES_KEY } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 import {
     generateUpdateMutation,
@@ -50,7 +45,7 @@ const useTracesBatchFeedbackScoresMutation = () => {
                 })),
             };
 
-            const { data } = await api.put(TRACES_BATCH_FEEDBACK_SCORES_ENDPOINT, body);
+            const { data } = await api.put(`${TRACES_REST_ENDPOINT}feedback-scores`, body);
             return data;
         },
         onError: (error: AxiosError) => {

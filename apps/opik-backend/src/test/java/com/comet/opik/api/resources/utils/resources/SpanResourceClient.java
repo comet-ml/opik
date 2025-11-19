@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.CommentsBatchCreate;
 import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -166,14 +167,14 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public Response callSpanCommentsBatchCreate(java.util.List<UUID> ids, String text, String apiKey, String workspaceName) {
+    public Response callSpanCommentsBatchCreate(Set<UUID> ids, String text, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("comments")
                 .path("batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(CommentsBatchCreate.builder().ids(Set.copyOf(ids)).text(text).build()));
+                .post(Entity.json(CommentsBatchCreate.builder().ids(ids).text(text).build()));
     }
 
     public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey) {

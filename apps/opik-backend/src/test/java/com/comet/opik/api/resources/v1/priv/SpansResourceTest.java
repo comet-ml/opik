@@ -218,19 +218,55 @@ class SpansResourceTest {
 
     @Test
     void createSpanCommentsBatch_Success() {
-        var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class);
+        var projectName = org.apache.commons.lang3.RandomStringUtils.secure().nextAlphanumeric(10);
+        var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                .stream()
+                .map(s -> s.toBuilder().projectName(projectName).build())
+                .toList();
         spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
 
-        var ids = spans.stream().limit(3).map(Span::id).toList();
-        var response = spanResourceClient.callSpanCommentsBatchCreate(ids, "hello", API_KEY, TEST_WORKSPACE);
+        var ids = spans.stream().limit(3).map(Span::id).collect(java.util.stream.Collectors.toSet());
+        var text = org.apache.commons.lang3.RandomStringUtils.secure().nextAlphanumeric(16);
+        var response = spanResourceClient.callSpanCommentsBatchCreate(ids, text, API_KEY, TEST_WORKSPACE);
         assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_NO_CONTENT);
 
-        for (UUID id : ids) {
-            var span = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+        var page = spanResourceClient.findSpans(
+                TEST_WORKSPACE,
+                API_KEY,
+                projectName,
+                null,
+                1,
+                ids.size(),
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of());
+
+        assertThat(page.content().size()).isEqualTo(ids.size());
+        for (var span : page.content()) {
+            assertThat(ids).contains(span.id());
             assertThat(span.comments()).isNotNull();
             assertThat(span.comments().size()).isEqualTo(1);
-            assertThat(span.comments().getFirst().text()).isEqualTo("hello");
+            assertThat(span.comments().getFirst().text()).isEqualTo(text);
         }
+    }
+
+    @Test
+    void createSpanCommentsBatch_MixedWorkspace_BadRequest() {
+        var span1 = podamFactory.manufacturePojo(Span.class);
+        var span2 = podamFactory.manufacturePojo(Span.class);
+
+        spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
+
+        String otherWorkspaceName = java.util.UUID.randomUUID().toString();
+        String otherWorkspaceId = java.util.UUID.randomUUID().toString();
+        mockTargetWorkspace(API_KEY, otherWorkspaceName, otherWorkspaceId);
+        spanResourceClient.createSpan(span2, API_KEY, otherWorkspaceName);
+
+        var ids = java.util.Set.of(span1.id(), span2.id());
+        var response = spanResourceClient.callSpanCommentsBatchCreate(ids, "bad", API_KEY, TEST_WORKSPACE);
+        assertThat(response.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_BAD_REQUEST);
     }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -658,7 +694,6 @@ class SpansResourceTest {
                     .isEqualTo(expectedErrorMessage);
         }
     }
-
     @Nested
     @DisplayName("Session Token Cookie Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1035,7 +1070,6 @@ class SpansResourceTest {
         AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
                 USER);
     }
-
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindSpans {
@@ -1832,7 +1866,6 @@ class SpansResourceTest {
                 }
             }
         }
-
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
@@ -2631,7 +2664,6 @@ class SpansResourceTest {
                     values.unexpected(),
                     values.all(), filters, Map.of());
         }
-
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterEndTimeEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
@@ -3411,7 +3443,6 @@ class SpansResourceTest {
                     values.unexpected(),
                     values.all(), filters, Map.of());
         }
-
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanString__thenReturnSpansFiltered(String endpoint,
@@ -4192,7 +4223,6 @@ class SpansResourceTest {
                     values.unexpected(),
                     values.all(), filters, Map.of());
         }
-
         @ParameterizedTest
         @MethodSource("getDurationArgs")
         void whenFilterByDuration__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
@@ -4978,7 +5008,6 @@ class SpansResourceTest {
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
     }
-
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateSpan {
@@ -5101,9 +5130,8 @@ class SpansResourceTest {
                                     Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "gpt-4o-mini-2024-07-18", "openai",
                             null, null),
-                    Arguments.of(
-                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-3-5-sonnet-latest", "anthropic",
                             null, null),
                     Arguments.of(
@@ -5619,7 +5647,6 @@ class SpansResourceTest {
             }
         }
     }
-
     @Nested
     @DisplayName("Update:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -6410,7 +6437,6 @@ class SpansResourceTest {
             getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
         }
     }
-
     @Nested
     @DisplayName("Feedback:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -7200,7 +7226,6 @@ class SpansResourceTest {
             assertFeedbackScoreNames(actualEntity, expectedNames);
         }
     }
-
     private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
             Project project, String apiKey, String workspaceName, boolean shouldBeFound, Optional<SpanType> spanType) {
         return IntStream.range(0, multipleValuesFeedbackScores.size())
