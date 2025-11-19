@@ -857,9 +857,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
                 <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
-            FROM dataset_items AS s FINAL
-            WHERE <if(ids)>s.id IN :ids AND <endif>s.workspace_id = :workspace_id
-            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            FROM dataset_items AS s
+            WHERE s.workspace_id = :workspace_id
+            <if(ids)> AND s.id IN :ids <endif>
+            <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
             """;

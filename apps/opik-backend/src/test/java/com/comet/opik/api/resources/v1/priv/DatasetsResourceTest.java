@@ -4332,11 +4332,7 @@ class DatasetsResourceTest {
             assertThat(updated3.tags()).containsExactlyInAnyOrder("exclude", "tag3"); // unchanged
         }
 
-        // TODO: This test is currently disabled due to a ClickHouse-specific issue with filter-based bulk updates
-        // when mergeTags=false. The merge case works fine, and ID-based updates work fine with mergeTags=false.
-        // This appears to be a ClickHouse consistency issue that needs further investigation.
-        // See: https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#consistency
-        // @Test
+        @Test
         @DisplayName("Success: batch update by filters without merge")
         void batchUpdateDatasetItems__whenUsingFiltersWithoutMerge__thenSucceed() {
             // Create items with different tags
