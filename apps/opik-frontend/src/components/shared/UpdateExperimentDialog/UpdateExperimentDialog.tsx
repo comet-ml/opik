@@ -49,8 +49,10 @@ export function UpdateExperimentDialog({
     if (open && !prevOpenRef.current) {
       setName(latestName);
       setConfiguration(JSON.stringify(latestConfiguration || {}, null, 2));
+      setShowInvalidJSON(false);
     }
     prevOpenRef.current = open;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, latestName, latestConfiguration]);
 
   // Check if any changes have been made

@@ -39,7 +39,7 @@ const useExperimentUpdateMutation = () => {
       queryClient.invalidateQueries({
         queryKey: ["experiment", { experimentId: variables.experiment.id }],
       });
-      return queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: ["experiments"],
       });
     },
