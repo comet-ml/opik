@@ -100,7 +100,7 @@ Opik（由 [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=git
 
 最简方式启动本地 Opik 实例，使用全新 `.opik.sh` 安装脚本：
 
-On Linux or Mac Enviroment:
+On Linux or Mac Environment:
 
 ```bash
 # 克隆 Opik 仓库
@@ -113,7 +113,7 @@ cd opik
 ./opik.sh
 ```
 
-On Windows Enviroment:
+On Windows Environment:
 
 ```powershell
 # 克隆 Opik 仓库
