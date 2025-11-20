@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.TraceEnrichmentOptions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -211,7 +212,7 @@ class DatasetsResourceCreateFromTracesTest {
         // Create request with all enrichment options
         var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace1.id(), trace2.id()))
-                .enrichmentOptions(com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder()
+                .enrichmentOptions(TraceEnrichmentOptions.builder()
                         .includeSpans(true)
                         .includeTags(true)
                         .includeFeedbackScores(true)
@@ -303,7 +304,7 @@ class DatasetsResourceCreateFromTracesTest {
         var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace.id()))
                 .enrichmentOptions(
-                        com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder().build())
+                        TraceEnrichmentOptions.builder().build())
                 .build();
 
         // Call endpoint
@@ -336,7 +337,7 @@ class DatasetsResourceCreateFromTracesTest {
         var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(UUID.randomUUID()))
                 .enrichmentOptions(
-                        com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder().build())
+                        TraceEnrichmentOptions.builder().build())
                 .build();
 
         try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(nonExistentDatasetId,
@@ -362,7 +363,7 @@ class DatasetsResourceCreateFromTracesTest {
         var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of())
                 .enrichmentOptions(
-                        com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder().build())
+                        TraceEnrichmentOptions.builder().build())
                 .build();
 
         try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(datasetId, request, apiKey,
@@ -401,7 +402,7 @@ class DatasetsResourceCreateFromTracesTest {
         // Create request with ALL enrichment options enabled
         var request = com.comet.opik.api.CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace.id()))
-                .enrichmentOptions(com.comet.opik.domain.TraceEnrichmentService.TraceEnrichmentOptions.builder()
+                .enrichmentOptions(TraceEnrichmentOptions.builder()
                         .includeSpans(true)
                         .includeTags(true)
                         .includeFeedbackScores(true)

@@ -2,6 +2,7 @@ package com.comet.opik.domain.threads;
 
 import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadBatchUpdate;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -31,6 +32,7 @@ import reactor.util.context.ContextView;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,6 +73,8 @@ public interface TraceThreadService {
     Mono<Void> updateThreadSampledValue(UUID projectId, List<TraceThreadSampling> threadSamplingPerRule);
 
     Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
+
+    Mono<Void> batchUpdate(TraceThreadBatchUpdate batchUpdate);
 
     Mono<Void> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 
@@ -165,6 +169,16 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
                 .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
                         traceThreadIdModel.projectId(), threadUpdate));
+    }
+
+    @Override
+    public Mono<Void> batchUpdate(@NonNull TraceThreadBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' threads", batchUpdate.ids().size());
+
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        List<UUID> threadModelIds = new ArrayList<>(batchUpdate.ids());
+        return traceThreadDAO.bulkUpdate(threadModelIds, batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()));
     }
 
     @Override

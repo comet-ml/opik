@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, Brain } from "lucide-react";
+import { Trash, Brain, Tag } from "lucide-react";
 import get from "lodash/get";
 import first from "lodash/first";
 import slugify from "slugify";
@@ -13,6 +13,9 @@ import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
+import AddTagDialog, {
+  TAG_ENTITY_TYPE,
+} from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -90,9 +93,17 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
+      <AddTagDialog
+        key={`tag-${resetKeyRef.current}`}
+        rows={selectedRows}
+        open={open === 3}
+        setOpen={setOpen}
+        projectId={projectId}
+        type={TAG_ENTITY_TYPE.threads}
+      />
       <RunEvaluationDialog
         key={`evaluation-${resetKeyRef.current}`}
-        open={open === 3}
+        open={open === 4}
         setOpen={setOpen}
         projectId={projectId}
         entityIds={selectedRows.map((row) => row.thread_model_id)}
@@ -104,12 +115,26 @@ const ThreadsActionsPanel: React.FunctionComponent<
         disabled={disabled}
         dataType="threads"
       />
-      <TooltipWrapper content="Evaluate">
+      <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
           size="sm"
           onClick={() => {
             setOpen(3);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Tag className="mr-2 size-4" />
+          Add tags
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Evaluate">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(4);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}

@@ -28,18 +28,28 @@ export function compareItemLists(
   expected: Array<Record<string, any>>,
   actual: Array<Record<string, any>>
 ): boolean {
-  const setExpected = new Set(expected.map(item => JSON.stringify(item)));
-  const setActual = new Set(
-    actual.map(item => {
-      const filtered: Record<string, any> = {};
-      for (const [key, val] of Object.entries(item)) {
-        if (!key.toLowerCase().includes('id')) {
-          filtered[key] = val;
-        }
+  // Normalize function to handle case-insensitive keys and filter out ID/system fields
+  const normalize = (item: Record<string, any>): Record<string, any> => {
+    const normalized: Record<string, any> = {};
+    for (const [key, val] of Object.entries(item)) {
+      const lowerKey = key.toLowerCase();
+      // Only include data fields (input/output), exclude IDs, tags, timestamps, etc.
+      if (lowerKey === 'input' || lowerKey === 'output') {
+        normalized[lowerKey] = typeof val === 'string' ? val.trim() : val;
       }
-      return JSON.stringify(filtered);
-    })
-  );
+    }
+    return normalized;
+  };
+
+  const normalizedExpected = expected.map(item => normalize(item));
+  const normalizedActual = actual.map(item => normalize(item));
+
+  if (normalizedExpected.length !== normalizedActual.length) {
+    return false;
+  }
+
+  const setExpected = new Set(normalizedExpected.map(item => JSON.stringify(item)));
+  const setActual = new Set(normalizedActual.map(item => JSON.stringify(item)));
 
   return setExpected.size === setActual.size &&
     [...setExpected].every(item => setActual.has(item));

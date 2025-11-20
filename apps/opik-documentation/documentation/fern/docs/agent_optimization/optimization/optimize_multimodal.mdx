@@ -1,0 +1,74 @@
+---
+title: "Optimize multimodal prompts"
+description: "Run optimizations for prompts that combine text, images, and other modalities."
+---
+
+Multimodal agents often juggle text instructions, image references, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for images or videos (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
+
+### Optimizer multimodal support
+
+Use optimizers that can forward OpenAI-style content parts (string or an array of `{ type: "text" | "image_url" }` parts) to a vision-capable LLM. Current support:
+
+| Optimizer | Multimodal (text+image) | Notes |
+|---|---|---|
+| Hierarchical Reflective Optimizer | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
+| MetaPrompt Optimizer | ✗ | Planned |
+| Evolutionary Optimizer | ✗ | Planned |
+| Few-shot Bayesian Optimizer | ✗ | Planned |
+| Parameter Optimizer | ✗ | Not applicable (tunes parameters only) |
+| GEPA Optimizer | ✗ | Planned |
+
+See also: [Evaluate multimodal](/evaluation/evaluate_multimodal) for model-family guidance and content block format.
+
+## Dataset design
+
+- Store image or audio references as signed URLs in your dataset items (`metadata["image_url"]`).
+- Include textual descriptions alongside assets so metrics can run without downloading large files when possible.
+- Tag rows with modality info (`metadata["modality"] = "image+text"`) to filter during analysis.
+
+## Prompt structure
+
+```python
+from opik_optimizer import ChatPrompt
+
+prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "Analyze the provided image and answer the question."},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Question: {question}"},
+                {"type": "image_url", "image_url": {"url": "{image_url}"}},
+            ],
+        },
+    ],
+    model="openai/gpt-4o-mini"
+)
+```
+
+- Describe the expected output schema (JSON, markdown table, etc.) to reduce ambiguity.
+
+## Metrics
+
+- Reuse existing text metrics when possible by comparing textual descriptions.
+- For vision-specific scoring, call external models from your metric function, but cache results to control cost.
+- Record reasons that mention the modality: “Image not described” or “Chart incorrectly transcribed”.
+- When possible, augment automated metrics with lightweight human review or deterministic checks—LLM-as-a-judge signals can be noisy for multimodal tasks.
+
+## Running optimizations
+
+- Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
+- Use Hierarchical Reflective to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
+- Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
+- If an optimizer does not support the modality (e.g., text-only GEPA with image inputs), it will still mutate the prompt but cannot execute candidate evaluations—stick to optimizers whose evaluation models accept the modality.
+
+## Validation
+
+- Spot-check generated outputs with the associated media in the dashboard.
+- Confirm that dataset asset URLs remain valid for the duration of the optimization.
+- When sharing results, include thumbnails or sample outputs so reviewers understand the changes.
+
+## Related guides
+
+- [Define datasets](/agent_optimization/optimization/define_datasets)
+- [Define metrics](/agent_optimization/optimization/define_metrics)

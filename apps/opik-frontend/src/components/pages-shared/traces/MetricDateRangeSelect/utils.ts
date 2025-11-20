@@ -1,6 +1,12 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect";
+import {
+  DateRangeValue,
+  getRangePreset,
+  DateRangePreset,
+  PRESET_DATE_RANGES,
+} from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
+import { DATE_RANGE_PRESET_ALLTIME, DEFAULT_DATE_PRESET } from "./constants";
 
 export const serializeDateForURL = (date: Date): string => {
   return dayjs(date).format("YYYY-MM-DD");
@@ -11,17 +17,29 @@ export const parseDateFromState = (dateString: string): Date => {
 };
 
 export const serializeDateRange = (range: DateRangeValue): string => {
+  const preset = getRangePreset(range);
+  if (preset) {
+    return preset;
+  }
   return `${serializeDateForURL(range.from)},${serializeDateForURL(range.to)}`;
 };
 
 export const parseDateRangeFromState = (
   value: string,
-  defaultRange: DateRangeValue,
   minDate: Date,
   maxDate: Date,
+  defaultValue: DateRangePreset = DEFAULT_DATE_PRESET,
 ): DateRangeValue => {
-  if (!value || !value.includes(",")) {
-    return defaultRange;
+  if (!value) {
+    return PRESET_DATE_RANGES[defaultValue];
+  }
+
+  if (value in PRESET_DATE_RANGES) {
+    return PRESET_DATE_RANGES[value as DateRangePreset];
+  }
+
+  if (!value.includes(",")) {
+    return PRESET_DATE_RANGES[defaultValue];
   }
 
   const [fromStr, toStr] = value.split(",");
@@ -29,18 +47,19 @@ export const parseDateRangeFromState = (
     const from = parseDateFromState(fromStr);
     const to = parseDateFromState(toStr);
 
-    if (
-      !dayjs(from).isValid() ||
-      !dayjs(to).isValid() ||
-      dayjs(from).isBefore(minDate) ||
-      dayjs(to).isAfter(maxDate)
-    ) {
-      return defaultRange;
+    if (!dayjs(from).isValid() || !dayjs(to).isValid()) {
+      return PRESET_DATE_RANGES[defaultValue];
     }
 
-    return { from, to };
+    const parsedRange = { from, to };
+
+    if (dayjs(from).isBefore(minDate) || dayjs(to).isAfter(maxDate)) {
+      return PRESET_DATE_RANGES[defaultValue];
+    }
+
+    return parsedRange;
   } catch {
-    return defaultRange;
+    return PRESET_DATE_RANGES[defaultValue];
   }
 };
 
@@ -62,30 +81,35 @@ export const calculateIntervalType = (
 
 export const calculateIntervalStartAndEnd = (
   dateRange: DateRangeValue,
-): { intervalStart: string; intervalEnd: string } => {
-  // Calculate the number of days in the original range
+): { intervalStart: string; intervalEnd: string | undefined } => {
   const daysDiff = dayjs(dateRange.to).diff(dayjs(dateRange.from), "days");
   const startOf = daysDiff <= 1 ? "hour" : "day";
 
-  // Check if the end date is today
   const isEndDateToday = dayjs(dateRange.to).isSame(dayjs(), "day");
+  const preset = getRangePreset(dateRange);
+  const isPresetRange = preset && preset !== DATE_RANGE_PRESET_ALLTIME;
 
-  let endTime: dayjs.Dayjs;
+  let endTime: dayjs.Dayjs | undefined;
   let startTime: dayjs.Dayjs;
 
   if (isEndDateToday) {
-    // If end date is today, use current moment in UTC
-    endTime = dayjs().utc();
-    // Start time = current time minus the number of days in the original range
-    startTime = endTime.subtract(daysDiff || 1, "days").startOf(startOf);
+    if (isPresetRange) {
+      endTime = undefined;
+      startTime = dayjs()
+        .utc()
+        .subtract(daysDiff || 1, "days")
+        .startOf(startOf);
+    } else {
+      endTime = dayjs().utc();
+      startTime = endTime.subtract(daysDiff || 1, "days").startOf(startOf);
+    }
   } else {
-    // If end date is not today, use the selected date range as-is
     endTime = dayjs(dateRange.to).utc().endOf("day");
     startTime = dayjs(dateRange.from).utc().startOf(startOf);
   }
 
   return {
     intervalStart: startTime.format(),
-    intervalEnd: endTime.format(),
+    intervalEnd: endTime?.format(),
   };
 };

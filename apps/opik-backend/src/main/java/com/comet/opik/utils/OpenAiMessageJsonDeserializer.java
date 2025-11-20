@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
@@ -11,7 +12,6 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
-import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -41,8 +41,8 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         };
     }
 
-    private UserMessage deserializeUserMessage(JsonNode jsonNode) {
-        var builder = UserMessage.builder();
+    private OpikUserMessage deserializeUserMessage(JsonNode jsonNode) {
+        var builder = OpikUserMessage.builder();
 
         var nameNode = jsonNode.get("name");
         if (nameNode != null && !nameNode.isNull()) {
@@ -66,7 +66,8 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
                 switch (type) {
                     case "text", "input_text" -> builder.addText(partNode.path("text").asText(""));
                     case "image_url" -> handleImageUrlPart(builder, partNode.path("image_url"));
-                    default -> log.warn("Skipping part of user message due to unknown type: '{}", type);
+                    case "video_url" -> handleVideoUrlPart(builder, partNode.path("video_url"));
+                    default -> log.warn("Skipping part of user message due to unknown type: '{}'", type);
                 }
             }
             return builder.build();
@@ -76,7 +77,7 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         return builder.build();
     }
 
-    private void handleImageUrlPart(UserMessage.Builder builder, JsonNode imageUrlNode) {
+    private void handleImageUrlPart(OpikUserMessage.Builder builder, JsonNode imageUrlNode) {
         if (imageUrlNode == null || imageUrlNode.isNull()) {
             return;
         }
@@ -97,8 +98,21 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
             var detail = ImageDetail.valueOf(detailText.toUpperCase());
             builder.addImageUrl(url, detail);
         } catch (IllegalArgumentException exception) {
-            log.warn("Error adding image with url '{}', detail: '{}'", url, detailText);
+            log.warn("Error adding image with url '{}', detail: '{}'", url, detailText, exception);
             builder.addImageUrl(url);
         }
+    }
+
+    private void handleVideoUrlPart(OpikUserMessage.Builder builder, JsonNode videoUrlNode) {
+        if (videoUrlNode == null || videoUrlNode.isNull()) {
+            return;
+        }
+
+        var url = videoUrlNode.path("url").asText(null);
+        if (StringUtils.isBlank(url)) {
+            return;
+        }
+
+        builder.addVideoUrl(url);
     }
 }

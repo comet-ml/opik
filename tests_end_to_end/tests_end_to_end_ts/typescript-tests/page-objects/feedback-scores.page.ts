@@ -1,7 +1,7 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { BasePage } from './base.page';
 
-export class FeedbackScoresPage {
-  readonly page: Page;
+export class FeedbackScoresPage extends BasePage {
   readonly searchInput: Locator;
   readonly createButton: Locator;
   readonly feedbackNameInput: Locator;
@@ -9,7 +9,7 @@ export class FeedbackScoresPage {
   readonly createDefinitionButton: Locator;
 
   constructor(page: Page) {
-    this.page = page;
+    super(page, 'configuration', '?tab=feedback-definitions');
     this.searchInput = page.getByTestId('search-input');
     this.createButton = page.getByRole('button', { name: 'Create new feedback definition' });
     this.feedbackNameInput = page.getByPlaceholder('Feedback definition name');
@@ -18,7 +18,7 @@ export class FeedbackScoresPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/default/configuration?tab=feedback-definitions');
+    await super.goto();
     await this.page.waitForLoadState('networkidle');
   }
 

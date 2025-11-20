@@ -9,6 +9,7 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Field;
@@ -45,7 +46,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
-import com.comet.opik.domain.OpenTelemetryMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -54,8 +55,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
@@ -167,7 +166,6 @@ class GetTracesByProjectResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
     private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
     private String baseURI;
@@ -178,9 +176,10 @@ class GetTracesByProjectResourceTest {
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
@@ -195,6 +194,7 @@ class GetTracesByProjectResourceTest {
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
+        this.idGenerator = idGenerator;
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1142,7 +1142,7 @@ class GetTracesByProjectResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var traceName = generator.generate().toString();
+            var traceName = UUID.randomUUID().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1160,7 +1160,7 @@ class GetTracesByProjectResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
 
             traces.set(0, traces.getFirst().toBuilder()
-                    .name(generator.generate().toString())
+                    .name(UUID.randomUUID().toString())
                     .build());
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
@@ -3370,7 +3370,7 @@ class GetTracesByProjectResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = generator.generate().toString();
+            var projectName = UUID.randomUUID().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> {
@@ -4235,12 +4235,11 @@ class GetTracesByProjectResourceTest {
         }
 
         @Test
-        void getTracesByProject__whenSortingByInvalidField__thenReturn400() {
+        void getTracesByProject__whenSortingByInvalidField__thenIgnoreAndReturnSuccess() {
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
-                    "Invalid sorting fields '%s'".formatted(field));
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
 
@@ -4251,10 +4250,11 @@ class GetTracesByProjectResourceTest {
 
             var actualResponse = traceResourceClient.callGetTracesWithQueryParams(API_KEY, TEST_WORKSPACE, queryParams);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
+            var actualEntity = actualResponse.readEntity(Trace.TracePage.class);
+            assertThat(actualEntity).isNotNull();
         }
 
         @ParameterizedTest
@@ -4804,21 +4804,57 @@ class GetTracesByProjectResourceTest {
         }
 
         @ParameterizedTest
-        @DisplayName("time filtering requires both from_time and to_time parameters")
+        @DisplayName("time filtering works with only from_time parameter - to_time is optional")
         @MethodSource("provideInvalidParameterScenarios")
-        void whenOnlyFromTimeProvided_thenReturnBadRequest(
+        void whenOnlyFromTimeProvided_thenFilterTracesFromThatTime(
                 String endpoint, TracePageTestAssertion testAssertion) {
             var workspace = setupTestWorkspace();
-            Instant now = Instant.now();
 
+            Instant baseTime = Instant.now();
+            Instant fromTime = baseTime.minus(Duration.ofMinutes(5));
+
+            // Create traces: some before fromTime, some after
+            List<Trace> allTraces = List.of(
+                    createTraceAtTimestamp(workspace.projectName(), fromTime.minus(Duration.ofMinutes(10)),
+                            "Before from_time - should be excluded"),
+                    createTraceAtTimestamp(workspace.projectName(), fromTime,
+                            "At from_time - should be included"),
+                    createTraceAtTimestamp(workspace.projectName(), fromTime.plus(Duration.ofMinutes(2)),
+                            "After from_time - should be included"),
+                    createTraceAtTimestamp(workspace.projectName(), baseTime,
+                            "Current time - should be included"));
+
+            traceResourceClient.batchCreateTraces(allTraces, workspace.apiKey(), workspace.workspaceName());
+
+            // Only provide from_time, omit to_time (which defaults to current time or no upper limit)
             Map<String, String> queryParams = new HashMap<>();
             queryParams.put("project_name", workspace.projectName());
-            queryParams.put("from_time", now.toString());
+            queryParams.put("from_time", fromTime.toString());
 
             var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
                     workspace.apiKey(), workspace.workspaceName(), queryParams);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            // Should succeed (200 OK) since to_time is now optional
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            // Expected: traces at indices 1, 2, 3 (from fromTime onwards)
+            List<Trace> expectedTraces = normalizeTraces(allTraces.subList(1, 4));
+            List<Trace> unexpectedTraces = normalizeTraces(allTraces.subList(0, 1));
+
+            var tracePage = actualResponse.readEntity(TracePage.class);
+            assertThat(tracePage.content()).hasSize(expectedTraces.size());
+
+            // Verify expected traces are present
+            for (Trace expectedTrace : expectedTraces) {
+                assertThat(tracePage.content())
+                        .anySatisfy(trace -> assertThat(trace.id()).isEqualTo(expectedTrace.id()));
+            }
+
+            // Verify unexpected traces are not present
+            for (Trace unexpectedTrace : unexpectedTraces) {
+                assertThat(tracePage.content())
+                        .noneSatisfy(trace -> assertThat(trace.id()).isEqualTo(unexpectedTrace.id()));
+            }
         }
 
         @ParameterizedTest
@@ -4857,7 +4893,7 @@ class GetTracesByProjectResourceTest {
         private Trace createTraceAtTimestamp(String projectName, Instant timestamp, String comment) {
             return createTrace().toBuilder()
                     .projectName(projectName)
-                    .id(generateUUIDForTimestamp(timestamp))
+                    .id(idGenerator.generateId(timestamp))
                     .spanCount(0)
                     .llmSpanCount(0)
                     .guardrailsValidations(null)
@@ -4872,11 +4908,6 @@ class GetTracesByProjectResourceTest {
             return traces.stream()
                     .sorted(Comparator.comparing(Trace::id).reversed())
                     .toList();
-        }
-
-        private UUID generateUUIDForTimestamp(Instant timestamp) {
-            byte[] zeroBytes = new byte[8];
-            return OpenTelemetryMapper.convertOtelIdToUUIDv7(zeroBytes, timestamp.toEpochMilli());
         }
 
     }

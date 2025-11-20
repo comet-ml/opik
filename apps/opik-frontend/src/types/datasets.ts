@@ -3,6 +3,7 @@ import {
   AggregatedDuration,
   AggregatedFeedbackScore,
   DYNAMIC_COLUMN_TYPE,
+  UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
 
@@ -35,6 +36,7 @@ export interface DatasetItem {
   source: DATASET_ITEM_SOURCE;
   trace_id?: string;
   span_id?: string;
+  tags?: string[];
   created_at: string;
   last_updated_at: string;
 }
@@ -54,6 +56,7 @@ export interface ExperimentPromptVersion {
   id: string;
   commit: string;
   prompt_id: string;
+  prompt_name: string;
 }
 
 export enum EXPERIMENT_TYPE {
@@ -95,6 +98,8 @@ export interface ExperimentItem {
   output: object;
   feedback_scores?: TraceFeedbackScore[];
   duration?: number;
+  usage?: UsageData;
+  total_estimated_cost?: number;
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;

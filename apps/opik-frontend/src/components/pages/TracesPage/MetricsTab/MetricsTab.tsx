@@ -6,14 +6,14 @@ import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import {
-  useMetricDateRangeWithQuery,
+  useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 import ProjectMetricsSection from "./ProjectMetricsSection";
 import ThreadMetricsSection from "./ThreadMetricsSection";
 import TraceMetricsSection from "./TraceMetricsSection";
 
-const METRICS_DATE_RANGE_KEY = "range";
+const METRICS_TAB_DATE_RANGE_QUERY_KEY = "metrics_time_range";
 
 interface MetricsTabProps {
   projectId: string;
@@ -30,8 +30,8 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQuery({
-    key: METRICS_DATE_RANGE_KEY,
+  } = useMetricDateRangeWithQueryAndStorage({
+    key: METRICS_TAB_DATE_RANGE_QUERY_KEY,
   });
 
   const { data: traces } = useTracesList(
@@ -87,6 +87,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           onChangeValue={handleDateRangeChange}
           minDate={minDate}
           maxDate={maxDate}
+          hideAlltime={true}
         />
       </div>
 

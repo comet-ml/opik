@@ -15,8 +15,8 @@ export interface TraceThreadSearchStreamRequest {
     truncate?: boolean;
     /** If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments */
     stripAttachments?: boolean;
-    /** Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'. */
+    /** Filter trace threads created from this time (ISO-8601 format). */
     fromTime?: Date;
-    /** Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'. */
+    /** Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'. */
     toTime?: Date;
 }

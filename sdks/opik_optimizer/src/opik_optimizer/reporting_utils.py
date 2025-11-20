@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from rich import box
-from rich.console import Console, Group
+from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.progress import track
 from rich.text import Text
@@ -30,7 +30,7 @@ def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool
     """
     if baseline == 0:
         return 0.0, False
-    return ((current - baseline) / baseline) * 100, True
+    return ((current - baseline) / baseline), True
 
 
 def get_console(*args: Any, **kwargs: Any) -> Console:
@@ -112,11 +112,115 @@ def format_prompt_snippet(text: str, max_length: int = 100) -> str:
     return normalized
 
 
-def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:
+def _format_message_content(content: str | list[dict[str, Any]]) -> Text:
+    """
+    Format message content for display, handling both string and multimodal content.
+
+    Args:
+        content: Message content, either a string or a list of text/image parts.
+
+    Returns:
+        Text object ready for Rich display.
+    """
+    if isinstance(content, str):
+        return Text(content, overflow="fold")
+
+    # Handle multimodal content (list of parts)
+    formatted_parts: list[Text] = []
+
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            text_content = part.get("text", "")
+            if text_content:
+                # Split text into lines and format with pipe prefix
+                lines = text_content.split("\n")
+                formatted_lines: list[str] = ["text:"]
+                for line in lines:
+                    formatted_lines.append(f"  | {line}")
+                formatted_parts.append(
+                    Text("\n".join(formatted_lines), overflow="fold")
+                )
+        elif part_type == "image_url":
+            image_url_data = part.get("image_url", {})
+            url = (
+                image_url_data.get("url", "")
+                if isinstance(image_url_data, dict)
+                else ""
+            )
+
+            if url:
+                # Check if it's a base64 data URI
+                if url.startswith("data:image"):
+                    # Extract base64 part (after the comma)
+                    if "," in url:
+                        base64_part = url.split(",", 1)[1]
+                        # Show first 10 characters of base64
+                        preview = (
+                            base64_part[:10] + "..."
+                            if len(base64_part) > 10
+                            else base64_part
+                        )
+                        formatted_parts.append(
+                            Text(
+                                f"image_url:\n  | {preview}",
+                                overflow="fold",
+                                style="dim",
+                            )
+                        )
+                    else:
+                        formatted_parts.append(
+                            Text(
+                                f"image_url:\n  | {url[:50]}...",
+                                overflow="fold",
+                                style="dim",
+                            )
+                        )
+                else:
+                    # Regular URL
+                    display_url = url[:80] + "..." if len(url) > 80 else url
+                    formatted_parts.append(
+                        Text(
+                            f"image_url:\n  | {display_url}",
+                            overflow="fold",
+                            style="dim",
+                        )
+                    )
+            else:
+                formatted_parts.append(
+                    Text("image_url:\n  | <no URL>", overflow="fold", style="dim")
+                )
+
+    # Combine all parts with spacing
+    if not formatted_parts:
+        return Text("(empty content)", style="dim")
+
+    result = Text()
+    for i, text_part in enumerate(formatted_parts):
+        if i > 0:
+            result.append("\n\n")
+        result.append(text_part)
+
+    return result
+
+
+def display_messages(messages: list[dict[str, Any]], prefix: str = "") -> None:
+    """
+    Display messages using Rich panels, supporting both string and multimodal content.
+
+    Args:
+        messages: List of message dictionaries to display.
+        prefix: Optional prefix to add to each line of output.
+    """
     for i, msg in enumerate(messages):
+        # MessageDict requires content, but we use .get() for defensive programming
+        content: str | list[dict[str, Any]] = msg.get("content", "")
+        formatted_content = _format_message_content(content)
+        role = msg.get("role", "message")
+
         panel = Panel(
-            Text(msg.get("content", ""), overflow="fold"),
-            title=f"{msg.get('role', 'message')}",
+            formatted_content,
+            title=role,
             title_align="left",
             border_style="dim",
             width=PANEL_WIDTH,
@@ -190,12 +294,11 @@ def get_link_text(
         )
 
         # Create a visually appealing panel with an icon and ensure link doesn't wrap
-        link_text = Text(pre_text + link_text)
-        link_text.stylize(f"link {optimization_url}", len(pre_text), len(link_text))  # type: ignore
+        result_text = Text(pre_text + link_text)
+        result_text.stylize(f"link {optimization_url}", len(pre_text), len(result_text))  # type: ignore
+        return result_text
     else:
-        link_text = Text("No optimization run link available", style="dim")
-
-    return link_text
+        return Text("No optimization run link available", style="dim")
 
 
 def display_header(
@@ -238,38 +341,43 @@ def display_result(
     console = get_console()
     console.print(Text("\n> Optimization complete\n"))
 
-    content: Text | Panel = []
+    content: list[RenderableType] = []
 
     if best_score > initial_score:
         perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
         if has_percentage:
-            content += [
+            content.append(
                 Text(
                     f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
                     style="bold green",
                 )
-            ]
+            )
         else:
-            content += [
+            content.append(
                 Text(
                     f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
                     style="bold green",
                 )
-            ]
+            )
     else:
-        content += [
+        content.append(
             Text(
                 f"Optimization run did not find a better prompt than the initial one.\nScore: {best_score:.4f}",
                 style="dim bold red",
             )
-        ]
+        )
 
     content.append(Text("\nOptimized prompt:"))
     for i, msg in enumerate(best_prompt):
+        # MessageDict requires content, but we use .get() for defensive programming
+        content_value: str | list[dict[str, Any]] = msg.get("content", "")
+        formatted_content = _format_message_content(content_value)
+        role = msg.get("role", "message")
+
         content.append(
             Panel(
-                Text(msg.get("content", ""), overflow="fold"),
-                title=f"{msg.get('role', 'message')}",
+                formatted_content,
+                title=role,
                 title_align="left",
                 border_style="dim",
                 width=PANEL_WIDTH,

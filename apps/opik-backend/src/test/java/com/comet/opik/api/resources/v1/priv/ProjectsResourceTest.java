@@ -38,10 +38,10 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
-import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -874,8 +874,8 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when fetching projects with multiple sorting, then return an error")
-        void getProjects__whenMultipleSorting__thenReturnAnError() {
+        @DisplayName("when fetching projects with multiple sorting, then use first field only")
+        void getProjects__whenMultipleSorting__thenUseFirstFieldOnly() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -899,11 +899,11 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-
-            assertThat(actualEntity.getMessage()).isEqualTo(SortingFactory.ERR_MULTIPLE_SORTING);
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+            assertThat(actualEntity).isNotNull();
 
         }
 
@@ -1002,8 +1002,8 @@ class ProjectsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        @DisplayName("sort by non-sortable field should return an error")
-        void getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError(String sortField) {
+        @DisplayName("sort by non-sortable field should ignore and return success")
+        void getProjects__whenSortingProjectsByNonSortableField__thenIgnoreAndReturnSuccess(String sortField) {
             final int NUM_OF_PROJECTS = 5;
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1024,15 +1024,14 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
             assertThat(actualResponse.hasEntity()).isTrue();
 
-            var actualEntity = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualEntity.getMessage())
-                    .isEqualTo(SortingFactory.ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(sortField));
+            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+            assertThat(actualEntity).isNotNull();
         }
 
-        Stream<Arguments> getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError() {
+        Stream<Arguments> getProjects__whenSortingProjectsByNonSortableField__thenIgnoreAndReturnSuccess() {
             return Stream.of(
                     Arguments.of(Named.of("non-sortable field", "created_by")),
                     Arguments.of(Named.of("non-sortable field", "last_updated_by")),
@@ -1579,20 +1578,30 @@ class ProjectsResourceTest {
     }
 
     private ErrorCountWithDeviation getErrorCountWithDeviation(List<Trace> traces, Instant projectCreatedAt) {
-        Instant lastWeek = projectCreatedAt.minus(7, ChronoUnit.DAYS);
+        // Use Instant.now() to match production query behavior which uses now() in ClickHouse
+        // The test determinism comes from the trace UUID timestamps, not from the boundary calculation
+        Instant now = Instant.now();
+        Instant lastWeekStart = now.minus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
         long recentErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
-                .filter(trace -> trace.startTime().isAfter(lastWeek) || trace.startTime().equals(lastWeek))
+                .filter(trace -> {
+                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    return !traceTime.isBefore(lastWeekStart) && !traceTime.isAfter(now);
+                })
                 .count();
 
         long pastPeriodErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
-                .filter(trace -> trace.startTime().isBefore(lastWeek))
+                .filter(trace -> {
+                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    return traceTime.isBefore(lastWeekStart);
+                })
                 .count();
 
         long errorCount = recentErrorCount + pastPeriodErrorCount;
         Long deviationPercentage = pastPeriodErrorCount > 0
-                ? Long.valueOf(Math.round(((errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100))
+                ? Long.valueOf(
+                        Math.round(((recentErrorCount - pastPeriodErrorCount) / (double) pastPeriodErrorCount) * 100))
                 : null;
 
         return ErrorCountWithDeviation.builder()

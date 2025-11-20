@@ -197,7 +197,10 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
         ],
     )
 
-    if semantic_version.SemanticVersion.parse(dspy_version) >= "3.0.0":
+    if (
+        semantic_version.SemanticVersion.parse(dspy_version) >= "3.0.0"
+        and semantic_version.SemanticVersion.parse(dspy_version) < "3.0.4"
+    ):
         EXPECTED_TRACE_TREE.spans[0].spans.append(
             SpanModel(
                 id=ANY_STRING,

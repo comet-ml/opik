@@ -1,0 +1,98 @@
+---
+title: "Quickstart"
+description: "Install the Agent Optimizer SDK, run your first optimization, and inspect the results in under 10 minutes."
+---
+
+**Opik Agent Optimizer Quickstart** gives you the fastest path from “hello world” to a successful optimization run. If you already walked through the main [Opik Quickstart](/quickstart) (tracing + evaluation), this is the next stop—it layers on the `opik-optimizer` SDK so you can automatically improve prompts and agents.
+
+## Why Opik Agent Optimizer?
+
+- **Production-grade workflows** – reuse the same datasets, metrics, and tracing you already have in Opik.
+- **Multiple strategies** – swap between MetaPrompt, Hierarchical Reflective, Evolutionary, GEPA, and more with one API.
+- **Deep analysis** – every trial is logged to Opik so you can inspect prompts, tool calls, and failure modes.
+
+<Callout>
+  Estimated time: **≤10 minutes** if you already have Python and an Opik API key configured.
+</Callout>
+
+## Prerequisites
+
+- Python 3.10+
+- Opik account
+- Access to an OpenAI-compatible LLM via LiteLLM (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.)
+
+## 1. Install and authenticate
+
+```bash
+pip install --upgrade opik opik-optimizer
+opik configure  # paste your API key
+```
+
+## 2. Create a dataset and metric
+
+```python
+import opik
+from opik.evaluation.metrics import LevenshteinRatio
+
+client = opik.Opik()
+dataset = client.get_or_create_dataset(name="agent-opt-quickstart")
+dataset.insert([
+    {"question": "What is Opik?", "answer": "Opik is an LLM observability and optimization platform."},
+    {"question": "How do I reduce hallucinations?", "answer": "Use evaluations and prompt optimization to enforce grounding."},
+])
+
+def answer_quality(item, output):
+    metric = LevenshteinRatio()
+    return metric.score(reference=item["answer"], output=output)
+```
+
+## 3. Run the optimizer
+
+```python
+from opik_optimizer import MetaPromptOptimizer, ChatPrompt
+
+prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "You are a precise assistant."},
+        {"role": "user", "content": "{question}"},
+    ],
+    model="openai/gpt-4o-mini"
+)
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=answer_quality,
+    max_trials=3,
+    n_samples=2,
+)
+
+result.display()
+```
+
+## 4. Inspect results
+
+- Run `opik dashboard` or open [https://www.comet.com/opik](https://www.comet.com/opik).
+- In the left nav, go to **Evaluation → Optimization runs**, then select your latest run.
+- Review the optimization-progress chart, trial table, and per-trial traces to decide whether to ship the new prompt.
+
+## Common first issues
+
+<AccordionGroup>
+  <Accordion title="Prompt must be a ChatPrompt object">
+    Import `ChatPrompt` from `opik_optimizer` and wrap your `messages` list before passing it to any optimizer.
+  </Accordion>
+  <Accordion title="Authentication failed">
+    Re-run `opik configure` and confirm the account has Agent Optimizer access. If you changed machines, copy the `~/.opik/config` file or re-enter the key.
+  </Accordion>
+  <Accordion title="liteLLM provider errors">
+    Ensure provider keys (e.g., `OPENAI_API_KEY`) are exported in the same shell running the script, and verify the model you selected is enabled for that key.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+- Prefer notebooks? Launch the [Quickstart notebook](/agent_optimization/quickstart_notebook).
+- Dive deeper into [Define datasets](/agent_optimization/optimization/define_datasets) and [Define metrics](/agent_optimization/optimization/define_metrics).
+- Explore the [Optimization Algorithms overview](/agent_optimization/algorithms/overview) to pick the best strategy for your workload.

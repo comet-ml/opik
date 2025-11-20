@@ -23,3 +23,9 @@ def test_supports_vision_detects_common_suffixes() -> None:
     assert ModelCapabilities.supports_vision("provider/new-model-vl") is True
     assert ModelCapabilities.supports_vision("gpt-4.1") is True
     assert ModelCapabilities.supports_vision("gpt-4.1-mini") is True
+
+
+def test_supports_video_detects_keywords() -> None:
+    assert ModelCapabilities.supports_video("provider/some-video-model") is True
+    assert ModelCapabilities.supports_video("qwen/qwen2.5-vl-32b-instruct") is True
+    assert ModelCapabilities.supports_video("text-only-model") is False

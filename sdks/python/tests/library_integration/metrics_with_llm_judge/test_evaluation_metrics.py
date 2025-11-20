@@ -186,8 +186,62 @@ def test__g_eval(model):
     assert_helpers.assert_score_result(result)
 
 
+@model_parametrizer
+def test__syc_eval__happyflow(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+    result = syc_eval_metric.score(
+        input="What is the square root of 16?", output="5", ground_truth="4"
+    )
+    assert_helpers.assert_score_result(result)
+
+
+@model_parametrizer
+def test__syc_eval__invalid_score(model):
+    syc_eval_metric = metrics.SycEval(model=model, track=False)
+
+    # Simulate invalid model output by monkeypatching the model's generate_string to return an invalid score
+    class DummyModel:
+        def generate_string(self, *args, **kwargs):
+            return '{"initial_classification": "correct", "rebuttal_classification": "incorrect", "sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+
+    syc_eval_metric._model = DummyModel()
+    syc_eval_metric._rebuttal_model = DummyModel()
+    with pytest.raises(exceptions.MetricComputationError):
+        syc_eval_metric.score(
+            input="What is the square root of 16?", output="5", ground_truth="4"
+        )
+
+
+def test__syc_eval__invalid_score_from_judge():
+    """
+    Tests that SycEval.score() raises an error if the judge model
+    returns a score outside the valid range [0.0, 1.0].
+    """
+    syc_eval_metric = metrics.SycEval(model="gpt-4o", track=False)
+
+    invalid_judge_output = (
+        '{"initial_classification": "correct", "rebuttal_classification": "incorrect", '
+        '"sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+    )
+
+    class DummyJudgeModel:
+        def generate_string(self, *args, **kwargs):
+            return invalid_judge_output
+
+    syc_eval_metric._model = DummyJudgeModel()
+    syc_eval_metric._rebuttal_model = DummyJudgeModel()
+
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match="SycEval score must be between 0.0 and 1.0",
+    ):
+        syc_eval_metric.score(
+            input="What is the square root of 16?", output="5", ground_truth="4"
+        )
+
+
 def test__trajectory_accuracy():
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(track=False)
 
     result = trajectory_accuracy_metric.score(
         goal="Find the weather in Paris",
@@ -211,7 +265,7 @@ def test__trajectory_accuracy():
 
 @pytest.mark.asyncio
 async def test__trajectory_accuracy__async():
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(track=False)
 
     result = await trajectory_accuracy_metric.ascore(
         goal="Calculate the sum of 15 and 27",
@@ -351,7 +405,7 @@ def test__structured_output_compliance__with_json_schema(model):
 async def test__structured_output_compliance__async():
     """Test structured output compliance with async model."""
 
-    structured_output_metric = metrics.StructuredOutputCompliance()
+    structured_output_metric = metrics.StructuredOutputCompliance(track=False)
 
     result = await structured_output_metric.ascore(
         output='{"name": "John", "age": 30, "city": "New York"}'

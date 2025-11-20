@@ -1,20 +1,20 @@
 import React, { useEffect } from "react";
 import sortBy from "lodash/sortBy";
 import { BooleanParam, useQueryParam } from "use-query-params";
-import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
+import { Maximize2, Minimize2, PenLine } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
-import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import ResourceLink, {
-  RESOURCE_TYPE,
-} from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
+import NavigationTag from "@/components/shared/NavigationTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -83,23 +83,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
     if (isCompare) {
       const tag =
         experimentsIds.length === 2 ? (
-          <Tag size="md" variant="gray" className="flex items-center gap-2">
-            <FlaskConical className="size-4 shrink-0" />
-            <div className="truncate">{experiments[1]?.name}</div>
-          </Tag>
+          <ExperimentTag experimentName={experiments[1]?.name} />
         ) : (
-          <Tag size="md" variant="gray">
-            {`${experimentsIds.length - 1} experiments`}
-          </Tag>
+          <ExperimentTag count={experimentsIds.length - 1} />
         );
 
       return (
         <div className="flex h-11 items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
-          <Tag size="md" variant="gray" className="flex items-center gap-2">
-            <FlaskConical className="size-4 shrink-0" />
-            <div className="truncate">{experiment?.name}</div>
-          </Tag>
+          <ExperimentTag experimentName={experiment?.name} />
           <span className="text-nowrap">compared against</span>
           {tag}
         </div>
@@ -107,7 +99,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
     } else {
       return (
         <div className="flex h-11 items-center gap-2">
-          <PenLine className="size-4 shrink-0" />
+          <TooltipWrapper content="Feedback and experiment scores">
+            <PenLine className="size-4 shrink-0" />
+          </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
             {sortBy(
               [
@@ -183,21 +177,24 @@ const CompareExperimentsDetails: React.FunctionComponent<
         <h1 className="comet-title-l truncate break-words">{title}</h1>
         {renderCompareFeedbackScoresButton()}
       </div>
-      <div className="mb-1 flex gap-4 overflow-x-auto">
-        {!isCompare && <DateTag date={experiment?.created_at} />}
-        <ResourceLink
+      <div className="mb-1 flex gap-2 overflow-x-auto">
+        {!isCompare && (
+          <DateTag
+            date={experiment?.created_at}
+            resource={RESOURCE_TYPE.experiment}
+          />
+        )}
+        <NavigationTag
           id={experiment?.dataset_id}
           name={experiment?.dataset_name}
           resource={RESOURCE_TYPE.dataset}
-          asTag
         />
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
-            <ResourceLink
+            <NavigationTag
               id={experiment.prompt_versions[0].prompt_id}
-              name={`Prompt ${experiment.prompt_versions[0].commit}`}
+              name={experiment.prompt_versions[0].prompt_name}
               resource={RESOURCE_TYPE.prompt}
-              asTag
             />
           )}
       </div>

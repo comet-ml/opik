@@ -55,7 +55,6 @@ prompt = ChatPrompt(
 
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
-    reflection_model="openai/gpt-4o",  # stronger reflector is often helpful
     n_threads=6,
     temperature=0.2,
     max_tokens=200,
@@ -131,13 +130,11 @@ The `optimize_prompt` method has the following parameters:
 
 ### Model Support
 
-There are two models to consider when using the `HierarchicalReflectiveOptimizer`:
-- `HierarchicalReflectiveOptimizer.model`: The model used for the root cause analysis and failure mode synthesis.
-- `ChatPrompt.model`: The model used to evaluate the prompt.
+GEPA coordinates two model contexts:
+- `GepaOptimizer.model`: LiteLLM model string the optimizer uses for internal reasoning (reflection, mutation prompts, etc.).
+- `ChatPrompt.model`: The model evaluated against your dataset—this should match what you run in production.
 
-The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
-`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
-using the `model_parameters` parameter:
+Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
 
 ```python
 optimizer = GepaOptimizer(
@@ -148,6 +145,14 @@ optimizer = GepaOptimizer(
     }
 )
 ```
+
+Reflection is handled internally; there is no separate `reflection_model` argument to set.
+
+## Limitations & tips
+
+- **Instruction-focused**: The current wrapper optimizes the instruction/system portion of your prompt. If you rely heavily on few-shot exemplars, consider pairing GEPA with the Few-Shot Bayesian optimizer or an Evolutionary run.
+- **Reflection can misfire**: GEPA’s reflective mutations are only as good as the metric reasons you supply. If `ScoreResult.reason` is vague, the optimizer may reinforce bad behaviors. Invest in descriptive metrics before running GEPA at scale.
+- **Cost-aware**: Although GEPA is more sample-efficient than some RL-based methods, reflection and Pareto scoring still consume multiple LLM calls per trial. Start with small `max_trials` and monitor API usage.
 
 ## Next Steps
 

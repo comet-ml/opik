@@ -1,3 +1,5 @@
+import { DropdownOption } from "@/types/shared";
+
 export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
@@ -6,6 +8,8 @@ export enum PROVIDER_TYPE {
   VERTEX_AI = "vertex-ai",
   CUSTOM = "custom-llm",
 }
+
+export type COMPOSED_PROVIDER_TYPE = PROVIDER_TYPE | string;
 
 export enum PROVIDER_MODEL_TYPE {
   // <------ openai
@@ -406,6 +410,10 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "vertex_ai/gemini-2.5-flash-lite-preview-06-17",
 }
 
+export interface ProviderModelsMap {
+  [providerKey: COMPOSED_PROVIDER_TYPE]: DropdownOption<PROVIDER_MODEL_TYPE>[];
+}
+
 export type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
@@ -418,18 +426,39 @@ export interface ProviderKeyConfiguration {
   models?: string;
 }
 
-export interface ProviderKey {
+export interface BaseProviderKey {
   id: string;
-  keyName: string;
   created_at: string;
   provider: PROVIDER_TYPE;
-  base_url?: string;
+  ui_composed_provider: COMPOSED_PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
+  headers?: Record<string, string>;
 }
 
-export interface ProviderKeyWithAPIKey extends ProviderKey {
-  apiKey: string;
+export interface StandardProviderObject extends BaseProviderKey {
+  provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM>;
+  base_url?: never;
+  provider_name?: never;
 }
+
+export interface CustomProviderObject extends BaseProviderKey {
+  provider: PROVIDER_TYPE.CUSTOM;
+  provider_name: string;
+  base_url: string;
+}
+
+export type ProviderObject = StandardProviderObject | CustomProviderObject;
+
+export type PartialProviderKeyUpdate = Partial<
+  Omit<BaseProviderKey, "provider">
+> & {
+  id?: string;
+  provider?: PROVIDER_TYPE;
+  apiKey?: string;
+  base_url?: string;
+  provider_name?: string;
+  headers?: Record<string, string>;
+};
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
@@ -484,6 +513,7 @@ export interface LLMCustomConfigsType {
   frequencyPenalty: number;
   presencePenalty: number;
   seed?: number | null;
+  custom_parameters?: Record<string, unknown> | null;
 }
 
 export type LLMPromptConfigsType =

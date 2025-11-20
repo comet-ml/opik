@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "1.9.2",
+  "version": "1.9.24",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -99,6 +99,8 @@
     "dotenv": "^16.5.0",
     "fast-deep-equal": "^3.1.3",
     "fast-json-stable-stringify": "^2.1.0",
+    "form-data-encoder": "^4.0.2",
+    "formdata-node": "^6.0.3",
     "ini": "^5.0.0",
     "jest-diff": "^29.7.0",
     "mustache": "^4.2.0",

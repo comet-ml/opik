@@ -11,11 +11,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      version:
-        type: string
-        required: false
-        description: Version (optional)
-        default: ""
       is_release:
         type: boolean
         required: true
@@ -91,7 +86,7 @@ jobs:
                     fixedBranchName="${fixedBranchName%?}"
                   done
                 fi
-                VERSION="${BASE_VERSION}.${fixedBranchName}-${{ github.run_number }}"
+                VERSION="${BASE_VERSION}-${fixedBranchName}-${{ github.run_number }}"
               fi
             fi
             echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT

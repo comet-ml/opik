@@ -4,12 +4,16 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .llm_as_judge_message_content_write import LlmAsJudgeMessageContentWrite
 from .llm_as_judge_message_write_role import LlmAsJudgeMessageWriteRole
 
 
 class LlmAsJudgeMessageWrite(UniversalBaseModel):
     role: LlmAsJudgeMessageWriteRole
-    content: str
+    content: typing.Optional[str] = None
+    content_array: typing.Optional[typing.List[LlmAsJudgeMessageContentWrite]] = None
+    string_content: typing.Optional[bool] = None
+    structured_content: typing.Optional[bool] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

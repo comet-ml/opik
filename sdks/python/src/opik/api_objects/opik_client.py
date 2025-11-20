@@ -21,6 +21,7 @@ from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
 from .dataset import rest_operations as dataset_rest_operations
+from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
@@ -846,8 +847,13 @@ class Opik:
             self._rest_client, dataset_name
         )
 
+        experiments_client = self.get_experiments_client()
         experiments = dataset_rest_operations.get_dataset_experiments(
-            self._rest_client, dataset_id, max_results, streamer=self._streamer
+            rest_client=self._rest_client,
+            dataset_id=dataset_id,
+            max_results=max_results,
+            streamer=self._streamer,
+            experiments_client=experiments_client,
         )
 
         return experiments
@@ -960,6 +966,7 @@ class Opik:
             dataset_name=dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
             prompts=checked_prompts,
         )
 
@@ -988,6 +995,7 @@ class Opik:
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
         )
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
@@ -1012,6 +1020,7 @@ class Opik:
                 dataset_name=public_experiment.dataset_name,
                 rest_client=self._rest_client,
                 streamer=self._streamer,
+                experiments_client=self.get_experiments_client(),
             )
             result.append(experiment_)
 
@@ -1044,6 +1053,7 @@ class Opik:
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
         )
 
     def end(self, timeout: Optional[int] = None) -> None:
@@ -1476,8 +1486,9 @@ class Opik:
         objective_name: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        optimization_id: Optional[str] = None,
     ) -> optimization.Optimization:
-        id = id_helpers.generate_id()
+        id = optimization_id or id_helpers.generate_id()
 
         self._rest_client.optimizations.create_optimization(
             id=id,
@@ -1499,6 +1510,15 @@ class Opik:
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
         _ = self._rest_client.optimizations.get_optimization_by_id(id)
         return optimization.Optimization(id=id, rest_client=self._rest_client)
+
+    def get_experiments_client(self) -> experiments_client.ExperimentsClient:
+        """
+        Retrieves an instance of `ExperimentsClient`.
+
+        Returns:
+            An instance of the ExperimentsClient initialized with a cached REST client.
+        """
+        return experiments_client.ExperimentsClient(self._rest_client)
 
 
 @functools.lru_cache()

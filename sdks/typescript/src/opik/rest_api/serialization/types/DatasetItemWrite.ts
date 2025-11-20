@@ -17,6 +17,7 @@ export const DatasetItemWrite: core.serialization.ObjectSchema<
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemWriteSource,
     data: JsonNode,
+    tags: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace DatasetItemWrite {
@@ -26,5 +27,6 @@ export declare namespace DatasetItemWrite {
         span_id?: string | null;
         source: DatasetItemWriteSource.Raw;
         data: JsonNode.Raw;
+        tags?: string[] | null;
     }
 }

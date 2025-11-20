@@ -5,6 +5,7 @@ from threading import Lock
 from typing import Any, Optional
 
 import numpy as np
+
 import pytest
 
 import opik.jsonable_encoder as jsonable_encoder
