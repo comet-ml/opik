@@ -210,7 +210,7 @@ spec:
       volumes:
       {{- if $value.usesJavaTrustStore }}
         {{- if $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
-        {{- toYaml $.Values.caCerts.overwriteJavaCATrustStore.volume | nindent 8 }}
+        {{- toYaml (list $.Values.caCerts.overwriteJavaCATrustStore.volume) | nindent 8 }}
         {{- else if (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef) }}
         - name: additonal-ca-certificates
           {{- if $.Values.caCerts.additionalCACertsInSecret }}
