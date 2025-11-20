@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
-import com.comet.opik.infrastructure.db.TemplateStructureArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
@@ -27,7 +26,6 @@ import java.util.UUID;
 @RegisterConstructorMapper(Prompt.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
-@RegisterArgumentFactory(TemplateStructureArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 interface PromptDAO {
 
