@@ -114,8 +114,7 @@ chained_result = another_optimizer.optimize_prompt(
 Here's a brief example of how to use the `FewShotBayesianOptimizer`. We'll use a sample dataset provided by Opik.
 
 Available sample datasets for testing include `"tiny-test"`, `"halu-eval-300"`, and the
-full HotpotQA splits via `hotpot(split="train", count=300)`. Legacy helpers such as
-`hotpot_300()` still exist for backwards compatibility but now emit `DeprecationWarning`s.
+full HotpotQA splits via `hotpot(split="train", count=300)`.
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio

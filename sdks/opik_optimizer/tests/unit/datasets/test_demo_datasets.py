@@ -10,38 +10,27 @@ from opik.api_objects.dataset import Dataset
 
 # Expected size mappings - add expected sizes based on dataset function names
 dataset_sizes = {
-    "driving_hazard_50": 50,
-    "driving_hazard_100": 100,
-    "driving_hazard_test_split": 100,
-    "hotpot_300": 300,
-    "hotpot_500": 500,
-    "halu_eval_300": 300,
+    "driving_hazard_50": 50, # deprecated
+    "driving_hazard_100": 100, # deprecated
+    "driving_hazard_test_split": 100, # deprecated
+    "hotpot_300": 300, # deprecated
+    "hotpot_500": 500, # deprecated
+    "halu_eval_300": 300, # deprecated
     "tiny_test": 5,
     "gsm8k": 300,
     "ai2_arc": 300,
-    "truthful_qa": 300,
-    "cnn_dailymail": 100,
-    "ragbench_sentence_relevance": 300,
-    "election_questions": 300,
-    "medhallu": 300,
-    "rag_hallucinations": 300,
+    "truthful_qa": 300, # deprecated
+    "cnn_dailymail": 100, # deprecated
+    "ragbench_sentence_relevance": 300, # deprecated
+    "election_questions": 300, # deprecated
+    "medhallu": 300, # deprecated
+    "rag_hallucinations": 300, # deprecated
     "context7_eval": 3,
 }
 
-# Extra kwargs passed to dataset helpers so we can request the legacy slice sizes
-# without relying on default behavior (which now streams the entire split).
-DATASET_CALL_KWARGS = {
-    "gsm8k": {"count": dataset_sizes["gsm8k"]},
-    "ai2_arc": {"count": dataset_sizes["ai2_arc"]},
-    "truthful_qa": {"count": dataset_sizes["truthful_qa"]},
-    "cnn_dailymail": {"count": dataset_sizes["cnn_dailymail"]},
-    "ragbench_sentence_relevance": {
-        "count": dataset_sizes["ragbench_sentence_relevance"]
-    },
-    "election_questions": {"count": dataset_sizes["election_questions"]},
-    "medhallu": {"count": dataset_sizes["medhallu"]},
-    "rag_hallucinations": {"count": dataset_sizes["rag_hallucinations"]},
-}
+# Extra kwargs left here for future dataset overrides when needed. All curated
+# helpers now honor their presets by default, so we don't pass anything.
+DATASET_CALL_KWARGS: dict[str, dict[str, int]] = {}
 
 # Get dataset functions from opik_optimizer.datasets for which we have expected sizes
 full_dataset_functions = [
