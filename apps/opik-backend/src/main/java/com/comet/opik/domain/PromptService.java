@@ -160,9 +160,7 @@ class PromptServiceImpl implements PromptService {
             promptVersionDAO.save(workspaceId, promptVersion);
 
             PromptVersion savedVersion = promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
-            return savedVersion.toBuilder()
-                    .templateStructure(createdPrompt.templateStructure())
-                    .build();
+            return savedVersion;
         });
 
         log.info("Created Prompt version for prompt id '{}'", createdPrompt.id());
@@ -426,9 +424,7 @@ class PromptServiceImpl implements PromptService {
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
         PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
-        return savedVersion.toBuilder()
-                .templateStructure(prompt.templateStructure())
-                .build();
+        return savedVersion;
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {
@@ -515,12 +511,8 @@ class PromptServiceImpl implements PromptService {
             throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
         }
 
-        // Get parent prompt to inherit template structure
-        Prompt prompt = getById(promptVersion.promptId());
-
         return promptVersion.toBuilder()
                 .variables(getVariables(promptVersion.template(), promptVersion.type()))
-                .templateStructure(prompt.templateStructure())
                 .build();
     }
 
@@ -615,7 +607,6 @@ class PromptServiceImpl implements PromptService {
 
             return promptVersion.toBuilder()
                     .variables(getVariables(promptVersion.template(), promptVersion.type()))
-                    .templateStructure(prompt.templateStructure())
                     .build();
         });
     }
