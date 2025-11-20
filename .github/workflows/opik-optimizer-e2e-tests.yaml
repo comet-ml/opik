@@ -82,7 +82,7 @@ jobs:
 
             # Test Configuration
             OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
-          run: pytest tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+          run: pytest -n auto --dist loadfile tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Upload test artifacts on failure
           if: failure()
@@ -137,4 +137,4 @@ jobs:
             pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
         - name: Run dataset integration check
-          run: pytest tests/integration/datasets/test_dataset_sources.py -vv
+          run: pytest -n auto --dist loadfile tests/integration/datasets/test_dataset_sources.py -vv

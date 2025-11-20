@@ -71,4 +71,4 @@ jobs:
             pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
   
         - name: Run unit tests
-          run: pytest tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+          run: pytest -n auto --dist loadfile tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
