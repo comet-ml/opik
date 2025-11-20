@@ -346,8 +346,10 @@ export class OpikClient {
      * Updates an experiment by ID
      *
      * @param id The ID of the experiment
-     * @param name The new name
-     * @param experimentConfig The new configuration
+     * @param name Optional new name for the experiment
+     * @param experimentConfig Optional new configuration for the experiment
+     * @returns Promise that resolves when the experiment is updated
+     * @throws {Error} If neither name nor experimentConfig is provided
      */
     public updateExperiment = async (
         id: string,
