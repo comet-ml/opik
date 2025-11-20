@@ -86,6 +86,7 @@ import java.util.function.Predicate;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 
 @Path("/v1/private/datasets")
 @Produces(MediaType.APPLICATION_JSON)
@@ -318,13 +319,15 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Batch updating '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
 
         itemService.batchUpdate(batchUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Batch updated '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        log.info("Batch updated dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
 
         return Response.noContent().build();
     }

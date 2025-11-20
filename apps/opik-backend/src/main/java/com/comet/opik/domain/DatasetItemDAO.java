@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemUpdate;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -68,7 +69,8 @@ public interface DatasetItemDAO {
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
-    Mono<Void> bulkUpdate(Set<UUID> ids, DatasetItemUpdate update, boolean mergeTags);
+    Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters, DatasetItemUpdate update,
+            boolean mergeTags);
 }
 
 @Singleton
@@ -854,8 +856,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
                 <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
-            FROM dataset_items s
-            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+            FROM dataset_items AS s
+            WHERE s.workspace_id = :workspace_id
+            <if(ids)> AND s.id IN :ids <endif>
+            <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
             """;
@@ -1493,26 +1497,57 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull DatasetItemUpdate update,
-            boolean mergeTags) {
-        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
-        log.info("Bulk updating '{}' dataset items", ids.size());
+    public Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters,
+            @NonNull DatasetItemUpdate update, boolean mergeTags) {
+        boolean hasIds = CollectionUtils.isNotEmpty(ids);
+        boolean hasFilters = CollectionUtils.isNotEmpty(filters);
+
+        Preconditions.checkArgument(hasIds || hasFilters, "Either ids or filters must be provided");
+
+        if (hasIds) {
+            log.info("Bulk updating '{}' dataset items by IDs", ids.size());
+        } else {
+            log.info("Bulk updating dataset items by filters");
+        }
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+
+        // Add ids or filters to template
+        if (hasIds) {
+            template.add("ids", true);
+        } else {
+            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+        }
+
         var query = template.render();
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(query)
-                    .bind("ids", ids);
+            var statement = connection.createStatement(query);
+
+            // Bind ids if provided
+            if (hasIds) {
+                statement.bind("ids", ids);
+            }
 
             bindBulkUpdateParams(update, statement);
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "bulk_update");
+            // Bind filter parameters if provided
+            if (hasFilters) {
+                filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
+
+            String segmentOperation = hasIds ? "bulk_update" : "bulk_update_by_filters";
+            Segment segment = startSegment("dataset_items", "Clickhouse", segmentOperation);
+
+            String successMessage = hasIds
+                    ? "Completed bulk update for '%s' dataset items".formatted(ids.size())
+                    : "Completed bulk update for dataset items matching filters";
 
             return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .then()
-                    .doOnSuccess(__ -> log.info("Completed bulk update for '{}' dataset items", ids.size()));
+                    .doOnSuccess(__ -> log.info(successMessage));
         });
     }
 
