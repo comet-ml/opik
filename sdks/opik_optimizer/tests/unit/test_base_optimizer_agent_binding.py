@@ -6,7 +6,7 @@ import pytest
 
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.optimizable_agent import OptimizableAgent
-from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+from opik_optimizer.api_objects.chat_prompt import ChatPrompt
 
 
 class DummyOptimizer(BaseOptimizer):

@@ -1,10 +1,12 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import PlaygroundOutputTable from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
 import PlaygroundOutputActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
 import { usePromptIds, useSetDatasetVariables } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filters } from "@/types/filters";
+import { keepPreviousData } from "@tanstack/react-query";
 
 interface PlaygroundOutputsProps {
   workspaceName: string;
@@ -22,22 +24,37 @@ const PlaygroundOutputs = ({
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
+  const [filters, setFilters] = useState<Filters>([]);
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(100);
 
   const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
     useDatasetItemsList(
       {
         datasetId: datasetId!,
-        page: 1,
-        size: 1000,
+        page,
+        size,
         truncate: true,
+        filters,
       },
       {
         enabled: !!datasetId,
+        placeholderData: keepPreviousData,
       },
     );
 
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
+  const total = datasetItemsData?.total || 0;
+
+  const handleChangeDatasetId = useCallback(
+    (id: string | null) => {
+      setFilters([]);
+      setPage(1);
+      onChangeDatasetId(id);
+    },
+    [onChangeDatasetId],
+  );
 
   const renderResult = () => {
     if (datasetId) {
@@ -77,8 +94,15 @@ const PlaygroundOutputs = ({
         datasetItems={datasetItems}
         datasetColumns={datasetColumns}
         workspaceName={workspaceName}
-        onChangeDatasetId={onChangeDatasetId}
+        onChangeDatasetId={handleChangeDatasetId}
         loadingDatasetItems={isLoadingDatasetItems}
+        filters={filters}
+        onFiltersChange={setFilters}
+        page={page}
+        onChangePage={setPage}
+        size={size}
+        onChangeSize={setSize}
+        total={total}
       />
       {renderResult()}
     </div>

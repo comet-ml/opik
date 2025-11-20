@@ -50,7 +50,7 @@ def real_model_conversation():
 def test_user_frustration_metric(real_model_conversation):
     """Integration test with a real model."""
     metric = user_frustration.UserFrustrationMetric(
-        track=True, window_size=3
+        track=False, window_size=3
     )  # Uses default model
     result = metric.score(real_model_conversation)
 
@@ -65,7 +65,7 @@ async def test_user_frustration_metric_async(real_model_conversation):
     """Integration test with a real model asyncio mode."""
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
-    metric = user_frustration.UserFrustrationMetric(track=True, window_size=3)
+    metric = user_frustration.UserFrustrationMetric(track=False, window_size=3)
     result = await metric.ascore(real_model_conversation)
 
     assert_helpers.assert_score_result(result)

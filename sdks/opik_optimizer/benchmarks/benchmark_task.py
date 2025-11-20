@@ -2,7 +2,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
+
+TaskStatus = Literal["Pending", "Running", "Success", "Failed"]
+TASK_STATUS_PENDING: TaskStatus = "Pending"
+TASK_STATUS_RUNNING: TaskStatus = "Running"
+TASK_STATUS_SUCCESS: TaskStatus = "Success"
+TASK_STATUS_FAILED: TaskStatus = "Failed"
 
 
 class TaskEvaluationResult(BaseModel):
@@ -18,10 +24,10 @@ class TaskResult(BaseModel):
     optimizer_name: str
     model_name: str
     timestamp_start: float
-    status: Literal["Pending", "Running", "Success", "Failed"]
-    initial_prompt: chat_prompt.ChatPrompt | None = None
+    status: TaskStatus
+    initial_prompt: opik_optimizer.ChatPrompt | None = None
     initial_evaluation: TaskEvaluationResult | None = None
-    optimized_prompt: chat_prompt.ChatPrompt | None = None
+    optimized_prompt: opik_optimizer.ChatPrompt | None = None
     optimized_evaluation: TaskEvaluationResult | None = None
     error_message: str | None = None
     timestamp_end: float | None = None
@@ -42,12 +48,12 @@ class TaskResult(BaseModel):
         """Custom validation method to handle nested objects during deserialization."""
         # Handle ChatPrompt objects
         if obj.get("initial_prompt") and isinstance(obj["initial_prompt"], dict):
-            obj["initial_prompt"] = chat_prompt.ChatPrompt.model_validate(
+            obj["initial_prompt"] = opik_optimizer.ChatPrompt.model_validate(
                 obj["initial_prompt"]
             )
 
         if obj.get("optimized_prompt") and isinstance(obj["optimized_prompt"], dict):
-            obj["optimized_prompt"] = chat_prompt.ChatPrompt.model_validate(
+            obj["optimized_prompt"] = opik_optimizer.ChatPrompt.model_validate(
                 obj["optimized_prompt"]
             )
 

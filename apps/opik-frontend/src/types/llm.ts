@@ -35,7 +35,9 @@ export interface LLMMessage {
   autoImprove?: boolean;
 }
 
-export type ProviderMessageType = Omit<LLMMessage, "id">;
+export type ProviderMessageType = Omit<LLMMessage, "id"> & {
+  content_array?: Array<TextPart | ImagePart | VideoPart> | null;
+};
 
 export interface PlaygroundPromptMetadata {
   created_from: "opik_ui";

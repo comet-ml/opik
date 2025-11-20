@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List, Generator
 
 from opik.api_objects import span, opik_client
 from opik.types import SpanType
+from opik import context_storage
 from .. import arguments_helpers, base_track_decorator, error_info_collector
 
 LOGGER = logging.getLogger(__name__)
@@ -109,6 +110,14 @@ def start_as_current_span(
                 **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
             )
             client.trace(**span_creation_result.trace_data.as_parameters)
+
+        # Clean up span and trace from context
+        opik_context_storage = context_storage.get_current_context_instance()
+        opik_context_storage.pop_span_data(ensure_id=span_creation_result.span_data.id)
+        if span_creation_result.trace_data is not None:
+            opik_context_storage.pop_trace_data(
+                ensure_id=span_creation_result.trace_data.id
+            )
 
         if flush:
             client.flush()

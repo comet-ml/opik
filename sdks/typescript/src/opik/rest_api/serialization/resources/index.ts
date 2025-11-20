@@ -24,6 +24,8 @@ export * from "./annotationQueues/client/requests";
 export * from "./attachments/client/requests";
 export * as chatCompletions from "./chatCompletions";
 export * from "./chatCompletions/client/requests";
+export * as dashboards from "./dashboards";
+export * from "./dashboards/client/requests";
 export * from "./datasets/client/requests";
 export * from "./experiments/client/requests";
 export * as guardrails from "./guardrails";

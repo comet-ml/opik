@@ -10,6 +10,7 @@ export interface DatasetItem {
     spanId?: string;
     source: OpikApi.DatasetItemSource;
     data: OpikApi.JsonNode;
+    tags?: string[];
     experimentItems?: OpikApi.ExperimentItem[];
     datasetId?: string;
     createdAt?: Date;

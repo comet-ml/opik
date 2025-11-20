@@ -7,7 +7,7 @@ from collections.abc import Callable
 os.environ.setdefault("LITELLM_CACHE_TYPE", "memory")
 
 from opik_optimizer.utils.core import create_litellm_agent_class
-from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+from opik_optimizer.api_objects.chat_prompt import ChatPrompt
 
 InvokeCallable = Callable[..., str]
 

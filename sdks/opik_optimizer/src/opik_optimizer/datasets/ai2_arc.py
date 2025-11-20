@@ -5,7 +5,7 @@ def ai2_arc(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the AI2 ARC dataset.
     """
-    dataset_name = "ai2_arc" if not test_mode else "ai2_arc_test"
+    dataset_name = "ai2_arc_train" if not test_mode else "ai2_arc_sample"
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()

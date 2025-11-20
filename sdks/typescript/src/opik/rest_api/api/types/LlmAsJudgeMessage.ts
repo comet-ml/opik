@@ -6,5 +6,8 @@ import * as OpikApi from "../index";
 
 export interface LlmAsJudgeMessage {
     role: OpikApi.LlmAsJudgeMessageRole;
-    content: string;
+    content?: string;
+    contentArray?: OpikApi.LlmAsJudgeMessageContent[];
+    stringContent?: boolean;
+    structuredContent?: boolean;
 }

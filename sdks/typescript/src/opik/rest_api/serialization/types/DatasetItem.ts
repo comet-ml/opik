@@ -16,6 +16,7 @@ export const DatasetItem: core.serialization.ObjectSchema<serializers.DatasetIte
         spanId: core.serialization.property("span_id", core.serialization.string().optional()),
         source: DatasetItemSource,
         data: JsonNode,
+        tags: core.serialization.list(core.serialization.string()).optional(),
         experimentItems: core.serialization.property(
             "experiment_items",
             core.serialization.list(ExperimentItem).optional(),
@@ -34,6 +35,7 @@ export declare namespace DatasetItem {
         span_id?: string | null;
         source: DatasetItemSource.Raw;
         data: JsonNode.Raw;
+        tags?: string[] | null;
         experiment_items?: ExperimentItem.Raw[] | null;
         dataset_id?: string | null;
         created_at?: string | null;

@@ -3,7 +3,7 @@ from typing import Any
 import opik
 import opik_optimizer
 from opik_optimizer import ChatPrompt
-from opik_optimizer.gepa_optimizer import GepaOptimizer
+from opik_optimizer import GepaOptimizer
 from opik_optimizer.datasets import hotpot_300
 from opik_optimizer.utils import search_wikipedia
 

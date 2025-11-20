@@ -23,8 +23,8 @@ from opik.api_objects.optimization import Optimization
 from .colbert import ColBERTv2
 
 if TYPE_CHECKING:
-    from opik_optimizer.optimizable_agent import OptimizableAgent
-    from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+    from ..optimizable_agent import OptimizableAgent
+    from ..api_objects import chat_prompt
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
@@ -331,7 +331,7 @@ def get_trial_compare_url(
 
 
 def create_litellm_agent_class(
-    prompt: "ChatPrompt", optimizer_ref: Any = None
+    prompt: "chat_prompt.ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:
     """
     Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
@@ -363,7 +363,7 @@ def create_litellm_agent_class(
         optimizer = optimizer_ref
 
         def __init__(
-            self, prompt: "ChatPrompt", project_name: str | None = None
+            self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
         ) -> None:
             # Get project_name from optimizer if available
             resolved_project = project_name

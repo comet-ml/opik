@@ -51,10 +51,12 @@ export interface LogProcessorArgs {
   onAddExperimentRegistry: (loggedExperiments: LogExperiment[]) => void;
   onError: (error: Error) => void;
   onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
+  onExperimentItemsComplete?: () => void;
 }
 
 export interface LogProcessor {
   log: (run: LogQueueParams) => void;
+  finishLogging: () => void;
 }
 
 const createBatchTraces = async (traces: LogTrace[]) => {
@@ -81,6 +83,16 @@ const createBatchExperimentItems = async (
   });
 };
 
+const finishExperiments = async (experimentIds: string[]) => {
+  if (experimentIds.length === 0) {
+    return;
+  }
+
+  await api.post(`${EXPERIMENTS_REST_ENDPOINT}finish`, {
+    ids: experimentIds,
+  });
+};
+
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",
@@ -95,7 +107,9 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
+    input: {
+      messages: run.providerMessages,
+    },
     output: { output: parseCompletionOutput(run) },
   };
 
@@ -136,7 +150,9 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
+    input: {
+      messages: run.providerMessages,
+    },
     output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: run.model,
@@ -191,10 +207,13 @@ const createLogPlaygroundProcessor = ({
   onAddExperimentRegistry,
   onError,
   onCreateTraces,
+  onExperimentItemsComplete,
 }: LogProcessorArgs): LogProcessor => {
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
   const traceMappings: TraceMapping[] = [];
+  let areExperimentsCreated = false;
+  let isLoggingFinished = false;
 
   const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
     try {
@@ -236,7 +255,30 @@ const createLogPlaygroundProcessor = ({
 
   experimentsQueue.drain(() => {
     onAddExperimentRegistry(experimentRegistry);
+    areExperimentsCreated = true;
+    tryFinishExperiments();
   });
+
+  const tryFinishExperiments = async () => {
+    // Only finish when both conditions are met:
+    // 1. All experiments have been created (queue drained)
+    // 2. finishLogging was called (all batches flushed and no more items will be added)
+    if (
+      areExperimentsCreated &&
+      isLoggingFinished &&
+      experimentRegistry.length > 0
+    ) {
+      try {
+        const experimentIds = experimentRegistry.map((e) => e.id);
+        await finishExperiments(experimentIds);
+        onExperimentItemsComplete?.();
+      } catch {
+        onError(
+          new Error("There has been an error with finishing experiments"),
+        );
+      }
+    }
+  };
 
   return {
     log: (run: LogQueueParams) => {
@@ -276,6 +318,18 @@ const createLogPlaygroundProcessor = ({
       );
 
       experimentItemsBatch.addItem(experimentItem);
+    },
+    finishLogging: () => {
+      // Flush all batches (triggers async API calls)
+      spanBatch.flush();
+      traceBatch.flush();
+      experimentItemsBatch.flush();
+
+      // Mark that logging is finished - no more items will be added
+      isLoggingFinished = true;
+
+      // Try to finish experiments if queue has also drained
+      tryFinishExperiments();
     },
   };
 };
