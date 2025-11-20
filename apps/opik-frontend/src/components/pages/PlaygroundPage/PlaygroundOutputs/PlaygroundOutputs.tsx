@@ -24,13 +24,14 @@ const PlaygroundOutputs = ({
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
   const [filters, setFilters] = useState<Filters>([]);
+  const [size, setSize] = useState(100);
 
   const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
     useDatasetItemsList(
       {
         datasetId: datasetId!,
         page: 1,
-        size: 1000,
+        size,
         truncate: true,
         filters,
       },
@@ -41,6 +42,7 @@ const PlaygroundOutputs = ({
 
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
+  const total = datasetItemsData?.total || 0;
 
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {
@@ -59,6 +61,9 @@ const PlaygroundOutputs = ({
             datasetItems={datasetItems}
             datasetColumns={datasetColumns}
             isLoadingDatasetItems={isLoadingDatasetItems}
+            size={size}
+            total={total}
+            onChangeSize={setSize}
           />
         </div>
       );
