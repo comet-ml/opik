@@ -708,7 +708,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
 def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
     fake_backend,
 ):
-    model_name = "openai/gpt-5-mini"
+    model_name = "openai/gpt-4o-mini"
 
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
@@ -838,7 +838,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
 def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged_in_openai_format(
     fake_backend,
 ):
-    model_name = "openai/gpt-5-mini"
+    model_name = "openai/gpt-4o-mini"
 
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}

@@ -4,6 +4,7 @@ from typing import Any, Generator, Optional, Dict, List
 
 from opik import datetime_helpers
 from opik.api_objects import trace, opik_client, helpers
+from opik import context_storage
 from .. import base_track_decorator, error_info_collector
 
 LOGGER = logging.getLogger(__name__)
@@ -74,6 +75,10 @@ def start_as_current_trace(
         # save trace data at the end of the context manager
         client = opik_client.get_client_cached()
         client.trace(**trace_data.init_end_time().as_parameters)
+
+        # Clean up trace from context
+        opik_context_storage = context_storage.get_current_context_instance()
+        opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
         if flush:
             client.flush()

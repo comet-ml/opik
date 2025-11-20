@@ -1,6 +1,7 @@
 import pytest
 
 import opik
+import opik.opik_context
 from opik.types import ErrorInfoDict
 from ...testlib import (
     ANY_BUT_NONE,
@@ -171,3 +172,24 @@ def test_start_as_current_trace__minimal_parameters__works(fake_backend):
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
+
+
+def test_start_as_current_trace__context_cleanup__trace_removed_after_exit(
+    fake_backend,
+):
+    """Test that the trace is properly removed from context after the context manager exits."""
+    # Verify no trace exists before
+    assert opik.opik_context.get_current_trace_data() is None
+
+    # Create trace and verify it exists inside context
+    with opik.start_as_current_trace("test-trace", flush=True) as trace:
+        current_trace = opik.opik_context.get_current_trace_data()
+        assert current_trace is not None
+        assert current_trace.id == trace.id
+
+    # Verify trace is removed from context after exit
+    assert opik.opik_context.get_current_trace_data() is None
+
+    # Verify trace was logged to backend
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].name == "test-trace"
