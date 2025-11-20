@@ -987,8 +987,15 @@ class Opik:
             metadata: The new metadata for the experiment. If None, the metadata will not be updated.
 
         Raises:
+            ValueError: if id is None or empty
             ApiError: if the backend responds with a non-2xx status
         """
+        if not id:
+            raise ValueError(
+                "id must be provided and can not be None or empty, "
+                f"id: {id}"
+            )
+
         self._rest_client.experiments.update_experiment(id, name=name, metadata=metadata)
         LOGGER.debug("Updated experiment with id '%s'", id)
 
