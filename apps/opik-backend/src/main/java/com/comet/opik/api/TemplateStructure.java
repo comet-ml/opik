@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum TemplateStructure {
@@ -17,6 +18,7 @@ public enum TemplateStructure {
         return value;
     }
 
+    @JsonCreator
     public static TemplateStructure fromString(String value) {
         if (value == null) {
             return TEXT; // Default to TEXT if null
