@@ -46,6 +46,51 @@ spec:
       {{- end }}
       {{- if or $value.initContainers $value.waitForClickhouse $value.waitForMysql $value.run_migration }}
       initContainers:
+      {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef) (not $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
+        - name: ca-cert-injection
+          image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ $value.image.tag }}"
+          imagePullPolicy: {{ $value.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
+          command:
+            - /bin/bash
+          args:
+            - -exc
+            - |
+              TRUSTSTORE_PATH="/emptydir/cacerts"
+              CERTS_DIR="/opt/opik/custom-ca-certs"
+
+              cp -f /etc/pki/ca-trust/extracted/java/cacerts $TRUSTSTORE_PATH
+
+              # Ensure the truststore exists
+              if [[ ! -f "$TRUSTSTORE_PATH" ]]
+              then
+                  echo "Truststore not found at $TRUSTSTORE_PATH"
+                  exit 1
+              fi
+              # Handle certificates from the CERTS_DIR
+              if [[ -d "$CERTS_DIR" ]]
+              then
+                  for CERT in "$CERTS_DIR"/*.pem
+                  do
+                      if [[ -f "$CERT" ]]
+                      then
+                          ALIAS=$(basename "$CERT" .pem)
+                          $JAVA_HOME/bin/keytool -import -trustcacerts -file "$CERT" \
+                              -alias "$ALIAS" -keystore "$TRUSTSTORE_PATH" \
+                              -storepass changeit -noprompt
+                          echo "Imported $CERT as $ALIAS"
+                      fi
+                  done
+              fi
+              echo "Certificate import process completed."
+          volumeMounts:
+            - name: additonal-ca-certificates
+              mountPath: /opt/opik/custom-ca-certs
+              readOnly: true
+            - mountPath: /emptydir
+              name: ca-trust-store
+      {{- end }}
       {{- if and (eq $key "backend") $value.waitForMysql.enabled }}
         - name: wait-for-mysql-service
           image: "{{ default $.Values.registry $value.waitForMysql.image.registry }}/{{ $value.waitForMysql.image.repository }}:{{ $value.waitForMysql.image.tag }}"
@@ -87,8 +132,13 @@ spec:
           envFrom:
             {{- toYaml . | nindent 10 }}
           {{- end }}
-          {{- with $value.volumeMounts }}
           volumeMounts:
+          {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
+            - name: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.volume.name "ca-trust-store" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
+              subPath: cacerts
+              mountPath: /etc/pki/ca-trust/extracted/java/cacerts
+          {{- end }}
+          {{- with $value.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
       {{- end}}
@@ -145,16 +195,45 @@ spec:
           envFrom:
             {{- toYaml . | nindent 10 }}
           {{- end }}
-          {{- with $value.volumeMounts }}
           volumeMounts:
+          {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
+            - name: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.volume.name "ca-trust-store" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
+              subPath: cacerts
+              mountPath: /etc/pki/ca-trust/extracted/java/cacerts
+          {{- end }}
+          {{- with $value.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with $value.lifecycle }}
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- with $value.volumes }}
       volumes:
+      {{- if $value.usesJavaTrustStore }}
+        {{- if $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
+        {{- toYaml $.Values.caCerts.overwriteJavaCATrustStore.volume | nindent 8 }}
+        {{- else if (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef) }}
+        - name: additonal-ca-certificates
+          {{- if $.Values.caCerts.additionalCACertsInSecret }}
+          secret:
+            {{- if $.Values.caCerts.existingAdditionalCACertsRef }}
+            secretName: {{ $.Values.caCerts.existingAdditionalCACertsRef }}
+            {{- else }}
+            secretName: {{ include "opik.name" $ }}-extra-ca-certs
+            {{- end }}
+          {{- else }}
+          configMap:
+            {{- if $.Values.caCerts.existingAdditionalCACertsRef }}
+            name: {{ $.Values.caCerts.existingAdditionalCACertsRef }}
+            {{- else }}
+            name: {{ include "opik.name" $ }}-extra-ca-certs
+            {{- end }}
+          {{- end }}
+        - name: ca-trust-store
+          emptyDir: {}
+        {{- end }}
+      {{- end }}
+      {{- with $value.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with (default $.Values.nodeSelector $value.nodeSelector) }}

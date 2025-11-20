@@ -31,6 +31,36 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+caCerts:
+  # -- (list) Additional Certificate Authority Certificates to trust.
+  # Each list entry has two keys: `name` and `content`. `name` should be a 
+  # unique identifier. content Should be PEM formated Public Certificate 
+  # contents.
+  additionalCACerts:
+
+  # -- Certificates are Public Keys + Metadata, but some organizations may 
+  # still prefer storing these in Secrets.
+  additionalCACertsInSecret: false
+
+  # -- If there is an existing ConfigMap containing the additional CA 
+  # Certificates you can provide its name here instead of creatinga a new one.
+  # If `additionalCACertsInSecret` is `true` we will look for this name in
+  # Secrets.
+  existingAdditionalCACertsRef:
+
+  overwriteJavaCATrustStore:
+    # -- If enabled we will not inject additional CA Certificates to the Java
+    # TrustStore, but instead will mount a given volume containing a Java Trust
+    # Store to replace the default one in the containers.
+    enabled: false
+    # -- A Kubernetes Volume definition which will contain a valid Java Trust
+    # Store. The volume must contain a truststore named `cacerts`. See
+    # https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/
+    # for valid parameters.
+    # Only the sub path `cacerts` will be mounted.
+    volume: {}
+
+
 component:
   backend:
     enabled: true
@@ -125,6 +155,8 @@ component:
         enabled: false
         hosts: []
         secretName: ""
+    # @ignored
+    usesJavaTrustStore: true
 
   python-backend:
     enabled: true
