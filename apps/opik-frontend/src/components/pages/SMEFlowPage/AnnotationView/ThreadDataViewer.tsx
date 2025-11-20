@@ -10,7 +10,7 @@ import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceM
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import { createFilter } from "@/lib/filters";
-import { TREE_FILTER_COLUMNS } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
+import { SPAN_TYPE_FILTER_COLUMN } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -89,17 +89,14 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls?: boolean) => {
-      setTraceId(id);
-      setSpanId("");
-
-      // Set filters if we need to filter tool calls
+      // Set filters FIRST, before opening the panel
+      // This ensures the filters are in the URL before TraceDetailsPanel reads them
       if (shouldFilterToolCalls) {
-        const typeColumn = TREE_FILTER_COLUMNS[0]; // "type" column
         setTracePanelFilters([
           createFilter({
-            id: typeColumn.id,
-            field: typeColumn.id,
-            type: typeColumn.type,
+            id: SPAN_TYPE_FILTER_COLUMN.id,
+            field: SPAN_TYPE_FILTER_COLUMN.id,
+            type: SPAN_TYPE_FILTER_COLUMN.type,
             operator: "=",
             value: SPAN_TYPE.tool,
           }),
@@ -107,6 +104,10 @@ const ThreadDataViewer: React.FunctionComponent = () => {
       } else {
         setTracePanelFilters([]);
       }
+
+      // Then open the panel
+      setTraceId(id);
+      setSpanId("");
     },
     [setTracePanelFilters],
   );
