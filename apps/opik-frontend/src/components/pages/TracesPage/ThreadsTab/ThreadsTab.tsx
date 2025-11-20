@@ -17,7 +17,7 @@ import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 import {
-  useMetricDateRangeWithQuery,
+  useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
@@ -244,7 +244,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQuery({});
+  } = useMetricDateRangeWithQueryAndStorage();
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,

@@ -17,7 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 import {
-  useMetricDateRangeWithQuery,
+  useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
@@ -250,7 +250,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQuery({});
+  } = useMetricDateRangeWithQueryAndStorage();
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
