@@ -97,6 +97,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
           createFilter({
             id: "type",
             field: "type",
+            type: COLUMN_TYPE.category,
             operator: "=",
             value: "tool",
           }),
