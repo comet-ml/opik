@@ -21,6 +21,8 @@ class DummyOptimizer:
         self._gepa_live_metric_calls = 0
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+        self.project_name = "dummy"
+        self.name = "DummyOptimizer"
 
     def _increment_llm_counter(self) -> None:
         self.llm_call_counter += 1
@@ -31,6 +33,12 @@ class DummyOptimizer:
     def _reset_counters(self) -> None:
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+
+    def _instantiate_agent(self, prompt: ChatPrompt, agent_class: Any | None = None) -> Any:
+        cls = agent_class or (lambda p: DummyAgent(p))
+        agent = cls(prompt)
+        agent.optimizer = self  # Mimic BaseOptimizer behavior
+        return agent
 
 
 def test_adapter_evaluate_uses_metric(
