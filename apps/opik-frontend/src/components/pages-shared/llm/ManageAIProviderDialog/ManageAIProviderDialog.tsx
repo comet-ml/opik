@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { MessageCircleWarning } from "lucide-react";
 import get from "lodash/get";
 import isFunction from "lodash/isFunction";
+import { v4 as uuidv4 } from "uuid";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -140,7 +141,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           ? Object.entries(providerKey.headers).map(([key, value]) => ({
               key,
               value,
-              id: crypto.randomUUID(),
+              id: uuidv4(),
             }))
           : [],
     } as AIProviderFormType,
@@ -342,7 +343,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                                     ([key, value]) => ({
                                       key,
                                       value,
-                                      id: crypto.randomUUID(),
+                                      id: uuidv4(),
                                     }),
                                   )
                                 : [],
