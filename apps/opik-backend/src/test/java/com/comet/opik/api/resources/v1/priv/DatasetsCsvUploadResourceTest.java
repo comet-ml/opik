@@ -39,6 +39,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -53,6 +56,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -282,9 +286,10 @@ class DatasetsCsvUploadResourceTest {
                 });
     }
 
-    @Test
-    @DisplayName("Upload CSV file with empty header - should return 400 Bad Request")
-    void uploadCsvFile__emptyHeader() {
+    @ParameterizedTest
+    @DisplayName("Upload CSV file with invalid headers - should return 400 Bad Request")
+    @MethodSource("provideInvalidCsvHeaders")
+    void uploadCsvFile__invalidHeaders(String csvContent, String testDescription) {
         // Given: Create a dataset
         Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                 .id(null)
@@ -294,92 +299,48 @@ class DatasetsCsvUploadResourceTest {
 
         UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
-        // Prepare CSV with an empty header (second column has no name)
-        String csvContent = """
-                input,,expected_output
-                "What is 2+2?","4","4"
-                "What is the capital of France?","Paris","Paris"
-                """;
-
-        // When: Upload CSV file with empty header
+        // When: Upload CSV file with invalid header
         try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
             // Then: Should return 400 Bad Request
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.getStatus())
+                    .as("Test case: %s", testDescription)
+                    .isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
             // Verify error message mentions empty header
             String errorMessage = response.readEntity(String.class);
-            assertThat(errorMessage).contains("empty header names");
+            assertThat(errorMessage)
+                    .as("Test case: %s", testDescription)
+                    .contains("empty header names");
         }
 
         // Verify no items were created
         var items = getDatasetItems(createdDatasetId);
-        assertThat(items).isEmpty();
+        assertThat(items)
+                .as("Test case: %s - no items should be created", testDescription)
+                .isEmpty();
     }
 
-    @Test
-    @DisplayName("Upload CSV file with blank header - should return 400 Bad Request")
-    void uploadCsvFile__blankHeader() {
-        // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                .id(null)
-                .createdBy(null)
-                .lastUpdatedBy(null)
-                .build();
-
-        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-
-        // Prepare CSV with a blank header (spaces only)
-        String csvContent = """
-                input,   ,expected_output
-                "What is 2+2?","4","4"
-                """;
-
-        // When: Upload CSV file with blank header
-        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
-            // Then: Should return 400 Bad Request
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            // Verify error message mentions empty header
-            String errorMessage = response.readEntity(String.class);
-            assertThat(errorMessage).contains("empty header names");
-        }
-
-        // Verify no items were created
-        var items = getDatasetItems(createdDatasetId);
-        assertThat(items).isEmpty();
-    }
-
-    @Test
-    @DisplayName("Upload CSV file with first header empty - should return 400 Bad Request")
-    void uploadCsvFile__firstHeaderEmpty() {
-        // Given: Create a dataset
-        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                .id(null)
-                .createdBy(null)
-                .lastUpdatedBy(null)
-                .build();
-
-        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
-
-        // Prepare CSV with first header empty
-        String csvContent = """
-                ,output,expected_output
-                "What is 2+2?","4","4"
-                """;
-
-        // When: Upload CSV file with first header empty
-        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
-            // Then: Should return 400 Bad Request
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            // Verify error message mentions empty header
-            String errorMessage = response.readEntity(String.class);
-            assertThat(errorMessage).contains("empty header names");
-        }
-
-        // Verify no items were created
-        var items = getDatasetItems(createdDatasetId);
-        assertThat(items).isEmpty();
+    private static Stream<Arguments> provideInvalidCsvHeaders() {
+        return Stream.of(
+                Arguments.of(
+                        """
+                                input,,expected_output
+                                "What is 2+2?","4","4"
+                                "What is the capital of France?","Paris","Paris"
+                                """,
+                        "Empty header in middle position"),
+                Arguments.of(
+                        """
+                                input,   ,expected_output
+                                "What is 2+2?","4","4"
+                                """,
+                        "Blank header with spaces"),
+                Arguments.of(
+                        """
+                                ,output,expected_output
+                                "What is 2+2?","4","4"
+                                """,
+                        "Empty first header"));
     }
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {
