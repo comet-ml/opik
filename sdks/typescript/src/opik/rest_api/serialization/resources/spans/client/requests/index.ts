@@ -1,3 +1,3 @@
 export { SpanBatchWrite } from "./SpanBatchWrite";
-export { SpanUpdate } from "./SpanUpdate";
+export { SpanBatchUpdate } from "./SpanBatchUpdate";
 export { SpanSearchStreamRequestPublic } from "./SpanSearchStreamRequestPublic";
