@@ -1689,3 +1689,132 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
 
     for trace in dataset_item_2_traces:
         assert_equal(EXPECTED_TRACE_DATASET_ITEM_2, trace)
+
+
+def test_evaluate__with_experiment_scores(fake_backend):
+    """Test that experiment_scores are computed and stored correctly."""
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+    )
+    mock_dataset.name = "test-dataset"
+    mock_dataset.id = "dataset-id"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            input={"message": "say hello"},
+            reference="hello",
+        ),
+    ]
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment = mock.Mock()
+    mock_experiment.id = "experiment-id"
+    mock_experiment.name = "test-experiment"
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    mock_update_experiment = mock.Mock()
+
+    def compute_accuracy_stats(test_results: List) -> List[score_result.ScoreResult]:
+        """Compute max accuracy across all test results."""
+        accuracy_scores = [
+            score.value
+            for test_result in test_results
+            for score in test_result.score_results
+            if score.name == "equals_metric"
+        ]
+        if not accuracy_scores:
+            return []
+        return [
+            score_result.ScoreResult(
+                name="equals_metric (max)",
+                value=max(accuracy_scores),
+            ),
+        ]
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            with mock.patch.object(
+                opik_client.Opik, "rest_client", mock.Mock()
+            ) as mock_rest_client:
+                mock_rest_client.experiments = mock.Mock()
+                mock_rest_client.experiments.update_experiment = mock_update_experiment
+                result = evaluation.evaluate(
+                    dataset=mock_dataset,
+                    task=say_task,
+                    experiment_name="test-experiment",
+                    scoring_metrics=[metrics.Equals()],
+                    task_threads=1,
+                    experiment_scores=[compute_accuracy_stats],
+                )
+
+    # Verify experiment scores were computed and stored
+    assert len(result.experiment_scores) == 1
+    assert result.experiment_scores[0].name == "equals_metric (max)"
+    assert result.experiment_scores[0].value == 1.0
+
+    # Verify experiment scores were logged to backend
+    mock_update_experiment.assert_called_once()
+    call_args = mock_update_experiment.call_args
+    assert call_args[1]["id"] == "experiment-id"
+    assert len(call_args[1]["experiment_scores"]) == 1
+    assert call_args[1]["experiment_scores"][0].name == "equals_metric (max)"
+    assert call_args[1]["experiment_scores"][0].value == 1.0
+
+
+def test_evaluate__with_experiment_scores_empty_results(fake_backend):
+    """Test that experiment_scores handle empty test results gracefully."""
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id", "name"]
+    )
+    mock_dataset.name = "test-dataset"
+    mock_dataset.id = "dataset-id"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = []
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment = mock.Mock()
+    mock_experiment.id = "experiment-id"
+    mock_experiment.name = "test-experiment"
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    def compute_accuracy_stats(test_results: List) -> List[score_result.ScoreResult]:
+        """Compute max accuracy across all test results."""
+        return [
+            score_result.ScoreResult(
+                name="equals_metric (max)",
+                value=0.5,
+            ),
+        ]
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            result = evaluation.evaluate(
+                dataset=mock_dataset,
+                task=say_task,
+                experiment_name="test-experiment",
+                scoring_metrics=[metrics.Equals()],
+                task_threads=1,
+                experiment_scores=[compute_accuracy_stats],
+            )
+
+    # Verify experiment scores are empty when no test results
+    assert len(result.experiment_scores) == 0

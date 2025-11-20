@@ -24,6 +24,7 @@ export interface Experiment {
     createdBy?: string;
     lastUpdatedBy?: string;
     status?: OpikApi.ExperimentStatus;
+    experimentScores?: OpikApi.ExperimentScore[];
     promptVersion?: OpikApi.PromptVersionLink;
     promptVersions?: OpikApi.PromptVersionLink[];
 }

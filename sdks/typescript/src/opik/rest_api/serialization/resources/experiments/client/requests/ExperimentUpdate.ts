@@ -8,6 +8,7 @@ import * as core from "../../../../../core";
 import { JsonNode } from "../../../../types/JsonNode";
 import { ExperimentUpdateType } from "../../types/ExperimentUpdateType";
 import { ExperimentUpdateStatus } from "../../types/ExperimentUpdateStatus";
+import { ExperimentScore } from "../../../../types/ExperimentScore";
 
 export const ExperimentUpdate: core.serialization.Schema<serializers.ExperimentUpdate.Raw, OpikApi.ExperimentUpdate> =
     core.serialization.object({
@@ -15,6 +16,10 @@ export const ExperimentUpdate: core.serialization.Schema<serializers.ExperimentU
         metadata: JsonNode.optional(),
         type: ExperimentUpdateType.optional(),
         status: ExperimentUpdateStatus.optional(),
+        experimentScores: core.serialization.property(
+            "experiment_scores",
+            core.serialization.list(ExperimentScore).optional(),
+        ),
     });
 
 export declare namespace ExperimentUpdate {
@@ -23,5 +28,6 @@ export declare namespace ExperimentUpdate {
         metadata?: JsonNode.Raw | null;
         type?: ExperimentUpdateType.Raw | null;
         status?: ExperimentUpdateStatus.Raw | null;
+        experiment_scores?: ExperimentScore.Raw[] | null;
     }
 }

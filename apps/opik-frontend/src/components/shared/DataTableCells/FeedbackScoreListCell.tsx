@@ -163,19 +163,25 @@ const FeedbackScoreListAggregationCell = <TData,>(
   const { aggregationMap } = context.table.options.meta ?? {};
 
   const data = aggregationMap?.[rowId] ?? {};
-  const rawValue = get(data, aggregationKey ?? "", undefined);
+  const feedbackScoresRaw = get(data, aggregationKey ?? "", undefined);
+  const experimentScoresRaw = get(data, "experiment_scores", undefined);
+
   let value = "";
 
-  if (isArray(rawValue)) {
-    value = (rawValue as TraceFeedbackScore[])
-      .map(
-        (item: TraceFeedbackScore) =>
-          `${item.name}: ${
-            isNumber(item.value) ? dataFormatter(item.value) : "-"
-          }`,
-      )
-      .join(", ");
-  }
+  const formatScores = (scores: unknown, addAvg: boolean) => {
+    if (!isArray(scores)) return [];
+    return (scores as TraceFeedbackScore[]).map((item: TraceFeedbackScore) => {
+      const name = addAvg ? `${item.name} (avg)` : item.name;
+      return `${name}: ${
+        isNumber(item.value) ? dataFormatter(item.value) : "-"
+      }`;
+    });
+  };
+
+  const feedbackScoresFormatted = formatScores(feedbackScoresRaw, true);
+  const experimentScoresFormatted = formatScores(experimentScoresRaw, false);
+
+  value = [...feedbackScoresFormatted, ...experimentScoresFormatted].join(", ");
 
   return (
     <CellWrapper

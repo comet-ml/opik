@@ -8,6 +8,7 @@ import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -217,6 +219,9 @@ public class ExperimentsTestUtils {
                 .toList();
         List<FeedbackScoreAverage> feedbackScores = calculateFeedbackScoreAverages(allItems);
 
+        // Calculate experiment score averages across all experiments
+        List<FeedbackScoreAverage> experimentScores = calculateExperimentScoreAverages(experiments);
+
         return AggregationData.builder()
                 .experimentCount(experimentCount)
                 .traceCount(totalTraceCount)
@@ -224,6 +229,7 @@ public class ExperimentsTestUtils {
                 .totalEstimatedCostAvg(avgCost)
                 .duration(avgDurationPercentiles)
                 .feedbackScores(feedbackScores)
+                .experimentScores(experimentScores)
                 .build();
     }
 
@@ -307,16 +313,23 @@ public class ExperimentsTestUtils {
         return new PercentageValues(avgP50, avgP90, avgP99);
     }
 
-    private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+    /**
+     * Generic method to calculate score averages.
+     *
+     * @param items List of items to extract scores from
+     * @param scoreExtractor Function to extract scores from each item (returns name -> value map)
+     * @param <T> Type of items to process
+     * @return List of FeedbackScoreAverage with calculated averages
+     */
+    private <T> List<FeedbackScoreAverage> calculateScoreAverages(
+            List<T> items,
+            Function<T, Map<String, BigDecimal>> scoreExtractor) {
+
         Map<String, List<BigDecimal>> scoresByName = new HashMap<>();
 
-        for (ExperimentItem item : items) {
-            if (item.feedbackScores() != null) {
-                for (FeedbackScore score : item.feedbackScores()) {
-                    scoresByName.computeIfAbsent(score.name(), k -> new ArrayList<>())
-                            .add(score.value());
-                }
-            }
+        for (T item : items) {
+            Map<String, BigDecimal> scores = scoreExtractor.apply(item);
+            scores.forEach((name, value) -> scoresByName.computeIfAbsent(name, k -> new ArrayList<>()).add(value));
         }
 
         return scoresByName.entrySet().stream()
@@ -330,7 +343,40 @@ public class ExperimentsTestUtils {
                             .value(average)
                             .build();
                 })
+                .sorted((a, b) -> a.name().compareTo(b.name()))
                 .toList();
+    }
+
+    private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+        return calculateScoreAverages(items, item -> {
+            if (item.feedbackScores() == null) {
+                return Map.of();
+            }
+            return item.feedbackScores().stream()
+                    .filter(score -> score.name() != null && score.value() != null)
+                    .collect(Collectors.toMap(
+                            FeedbackScore::name,
+                            FeedbackScore::value,
+                            (v1, v2) -> v1)); // In case of duplicate names, keep first
+        });
+    }
+
+    /**
+     * Calculate experiment score averages across all experiments.
+     * Extracts experiment scores from each experiment and calculates the average value for each score name.
+     */
+    private List<FeedbackScoreAverage> calculateExperimentScoreAverages(List<Experiment> experiments) {
+        return calculateScoreAverages(experiments, experiment -> {
+            if (experiment.experimentScores() == null) {
+                return Map.of();
+            }
+            return experiment.experimentScores().stream()
+                    .filter(score -> score.name() != null && score.value() != null)
+                    .collect(Collectors.toMap(
+                            ExperimentScore::name,
+                            ExperimentScore::value,
+                            (v1, v2) -> v1)); // In case of duplicate names, keep first
+        });
     }
 
     /**
