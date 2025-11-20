@@ -147,11 +147,8 @@ const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const [editingRule, setEditingRule] = useState<EvaluatorsRule | undefined>(
-    undefined,
-  );
-
+  const [openDialogForCreate, setOpenDialogForCreate] =
+    useState<boolean>(false);
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -211,6 +208,9 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
+  const editingRule = rows.find((r) => r.id === editRuleId);
+  const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -242,24 +242,6 @@ export const OnlineEvaluationPage: React.FC = () => {
     },
     [setEditRuleId],
   );
-
-  // handle opening edit dialog from query parameter
-  useEffect(() => {
-    if (
-      editRuleId &&
-      rows.length > 0 &&
-      editingRule?.id !== editRuleId &&
-      !isPending
-    ) {
-      const ruleToEdit = rows.find((rule) => rule.id === editRuleId);
-
-      if (ruleToEdit) {
-        setEditingRule(ruleToEdit);
-        setOpenDialog(true);
-        resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-      }
-    }
-  }, [editRuleId, rows, editingRule?.id, isPending]);
 
   const columns = useMemo(() => {
     return [
@@ -318,20 +300,18 @@ export const OnlineEvaluationPage: React.FC = () => {
   );
 
   const handleNewRuleClick = useCallback(() => {
-    setEditingRule(undefined);
-    setOpenDialog(true);
+    setOpenDialogForCreate(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, [setEditingRule]);
+  }, []);
 
   const handleCloseDialog = useCallback(
     (open: boolean) => {
-      setOpenDialog(open);
+      setOpenDialogForCreate(open);
       if (!open) {
         setEditRuleId(undefined);
-        setEditingRule(undefined);
       }
     },
-    [setEditRuleId, setEditingRule],
+    [setEditRuleId],
   );
 
   // Filter out "type" (Scope), "enabled" (Status), and "sampling_rate" from filter options
@@ -356,7 +336,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         <NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
-          open={openDialog}
+          open={isDialogOpen}
           setOpen={handleCloseDialog}
           rule={editingRule}
         />
@@ -429,7 +409,7 @@ export const OnlineEvaluationPage: React.FC = () => {
       </div>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
-        open={openDialog}
+        open={isDialogOpen}
         setOpen={handleCloseDialog}
         rule={editingRule}
       />
