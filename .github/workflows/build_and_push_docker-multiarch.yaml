@@ -1,4 +1,4 @@
-name: "Build Docker Images"
+name: "Build Docker Images Multi-Arch"
 
 on:
   workflow_call:
