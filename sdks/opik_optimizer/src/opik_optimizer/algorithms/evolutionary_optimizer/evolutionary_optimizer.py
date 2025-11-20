@@ -384,6 +384,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        dataset_validation: opik.Dataset | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         *args: Any,
@@ -401,9 +402,15 @@ class EvolutionaryOptimizer(BaseOptimizer):
             project_name: Opik project name for logging traces (default: "Optimization").
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
+            dataset_validation: Optional validation dataset (not yet supported by this optimizer).
             max_trials: Maximum number of prompt evaluations allowed.
             mcp_config: MCP tool-calling configuration (default: None).
         """
+        if dataset_validation is not None:
+            logger.warning(
+                f"{self.__class__.__name__} currently does not support validation dataset. "
+                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
+            )
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -950,8 +957,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
+        dataset_validation: opik.Dataset | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
+        if dataset_validation is not None:
+            logger.warning(
+                f"{self.__class__.__name__} currently does not support validation dataset. "
+                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
+            )
         if prompt.tools is None or not prompt.tools:
             raise ValueError("Prompt must include tools for MCP optimization")
 
