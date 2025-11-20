@@ -4,7 +4,6 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
-import com.comet.opik.api.CommentsBatchCreate;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
@@ -587,36 +586,13 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete trace comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
+        log.info("Delete trace comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         commentService.delete(batchDelete)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted trace comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
-
-        return Response.noContent().build();
-    }
-
-    @POST
-    @Path("/comments/batch")
-    @Operation(operationId = "createTraceCommentsBatch", summary = "Create comments for multiple traces", description = "Create the same comment text for multiple trace IDs (max 10 per request)", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    @RateLimited
-    public Response createTraceCommentsBatch(
-            @RequestBody(content = @Content(schema = @Schema(implementation = CommentsBatchCreate.class))) @NotNull @Valid CommentsBatchCreate payload) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Creating trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
-
-        commentService.createBatchForTraces(payload.ids(), payload.text())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        log.info("Created trace comments batch with size '{}' on workspaceId '{}'", payload.ids().size(), workspaceId);
+        log.info("Deleted trace comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -771,8 +747,7 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted trace threads with size '{}' on workspaceId '{}'", traceThreads.threadIds().size(),
-                workspaceId);
+        log.info("Deleted trace threads with ids '{}' on workspaceId '{}'", traceThreads.threadIds(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -1027,13 +1002,13 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete thread comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
+        log.info("Delete thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         commentService.delete(batchDelete)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted thread comments with size '{}' on workspaceId '{}'", batchDelete.ids().size(), workspaceId);
+        log.info("Deleted thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         return Response.noContent().build();
     }

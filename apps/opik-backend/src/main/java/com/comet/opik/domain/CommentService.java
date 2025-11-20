@@ -59,8 +59,7 @@ class CommentServiceImpl implements CommentService {
 
         return monoProjectId
                 .switchIfEmpty(Mono.error(failWithNotFound(entityType.getType(), entityId)))
-                .flatMap(projectId -> commentDAO.addComment(id, entityId, entityType, projectId,
-                        comment))
+                .flatMap(projectId -> commentDAO.addComment(id, entityId, entityType, projectId, comment))
                 .map(__ -> id);
     }
 
