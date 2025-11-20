@@ -24,7 +24,7 @@ HALU_EVAL_SPEC = DatasetSpec(
     name="halu_eval",
     hf_path="pminervini/HaluEval",
     hf_name="general",
-    default_source_split="data",
+    default_source_split="train",
     prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
