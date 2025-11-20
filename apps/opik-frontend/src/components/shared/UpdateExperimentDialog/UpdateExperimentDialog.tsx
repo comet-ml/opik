@@ -44,12 +44,9 @@ export function UpdateExperimentDialog({
     JSON.stringify(latestConfiguration || {}, null, 2),
   );
 
-  // Reset state when dialog opens OR when props change while dialog is closed
+  // Reset state only when dialog opens (false -> true transition)
   useEffect(() => {
-    const isOpening = open && !prevOpenRef.current;
-    const propsChangedWhileClosed = !open;
-
-    if (isOpening || propsChangedWhileClosed) {
+    if (open && !prevOpenRef.current) {
       setName(latestName);
       setConfiguration(JSON.stringify(latestConfiguration || {}, null, 2));
     }
@@ -76,9 +73,7 @@ export function UpdateExperimentDialog({
 
     // Use validation result directly to avoid double parsing
     const parsedConfiguration =
-      configuration.trim() === ""
-        ? {}
-        : (safelyParseJSON(configuration) as object);
+      configuration.trim() === "" ? {} : safelyParseJSON(configuration);
 
     onConfirm(name, parsedConfiguration);
     setOpen(false);
