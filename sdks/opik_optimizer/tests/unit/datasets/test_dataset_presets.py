@@ -18,7 +18,7 @@ CURATED_DATASETS = [
     ("medhallu", "train", 300),
     ("rag_hallucinations", "train", 300),
     ("tiny_test", "train", 5),
-    ("halu_eval_300", "data", 300),
+    ("halu_eval_300", "train", 300),
 ]
 
 
