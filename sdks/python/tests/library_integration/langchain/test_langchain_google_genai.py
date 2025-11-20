@@ -83,53 +83,37 @@ def test_langchain__google_genai_llm_is_used__token_usage_is_logged__happy_flow(
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="RunnableSequence",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=ANY_BUT_NONE,
-                tags=["tag1", "tag2"],
-                metadata={"a": "b", "created_from": "langchain"},
-                type="general",
-                usage=None,
+                output={"output": ANY_BUT_NONE},
+                metadata={"created_from": "langchain"},
+                type="tool",
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_BUT_NONE},
-                        metadata={"created_from": "langchain"},
-                        type="tool",
-                        end_time=ANY_BUT_NONE,
-                        project_name="Default Project",
-                        last_updated_at=ANY_BUT_NONE,
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="custom-google-genai-llm-name",
-                        input=expected_llm_span_input,
-                        output=ANY_BUT_NONE,
-                        metadata=ANY_DICT,
-                        type="llm",
-                        usage=ANY_DICT,
-                        end_time=ANY_BUT_NONE,
-                        project_name="Default Project",
-                        model=ANY_STRING.starting_with("gemini-2.0-flash"),
-                        provider="google_ai",
-                        last_updated_at=ANY_BUT_NONE,
-                    ),
-                ],
                 last_updated_at=ANY_BUT_NONE,
-            )
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="custom-google-genai-llm-name",
+                input=expected_llm_span_input,
+                output=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                usage=ANY_DICT,
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                model=ANY_STRING.starting_with("gemini-2.0-flash"),
+                provider="google_ai",
+                last_updated_at=ANY_BUT_NONE,
+            ),
         ],
         last_updated_at=ANY_BUT_NONE,
     )
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
+    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
     google_helpers.assert_usage_validity(llm_call_span.usage)
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
