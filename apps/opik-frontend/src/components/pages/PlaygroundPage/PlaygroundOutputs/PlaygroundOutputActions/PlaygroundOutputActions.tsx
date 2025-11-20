@@ -557,7 +557,7 @@ const PlaygroundOutputActions = ({
               sizeChange={onChangeSize}
               total={total}
               variant="minimal"
-              itemsPerPage={[10, 50, 100, 200, 500]}
+              itemsPerPage={[10, 50, 100, 200, 500, 1000]}
             />
             <Separator orientation="vertical" className="mx-2 h-4" />
           </div>
