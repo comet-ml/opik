@@ -717,6 +717,10 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/parameter_optimizer.mdx
             slug: parameter_optimizer
+          - page: Tool Optimization
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/tool_optimization.mdx
+            slug: tool_optimization
       - section: Cookbooks & Tutorials
         slug: /cookbooks
         contents:
