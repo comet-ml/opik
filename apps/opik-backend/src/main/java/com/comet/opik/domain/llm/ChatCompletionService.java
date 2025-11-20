@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.google.common.base.Throwables;
 import dev.langchain4j.internal.RetryUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -18,8 +19,11 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.net.ConnectException;
+import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -63,7 +67,7 @@ public class ChatCompletionService {
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -114,7 +118,7 @@ public class ChatCompletionService {
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
     }
 
@@ -153,8 +157,67 @@ public class ChatCompletionService {
                 }
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-                var errorMessage = new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+                var errorMessage = new ErrorMessage(buildDetailedErrorMessage(throwable));
                 handlers.handleError(errorMessage);
+            }
+        };
+    }
+
+    /**
+     * Builds a detailed error message by combining the base error message with exception details.
+     * Extracts meaningful error information from the exception chain.
+     *
+     * @param throwable the exception to extract details from
+     * @return a detailed error message combining the base message with exception details
+     */
+    private String buildDetailedErrorMessage(Throwable throwable) {
+        String exceptionDetails = extractErrorDetails(throwable);
+        if (StringUtils.isNotBlank(exceptionDetails)) {
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
+        }
+        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+    }
+
+    /**
+     * Extracts meaningful error details from an exception chain.
+     * Walks through the exception chain to find the most informative error message,
+     * preferring root causes over wrapper exceptions.
+     * Provides user-friendly messages for common exception types.
+     *
+     * @param throwable the exception to extract details from
+     * @return the extracted error details, or null if no meaningful details found
+     */
+    private String extractErrorDetails(Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+
+        Throwable rootCause = Throwables.getRootCause(throwable);
+
+        // Use the most specific exception (root cause if available)
+        Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
+
+        // Provide user-friendly messages based on exception type
+        return switch (exceptionToHandle) {
+            case ConnectException connectException -> {
+                // Extract host/URL from the exception message if available
+                String message = connectException.getMessage();
+                if (message != null && message.contains("Connection refused")) {
+                    yield "Service is unreachable. Please check the provider URL.";
+                }
+                yield "Service is unreachable: " + message;
+            }
+            case ClosedChannelException closedChannelException ->
+                "Service is unreachable. Please check the provider URL.";
+            default -> {
+                // For other exceptions, use the exception message
+                String message = exceptionToHandle.getMessage();
+                if (StringUtils.isNotBlank(message)) {
+                    yield message;
+                }
+                // Fallback to exception class name if no message
+                yield exceptionToHandle.getClass().getSimpleName();
             }
         };
     }
