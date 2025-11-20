@@ -4329,24 +4329,55 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("Error: batch update by filters without merge is not allowed")
-        void batchUpdateDatasetItems__whenUsingFiltersWithoutMerge__thenBadRequest() {
-            // Create filter
+        @DisplayName("Success: batch update by filters automatically merges tags even when mergeTags is false")
+        void batchUpdateDatasetItems__whenUsingFiltersWithMergeFalse__thenAutoMerges() {
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("include", "tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("include", "tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("include", "tag2");
+            assertThat(retrieved3.tags()).containsExactlyInAnyOrder("other");
+
+            // Create filter to match items with "include" tag
             var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
 
-            // Attempt batch update by filters without merge (should fail validation)
+            // Batch update by filters with mergeTags=false (should auto-set to true)
             var batchUpdate = DatasetItemBatchUpdate.builder()
                     .filters(List.of(filter))
                     .update(DatasetItemUpdate.builder()
-                            .tags(Set.of("replaced"))
+                            .tags(Set.of("newtag"))
                             .build())
-                    .mergeTags(false)
+                    .mergeTags(false) // This will be automatically set to true
                     .build();
 
-            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
-                    TEST_WORKSPACE)) {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-            }
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were merged (not replaced) for items matching filters
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
+            assertThat(updated3.tags()).containsExactlyInAnyOrder("other"); // Unchanged
         }
 
         @Test

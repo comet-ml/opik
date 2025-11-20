@@ -69,9 +69,8 @@ public interface DatasetItemDAO {
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
-    Mono<Void> bulkUpdate(Set<UUID> ids, DatasetItemUpdate update, boolean mergeTags);
-
-    Mono<Void> bulkUpdateByFilters(List<DatasetItemFilter> filters, DatasetItemUpdate update, boolean mergeTags);
+    Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters, DatasetItemUpdate update,
+            boolean mergeTags);
 }
 
 @Singleton
@@ -1494,27 +1493,57 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull DatasetItemUpdate update,
-            boolean mergeTags) {
-        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
-        log.info("Bulk updating '{}' dataset items", ids.size());
+    public Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters,
+            @NonNull DatasetItemUpdate update, boolean mergeTags) {
+        boolean hasIds = CollectionUtils.isNotEmpty(ids);
+        boolean hasFilters = CollectionUtils.isNotEmpty(filters);
+
+        Preconditions.checkArgument(hasIds || hasFilters, "Either ids or filters must be provided");
+
+        if (hasIds) {
+            log.info("Bulk updating '{}' dataset items by IDs", ids.size());
+        } else {
+            log.info("Bulk updating dataset items by filters");
+        }
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
-        template.add("ids", true);
+
+        // Add ids or filters to template
+        if (hasIds) {
+            template.add("ids", true);
+        } else {
+            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+        }
+
         var query = template.render();
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(query)
-                    .bind("ids", ids);
+            var statement = connection.createStatement(query);
+
+            // Bind ids if provided
+            if (hasIds) {
+                statement.bind("ids", ids);
+            }
 
             bindBulkUpdateParams(update, statement);
 
-            Segment segment = startSegment("dataset_items", "Clickhouse", "bulk_update");
+            // Bind filter parameters if provided
+            if (hasFilters) {
+                filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
+
+            String segmentOperation = hasIds ? "bulk_update" : "bulk_update_by_filters";
+            Segment segment = startSegment("dataset_items", "Clickhouse", segmentOperation);
+
+            String successMessage = hasIds
+                    ? "Completed bulk update for '%s' dataset items".formatted(ids.size())
+                    : "Completed bulk update for dataset items matching filters";
 
             return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .then()
-                    .doOnSuccess(__ -> log.info("Completed bulk update for '{}' dataset items", ids.size()));
+                    .doOnSuccess(__ -> log.info(successMessage));
         });
     }
 
@@ -1549,37 +1578,5 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Void> bulkUpdateByFilters(@NonNull List<DatasetItemFilter> filters,
-            @NonNull DatasetItemUpdate update, boolean mergeTags) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(filters), "filters must not be empty");
-        log.info("Bulk updating dataset items by filters");
-
-        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
-
-        // Add filters to template
-        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-
-        var query = template.render();
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(query);
-
-            bindBulkUpdateParams(update, statement);
-
-            // Bind filter parameters
-            filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
-
-            Segment segment = startSegment("dataset_items", "Clickhouse", "bulk_update_by_filters");
-
-            return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .then()
-                    .doOnSuccess(__ -> log.info("Completed bulk update for dataset items matching filters"));
-        });
     }
 }

@@ -19,7 +19,7 @@ public class DatasetItemBatchUpdateValidator
 
         // Check if `ids` is provided
         boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
-        // Check if filters is provided
+        // Check if filters are provided
         boolean hasFilters = CollectionUtils.isNotEmpty(batchUpdate.filters());
 
         // Validate that at least one of ids or filters is provided
@@ -33,14 +33,6 @@ public class DatasetItemBatchUpdateValidator
         if (hasIds && hasFilters) {
             context.buildConstraintViolationWithTemplate(
                     "Cannot provide both 'ids' and 'filters'. Use 'ids' for specific items or 'filters' to update items matching the filter criteria.")
-                    .addConstraintViolation();
-            return false;
-        }
-
-        // Validate that mergeTags is true when using filters
-        if (hasFilters && !batchUpdate.mergeTags()) {
-            context.buildConstraintViolationWithTemplate(
-                    "When using 'filters', 'merge_tags' must be true. Tag replacement (merge_tags=false) is only supported when using 'ids'.")
                     .addConstraintViolation();
             return false;
         }

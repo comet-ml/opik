@@ -24,7 +24,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -255,18 +254,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Mono<Void> batchUpdate(@NonNull DatasetItemBatchUpdate batchUpdate) {
-        if (CollectionUtils.isNotEmpty(batchUpdate.ids())) {
-            log.info("Batch updating '{}' dataset items by IDs", batchUpdate.ids().size());
-            return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), batchUpdate.mergeTags())
-                    .doOnSuccess(
-                            __ -> log.info("Completed batch update for '{}' dataset items", batchUpdate.ids().size()));
-        } else if (CollectionUtils.isNotEmpty(batchUpdate.filters())) {
-            log.info("Batch updating dataset items by filters");
-            return dao.bulkUpdateByFilters(batchUpdate.filters(), batchUpdate.update(), batchUpdate.mergeTags())
-                    .doOnSuccess(__ -> log.info("Completed batch update for dataset items matching filters"));
-        } else {
-            return Mono.error(new IllegalArgumentException("Either ids or filters must be provided"));
-        }
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.filters(), batchUpdate.update(),
+                batchUpdate.mergeTags());
     }
 
     @WithSpan
