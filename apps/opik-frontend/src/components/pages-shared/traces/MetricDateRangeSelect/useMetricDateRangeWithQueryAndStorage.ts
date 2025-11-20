@@ -9,18 +9,17 @@ import { DEFAULT_DATE_PRESET } from "./constants";
 type UseMetricDateRangeWithQueryAndStorageOptions =
   UseMetricDateRangeOptions & {
     queryKey: string;
-    localStorageKey: string;
   };
 
 export const useMetricDateRangeWithQueryAndStorage = (
   options: UseMetricDateRangeWithQueryAndStorageOptions,
 ) => {
-  const { queryKey, localStorageKey, ...rest } = options;
+  const { queryKey, ...rest } = options;
 
   const [value, setValue] = useQueryParamAndLocalStorageState<
     string | null | undefined
   >({
-    localStorageKey,
+    localStorageKey: `local-${queryKey}`,
     queryKey,
     defaultValue: DEFAULT_DATE_PRESET,
     queryParamConfig: StringParam,
