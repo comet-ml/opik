@@ -282,6 +282,106 @@ class DatasetsCsvUploadResourceTest {
                 });
     }
 
+    @Test
+    @DisplayName("Upload CSV file with empty header - should return 400 Bad Request")
+    void uploadCsvFile__emptyHeader() {
+        // Given: Create a dataset
+        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Prepare CSV with an empty header (second column has no name)
+        String csvContent = """
+                input,,expected_output
+                "What is 2+2?","4","4"
+                "What is the capital of France?","Paris","Paris"
+                """;
+
+        // When: Upload CSV file with empty header
+        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
+            // Then: Should return 400 Bad Request
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            // Verify error message mentions empty header
+            String errorMessage = response.readEntity(String.class);
+            assertThat(errorMessage).contains("empty header names");
+        }
+
+        // Verify no items were created
+        var items = getDatasetItems(createdDatasetId);
+        assertThat(items).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Upload CSV file with blank header - should return 400 Bad Request")
+    void uploadCsvFile__blankHeader() {
+        // Given: Create a dataset
+        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Prepare CSV with a blank header (spaces only)
+        String csvContent = """
+                input,   ,expected_output
+                "What is 2+2?","4","4"
+                """;
+
+        // When: Upload CSV file with blank header
+        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
+            // Then: Should return 400 Bad Request
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            // Verify error message mentions empty header
+            String errorMessage = response.readEntity(String.class);
+            assertThat(errorMessage).contains("empty header names");
+        }
+
+        // Verify no items were created
+        var items = getDatasetItems(createdDatasetId);
+        assertThat(items).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Upload CSV file with first header empty - should return 400 Bad Request")
+    void uploadCsvFile__firstHeaderEmpty() {
+        // Given: Create a dataset
+        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Prepare CSV with first header empty
+        String csvContent = """
+                ,output,expected_output
+                "What is 2+2?","4","4"
+                """;
+
+        // When: Upload CSV file with first header empty
+        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
+            // Then: Should return 400 Bad Request
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            // Verify error message mentions empty header
+            String errorMessage = response.readEntity(String.class);
+            assertThat(errorMessage).contains("empty header names");
+        }
+
+        // Verify no items were created
+        var items = getDatasetItems(createdDatasetId);
+        assertThat(items).isEmpty();
+    }
+
     private Response uploadCsvFile(UUID datasetId, String csvContent) {
         byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
         InputStream csvInputStream = new ByteArrayInputStream(csvBytes);
