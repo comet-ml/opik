@@ -30,6 +30,37 @@ const experiment = await opik.getExperiment("my-experiment");
 const datasetExperiments = await opik.getDatasetExperiments("my-dataset", 100); // Optional maxResults parameter (default: 100)
 ```
 
+### Updating an Experiment
+
+```typescript
+// Update experiment name
+await opik.updateExperiment(
+  "experiment-id",
+  "Updated Experiment Name"
+);
+
+// Update experiment configuration
+await opik.updateExperiment(
+  "experiment-id",
+  undefined,
+  {
+    model: "gpt-4",
+    temperature: 0.7,
+    promptTemplate: "Answer the following question: {question}"
+  }
+);
+
+// Update both name and configuration
+await opik.updateExperiment(
+  "experiment-id",
+  "Updated Experiment Name",
+  {
+    model: "gpt-4",
+    temperature: 0.7
+  }
+);
+```
+
 ### Deleting an Experiment
 
 ```typescript
