@@ -24,6 +24,10 @@ from .driving_hazard import (
     driving_hazard_test_split,
 )
 
+# TODO(opik): Remove the legacy helpers (hotpot_300/500, halu_eval_300,
+# driving_hazard_50/100/test_split, etc.) once all downstream scripts and docs
+# rely on the normalized dataset APIs.
+
 __all__ = [
     "ai2_arc",
     "cnn_dailymail",
