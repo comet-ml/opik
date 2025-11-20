@@ -43,9 +43,19 @@ def test_custom_agent_optimizer_binding(prompt: ChatPrompt) -> None:
     custom_agent_class = CustomAgent
 
     optimizer_one = DummyOptimizer(model="gpt-4o")
-    resolved_one = optimizer_one._setup_agent_class(prompt, custom_agent_class)
-    assert resolved_one.optimizer is optimizer_one
+    optimizer_one.agent_class = optimizer_one._setup_agent_class(
+        prompt, custom_agent_class
+    )
+    agent_one = optimizer_one._instantiate_agent(prompt)
+    assert agent_one.optimizer is optimizer_one
 
     optimizer_two = DummyOptimizer(model="gpt-4o")
-    resolved_two = optimizer_two._setup_agent_class(prompt, custom_agent_class)
-    assert resolved_two.optimizer is optimizer_two
+    optimizer_two.agent_class = optimizer_two._setup_agent_class(
+        prompt, custom_agent_class
+    )
+    agent_two = optimizer_two._instantiate_agent(prompt)
+    assert agent_two.optimizer is optimizer_two
+
+    # Ensure binding remains per instance and class-level attribute was not mutated
+    assert agent_one.optimizer is optimizer_one
+    assert getattr(custom_agent_class, "optimizer", None) is None
