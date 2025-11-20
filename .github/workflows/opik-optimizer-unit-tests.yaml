@@ -10,6 +10,8 @@ env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
 
+permissions:
+  contents: read
 jobs:
     run-unit-tests:
         name: Opik Optimizer Unit Tests Python ${{matrix.python_version}}
