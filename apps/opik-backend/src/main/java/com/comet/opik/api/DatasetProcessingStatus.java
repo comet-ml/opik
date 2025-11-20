@@ -23,6 +23,7 @@ public enum DatasetProcessingStatus {
         return Arrays.stream(values())
                 .filter(status -> status.value.equals(value))
                 .findFirst()
-                .orElse(COMPLETED);
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown DatasetProcessingStatus value: '%s'".formatted(value)));
     }
 }

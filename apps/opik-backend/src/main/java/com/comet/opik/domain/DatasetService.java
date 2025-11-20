@@ -664,11 +664,11 @@ class DatasetServiceImpl implements DatasetService {
 
             if (result == 0) {
                 log.warn("Failed to update processing status for dataset '{}' on workspaceId '{}'", id, workspaceId);
-            } else {
-                log.info("Successfully updated processing status for dataset '{}' on workspaceId '{}' to '{}'", id,
-                        workspaceId, status);
+                return null;
             }
 
+            log.info("Successfully updated processing status for dataset '{}' on workspaceId '{}' to '{}'", id,
+                    workspaceId, status);
             return null;
         });
     }
