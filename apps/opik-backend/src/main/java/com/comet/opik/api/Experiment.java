@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -49,7 +50,8 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentStatus status,
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<ExperimentScore> experimentScores,
+        @JsonView({Experiment.View.Public.class,
+                Experiment.View.Write.class}) List<@NotNull @Valid ExperimentScore> experimentScores,
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(deprecated = true) PromptVersionLink promptVersion,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions){

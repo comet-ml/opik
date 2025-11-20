@@ -207,7 +207,10 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
         return dao.getExperimentsFeedbackScoreNames(experimentIds)
                 .map(scores -> scores.stream()
-                        .map(score -> new FeedbackScoreNames.ScoreName(score.name(), score.type()))
+                        .map(score -> FeedbackScoreNames.ScoreName.builder()
+                                .name(score.name())
+                                .type(score.type())
+                                .build())
                         .toList())
                 .map(FeedbackScoreNames::new);
     }

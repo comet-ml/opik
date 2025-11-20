@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Experiment.ExperimentPage;
+import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
@@ -53,8 +55,6 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.Experiment.ExperimentPage;
-import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
@@ -868,7 +868,7 @@ class ExperimentDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
@@ -941,26 +941,13 @@ class ExperimentDAO {
                 .toList();
     }
 
-    public static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
-        List<FeedbackScoreAverage> feedbackScoresAvg = Optional
-                .ofNullable(row.get("feedback_scores", Map.class))
-                .map(map -> (Map<String, ? extends Number>) map)
-                .orElse(Map.of())
-                .entrySet()
-                .stream()
-                .map(scores -> {
-                    return new FeedbackScoreAverage(scores.getKey(),
-                            BigDecimal.valueOf(scores.getValue().doubleValue()).setScale(SCALE,
-                                    RoundingMode.HALF_EVEN));
-                })
-                .toList();
-
-        return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
+    public static List<FeedbackScoreAverage> getFeedbackScores(Row row, String columnName) {
+        return getScoresAggregation(row, columnName);
     }
 
-    public static List<FeedbackScoreAverage> getExperimentScoresAggregation(Row row) {
-        List<FeedbackScoreAverage> experimentScoresAvg = Optional
-                .ofNullable(row.get("experiment_scores", Map.class))
+    private static List<FeedbackScoreAverage> getScoresAggregation(Row row, String columnName) {
+        List<FeedbackScoreAverage> scoresAvg = Optional
+                .ofNullable(row.get(columnName, Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .orElse(Map.of())
                 .entrySet()
@@ -972,7 +959,7 @@ class ExperimentDAO {
                 })
                 .toList();
 
-        return experimentScoresAvg.isEmpty() ? null : experimentScoresAvg;
+        return scoresAvg.isEmpty() ? null : scoresAvg;
     }
 
     public static List<ExperimentScore> getExperimentScores(Row row) {
@@ -983,7 +970,7 @@ class ExperimentDAO {
         try {
             List<ExperimentScore> scores = JsonUtils.readValue(experimentScoresJson,
                     ExperimentScore.LIST_TYPE_REFERENCE);
-            return scores == null || scores.isEmpty() ? null : scores;
+            return CollectionUtils.isEmpty(scores) ? null : scores;
         } catch (Exception e) {
             log.warn("Failed to deserialize experiment_scores from JSON: {}", experimentScoresJson, e);
             return null;
@@ -1331,8 +1318,8 @@ class ExperimentDAO {
                     .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
                     .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
                     .duration(getDuration(row))
-                    .feedbackScores(getFeedbackScores(row))
-                    .experimentScores(getExperimentScoresAggregation(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
+                    .experimentScores(getFeedbackScores(row, "experiment_scores"))
                     .build();
         });
     }

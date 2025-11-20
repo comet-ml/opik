@@ -1,5 +1,4 @@
 from typing import Dict, Any, List
-import statistics
 
 from opik.evaluation.metrics import IsJson, Hallucination, score_result
 from opik.evaluation import evaluate, test_result
@@ -76,8 +75,8 @@ def compute_hallucination_stats(
     
     return [
         score_result.ScoreResult(
-            name="hallucination_metric (std_dev)",
-            value=statistics.stdev(scores) if len(scores) > 1 else 0.0,
+            name="Custom metric",
+            value=max(scores) if len(scores) > 1 else 0.0,
         )
     ]
 
