@@ -194,7 +194,10 @@ def fetch_records_for_slice(
 
     load_kwargs = load_kwargs_resolver(slice_request.source_split)
 
-    use_streaming = os.getenv("OPIK_USE_HF_STREAMING", "false").lower() == "true"
+    # Streaming by default to avoid full HF downloads in smoke/test scenarios.
+    # Disable by setting OPIK_USE_HF_STREAMING=false when a full materialized
+    # dataset is explicitly required.
+    use_streaming = os.getenv("OPIK_USE_HF_STREAMING", "true").lower() == "true"
     if use_streaming:
         try:
             return stream_records_for_slice(
