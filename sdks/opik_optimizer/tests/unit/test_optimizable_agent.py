@@ -1,7 +1,7 @@
 import os
 from unittest.mock import Mock
 
-
+from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.optimizable_agent import OptimizableAgent
 import opik_optimizer
 
