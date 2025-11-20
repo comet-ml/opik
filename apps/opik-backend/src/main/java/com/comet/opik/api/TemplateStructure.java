@@ -2,20 +2,18 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.Getter;
 
+@Getter
 public enum TemplateStructure {
     TEXT("text"),
     CHAT("chat");
 
+    @JsonValue
     private final String value;
 
     TemplateStructure(String value) {
         this.value = value;
-    }
-
-    @JsonValue
-    public String getValue() {
-        return value;
     }
 
     @JsonCreator
