@@ -8,6 +8,7 @@ import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.domain.AlertService;
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectService;
@@ -16,9 +17,12 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,12 +42,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
@@ -67,7 +74,9 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     public static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
             AlertEventType.TRACE_COST,
             AlertEventType.TRACE_LATENCY,
-            AlertEventType.TRACE_ERRORS);
+            AlertEventType.TRACE_ERRORS,
+            AlertEventType.TRACE_FEEDBACK_SCORE,
+            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE);
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
     private volatile boolean interrupted = false;
 
@@ -179,6 +188,18 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                     config.projectIds(),
                     startTime,
                     endTime);
+            case TRACE_FEEDBACK_SCORE -> projectMetricsDAO.getAverageFeedbackScore(
+                    config.projectIds(),
+                    startTime,
+                    endTime,
+                    EntityType.TRACE,
+                    config.name());
+            case TRACE_THREAD_FEEDBACK_SCORE -> projectMetricsDAO.getAverageFeedbackScore(
+                    config.projectIds(),
+                    startTime,
+                    endTime,
+                    EntityType.THREAD,
+                    config.name());
             default -> Mono.just(BigDecimal.ZERO);
         };
 
@@ -193,7 +214,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .doOnError(error -> log.error("Error retrieving metric value: '{}'", error.getMessage(), error))
                 .flatMap(metricValue -> {
                     // Compare with threshold
-                    if (metricValue.compareTo(thresholdForComparison) > 0) {
+                    if (compareMetric(metricValue, thresholdForComparison, config.operator())) {
                         log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}'",
                                 alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
 
@@ -246,6 +267,13 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    private boolean compareMetric(BigDecimal metricValue, BigDecimal threshold, Operator operator) {
+        return switch (operator) {
+            case GREATER_THAN -> metricValue.compareTo(threshold) > 0;
+            case LESS_THAN -> metricValue.compareTo(threshold) < 0;
+        };
+    }
+
     private TriggerConfig extractTriggerConfig(AlertTrigger trigger) {
         if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
             throw new IllegalArgumentException("Trigger must have configuration for metrics alerts");
@@ -269,33 +297,40 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             case TRACE_COST -> AlertTriggerConfigType.THRESHOLD_COST;
             case TRACE_LATENCY -> AlertTriggerConfigType.THRESHOLD_LATENCY;
             case TRACE_ERRORS -> AlertTriggerConfigType.THRESHOLD_ERRORS;
+            case TRACE_FEEDBACK_SCORE, TRACE_THREAD_FEEDBACK_SCORE -> AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE;
             default -> throw new IllegalArgumentException(
                     "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
         };
 
         // Extract threshold from the appropriate config type
-        var thresholdString = trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == thresholdConfigType)
-                .findFirst()
-                .map(AlertTriggerConfig::configValue)
-                .map(v -> v.get(THRESHOLD_CONFIG_KEY))
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Threshold is required for metrics alerts of type '%s'".formatted(trigger.eventType())));
-
+        var thresholdString = extractConfigValue(trigger, thresholdConfigType, THRESHOLD_CONFIG_KEY);
         BigDecimal threshold = new BigDecimal(thresholdString);
 
         // Extract window from the same threshold config type
-        var windowString = trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == thresholdConfigType)
-                .findFirst()
-                .map(AlertTriggerConfig::configValue)
-                .map(v -> v.get(WINDOW_CONFIG_KEY))
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Time window is required for metrics alerts of type '%s'".formatted(trigger.eventType())));
-
+        var windowString = extractConfigValue(trigger, thresholdConfigType, WINDOW_CONFIG_KEY);
         long windowSeconds = Long.parseLong(windowString);
 
-        return new TriggerConfig(projectIds, threshold, windowSeconds);
+        // Extract name for feedback score alerts
+        String name = null;
+        Operator operator = Operator.GREATER_THAN;
+        if (trigger.eventType() == AlertEventType.TRACE_FEEDBACK_SCORE
+                || trigger.eventType() == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+            name = extractConfigValue(trigger, thresholdConfigType, NAME_CONFIG_KEY);
+            operator = Operator.fromString(extractConfigValue(trigger, thresholdConfigType, OPERATOR_CONFIG_KEY));
+        }
+
+        return new TriggerConfig(projectIds, threshold, windowSeconds, name, operator);
+    }
+
+    private String extractConfigValue(AlertTrigger trigger, AlertTriggerConfigType configType, String key) {
+        return trigger.triggerConfigs().stream()
+                .filter(c -> c.type() == configType)
+                .findFirst()
+                .map(AlertTriggerConfig::configValue)
+                .map(v -> v.get(key))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Missing config value for key '%s' in trigger of type '%s'"
+                                .formatted(key, configType)));
     }
 
     /**
@@ -309,6 +344,26 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 
-    private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds) {
+    private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds, String name,
+            Operator operator) {
+    }
+
+    @RequiredArgsConstructor
+    @Getter
+    private enum Operator {
+        GREATER_THAN(">"),
+        LESS_THAN("<"),
+        ;
+
+        @JsonValue
+        private final String queryParamOperator;
+
+        @JsonCreator
+        public static Operator fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(enumValue -> enumValue.queryParamOperator.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown Operator '%s'".formatted(value)));
+        }
     }
 }
