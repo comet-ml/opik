@@ -988,7 +988,6 @@ class Opik:
 
         Raises:
             ValueError: if id is None or empty
-            ApiError: if the backend responds with a non-2xx status
         """
         if not id:
             raise ValueError(
@@ -997,7 +996,6 @@ class Opik:
             )
 
         self._rest_client.experiments.update_experiment(id, name=name, metadata=metadata)
-        LOGGER.debug("Updated experiment with id '%s'", id)
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """
