@@ -4,11 +4,12 @@ import opik
 from typing import Any
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, add_record_index
 
 
 def _halu_records_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
+    """Normalize HF columns and add a stable index to avoid deduplication loss."""
+    normalized = [
         {
             "input": rec["user_query"],
             "llm_output": rec["chatgpt_response"],
@@ -16,6 +17,7 @@ def _halu_records_transform(records: list[dict[str, Any]]) -> list[dict[str, Any
         }
         for rec in records
     ]
+    return add_record_index(normalized)
 
 
 HALU_EVAL_SPEC = DatasetSpec(
@@ -32,7 +34,7 @@ HALU_EVAL_SPEC = DatasetSpec(
             dataset_name="halu_eval_300_train",
         )
     },
-    records_transform=_halu_records_transform,
+    records_transform=_halu_records_transform,  # de-dupe sensitive dataset, inject ids
 )
 
 _HALU_EVAL_HANDLE = DatasetHandle(HALU_EVAL_SPEC)

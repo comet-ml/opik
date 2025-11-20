@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 import pytest
+from datasets import config as datasets_config
 
 from opik_optimizer.api_objects.types import DatasetSpec
 from opik_optimizer.datasets.ai2_arc import AI2_ARC_SPEC
@@ -39,6 +40,18 @@ CURATED_SPECS: Iterable[DatasetSpec] = [
 ]
 
 
+def _is_hf_offline_error(exc: Exception) -> bool:
+    msg = str(exc)
+    markers = (
+        "Failed to resolve 'huggingface.co'",
+        "Max retries exceeded with url",
+        "NameResolutionError",
+        "HFValidationError",
+        "Temporary failure in name resolution",
+    )
+    return any(marker in msg for marker in markers)
+
+
 def _default_cache_dir() -> Path:
     cache_env = os.getenv("HF_DATASETS_CACHE")
     if cache_env:
@@ -51,36 +64,33 @@ def ensured_hf_cache(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
     """
-    Guarantee a writable HF cache path.
+    Guarantee a writable HF cache path by copying the shared cache into a temp dir.
 
-    We prefer the user's configured cache directory (to benefit from CI caching)
-    and fall back to an isolated temp directory only when necessary.
+    This avoids permission conflicts with pre-existing lock files created by other
+    users or CI jobs while still letting us reuse the downloaded dataset shards.
     """
-    cache_dir = _default_cache_dir()
-    try:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        probe = cache_dir / ".write_test"
-        probe.touch()
-        probe.unlink()
-        return cache_dir
-    except OSError:
-        alt_cache = tmp_path_factory.mktemp("hf_cache")
-        datasets_cache = alt_cache / "datasets"
-        datasets_cache.mkdir(exist_ok=True)
-        if cache_dir.exists():
-            try:
-                shutil.copytree(cache_dir, datasets_cache, dirs_exist_ok=True)
-            except OSError:
-                # Best-effort copy; it's fine if it fails (dataset will re-download).
-                pass
-        monkeypatch.setenv("HF_HOME", str(alt_cache))
-        monkeypatch.setenv("HF_DATASETS_CACHE", str(datasets_cache))
-        return datasets_cache
+    shared_cache = _default_cache_dir()
+    isolated_home = tmp_path_factory.mktemp("hf_cache")
+    datasets_cache = isolated_home / "datasets"
+    datasets_cache.mkdir(parents=True, exist_ok=True)
+    if shared_cache.exists():
+        try:
+            shutil.copytree(shared_cache, datasets_cache, dirs_exist_ok=True)
+        except OSError:
+            # Best-effort copy; if it fails we'll re-download when network allows.
+            pass
+    monkeypatch.setenv("HF_HOME", str(isolated_home))
+    monkeypatch.setenv("HF_DATASETS_CACHE", str(datasets_cache))
+    datasets_config.HF_CACHE_HOME = str(isolated_home)
+    datasets_config.HF_DATASETS_CACHE = str(datasets_cache)
+    return datasets_cache
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize("spec", CURATED_SPECS, ids=lambda spec: spec.name)
-def test_hf_sources_resolve_one_record(spec: DatasetSpec, ensured_hf_cache: Path) -> None:  # noqa: ARG001
+def test_hf_sources_resolve_one_record(
+    spec: DatasetSpec, ensured_hf_cache: Path
+) -> None:  # noqa: ARG001
     """
     Ensure each curated dataset can fetch at least one record directly from Hugging Face.
 
@@ -98,12 +108,17 @@ def test_hf_sources_resolve_one_record(spec: DatasetSpec, ensured_hf_cache: Path
         dataset_name=None,
         prefer_presets=True,
     )
-    records = fetch_records_for_slice(
-        slice_request=slice_request,
-        load_kwargs_resolver=handle._load_kwargs_resolver,  # type: ignore[attr-defined]
-        seed=resolve_dataset_seed(None),
-        custom_loader=spec.custom_loader,
-    )
+    try:
+        records = fetch_records_for_slice(
+            slice_request=slice_request,
+            load_kwargs_resolver=handle._load_kwargs_resolver,  # type: ignore[attr-defined]
+            seed=resolve_dataset_seed(None),
+            custom_loader=spec.custom_loader,
+        )
+    except Exception as exc:  # pragma: no cover - exercised in offline environments
+        if _is_hf_offline_error(exc):
+            pytest.skip(f"Hugging Face hub unavailable: {exc}")
+        raise
     assert len(records) == 1
     assert isinstance(records[0], dict)
     assert records[0], "Fetched record should contain data"

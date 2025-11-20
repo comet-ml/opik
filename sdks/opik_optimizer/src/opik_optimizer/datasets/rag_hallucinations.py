@@ -3,7 +3,8 @@ from __future__ import annotations
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset_utils import DatasetHandle, add_record_index
+
 
 RAG_HALLU_SPEC = DatasetSpec(
     name="rag_hallucinations",
@@ -18,6 +19,7 @@ RAG_HALLU_SPEC = DatasetSpec(
             dataset_name="rag_hallucination_train",
         )
     },
+    records_transform=add_record_index,  # de-dupe sensitive dataset, inject ids
 )
 
 _RAG_HALLU_HANDLE = DatasetHandle(RAG_HALLU_SPEC)

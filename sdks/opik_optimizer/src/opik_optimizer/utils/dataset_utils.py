@@ -54,6 +54,11 @@ def attach_uuids(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return payload
 
 
+def add_record_index(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shallow-copy records and inject a stable `_record_index` field for dedup-sensitive datasets."""
+    return [{**record, "_record_index": idx} for idx, record in enumerate(records)]
+
+
 def resolve_dataset_seed(seed: int | None) -> int:
     """Return the provided seed or fall back to the global default (env override)."""
     return seed if seed is not None else int(os.getenv("OPIK_DATASET_SEED", "42"))
@@ -478,6 +483,7 @@ __all__ = [
     "download_and_slice_hf_dataset",
     "fetch_records_for_slice",
     "default_dataset_name",
+    "add_record_index",
     "SliceRequest",
     "resolve_slice_request",
     "resolve_preset_split",

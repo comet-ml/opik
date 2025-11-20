@@ -10,21 +10,21 @@ from opik.api_objects.dataset import Dataset
 
 # Expected size mappings - add expected sizes based on dataset function names
 dataset_sizes = {
-    "driving_hazard_50": 50, # deprecated
-    "driving_hazard_100": 100, # deprecated
-    "driving_hazard_test_split": 100, # deprecated
-    "hotpot_300": 300, # deprecated
-    "hotpot_500": 500, # deprecated
-    "halu_eval_300": 300, # deprecated
+    "driving_hazard_50": 50,  # deprecated
+    "driving_hazard_100": 100,  # deprecated
+    "driving_hazard_test_split": 100,  # deprecated
+    "hotpot_300": 300,  # deprecated
+    "hotpot_500": 500,  # deprecated
+    "halu_eval_300": 300,  # deprecated
     "tiny_test": 5,
     "gsm8k": 300,
     "ai2_arc": 300,
-    "truthful_qa": 300, # deprecated
-    "cnn_dailymail": 100, # deprecated
-    "ragbench_sentence_relevance": 300, # deprecated
-    "election_questions": 300, # deprecated
-    "medhallu": 300, # deprecated
-    "rag_hallucinations": 300, # deprecated
+    "truthful_qa": 300,  # deprecated
+    "cnn_dailymail": 100,  # deprecated
+    "ragbench_sentence_relevance": 300,  # deprecated
+    "election_questions": 300,  # deprecated
+    "medhallu": 300,  # deprecated
+    "rag_hallucinations": 300,  # deprecated
     "context7_eval": 3,
 }
 
