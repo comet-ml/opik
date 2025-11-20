@@ -4,13 +4,6 @@ import isEmpty from "lodash/isEmpty";
 import { ColumnDef, createColumnHelper } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { COLUMN_TYPE, ColumnData, ROW_HEIGHT } from "@/types/shared";
@@ -39,22 +32,15 @@ interface PlaygroundOutputTableProps {
   datasetColumns: DatasetItemColumn[];
   promptIds: string[];
   isLoadingDatasetItems: boolean;
-  size: number;
-  total: number;
-  onChangeSize: (size: number) => void;
 }
 
 const COLUMNS_WIDTH_KEY = "playground-output-table-width-keys";
-const ITEMS_PER_PAGE = [10, 50, 100, 200, 500, 1000];
 
 const PlaygroundOutputTable = ({
   datasetItems,
   promptIds,
   datasetColumns,
   isLoadingDatasetItems,
-  size,
-  total,
-  onChangeSize,
 }: PlaygroundOutputTableProps) => {
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -204,41 +190,17 @@ const PlaygroundOutputTable = ({
   );
 
   return (
-    <div className="flex w-full flex-col pt-10">
-      <div className="flex items-center justify-between py-4">
-        <div className="comet-body-s text-muted-slate">
-          Total items: {total}
-        </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={`${size}`}
-            onValueChange={(value) => onChangeSize(Number(value))}
-          >
-            <SelectTrigger className="h-8 w-auto">
-              <SelectValue placeholder="Select a size" />
-            </SelectTrigger>
-            <SelectContent align="end">
-              {ITEMS_PER_PAGE.map((pageSize) => (
-                <SelectItem key={pageSize} value={`${pageSize}`}>
-                  {pageSize} items
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div
-        className="playground-table overflow-x-auto" // eslint-disable-line tailwindcss/no-custom-classname
-        style={{ "--cell-top-height": "28px" } as React.CSSProperties}
-      >
-        <DataTable
-          columns={columns}
-          data={rows}
-          rowHeight={ROW_HEIGHT.large}
-          resizeConfig={resizeConfig}
-          noData={<DataTableNoData title={noDataMessage} />}
-        />
-      </div>
+    <div
+      className="playground-table overflow-x-auto pt-11" // eslint-disable-line tailwindcss/no-custom-classname
+      style={{ "--cell-top-height": "28px" } as React.CSSProperties}
+    >
+      <DataTable
+        columns={columns}
+        data={rows}
+        rowHeight={ROW_HEIGHT.large}
+        resizeConfig={resizeConfig}
+        noData={<DataTableNoData title={noDataMessage} />}
+      />
     </div>
   );
 };
