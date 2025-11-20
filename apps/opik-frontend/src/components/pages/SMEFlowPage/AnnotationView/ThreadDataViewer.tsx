@@ -10,6 +10,7 @@ import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceM
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import { createFilter } from "@/lib/filters";
+import { TREE_FILTER_COLUMNS } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -93,11 +94,12 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
       // Set filters if we need to filter tool calls
       if (shouldFilterToolCalls) {
+        const typeColumn = TREE_FILTER_COLUMNS[0]; // "type" column
         setTracePanelFilters([
           createFilter({
-            id: "type",
-            field: "type",
-            type: COLUMN_TYPE.category,
+            id: typeColumn.id,
+            field: typeColumn.id,
+            type: typeColumn.type,
             operator: "=",
             value: SPAN_TYPE.tool,
           }),
