@@ -1,1 +1,0 @@
-Thank you for your contribution and the improvements to the README as well as the Korean localization, @RektPunk! Everything looks great. I'm approving and merging this PR.
