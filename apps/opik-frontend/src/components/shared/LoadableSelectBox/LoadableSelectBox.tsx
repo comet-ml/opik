@@ -2,7 +2,7 @@ import React, { ReactElement, useCallback, useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import isArray from "lodash/isArray";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ExternalLink } from "lucide-react";
 
 import {
   Popover,
@@ -274,7 +274,7 @@ export const LoadableSelectBox = ({
                 <div
                   key={option.value}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
+                    "group flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
                     option.description ? "min-h-12 py-2" : "h-10",
                   )}
                   onClick={() => {
@@ -314,6 +314,27 @@ export const LoadableSelectBox = ({
                       </div>
                     )}
                   </div>
+
+                  {option.action && (
+                    <TooltipWrapper content="Open in a new tab">
+                      <Button
+                        type="button"
+                        variant="minimal"
+                        size="icon-xs"
+                        asChild
+                      >
+                        <a
+                          href={option.action.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="size-3.5 shrink-0" />
+                        </a>
+                      </Button>
+                    </TooltipWrapper>
+                  )}
                 </div>
               ))}
             </>

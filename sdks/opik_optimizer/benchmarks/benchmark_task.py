@@ -4,6 +4,12 @@ from pydantic import BaseModel
 
 import opik_optimizer
 
+TaskStatus = Literal["Pending", "Running", "Success", "Failed"]
+TASK_STATUS_PENDING: TaskStatus = "Pending"
+TASK_STATUS_RUNNING: TaskStatus = "Running"
+TASK_STATUS_SUCCESS: TaskStatus = "Success"
+TASK_STATUS_FAILED: TaskStatus = "Failed"
+
 
 class TaskEvaluationResult(BaseModel):
     metrics: list[dict[Literal["metric_name", "score", "timestamp"], Any]]
@@ -18,7 +24,7 @@ class TaskResult(BaseModel):
     optimizer_name: str
     model_name: str
     timestamp_start: float
-    status: Literal["Pending", "Running", "Success", "Failed"]
+    status: TaskStatus
     initial_prompt: opik_optimizer.ChatPrompt | None = None
     initial_evaluation: TaskEvaluationResult | None = None
     optimized_prompt: opik_optimizer.ChatPrompt | None = None

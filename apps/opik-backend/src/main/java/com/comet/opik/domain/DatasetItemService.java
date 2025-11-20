@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
@@ -30,6 +31,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -40,7 +42,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 @ImplementedBy(DatasetItemServiceImpl.class)
 public interface DatasetItemService {
 
-    Mono<Void> save(DatasetItemBatch batch);
+    Mono<Void> verifyDatasetExistsAndSave(DatasetItemBatch batch);
+
+    Mono<Long> saveBatch(UUID datasetId, List<DatasetItem> items);
 
     Mono<Void> createFromTraces(UUID datasetId, Set<UUID> traceIds, TraceEnrichmentOptions enrichmentOptions);
 
@@ -48,6 +52,10 @@ public interface DatasetItemService {
             SpanEnrichmentOptions enrichmentOptions);
 
     Mono<DatasetItem> get(UUID id);
+
+    Mono<Void> patch(UUID id, DatasetItem item);
+
+    Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
     Mono<Void> delete(List<UUID> ids);
 
@@ -78,7 +86,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> save(@NonNull DatasetItemBatch batch) {
+    public Mono<Void> verifyDatasetExistsAndSave(@NonNull DatasetItemBatch batch) {
         if (batch.datasetId() == null && batch.datasetName() == null) {
             return Mono.error(failWithError("dataset_id or dataset_name must be provided"));
         }
@@ -219,6 +227,39 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
     }
 
+    @Override
+    @WithSpan
+    public Mono<Void> patch(@NonNull UUID id, @NonNull DatasetItem item) {
+        return get(id)
+                .flatMap(existingItem -> {
+                    // Build patched item by merging provided fields with existing item
+                    // Only non-null fields from the patch are applied
+                    var builder = existingItem.toBuilder();
+
+                    // Apply patch fields if provided
+                    Optional.ofNullable(item.data()).ifPresent(builder::data);
+                    Optional.ofNullable(item.source()).ifPresent(builder::source);
+                    Optional.ofNullable(item.traceId()).ifPresent(builder::traceId);
+                    Optional.ofNullable(item.spanId()).ifPresent(builder::spanId);
+                    Optional.ofNullable(item.tags()).ifPresent(builder::tags);
+
+                    DatasetItem patchedItem = builder.build();
+
+                    // Save the patched item (ClickHouse INSERT replaces existing rows with same ID)
+                    DatasetItemBatch batch = new DatasetItemBatch(null, existingItem.datasetId(), List.of(patchedItem));
+                    return saveBatch(batch, existingItem.datasetId());
+                })
+                .then();
+    }
+
+    @WithSpan
+    public Mono<Void> batchUpdate(@NonNull DatasetItemBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' dataset items", batchUpdate.ids().size());
+
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), batchUpdate.mergeTags())
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' dataset items", batchUpdate.ids().size()));
+    }
+
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
             Visibility visibility) {
@@ -234,6 +275,18 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dao.getOutputColumns(datasetId, experimentIds)
                 .map(columns -> PageColumns.builder().columns(columns).build())
                 .switchIfEmpty(Mono.just(PageColumns.empty()));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> saveBatch(@NonNull UUID datasetId, @NonNull List<DatasetItem> items) {
+        if (items.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        // Create a batch with the items and save it
+        DatasetItemBatch batch = new DatasetItemBatch(null, datasetId, items);
+        return saveBatch(batch, datasetId);
     }
 
     private Mono<Long> saveBatch(DatasetItemBatch batch, UUID id) {

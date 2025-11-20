@@ -170,6 +170,7 @@ from .dataset_item_page_public import DatasetItemPagePublic
 from .dataset_item_public import DatasetItemPublic
 from .dataset_item_public_source import DatasetItemPublicSource
 from .dataset_item_source import DatasetItemSource
+from .dataset_item_update import DatasetItemUpdate
 from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
@@ -271,6 +272,9 @@ from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .ids_holder import IdsHolder
+from .image_url import ImageUrl
+from .image_url_public import ImageUrlPublic
+from .image_url_write import ImageUrlWrite
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -285,6 +289,9 @@ from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 from .llm_as_judge_message import LlmAsJudgeMessage
+from .llm_as_judge_message_content import LlmAsJudgeMessageContent
+from .llm_as_judge_message_content_public import LlmAsJudgeMessageContentPublic
+from .llm_as_judge_message_content_write import LlmAsJudgeMessageContentWrite
 from .llm_as_judge_message_public import LlmAsJudgeMessagePublic
 from .llm_as_judge_message_public_role import LlmAsJudgeMessagePublicRole
 from .llm_as_judge_message_role import LlmAsJudgeMessageRole
@@ -384,6 +391,8 @@ from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
 from .span_type import SpanType
+from .span_update import SpanUpdate
+from .span_update_type import SpanUpdateType
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
@@ -416,9 +425,11 @@ from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePubl
 from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
 from .trace_thread_page import TraceThreadPage
 from .trace_thread_status import TraceThreadStatus
+from .trace_thread_update import TraceThreadUpdate
 from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
 from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
+from .trace_update import TraceUpdate
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
@@ -433,6 +444,9 @@ from .value_entry_experiment_item_bulk_write_view_source import ValueEntryExperi
 from .value_entry_public import ValueEntryPublic
 from .value_entry_public_source import ValueEntryPublicSource
 from .value_entry_source import ValueEntrySource
+from .video_url import VideoUrl
+from .video_url_public import VideoUrlPublic
+from .video_url_write import VideoUrlWrite
 from .webhook import Webhook
 from .webhook_examples import WebhookExamples
 from .webhook_public import WebhookPublic
@@ -590,6 +604,7 @@ __all__ = [
     "DatasetItemPublic",
     "DatasetItemPublicSource",
     "DatasetItemSource",
+    "DatasetItemUpdate",
     "DatasetItemWrite",
     "DatasetItemWriteSource",
     "DatasetPagePublic",
@@ -684,6 +699,9 @@ __all__ = [
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "IdsHolder",
+    "ImageUrl",
+    "ImageUrlPublic",
+    "ImageUrlWrite",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -698,6 +716,9 @@ __all__ = [
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
     "LlmAsJudgeMessage",
+    "LlmAsJudgeMessageContent",
+    "LlmAsJudgeMessageContentPublic",
+    "LlmAsJudgeMessageContentWrite",
     "LlmAsJudgeMessagePublic",
     "LlmAsJudgeMessagePublicRole",
     "LlmAsJudgeMessageRole",
@@ -795,6 +816,8 @@ __all__ = [
     "SpanPublic",
     "SpanPublicType",
     "SpanType",
+    "SpanUpdate",
+    "SpanUpdateType",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",
@@ -827,9 +850,11 @@ __all__ = [
     "TraceThreadLlmAsJudgeCodeWrite",
     "TraceThreadPage",
     "TraceThreadStatus",
+    "TraceThreadUpdate",
     "TraceThreadUserDefinedMetricPythonCode",
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
+    "TraceUpdate",
     "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
@@ -844,6 +869,9 @@ __all__ = [
     "ValueEntryPublic",
     "ValueEntryPublicSource",
     "ValueEntrySource",
+    "VideoUrl",
+    "VideoUrlPublic",
+    "VideoUrlWrite",
     "Webhook",
     "WebhookExamples",
     "WebhookPublic",

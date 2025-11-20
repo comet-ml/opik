@@ -5,7 +5,7 @@ def halu_eval_300(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the HaluEval dataset.
     """
-    dataset_name = "halu_eval_300" if not test_mode else "halu_eval_300_test"
+    dataset_name = "halu_eval_300_train" if not test_mode else "halu_eval_300_sample"
     nb_items = 300 if not test_mode else 5
 
     client = opik.Opik()
