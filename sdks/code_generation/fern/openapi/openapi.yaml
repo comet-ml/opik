@@ -6192,6 +6192,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6199,10 +6203,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6515,6 +6515,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceFilter_Write"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6522,10 +6526,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6761,6 +6761,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6768,10 +6772,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7055,6 +7055,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7062,10 +7066,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7140,6 +7140,10 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7147,10 +7151,6 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8861,12 +8861,27 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink"
         prompt_versions:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+    ExperimentScore:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     PercentageValues:
       type: object
       properties:
@@ -8894,6 +8909,17 @@ components:
         prompt_name:
           type: string
           readOnly: true
+    ExperimentScore_Write:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     Experiment_Write:
       required:
       - dataset_name
@@ -8924,6 +8950,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore_Write"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Write"
         prompt_versions:
@@ -9553,6 +9583,17 @@ components:
           type: array
           items:
             type: string
+    ExperimentScore_Public:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     Experiment_Public:
       required:
       - dataset_name
@@ -9630,6 +9671,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore_Public"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Public"
         prompt_versions:
@@ -9706,6 +9751,10 @@ components:
         duration:
           $ref: "#/components/schemas/PercentageValues"
         feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        experiment_scores:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
@@ -9801,6 +9850,12 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
+    JsonNode:
+      type: object
     BooleanFeedbackDefinition:
       required:
       - details
@@ -11076,6 +11131,8 @@ components:
       type: object
       properties:
         name:
+          type: string
+        type:
           type: string
     DataPointNumber_Public:
       required:

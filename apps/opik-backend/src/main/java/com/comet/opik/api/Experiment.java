@@ -49,6 +49,7 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentStatus status,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<ExperimentScore> experimentScores,
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(deprecated = true) PromptVersionLink promptVersion,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions){

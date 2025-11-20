@@ -4,6 +4,7 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -35,7 +36,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
 import static com.comet.opik.api.AlertEventType.TRACE_THREAD_FEEDBACK_SCORE;
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -61,7 +61,10 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
 
-    Mono<List<String>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+    Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+
+    record ScoreNameWithType(String name, String type) {
+    }
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -226,6 +229,88 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, author, name
             ) AS names
+            ;
+            """;
+
+    private static final String SELECT_EXPERIMENTS_ALL_SCORE_NAMES = """
+            WITH experiments_dedup AS (
+                SELECT *
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                <if(experiment_ids)>
+                AND id IN :experiment_ids
+                <endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ),
+            experiment_score_names AS (
+                SELECT DISTINCT
+                    JSON_VALUE(score, '$.name') AS name,
+                    'experiment_scores' AS type
+                FROM experiments_dedup AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            ),
+            feedback_score_names AS (
+                SELECT
+                    distinct name
+                FROM (
+                    SELECT
+                        name
+                    FROM feedback_scores
+                    WHERE workspace_id = :workspace_id
+                    <if(project_ids)>
+                    AND project_id IN :project_ids
+                    <endif>
+                    <if(experiment_ids)>
+                    AND entity_id IN (
+                        SELECT DISTINCT ei.trace_id
+                        FROM (
+                            SELECT
+                                trace_id
+                            FROM experiment_items
+                            WHERE workspace_id = :workspace_id
+                            AND experiment_id IN :experiment_ids
+                            ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) ei
+                    )
+                    <endif>
+                    AND entity_type = :entity_type
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                    UNION ALL
+                    SELECT
+                        name
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                    <if(project_ids)>
+                    AND project_id IN :project_ids
+                    <endif>
+                    <if(experiment_ids)>
+                    AND entity_id IN (
+                        SELECT DISTINCT ei.trace_id
+                        FROM (
+                            SELECT
+                                trace_id
+                            FROM experiment_items
+                            WHERE workspace_id = :workspace_id
+                            AND experiment_id IN :experiment_ids
+                            ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) ei
+                    )
+                    <endif>
+                    AND entity_type = :entity_type
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, author, name
+                ) AS names
+            )
+            SELECT name, type FROM experiment_score_names
+            UNION ALL
+            SELECT name, 'feedback_scores' AS type FROM feedback_score_names
+            ORDER BY name
             ;
             """;
 
@@ -568,20 +653,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
+    public Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
-
-            var template = TemplateUtils.newST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
-
+            var template = TemplateUtils.newST(SELECT_EXPERIMENTS_ALL_SCORE_NAMES);
             bindTemplateParam(null, true, experimentIds, template);
-
             var statement = connection.createStatement(template.render());
-
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
-                    .distinct()
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> new ScoreNameWithType(
+                            row.get("name", String.class),
+                            row.get("type", String.class))))
                     .collect(Collectors.toList());
         });
     }

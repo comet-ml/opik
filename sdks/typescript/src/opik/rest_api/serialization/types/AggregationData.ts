@@ -24,6 +24,10 @@ export const AggregationData: core.serialization.ObjectSchema<
         "feedback_scores",
         core.serialization.list(FeedbackScoreAverage).optional(),
     ),
+    experimentScores: core.serialization.property(
+        "experiment_scores",
+        core.serialization.list(FeedbackScoreAverage).optional(),
+    ),
 });
 
 export declare namespace AggregationData {
@@ -34,5 +38,6 @@ export declare namespace AggregationData {
         total_estimated_cost_avg?: number | null;
         duration?: PercentageValues.Raw | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
+        experiment_scores?: FeedbackScoreAverage.Raw[] | null;
     }
 }

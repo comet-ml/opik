@@ -31,13 +31,19 @@ const useCompareExperimentsChartsData = ({
     if (!isCompare) return {};
     return experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
-        acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-          (a, f) => {
-            a[f.name] = f.value;
-            return a;
-          },
-          {},
-        );
+        const feedbackScoresMap = (e.feedback_scores || [])?.reduce<
+          Record<string, number>
+        >((a, f) => {
+          a[`${f.name} (avg)`] = f.value;
+          return a;
+        }, {});
+        const experimentScoresMap = (e.experiment_scores || [])?.reduce<
+          Record<string, number>
+        >((a, f) => {
+          a[f.name] = f.value;
+          return a;
+        }, {});
+        acc[e.id] = { ...feedbackScoresMap, ...experimentScoresMap };
         return acc;
       },
       {},

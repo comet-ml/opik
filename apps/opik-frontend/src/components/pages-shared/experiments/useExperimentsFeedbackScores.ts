@@ -21,11 +21,18 @@ export const useExperimentsFeedbackScores = () => {
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
-      .map<DynamicColumn>((c) => ({
-        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
-        label: c.name,
-        columnType: COLUMN_TYPE.number,
-      }));
+      .map<DynamicColumn>((c) => {
+        const prefix =
+          c.type === "experiment_scores"
+            ? "experiment_scores"
+            : COLUMN_FEEDBACK_SCORES_ID;
+        return {
+          id: `${prefix}.${c.name}`,
+          label: c.name,
+          columnType: COLUMN_TYPE.number,
+          type: c.type,
+        };
+      });
   }, [feedbackScoresData?.scores]);
 
   return {

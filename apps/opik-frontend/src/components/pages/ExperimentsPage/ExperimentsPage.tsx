@@ -26,6 +26,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_DATASET_ID,
@@ -65,7 +66,6 @@ import {
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { formatNumericData } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -191,13 +191,9 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
+    accessorFn: transformExperimentScores,
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
@@ -497,21 +493,37 @@ const ExperimentsPage: React.FC = () => {
         };
       }
       groupExperiments.forEach((experiment) => {
+        const feedbackScoresMap = (experiment.feedback_scores || []).reduce<
+          Record<string, number>
+        >((acc, score) => {
+          acc[`${score.name} (avg)`] = score.value;
+          return acc;
+        }, {});
+
+        const experimentScoresMap = (experiment.experiment_scores || []).reduce<
+          Record<string, number>
+        >((acc, score) => {
+          acc[score.name] = score.value;
+          return acc;
+        }, {});
+
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,
           entityName: experiment.name,
           createdDate: formatDate(experiment.created_at),
-          scores: (experiment.feedback_scores || []).reduce<
-            Record<string, number>
-          >((acc, score) => {
-            acc[score.name] = score.value;
-            return acc;
-          }, {}),
+          scores: { ...feedbackScoresMap, ...experimentScoresMap },
         });
 
+        const feedbackScoreNames = (experiment.feedback_scores || []).map(
+          (s) => `${s.name} (avg)`,
+        );
+        const experimentScoreNames = (experiment.experiment_scores || []).map(
+          (s) => s.name,
+        );
         groupsMap[groupKey].lines = uniq([
           ...groupsMap[groupKey].lines,
-          ...(experiment.feedback_scores || []).map((s) => s.name),
+          ...feedbackScoreNames,
+          ...experimentScoreNames,
         ]);
       });
     });
