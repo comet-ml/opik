@@ -1,5 +1,5 @@
 name: TypeScript SDK Build & Publish
-run-name: "TypeScript SDK ${{ github.event.inputs.version || inputs.version || 'auto' }} from ${{github.ref_name}} by @${{ github.actor }}"
+run-name: "TypeScript SDK Build & Publish ${{ github.event.inputs.version || inputs.version || 'auto' }} from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
   push:
