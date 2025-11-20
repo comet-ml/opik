@@ -19,6 +19,7 @@ interface ExperimentTestContext extends TestContext {
     streamExperiments: MockInstance;
     createExperiment: MockInstance;
     deleteExperiments: MockInstance;
+    updateExperiment: MockInstance;
     getDatasetByIdentifier: MockInstance;
   };
 }
@@ -48,6 +49,10 @@ describe("Opik experiment operations", () => {
       deleteExperiments: vi
         .spyOn(client.api.experiments, "deleteExperimentsById")
         .mockImplementation(mockAPIFunction),
+
+      updateExperiment: vi
+        .spyOn(client.api.experiments, "updateExperiment")
+        .mockImplementation(() => createMockHttpResponsePromise(undefined)),
 
       getDatasetByIdentifier: vi
         .spyOn(client.api.datasets, "getDatasetByIdentifier")
@@ -523,35 +528,37 @@ describe("Opik experiment operations", () => {
   });
 
   describe("updateExperiment", () => {
-    it<ExperimentTestContext>("should update an experiment by ID", async ({ client, expect }) => {
+    it<ExperimentTestContext>("should update an experiment by ID", async ({
+      client,
+      spies,
+      expect,
+    }) => {
       const experimentId = "experiment-to-update-id";
-
-      const spy = vi
-        .spyOn(client.api.experiments, "updateExperiment")
-        .mockImplementation(() => createMockHttpResponsePromise(undefined)); // returns void
 
       await client.updateExperiment(experimentId, "updated-name", { k: "v" });
 
-      expect(spy).toHaveBeenCalledWith(experimentId, {
+      expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
         name: "updated-name",
         metadata: { k: "v" },
       });
     });
 
-    it<ExperimentTestContext>("should handle errors during the update operation", async ({ client, expect }) => {
+    it<ExperimentTestContext>("should handle errors during the update operation", async ({
+      client,
+      spies,
+      expect,
+    }) => {
       const experimentId = "experiment-to-update-error";
 
-      const spy = vi
-        .spyOn(client.api.experiments, "updateExperiment")
-        .mockImplementation(() => {
-          throw new Error("Failed to update experiment");
-        });
+      spies.updateExperiment.mockImplementationOnce(() => {
+        throw new Error("Failed to update experiment");
+      });
 
-      await expect(client.updateExperiment(experimentId, "bad-name", {})).rejects.toThrow(
-        "Failed to update experiment"
-      );
+      await expect(
+        client.updateExperiment(experimentId, "bad-name", {})
+      ).rejects.toThrow("Failed to update experiment");
 
-      expect(spy).toHaveBeenCalledWith(experimentId, {
+      expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
         name: "bad-name",
         metadata: {},
       });
