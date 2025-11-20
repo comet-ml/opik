@@ -1,3 +1,4 @@
+export { DatasetItemBatchUpdate } from "./DatasetItemBatchUpdate";
 export { DatasetWrite } from "./DatasetWrite";
 export { DatasetItemBatchWrite } from "./DatasetItemBatchWrite";
 export { CreateDatasetItemsFromSpansRequest } from "./CreateDatasetItemsFromSpansRequest";
