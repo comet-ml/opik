@@ -88,3 +88,46 @@ jobs:
                 *.log
                 tests/**/*.log
               retention-days: 7 
+
+    dataset-source-check:
+        name: Opik Optimizer Integration Smoke Tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: run-e2e-tests
+
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+
+        steps:
+        - name: Check out code
+          uses: actions/checkout@v4
+
+        - name: Setup Python 3.12
+          uses: actions/setup-python@v5
+          with:
+            python-version: "3.12"
+            cache: 'pip'
+            cache-dependency-path: |
+              sdks/opik_optimizer/pyproject.toml
+              sdks/opik_optimizer/setup.py
+              sdks/opik_optimizer/tests/test_requirements.txt
+
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v4
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
+        - name: Install opik_optimizer
+          run: pip install .
+
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+        - name: Run dataset integration check
+          run: pytest tests/integration/datasets/test_dataset_sources.py -vv
