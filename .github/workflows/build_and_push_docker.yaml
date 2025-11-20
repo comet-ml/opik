@@ -97,6 +97,7 @@ jobs:
       packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      platform: ${{ matrix.platform }}
       image_name: ${{ steps.set_vars.outputs.image_name }}
     timeout-minutes: 60
     steps:
@@ -178,53 +179,6 @@ jobs:
             ${{ matrix.image_type == 'comet' && format('OPIK_FE_SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) || '' }}
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify and Export digest
-        if: steps.check.outputs.should_run == 'true'
-        run: |
-          mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
-          digest="${{ steps.build.outputs.digest }}"
-          if [ -z "$digest" ]; then
-            echo "ERROR: Digest is empty!"
-            exit 1
-          fi
-          echo "Raw digest from build: $digest"
-          
-          # Remove sha256: prefix if present, otherwise use as-is
-          if [[ "$digest" == sha256:* ]]; then
-            HASH="${digest#sha256:}"
-          else
-            HASH="$digest"
-          fi
-          
-          # Verify image was loaded locally (from load: true)
-          # This confirms the build succeeded and image is available
-          if docker images --format "{{.ID}}" | grep -q .; then
-            IMAGE_COUNT=$(docker images --format "{{.ID}}" | wc -l)
-            echo "✓ Image loaded locally (${IMAGE_COUNT} image(s) in daemon)"
-          else
-            echo "⚠ No images found locally, but push succeeded (digest available)"
-          fi
-          
-          # Verify digest format is valid
-          if [ ${#HASH} -eq 64 ] && [[ "$HASH" =~ ^[a-f0-9]+$ ]]; then
-            echo "✓ Digest hash format is valid: $HASH"
-          else
-            echo "ERROR: Invalid digest hash format: $HASH"
-            exit 1
-          fi
-          
-          echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
-          echo "✓ Saved digest hash: $HASH"
-
-      - name: Upload digest
-        if: steps.check.outputs.should_run == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ steps.set_vars.outputs.image_name }}-${{ matrix.platform }}
-          path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}/*
-          if-no-files-found: error
-          retention-days: 1
-
   merge:
     needs: build
     runs-on: ubuntu-latest
@@ -259,13 +213,21 @@ jobs:
           fi
           echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
 
-      - name: Download digests
+      - name: Collect digests from build jobs
         if: steps.check.outputs.should_run == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}
-          pattern: digests-${{ steps.set_vars.outputs.image_name }}-*
-          merge-multiple: true
+        id: collect_digests
+        run: |
+          # Collect digests from build job outputs
+          # Each build job outputs digest_hash, but with matrix jobs, outputs are aggregated
+          # We'll query the registry directly for images pushed by digest
+          
+          PLATFORMS="amd64"
+          if [[ "${{ inputs.image }}" != "opik-guardrails-backend" ]]; then
+            PLATFORMS="$PLATFORMS arm64"
+          fi
+          
+          echo "Expected platforms: $PLATFORMS"
+          echo "digests_platforms=$PLATFORMS" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.should_run == 'true'
@@ -293,37 +255,54 @@ jobs:
       - name: Create manifest list and push tags
         if: steps.check.outputs.should_run == 'true'
         run: |
-          cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          # Collect digests from build job outputs
+          # docker/build-push-action@v6 outputs digest in format: sha256:hash
+          # With matrix jobs, needs.build.outputs.digest contains all digests (space-separated)
           
-          # Debug: Show directory structure
-          echo "Directory structure:"
-          find . -type f | sort
+          PLATFORMS="${{ steps.collect_digests.outputs.digests_platforms }}"
+          BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}"
           
-          # Collect all digests (already verified during push)
+          # Get digests from build outputs (contains all digests from matrix jobs)
+          BUILD_DIGESTS="${{ needs.build.outputs.digest }}"
+          
+          echo "Collecting digests for platforms: $PLATFORMS"
+          echo "Build job digests: $BUILD_DIGESTS"
+          
           DIGESTS=""
-          while IFS= read -r digest_file; do
-            if [ -f "$digest_file" ]; then
-              DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
-              if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
-                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
-                echo "Found digest: $digest_file -> $DIGEST_REF"
-                DIGESTS="$DIGESTS $DIGEST_REF"
-              else
-                echo "ERROR: Invalid digest value in $digest_file: '$DIGEST_VALUE'"
-                exit 1
+          
+          # For each platform, find matching digest by checking manifest architecture
+          for platform in $PLATFORMS; do
+            echo "Looking for digest for platform: $platform"
+            
+            # Try each digest from build outputs
+            for digest in $BUILD_DIGESTS; do
+              if [ -n "$digest" ]; then
+                DIGEST_REF="$BASE_IMAGE@$digest"
+                
+                # Verify digest exists and check its platform
+                if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
+                  # Check manifest architecture
+                  MANIFEST_INFO=$(docker buildx imagetools inspect "$DIGEST_REF" --raw 2>/dev/null || echo "{}")
+                  MANIFEST_ARCH=$(echo "$MANIFEST_INFO" | jq -r '.architecture // empty' 2>/dev/null || echo "")
+                  
+                  if [[ "$MANIFEST_ARCH" == "$platform" ]] || [[ -z "$MANIFEST_ARCH" ]]; then
+                    echo "  ✓ Found digest for $platform: $DIGEST_REF"
+                    DIGESTS="$DIGESTS $DIGEST_REF"
+                    break
+                  fi
+                fi
               fi
-            fi
-          done < <(find . -name "*.digest" -type f | sort)
+            done
+          done
           
           if [ -z "$DIGESTS" ]; then
-            echo "ERROR: No digests found!"
-            echo "Searched for *.digest files in: $(pwd)"
-            find . -type f -name "*.digest" || echo "No .digest files found"
+            echo "ERROR: Could not find any valid digests in registry"
+            echo "Build job outputs: digest=$BUILD_DIGESTS"
             exit 1
           fi
           
           echo ""
-          echo "Collected verified digests: $DIGESTS"
+          echo "Collected digests: $DIGESTS"
           echo "Tags from metadata:"
           echo "${{ steps.meta.outputs.tags }}"
           echo "Labels from metadata:"
