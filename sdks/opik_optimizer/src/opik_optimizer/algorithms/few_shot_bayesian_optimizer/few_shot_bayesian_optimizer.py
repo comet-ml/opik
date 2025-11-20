@@ -229,9 +229,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "baseline_score": baseline_score,
             }
         )
+        # Map dataset parameter to dataset_training for internal consistency
+        dataset_training = dataset
         base_experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset=dataset,
+            dataset_training=dataset_training,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
@@ -461,6 +463,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         project_name: str = "Optimization",
         max_trials: int = 10,
         optimization_id: str | None = None,
+        dataset_validation: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -477,10 +480,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             max_trials: Number of trials for Bayesian Optimization (default: 10)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
+            dataset_validation: Optional validation dataset (not yet supported by this optimizer).
 
         Returns:
             OptimizationResult: Result of the optimization
         """
+        if dataset_validation is not None:
+            logger.warning(
+                f"{self.__class__.__name__} currently does not support validation dataset. "
+                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
+            )
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -615,9 +624,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         additional_metadata = (
             {"optimization_id": optimization_id} if optimization_id else None
         )
+        # Map dataset parameter to dataset_training for internal consistency
+        dataset_training = dataset
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset=dataset,
+            dataset_training=dataset_training,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
