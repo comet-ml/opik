@@ -254,7 +254,7 @@ class PromptServiceImpl implements PromptService {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            return promptDAO.findByName(name, workspaceId);
+            return promptDAO.findByName(name, workspaceId, null);
         });
     }
 
@@ -568,19 +568,10 @@ class PromptServiceImpl implements PromptService {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            Prompt prompt = promptDAO.findByName(name, workspaceId);
+            Prompt prompt = promptDAO.findByName(name, workspaceId, templateStructure);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
-            }
-
-            // Validate template structure if specified (for early error detection)
-            if (templateStructure != null && !prompt.templateStructure().equals(templateStructure)) {
-                String expectedType = templateStructure == TemplateStructure.CHAT ? "chat" : "text";
-                String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "text";
-                throw new BadRequestException(
-                        "Prompt '%s' is a %s prompt, but %s prompt was requested".formatted(
-                                name, actualType, expectedType));
             }
 
             PromptVersion promptVersion;

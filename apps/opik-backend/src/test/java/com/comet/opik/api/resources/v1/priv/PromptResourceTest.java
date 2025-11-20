@@ -2588,9 +2588,9 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Error: should return bad request when template_structure mismatch")
-        void shouldReturnBadRequest_whenTemplateStructureMismatch() {
-            // Create a STRING prompt
+        @DisplayName("Error: should return not found when template_structure mismatch")
+        void shouldReturnNotFound_whenTemplateStructureMismatch() {
+            // Create a TEXT prompt
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -2614,7 +2614,7 @@ class PromptResourceTest {
                     .build();
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            // Try to retrieve it as CHAT prompt - should fail with clear error
+            // Try to retrieve it as CHAT prompt - should return 404 since query filters by template structure
             var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.CHAT);
 
             try (var response = client
@@ -2624,12 +2624,11 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(retrieveRequest))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
                 assertThat(response.hasEntity()).isTrue();
                 var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                assertThat(errorMessage.getMessage())
-                        .contains("is a text prompt, but chat prompt was requested");
+                assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(errorMessage.getMessage()).contains("Prompt not found");
             }
         }
 

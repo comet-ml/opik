@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -172,8 +173,10 @@ interface PromptDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id")
-    Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
+    @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id " +
+            "AND (:templateStructure IS NULL OR template_structure = :templateStructure)")
+    Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId,
+            @Bind("templateStructure") TemplateStructure templateStructure);
 
     @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy, "
             +
