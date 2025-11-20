@@ -69,9 +69,9 @@ jobs:
           run: pytest tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
     dataset-source-check:
-        name: Dataset Integration Smoke Test
+        name: Opik Optimizer Integration Smoke Tests
         runs-on: ubuntu-latest
-        timeout-minutes: 30
+        timeout-minutes: 15
         needs: run-unit-tests
 
         defaults:
