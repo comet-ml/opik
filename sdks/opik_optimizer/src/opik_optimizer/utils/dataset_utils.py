@@ -7,6 +7,7 @@ import time
 import warnings
 import itertools
 from collections.abc import Callable, Iterable, Sequence
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
@@ -16,6 +17,9 @@ import opik
 from datasets import load_dataset
 
 from opik_optimizer.api_objects.types import DatasetSpec
+
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=None)
@@ -387,9 +391,7 @@ def load_hf_dataset_slice(
     use_presets = (
         prefer_presets if prefer_presets is not None else requested_split is not None
     )
-    effective_count = (
-        resolve_test_mode_count(test_mode_count) if test_mode else count
-    )
+    effective_count = resolve_test_mode_count(test_mode_count) if test_mode else count
     slice_request = resolve_slice_request(
         base_name=base_name,
         requested_split=requested_split,
@@ -405,6 +407,18 @@ def load_hf_dataset_slice(
 
     resolved_seed = resolve_dataset_seed(seed)
     effective_test_count = resolve_test_mode_count(test_mode_count)
+
+    logger.info(
+        "Dataset slice resolved: %s (split=%s start=%s count=%s test_mode=%s streaming=%s seed=%s)",
+        slice_request.dataset_name,
+        slice_request.source_split,
+        slice_request.start,
+        slice_request.count,
+        test_mode,
+        os.getenv("OPIK_USE_HF_STREAMING", "true"),
+        resolved_seed,
+    )
+
     records = fetch_records_for_slice(
         slice_request=slice_request,
         load_kwargs_resolver=load_kwargs_resolver,
@@ -419,6 +433,14 @@ def load_hf_dataset_slice(
         records = records_transform(records)
         slice_size = len(records)
         expected_items = effective_test_count if test_mode else slice_size
+    logger.info(
+        "Dataset fetch complete: %s (split=%s fetched=%s expected=%s test_mode=%s)",
+        slice_request.dataset_name,
+        slice_request.source_split,
+        slice_size,
+        expected_items,
+        test_mode,
+    )
     if test_mode:
         records = records[:expected_items]
 
