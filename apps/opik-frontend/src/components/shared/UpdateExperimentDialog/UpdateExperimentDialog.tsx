@@ -35,7 +35,7 @@ export function UpdateExperimentDialog({
   const theme = useCodemirrorTheme({
     editable: true,
   });
-  const [name, setName] = useState("");
+  const [name, setName] = useState(latestName);
   const [configuration, setConfiguration] = useState(
     JSON.stringify(latestConfiguration || {}, null, 2),
   );
@@ -43,14 +43,14 @@ export function UpdateExperimentDialog({
   // Reset state when dialog opens
   useEffect(() => {
     if (open) {
-      setName("");
+      setName(latestName);
       setConfiguration(JSON.stringify(latestConfiguration || {}, null, 2));
     }
-  }, [open, latestConfiguration]);
+  }, [open, latestName, latestConfiguration]);
 
   // Check if any changes have been made
   const hasChanges =
-    name !== "" ||
+    name !== latestName ||
     configuration !== JSON.stringify(latestConfiguration || {}, null, 2);
 
   const handleUpdate = () => {
@@ -66,11 +66,7 @@ export function UpdateExperimentDialog({
       return;
     }
 
-    // Use latestName/Configuration if input is empty
-    onConfirm(
-      name || latestName,
-      parsedConfiguration ?? latestConfiguration ?? {},
-    );
+    onConfirm(name, parsedConfiguration);
   };
 
   return (
@@ -85,7 +81,6 @@ export function UpdateExperimentDialog({
             <Input
               id="name"
               type="text"
-              placeholder={latestName}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
