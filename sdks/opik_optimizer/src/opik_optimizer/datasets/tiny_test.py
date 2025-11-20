@@ -5,7 +5,7 @@ def tiny_test(test_mode: bool = False) -> opik.Dataset:
     """
     Tiny QA benchmark (core_en subset from vincentkoc/tiny_qa_benchmark_pp).
     """
-    dataset_name = "tiny_test" if not test_mode else "tiny_test_test"
+    dataset_name = "tiny_test_train" if not test_mode else "tiny_test_sample"
     nb_items = 5  # keep tiny dataset size consistent with tests/docs
 
     client = opik.Opik()

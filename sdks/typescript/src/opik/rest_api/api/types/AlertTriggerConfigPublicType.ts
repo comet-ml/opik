@@ -6,10 +6,12 @@ export type AlertTriggerConfigPublicType =
     | "scope:project"
     | "threshold:feedback_score"
     | "threshold:cost"
-    | "threshold:latency";
+    | "threshold:latency"
+    | "threshold:errors";
 export const AlertTriggerConfigPublicType = {
     ScopeProject: "scope:project",
     ThresholdFeedbackScore: "threshold:feedback_score",
     ThresholdCost: "threshold:cost",
     ThresholdLatency: "threshold:latency",
+    ThresholdErrors: "threshold:errors",
 } as const;

@@ -38,9 +38,9 @@ export const ALERT_TYPE_ICONS = {
 
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   [ALERT_EVENT_TYPE.trace_errors]: {
-    title: "New error in trace",
+    title: "Trace errors threshold",
     description:
-      "Triggered when a new error is detected in a trace within the selected projects.",
+      "Triggered when the number of trace errors exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_guardrails_triggered]: {
@@ -184,7 +184,7 @@ export const alertTriggersToFormTriggers = (
       trigger.trigger_configs,
     );
 
-    // Extract threshold and window for cost/latency triggers
+    // Extract threshold and window for cost/latency/errors triggers
     let thresholdData = {};
     if (trigger.event_type === ALERT_EVENT_TYPE.trace_cost) {
       thresholdData = getThresholdFromTriggerConfigs(
@@ -194,6 +194,11 @@ export const alertTriggersToFormTriggers = (
     } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_latency) {
       thresholdData = getThresholdFromTriggerConfigs(
         ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
+        trigger.trigger_configs,
+      );
+    } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_errors) {
+      thresholdData = getThresholdFromTriggerConfigs(
+        ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
         trigger.trigger_configs,
       );
     }
@@ -219,7 +224,7 @@ export const formTriggersToAlertTriggers = (
       configs.push(...createProjectScopeTriggerConfig(trigger.projectIds));
     }
 
-    // Add threshold config for cost/latency triggers
+    // Add threshold config for cost/latency/errors triggers
     if (trigger.eventType === ALERT_EVENT_TYPE.trace_cost) {
       configs.push(
         ...createThresholdTriggerConfig(
@@ -232,6 +237,14 @@ export const formTriggersToAlertTriggers = (
       configs.push(
         ...createThresholdTriggerConfig(
           ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
+          trigger.threshold,
+          trigger.window,
+        ),
+      );
+    } else if (trigger.eventType === ALERT_EVENT_TYPE.trace_errors) {
+      configs.push(
+        ...createThresholdTriggerConfig(
+          ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
           trigger.threshold,
           trigger.window,
         ),

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, ExternalLink, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ interface MetricSelectorProps {
   onSelectionChange: (ruleIds: string[] | null) => void;
   datasetId: string | null;
   onCreateRuleClick?: () => void;
+  workspaceName: string;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -29,6 +30,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   onSelectionChange,
   datasetId,
   onCreateRuleClick,
+  workspaceName,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -223,7 +225,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               {filteredRules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                  className="group flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                   onClick={() => handleSelect(rule.id)}
                 >
                   <Checkbox
@@ -232,6 +234,26 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="comet-body-s truncate">{rule.name}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center justify-center rounded">
+                    <TooltipWrapper content="Open in a new tab">
+                      <Button
+                        type="button"
+                        variant="minimal"
+                        size="icon-xs"
+                        asChild
+                      >
+                        <a
+                          href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="size-3.5 shrink-0" />
+                        </a>
+                      </Button>
+                    </TooltipWrapper>
                   </div>
                 </div>
               ))}

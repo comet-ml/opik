@@ -151,6 +151,9 @@ server:
       # Description: The port on which the application HTTP connector listens
       port: 8080
       maxRequestHeaderSize: 16KB
+      # Default: 1m
+      # Description: The maximum idle time for a connection, after which it will be closed.
+      idleTimeout: 1m
   adminConnectors:
     - type: http
       # Default: 8081
@@ -174,6 +177,9 @@ batchOperations:
     # Description: The maximal number of ids to be used for IN clause. Find requests with a larger number of ids will
     # involve the use of temp tables for querying
     maxExperimentInClauseSize: 100
+    # Default: 1000
+    # Description: The batch size for processing CSV files. Dataset items are saved to the database in batches of this size.
+    csvBatchSize: 1000
 
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
@@ -393,6 +399,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
+  # Default: false
+  # Description: Whether or not CSV upload feature is enabled for dataset items
+  csvUploadEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

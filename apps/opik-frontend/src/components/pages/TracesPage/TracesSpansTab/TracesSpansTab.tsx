@@ -17,7 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 import {
-  useMetricDateRangeWithQuery,
+  useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
@@ -250,7 +250,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQuery({});
+  } = useMetricDateRangeWithQueryAndStorage();
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -417,10 +417,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
-
-  const clearRowSelection = useCallback(() => {
-    setRowSelection({});
-  }, []);
 
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
@@ -922,7 +918,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
-            onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <MetricDateRangeSelect

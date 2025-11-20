@@ -23,7 +23,6 @@ data:
     limit_req_log_level info;
     limit_req_status 429;
     map_hash_bucket_size 256;
-    client_max_body_size 500M;
   {{- with .Values.component.frontend.additionalNginxSettings }}
     {{- . | nindent 4 }}
   {{- end }}
@@ -73,6 +72,12 @@ data:
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name localhost;
         
+        # Increased to 2GB to support large CSV uploads (OPIK-3077)
+        client_max_body_size {{ .Values.component.frontend.clientMaxBodySize | default "500M" }};
+        
+        # Add custom header to identify this nginx instance in multi-proxy setups
+        add_header X-Opik-Nginx "frontend" always;
+        
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
 
         location @api {
@@ -91,6 +96,7 @@ data:
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
+        
         location ^~ {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }

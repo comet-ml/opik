@@ -7,8 +7,10 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
@@ -4139,6 +4141,300 @@ class DatasetsResourceTest {
     }
 
     @Nested
+    @DisplayName("Batch update dataset items:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchUpdateDatasetItems {
+
+        @Test
+        @DisplayName("Success: batch add tags with merge")
+        void batchUpdateDatasetItems__whenAddingTagsWithMerge__thenSucceed() {
+            // Create items with different initial tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("existing1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("existing2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of())
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("existing1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("existing2");
+            assertThat(retrieved3.tags()).isEmpty();
+
+            // Batch add tags with merge
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(item1.id(), item2.id(), item3.id()))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("newtag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were merged
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("existing1", "newtag");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("existing2", "newtag");
+            assertThat(updated3.tags()).containsExactlyInAnyOrder("newtag");
+        }
+
+        @Test
+        @DisplayName("Success: batch replace tags without merge")
+        void batchUpdateDatasetItems__whenReplacingTagsWithoutMerge__thenSucceed() {
+            // Create items with initial tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("old1", "old2"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("old3", "old4"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("old1", "old2");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("old3", "old4");
+
+            // Batch replace tags without merge
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(item1.id(), item2.id()))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("new1", "new2"))
+                            .build())
+                    .mergeTags(false)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were replaced
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("new1", "new2");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("new1", "new2");
+        }
+
+        @Test
+        @DisplayName("Error: batch update with empty ids")
+        void batchUpdateDatasetItems__whenEmptyIds__thenBadRequest() {
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of())
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: batch update exceeds max size")
+        void batchUpdateDatasetItems__whenExceedsMaxSize__thenBadRequest() {
+            // Create more than 1000 IDs
+            var tooManyIds = new HashSet<UUID>();
+            for (int i = 0; i < 1001; i++) {
+                tooManyIds.add(UUID.randomUUID());
+            }
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(tooManyIds)
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: batch update by filters with merge tags")
+        void batchUpdateDatasetItems__whenUsingFiltersWithMerge__thenSucceed() {
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("include", "tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("include", "tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("exclude", "tag3"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("include", "tag2");
+            assertThat(retrieved3.tags()).containsExactlyInAnyOrder("exclude", "tag3");
+
+            // Create filter to match items with "include" tag
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+
+            // Batch update by filters with merge
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("newtag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify only items matching filters were updated
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
+            assertThat(updated3.tags()).containsExactlyInAnyOrder("exclude", "tag3"); // unchanged
+        }
+
+        @Test
+        @DisplayName("Success: batch update by filters automatically merges tags even when mergeTags is false")
+        void batchUpdateDatasetItems__whenUsingFiltersWithMergeFalse__thenAutoMerges() {
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("include", "tag1"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("include", "tag2"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other"))
+                    .build();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(List.of(item1, item2, item3))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Verify initial state
+            var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(retrieved1.tags()).containsExactlyInAnyOrder("include", "tag1");
+            assertThat(retrieved2.tags()).containsExactlyInAnyOrder("include", "tag2");
+            assertThat(retrieved3.tags()).containsExactlyInAnyOrder("other");
+
+            // Create filter to match items with "include" tag
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+
+            // Batch update by filters with mergeTags=false (should auto-set to true)
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("newtag"))
+                            .build())
+                    .mergeTags(false) // This will be automatically set to true
+                    .build();
+
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify tags were merged (not replaced) for items matching filters
+            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
+            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
+            assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
+            assertThat(updated3.tags()).containsExactlyInAnyOrder("other"); // Unchanged
+        }
+
+        @Test
+        @DisplayName("Error: batch update with both ids and filters")
+        void batchUpdateDatasetItems__whenBothIdsAndFilters__thenBadRequest() {
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag");
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(UUID.randomUUID()))
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: batch update with neither ids nor filters")
+        void batchUpdateDatasetItems__whenNeitherIdsNorFilters__thenBadRequest() {
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: batch update with empty filters")
+        void batchUpdateDatasetItems__whenEmptyFilters__thenBadRequest() {
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .filters(List.of())
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Delete items:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteDatasetItems {
@@ -7775,6 +8071,213 @@ class DatasetsResourceTest {
                         .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
                         .isEqualTo(1);
             });
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Experiment Items Sorting and Filtering: OPIK-2936")
+    class ExperimentItemsSortingAndFiltering {
+
+        @Test
+        @DisplayName("should sort experiment items by total_estimated_cost in descending order")
+        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSorted() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces and spans with costs
+            var costValues = List.of(
+                    BigDecimal.valueOf(10.50),
+                    BigDecimal.valueOf(25.75),
+                    BigDecimal.valueOf(5.25));
+
+            // Create traces using PodamFactoryUtils
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            // Create spans in batch
+            var spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i))
+                            .totalEstimatedCost(costValues.get(i))
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Create experiment
+            var experimentId = GENERATOR.generate();
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query with sorting by total_estimated_cost DESC
+            var sorting = toURLEncodedQueryParam(
+                    List.of(new SortingField("total_estimated_cost", Direction.DESC)));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sorting)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.content()).hasSize(3);
+
+                // Verify sorting order: 25.75, 10.50, 5.25
+                var costs = actualPage.content().stream()
+                        .map(item -> item.experimentItems().get(0).totalEstimatedCost())
+                        .toList();
+
+                assertThat(costs).hasSize(3);
+                assertThat(costs.get(0)).isEqualByComparingTo(BigDecimal.valueOf(25.75));
+                assertThat(costs.get(1)).isEqualByComparingTo(BigDecimal.valueOf(10.50));
+                assertThat(costs.get(2)).isEqualByComparingTo(BigDecimal.valueOf(5.25));
+            }
+        }
+
+        @Test
+        @DisplayName("should sort experiment items by usage.total_tokens in ascending order")
+        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSorted() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces and spans with usage data
+            var usageValues = List.of(
+                    Map.of("total_tokens", 150, "prompt_tokens", 100, "completion_tokens", 50),
+                    Map.of("total_tokens", 50, "prompt_tokens", 30, "completion_tokens", 20),
+                    Map.of("total_tokens", 100, "prompt_tokens", 60, "completion_tokens", 40));
+
+            // Create traces using PodamFactoryUtils
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            // Create spans in batch
+            var spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i))
+                            .usage(usageValues.get(i))
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Create experiment
+            var experimentId = GENERATOR.generate();
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query with sorting by usage.total_tokens ASC
+            var sorting = toURLEncodedQueryParam(
+                    List.of(new SortingField("usage.total_tokens", Direction.ASC)));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sorting)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.content()).hasSize(3);
+
+                // Verify sorting order: 50, 100, 150
+                var tokens = actualPage.content().stream()
+                        .map(item -> item.experimentItems().get(0).usage().get("total_tokens"))
+                        .toList();
+
+                assertThat(tokens).containsExactly(50L, 100L, 150L);
+            }
         }
     }
 }
