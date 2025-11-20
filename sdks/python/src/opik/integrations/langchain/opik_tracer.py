@@ -256,7 +256,9 @@ class OpikTracer(BaseTracer):
                 root_run_external_parent_span_id
             )
 
-    def _track_root_run(self, run_dict: Dict[str, Any]) -> TrackRootRunResult:
+    def _track_root_run(
+        self, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
+    ) -> TrackRootRunResult:
         run_metadata = _get_run_metadata(run_dict)
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
         self._update_thread_id_from_metadata(run_dict)
@@ -309,11 +311,16 @@ class OpikTracer(BaseTracer):
             )
 
         return self._initialize_span_and_trace_from_scratch(
-            run_dict=run_dict, root_metadata=root_metadata
+            run_dict=run_dict,
+            root_metadata=root_metadata,
+            allow_duplicating_root_span=allow_duplicating_root_span,
         )
 
     def _initialize_span_and_trace_from_scratch(
-        self, run_dict: Dict[str, Any], root_metadata: Dict[str, Any]
+        self,
+        run_dict: Dict[str, Any],
+        root_metadata: Dict[str, Any],
+        allow_duplicating_root_span: bool,
     ) -> TrackRootRunResult:
         trace_data = trace.TraceData(
             name=run_dict["name"],
@@ -325,7 +332,7 @@ class OpikTracer(BaseTracer):
         )
 
         # Skip creating a span for LangGraph root runs - children will be attached directly to trace
-        if _is_root_run(run_dict):
+        if _is_root_run(run_dict) and not allow_duplicating_root_span:
             return TrackRootRunResult(
                 new_trace_data=trace_data,
                 new_span_data=None,
@@ -417,20 +424,26 @@ class OpikTracer(BaseTracer):
         self._externally_created_traces_ids.add(span_data.trace_id)
         return span_data
 
-    def _process_start_span(self, run: Run) -> None:
+    def _process_start_span(self, run: Run, allow_duplicating_root_span: bool) -> None:
         try:
-            self._process_start_span_unsafe(run)
+            self._process_start_span_unsafe(run, allow_duplicating_root_span)
         except Exception as e:
             LOGGER.error("Failed during _process_start_span: %s", e, exc_info=True)
 
-    def _process_start_span_unsafe(self, run: Run) -> None:
+    def _process_start_span_unsafe(
+        self, run: Run, allow_duplicating_root_span: bool
+    ) -> None:
         run_dict: Dict[str, Any] = run.dict()
 
         if not run.parent_run_id:
-            self._create_root_trace_and_span(run_id=run.id, run_dict=run_dict)
+            self._create_root_trace_and_span(
+                run_id=run.id,
+                run_dict=run_dict,
+                allow_duplicating_root_span=allow_duplicating_root_span,
+            )
             return
 
-        # Check if the parent is a skipped LangGraph root run.
+        # Check if the parent is a skipped LangGraph/LangChain root run.
         # If so, attach children directly to trace.
         # Otherwise, attach to the parent span.
         if run.parent_run_id in self._skipped_langgraph_root_run_ids:
@@ -445,7 +458,7 @@ class OpikTracer(BaseTracer):
             )
 
     def _create_root_trace_and_span(
-        self, run_id: UUID, run_dict: Dict[str, Any]
+        self, run_id: UUID, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
     ) -> None:
         """
         Creates a root trace and span for a given run and stores the relevant trace and span
@@ -456,7 +469,7 @@ class OpikTracer(BaseTracer):
         trace data is stored in local storage for future reference.
         """
         # This is the first run for the chain.
-        root_run_result = self._track_root_run(run_dict)
+        root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
         if root_run_result.new_trace_data is not None:
             self._opik_context_storage.set_trace_data(root_run_result.new_trace_data)
             if (
@@ -758,7 +771,7 @@ class OpikTracer(BaseTracer):
         if self._skip_tracking():
             return
 
-        self._process_start_span(run)
+        self._process_start_span(run, allow_duplicating_root_span=True)
 
     def on_chat_model_start(
         self,
@@ -818,7 +831,7 @@ class OpikTracer(BaseTracer):
         if self._skip_tracking():
             return
 
-        self._process_start_span(run)
+        self._process_start_span(run, allow_duplicating_root_span=True)
 
     def _on_llm_end(self, run: Run) -> None:
         """Process the LLM Run."""
@@ -839,7 +852,7 @@ class OpikTracer(BaseTracer):
         if self._skip_tracking():
             return
 
-        self._process_start_span(run)
+        self._process_start_span(run, allow_duplicating_root_span=False)
 
     def _on_chain_end(self, run: Run) -> None:
         """Process the Chain Run."""
@@ -860,7 +873,7 @@ class OpikTracer(BaseTracer):
         if self._skip_tracking():
             return
 
-        self._process_start_span(run)
+        self._process_start_span(run, allow_duplicating_root_span=True)
 
     def _on_tool_end(self, run: Run) -> None:
         """Process the Tool Run."""

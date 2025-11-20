@@ -6,7 +6,9 @@ import pydantic
 import opik
 from ...testlib import (
     ANY_BUT_NONE,
+    ANY_STRING,
     ANY_DICT,
+    SpanModel,
     TraceModel,
     assert_equal,
 )
@@ -75,7 +77,23 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
-        spans=[],
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="ChatOpenAI",
+                input=ANY_BUT_NONE,
+                output=ANY_BUT_NONE,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                spans=[],
+                provider="openai",
+                model=ANY_STRING.starting_with("gpt-4o"),
+            ),
+        ],
     )
 
     assert len(fake_backend.trace_trees) == 1
