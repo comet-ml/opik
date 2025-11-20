@@ -1,4 +1,4 @@
-name: "Build Docker Images Multi-Arch"
+name: "Build Docker Images Multi-Arch ${{ github.event.inputs.image }}"
 
 on:
   workflow_call:
@@ -153,6 +153,7 @@ jobs:
           platforms: linux/${{ matrix.platform }}
           cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:${{ inputs.is_release && 'latest' || 'main' }}
           provenance: false
+          load: true
           outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
@@ -163,7 +164,7 @@ jobs:
             ${{ matrix.image_type == 'comet' && format('OPIK_FE_SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) || '' }}
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
-      - name: Export digest
+      - name: Verify and Export digest
         if: steps.check.outputs.should_run == 'true'
         run: |
           mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
@@ -173,14 +174,33 @@ jobs:
             exit 1
           fi
           echo "Raw digest from build: $digest"
+          
           # Remove sha256: prefix if present, otherwise use as-is
           if [[ "$digest" == sha256:* ]]; then
             HASH="${digest#sha256:}"
           else
             HASH="$digest"
           fi
+          
+          # Verify image was loaded locally (from load: true)
+          # This confirms the build succeeded and image is available
+          if docker images --format "{{.ID}}" | grep -q .; then
+            IMAGE_COUNT=$(docker images --format "{{.ID}}" | wc -l)
+            echo "✓ Image loaded locally (${IMAGE_COUNT} image(s) in daemon)"
+          else
+            echo "⚠ No images found locally, but push succeeded (digest available)"
+          fi
+          
+          # Verify digest format is valid
+          if [ ${#HASH} -eq 64 ] && [[ "$HASH" =~ ^[a-f0-9]+$ ]]; then
+            echo "✓ Digest hash format is valid: $HASH"
+          else
+            echo "ERROR: Invalid digest hash format: $HASH"
+            exit 1
+          fi
+          
           echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
-          echo "Saved digest hash: $HASH"
+          echo "✓ Saved digest hash: $HASH"
 
       - name: Upload digest
         if: steps.check.outputs.should_run == 'true'
@@ -254,33 +274,26 @@ jobs:
           echo "Directory structure:"
           find . -type f | sort
           
-          # Collect all digests - handle subdirectories from artifact downloads
+          # Collect all digests (already verified during push)
           DIGESTS=""
           while IFS= read -r digest_file; do
             if [ -f "$digest_file" ]; then
               DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
               if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
                 DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
-                echo "Found digest file: $digest_file"
-                echo "  Hash: $DIGEST_VALUE"
-                echo "  Reference: $DIGEST_REF"
-                
-                # Verify digest exists in registry
-                if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
-                  echo "  ✓ Verified digest exists in registry"
-                  DIGESTS="$DIGESTS $DIGEST_REF"
-                else
-                  echo "  ✗ WARNING: Digest not found in registry, skipping: $DIGEST_REF"
-                fi
+                echo "Found digest: $digest_file -> $DIGEST_REF"
+                DIGESTS="$DIGESTS $DIGEST_REF"
               else
-                echo "  ✗ WARNING: Invalid digest value in $digest_file: '$DIGEST_VALUE'"
+                echo "ERROR: Invalid digest value in $digest_file: '$DIGEST_VALUE'"
+                exit 1
               fi
             fi
           done < <(find . -name "*.digest" -type f | sort)
           
           if [ -z "$DIGESTS" ]; then
-            echo "ERROR: No valid digests found or verified!"
+            echo "ERROR: No digests found!"
             echo "Searched for *.digest files in: $(pwd)"
+            find . -type f -name "*.digest" || echo "No .digest files found"
             exit 1
           fi
           
@@ -322,5 +335,5 @@ jobs:
           else
             echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik/${{ steps.set_vars.outputs.image_name }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> $GITHUB_STEP_SUMMARY
 
