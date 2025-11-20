@@ -5,6 +5,7 @@ import os
 import secrets
 import time
 import warnings
+import itertools
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -142,6 +143,28 @@ def download_and_slice_hf_dataset(
     return subset.to_list()
 
 
+def stream_records_for_slice(
+    *,
+    load_fn: Callable[..., Any],
+    load_kwargs: dict[str, Any],
+    start: int,
+    count: int | None,
+) -> list[dict[str, Any]]:
+    """
+    Stream from HF without downloading full shards.
+    """
+    streaming_set = load_fn(streaming=True, **load_kwargs)
+    iterator = iter(streaming_set)
+
+    if start:
+        iterator = itertools.islice(iterator, start, None)
+
+    if count is None:
+        return list(iterator)
+
+    return list(itertools.islice(iterator, count))
+
+
 def fetch_records_for_slice(
     *,
     slice_request: SliceRequest,
@@ -170,6 +193,20 @@ def fetch_records_for_slice(
         )
 
     load_kwargs = load_kwargs_resolver(slice_request.source_split)
+
+    use_streaming = os.getenv("OPIK_USE_HF_STREAMING", "false").lower() == "true"
+    if use_streaming:
+        try:
+            return stream_records_for_slice(
+                load_fn=load_fn,
+                load_kwargs=load_kwargs,
+                start=slice_request.start,
+                count=slice_request.count,
+            )
+        except Exception:
+            # If streaming is unavailable for this dataset, fall back to full download.
+            pass
+
     return download_and_slice_hf_dataset(
         load_fn=load_fn,
         load_kwargs=load_kwargs,
