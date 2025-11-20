@@ -31,6 +31,7 @@ help:
 	@echo "  install      Install package"
 	@echo "  install-dev  Install package with dev dependencies"
 	@echo "  test         Run tests"
+	@echo "  profile      Profile unit tests (cProfile via pytest-profiling)"
 	@echo "  precommit    Run pre-commit hooks on all files"
 	@echo "  build        Build sdist and wheel"
 	@echo "  clean        Remove build artifacts and virtualenv"
@@ -50,7 +51,11 @@ install-dev:
 # Disable LiteLLM disk cache to avoid RO sqlite errors during tests.
 test:
 	$(call warn_if_no_venv)
-	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest --cov=opik_optimizer --cov-report=term-missing --cov-report=xml --cov-report=html
+	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile --cov=opik_optimizer --cov-report=term-missing --cov-report=xml --cov-report=html
+
+profile:
+	$(call warn_if_no_venv)
+	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile tests/unit --profile --maxfail=1
 
 precommit:
 	$(call warn_if_no_venv)
