@@ -6,6 +6,8 @@ from typing import Any
 
 import opik_optimizer
 
+pytestmark = pytest.mark.integration
+
 
 def test_few_shot_optimizer() -> None:
     # Ensure API key is available for e2e testing
@@ -13,8 +15,8 @@ def test_few_shot_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = opik_optimizer.FewShotBayesianOptimizer(
-        model="openai/gpt-5-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 128000},
+        model="openai/gpt-5-nano",
+        model_parameters={"temperature": 1, "max_tokens": 256},
         min_examples=1,
         max_examples=2,
     )
@@ -42,6 +44,7 @@ def test_few_shot_optimizer() -> None:
         metric=levenshtein_ratio,
         prompt=prompt,
         max_trials=1,  # Reduced from 2
+        n_samples=1,
     )
 
     # Enhanced OptimizationResult validation

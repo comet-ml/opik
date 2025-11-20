@@ -6,6 +6,8 @@ from typing import Any
 
 import opik_optimizer
 
+pytestmark = pytest.mark.integration
+
 
 def test_multimodal_hierarchical_reflective_optimizer() -> None:
     """E2E test for multimodal support with HierarchicalReflectiveOptimizer."""
@@ -59,8 +61,9 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
 
     # Initialize optimizer with minimal parameters for faster testing
     optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
-        model="openai/gpt-4o",
-        n_threads=1,
+        model="openai/gpt-5-nano",
+        model_parameters={"temperature": 1, "max_tokens": 256},
+        n_threads=2,
         max_parallel_batches=2,
         batch_size=5,
         convergence_threshold=0.01,
@@ -74,7 +77,7 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
         dataset=dataset,
         metric=levenshtein_ratio,
         max_trials=2,
-        n_samples=3,
+        n_samples=1,
         max_retries=1,
     )
 

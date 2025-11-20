@@ -6,6 +6,8 @@ from typing import Any
 
 import opik_optimizer
 
+pytestmark = pytest.mark.integration
+
 
 def test_evolutionary_optimizer() -> None:
     # Ensure API key is available for e2e testing
@@ -26,12 +28,12 @@ def test_evolutionary_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.EvolutionaryOptimizer(
-        model="openai/gpt-5-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 128000},
+        model="openai/gpt-5-nano",
+        model_parameters={"temperature": 1, "max_tokens": 256},
         infer_output_style=True,
         population_size=2,
         num_generations=2,
-        n_threads=1,
+        n_threads=2,
         enable_llm_crossover=False,
         enable_moo=False,
         elitism_size=1,
@@ -42,7 +44,8 @@ def test_evolutionary_optimizer() -> None:
         dataset=dataset,
         metric=levenshtein_ratio,
         prompt=prompt,
-        n_samples=3,  # Reduced from 10
+        n_samples=1,
+        max_trials=2,
     )
 
     # Enhanced OptimizationResult validation

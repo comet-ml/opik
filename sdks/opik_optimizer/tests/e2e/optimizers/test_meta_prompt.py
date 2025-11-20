@@ -6,6 +6,8 @@ from typing import Any
 
 import opik_optimizer
 
+pytestmark = pytest.mark.integration
+
 
 def test_metaprompt_optimizer() -> None:
     # Ensure API key is available for e2e testing
@@ -25,16 +27,20 @@ def test_metaprompt_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.MetaPromptOptimizer(
-        model="openai/gpt-5-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 128000},
-        n_threads=1,
+        model="openai/gpt-5-nano",
+        model_parameters={"temperature": 1, "max_tokens": 256},
+        n_threads=2,
         prompts_per_round=2,  # Reduced from 4
         seed=42,
     )
 
     # Run optimization with reduced sample size
     results = optimizer.optimize_prompt(
-        dataset=dataset, metric=levenshtein_ratio, prompt=prompt, n_samples=3
+        dataset=dataset,
+        metric=levenshtein_ratio,
+        prompt=prompt,
+        n_samples=1,
+        max_trials=2,
     )
 
     # Enhanced OptimizationResult validation
