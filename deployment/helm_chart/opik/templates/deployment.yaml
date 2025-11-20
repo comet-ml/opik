@@ -135,7 +135,7 @@ spec:
           volumeMounts:
           {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
             - name: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.volume.name "ca-trust-store" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
-              subPath: cacerts
+              subPath: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.subPath "cacerts" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
               mountPath: /etc/pki/ca-trust/extracted/java/cacerts
           {{- end }}
           {{- with $value.volumeMounts }}
@@ -198,7 +198,7 @@ spec:
           volumeMounts:
           {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
             - name: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.volume.name "ca-trust-store" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
-              subPath: cacerts
+              subPath: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.subPath "cacerts" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}
               mountPath: /etc/pki/ca-trust/extracted/java/cacerts
           {{- end }}
           {{- with $value.volumeMounts }}

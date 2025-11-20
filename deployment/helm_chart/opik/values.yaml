@@ -54,11 +54,12 @@ caCerts:
     # Store to replace the default one in the containers.
     enabled: false
     # -- A Kubernetes Volume definition which will contain a valid Java Trust
-    # Store. The volume must contain a truststore named `cacerts`. See
+    # Store. See
     # https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/
     # for valid parameters.
-    # Only the sub path `cacerts` will be mounted.
     volume: {}
+    # -- The sub-path of the valid Java Trust Store to mount from the volume.
+    subPath: cacerts
 
 
 component:
