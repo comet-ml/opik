@@ -350,18 +350,18 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
 
     @RequiredArgsConstructor
     @Getter
-    private enum Operator {
+    public enum Operator {
         GREATER_THAN(">"),
         LESS_THAN("<"),
         ;
 
         @JsonValue
-        private final String queryParamOperator;
+        private final String value;
 
         @JsonCreator
         public static Operator fromString(String value) {
             return Arrays.stream(values())
-                    .filter(enumValue -> enumValue.queryParamOperator.equals(value))
+                    .filter(enumValue -> enumValue.value.equals(value))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown Operator '%s'".formatted(value)));
         }

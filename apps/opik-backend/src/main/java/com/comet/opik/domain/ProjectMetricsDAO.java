@@ -845,11 +845,21 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result
-                            .map((row, metadata) -> Optional.ofNullable(row.get(rowName, BigDecimal.class))))
+                            .map((row, metadata) -> Optional
+                                    .ofNullable(getOptionalValue(row, rowName, BigDecimal.class))))
                     .next()
                     .mapNotNull(opt -> opt.orElse(null))
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
+        try {
+            return row.get(columnName, type);
+        } catch (Exception e) {
+            // Column doesn't exist in this query result - return null
+            return null;
+        }
     }
 
     private Mono<? extends Result> getMetric(
