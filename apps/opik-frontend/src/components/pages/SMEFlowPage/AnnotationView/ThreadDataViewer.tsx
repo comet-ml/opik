@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { JsonParam, useQueryParam } from "use-query-params";
 import { Loader2 } from "lucide-react";
 import last from "lodash/last";
-import { Thread } from "@/types/traces";
+import { SPAN_TYPE, Thread } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
@@ -99,7 +99,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
             field: "type",
             type: COLUMN_TYPE.category,
             operator: "=",
-            value: "tool",
+            value: SPAN_TYPE.tool,
           }),
         ]);
       } else {
