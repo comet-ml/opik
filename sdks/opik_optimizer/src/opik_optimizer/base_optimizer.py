@@ -169,20 +169,51 @@ class BaseOptimizer(ABC):
     def _setup_agent_class(
         self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
     ) -> Any:
-        """
-        Setup agent class for optimization.
+        """Resolve the agent class used for prompt evaluations.
+
+        Ensures custom implementations inherit from :class:`OptimizableAgent` and that
+        the optimizer reference is always available to track metrics.
 
         Args:
-            prompt: The chat prompt
-            agent_class: Optional custom agent class
+            prompt: The chat prompt driving the agent instance.
+            agent_class: Optional custom agent class supplied by the caller.
 
         Returns:
-            The agent class to use
+            The agent class to instantiate for dataset evaluations.
         """
         if agent_class is None:
             return create_litellm_agent_class(prompt, optimizer_ref=self)
-        else:
-            return agent_class
+        if not issubclass(agent_class, OptimizableAgent):
+            raise TypeError(
+                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
+            )
+        return agent_class
+
+    def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
+        """Attach this optimizer to the agent instance without mutating the class."""
+        try:
+            agent.optimizer = self  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - custom agents may forbid new attrs
+            logger.debug(
+                "Unable to record optimizer on agent instance of %s",
+                agent.__class__.__name__,
+            )
+        return agent
+
+    def _instantiate_agent(
+        self,
+        *args: Any,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
+    ) -> OptimizableAgent:
+        """
+        Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
+        """
+        resolved_class = agent_class or getattr(self, "agent_class", None)
+        if resolved_class is None:
+            raise ValueError("agent_class must be provided before instantiation")
+        agent = resolved_class(*args, **kwargs)
+        return self._bind_optimizer_to_agent(agent)
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -326,17 +357,33 @@ class BaseOptimizer(ABC):
 
         return helpers.drop_none(metadata)
 
-    def _build_optimization_config(self) -> dict[str, Any]:
+    def _build_optimization_metadata(
+        self, agent_class: type[OptimizableAgent] | None = None
+    ) -> dict[str, Any]:
         """
         Build metadata dictionary for optimization creation to be used when
         creating Opik optimizations.
 
+        Args:
+            agent_class: Optional agent class. If None, will try to get from self.agent_class.
+
         Returns:
-            Dictionary with 'optimizer' and optionally 'name' keys.
+            Dictionary with 'optimizer' and optionally 'agent_class' keys.
         """
         metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
         if self.name:
             metadata["name"] = self.name
+
+        # Try to get agent_class name from parameter or instance
+        agent_class_name: str | None = None
+        if agent_class is not None:
+            agent_class_name = getattr(agent_class, "__name__", None)
+        elif hasattr(self, "agent_class") and self.agent_class is not None:
+            agent_class_name = getattr(self.agent_class, "__name__", None)
+
+        if agent_class_name:
+            metadata["agent_class"] = agent_class_name
+
         return metadata
 
     def _prepare_experiment_config(
@@ -486,7 +533,7 @@ class BaseOptimizer(ABC):
         else:
             self.agent_class = agent_class
 
-        agent = self.agent_class(prompt)
+        agent = self._instantiate_agent(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)

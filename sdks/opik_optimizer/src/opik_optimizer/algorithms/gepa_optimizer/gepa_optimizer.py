@@ -270,8 +270,8 @@ class GepaOptimizer(BaseOptimizer):
                 client=opik_client,
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
+                metadata=self._build_optimization_metadata(agent_class=agent_class),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             ) as optimization:
                 try:
@@ -554,7 +554,9 @@ class GepaOptimizer(BaseOptimizer):
                 final_agent_cls = create_litellm_agent_class(
                     final_prompt, optimizer_ref=self
                 )
-                final_agent = final_agent_cls(final_prompt)
+                final_agent = self._instantiate_agent(
+                    final_prompt, agent_class=final_agent_cls
+                )
 
                 def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
                     messages = final_prompt.get_messages(dataset_item)
@@ -610,7 +612,7 @@ class GepaOptimizer(BaseOptimizer):
         try:
             analysis_prompt = final_prompt.copy()
             agent_cls = create_litellm_agent_class(analysis_prompt, optimizer_ref=self)
-            agent = agent_cls(analysis_prompt)
+            agent = self._instantiate_agent(analysis_prompt, agent_class=agent_cls)
             for item in items:
                 messages = analysis_prompt.get_messages(item)
                 output_text = agent.invoke(messages).strip()
@@ -770,7 +772,7 @@ class GepaOptimizer(BaseOptimizer):
 
         agent_class = create_litellm_agent_class(prompt, optimizer_ref=self)
         self.agent_class = agent_class
-        agent = agent_class(prompt)
+        agent = self._instantiate_agent(prompt, agent_class=agent_class)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)

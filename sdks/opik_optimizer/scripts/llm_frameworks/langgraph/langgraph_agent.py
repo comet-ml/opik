@@ -1,97 +1,82 @@
+from __future__ import annotations
+
 from typing import Any
 from typing_extensions import TypedDict
 
-from opik.integrations.langchain import OpikTracer
-from opik import track
+import litellm
 
+from opik import track
+from opik.integrations.langchain import OpikTracer
+from opik_optimizer import ChatPrompt, OptimizableAgent
 from opik_optimizer.utils import search_wikipedia
-from opik_optimizer import (
-    OptimizableAgent,
-    ChatPrompt,
-)
 
 from langgraph.graph import StateGraph
-from langchain_openai import ChatOpenAI
-from langchain.agents import Tool, create_react_agent, AgentExecutor
-from langchain_core.prompts import PromptTemplate
 
 
-# Create a wrapper function without optional parameters for LangChain compatibility
+PROMPT_TEMPLATE = """You are a fact-finding assistant. Use the provided context when answering.
+
+Context:
+{context}
+
+Question:
+{question}
+
+Respond with a concise, factual answer."""
+
+
+class AgentState(TypedDict):
+    system_prompt: str
+    question: str
+    context: str
+    answer: str
+
+
 def search_wikipedia_tool(query: str) -> list[str]:
-    """
-    This agent is used to search wikipedia. It can retrieve additional details
-    about a topic.
-    """
+    """Wrapper for the shared Wikipedia search helper."""
     return search_wikipedia(query, use_api=False)
 
 
 search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)
 
 
-class InputState(TypedDict):
-    input: str
+def create_graph(
+    project_name: str, system_prompt: str, model_name: str
+) -> tuple[Any, OpikTracer]:
+    """
+    Build a simple LangGraph workflow that (1) fetches context via the shared
+    Wikipedia tool and (2) calls an LLM to produce the final answer.
+    """
+    workflow = StateGraph(AgentState)
 
+    def fetch_context(state: AgentState) -> dict[str, str]:
+        query = state["question"]
+        results = search_wikipedia_tool(query)
+        context = "\n\n".join(results) if results else ""
+        return {"context": context}
 
-# Define the schema for the output
-class OutputState(TypedDict):
-    output: str
-
-
-# Define the overall schema, combining both input and output
-class OverallState(InputState, OutputState):
-    pass
-
-
-def create_graph(project_name: str, prompt_template: str) -> Any:
-    llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
-
-    agent_tools = [
-        Tool(
-            name="search_wikipedia",
-            func=search_wikipedia_tool,
-            description="""This agent is used to search wikipedia. It can retrieve additional details about a topic.""",
+    def generate_answer(state: AgentState) -> dict[str, str]:
+        context = state.get("context", "")
+        prompt_text = PROMPT_TEMPLATE.format(
+            context=context or "No additional information.",
+            question=state["question"],
         )
-    ]
+        messages = [
+            {"role": "system", "content": state.get("system_prompt", system_prompt)},
+            {"role": "user", "content": prompt_text},
+        ]
+        response = litellm.completion(model=model_name, messages=messages)
+        content = response.choices[0].message.content
+        return {"answer": content or "No response from model."}
 
-    # Ensure the prompt template has the required ReAct format placeholders
-    if "{tools}" not in prompt_template:
-        prompt_template += "\n\nYou have access to the following tools:\n\n{tools}"
-    if "{tool_names}" not in prompt_template:
-        prompt_template += '\n\nUse the following format:\n\nQuestion: "the input question you must answer"\nThought: "you should always think about what to do"\nAction: "the action to take" --- should be one of [{tool_names}]\nAction Input: "the input to the action"\nObservation: "the result of the action"\n... (this Thought/Action/Action Input/Observation can repeat N times)\nThought: "I now know the final answer"\nFinal Answer: "the final answer to the original input question"\n\nBegin!\n\nQuestion: {input}\nThought: {agent_scratchpad}'
+    workflow.add_node("fetch_context", fetch_context)
+    workflow.add_node("generate_answer", generate_answer)
+    workflow.set_entry_point("fetch_context")
+    workflow.add_edge("fetch_context", "generate_answer")
+    workflow.set_finish_point("generate_answer")
 
-    prompt = PromptTemplate.from_template(prompt_template)
-    agent = create_react_agent(llm, tools=agent_tools, prompt=prompt)
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=agent_tools,
-        handle_parsing_errors=True,
-        verbose=False,
-    )
-    workflow = StateGraph(OverallState, input=InputState, output=OutputState)
-    # We'll set this below:
-    opik_tracer = None
-
-    def run_agent_node(state: InputState) -> OutputState:
-        # "input" is from the State
-        user_input = state["input"]
-        # "input" is from the State
-        result = agent_executor.invoke(
-            {"input": user_input}, config={"callbacks": [opik_tracer]}
-        )
-        # "input", "output" are from the State
-        return {"output": result["output"]}
-
-    workflow.add_node("agent", run_agent_node)
-    workflow.set_entry_point("agent")
-    workflow.set_finish_point("agent")
     graph = workflow.compile()
-
-    # Setup the Opik tracker:
-    opik_tracer = OpikTracer(
-        project_name=project_name,
-        graph=graph.get_graph(xray=True),
-    )
-    return graph
+    tracer = OpikTracer(project_name=project_name, graph=graph.get_graph(xray=True))
+    return graph, tracer
 
 
 class LangGraphAgent(OptimizableAgent):
@@ -99,16 +84,25 @@ class LangGraphAgent(OptimizableAgent):
 
     def init_agent(self, prompt: ChatPrompt) -> None:
         self.prompt = prompt
-        self.graph = create_graph(
-            self.project_name,
-            self.prompt.get_messages()[0]["content"],
+        system_prompt = (
+            prompt.get_messages()[0]["content"]
+            if prompt.get_messages()
+            else "You are a helpful assistant."
         )
+        model_name = prompt.model or "gpt-4o-mini"
+        self.graph, self._tracer = create_graph(
+            self.project_name, system_prompt, model_name
+        )
+        self._system_prompt = system_prompt
+        self._model_name = model_name
 
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
-        if len(messages) > 1:
-            # Skip the system prompt
-            messages = messages[1:]
-        for message in messages:
-            result = self.graph.invoke({"input": message["content"]})
-
-        return result["output"] if result else "No result from agent"
+        question = messages[-1]["content"] if messages else ""
+        state: AgentState = {
+            "system_prompt": self._system_prompt,
+            "question": question,
+            "context": "",
+            "answer": "",
+        }
+        result = self.graph.invoke(state)
+        return result.get("answer", "No result from agent")

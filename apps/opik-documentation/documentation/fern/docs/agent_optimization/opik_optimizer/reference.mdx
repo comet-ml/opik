@@ -756,7 +756,7 @@ optimize_prompt(
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
 <ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
-<ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (default: "pareto")</ParamField>
+<ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (use "pareto", "current_best", or "epsilon_greedy"; default: "pareto")</ParamField>
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True">Skip candidates with perfect scores (default: True)</ParamField>
 <ParamField path="perfect_score" type="float" optional={true} default="1.0">Score considered perfect (default: 1.0)</ParamField>
 <ParamField path="use_merge" type="bool" optional={true} default="False">Enable merge operations (default: False)</ParamField>
@@ -1079,4 +1079,3 @@ llm_invoke(
 <ParamField path="messages" type="list[dict[str, str]] | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} default="False" />
-

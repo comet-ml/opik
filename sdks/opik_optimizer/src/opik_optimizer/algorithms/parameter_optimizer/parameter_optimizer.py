@@ -160,8 +160,8 @@ class ParameterOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=metric_name,
+            metadata=self._build_optimization_metadata(agent_class=agent_class),
             name=self.name,
-            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
