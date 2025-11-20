@@ -1,10 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { Database, FlaskConical, Pause, Play, Plus, X } from "lucide-react";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import MetricSelector from "./MetricSelector";
+import DatasetEmptyState from "./DatasetEmptyState";
+
+import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectByName from "@/api/projects/useProjectByName";
+import useRulesList from "@/api/automations/useRulesList";
+import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 import {
   usePromptCount,
   usePromptMap,
@@ -12,24 +24,19 @@ import {
   useSelectedRuleIds,
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
-import useProjectByName from "@/api/projects/useProjectByName";
-import useRulesList from "@/api/automations/useRulesList";
-import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
-import MetricSelector from "./MetricSelector";
-import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
-import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
-import { useQueryClient } from "@tanstack/react-query";
-
-import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
 import { cn } from "@/lib/utils";
+import {
+  supportsImageInput,
+  supportsVideoInput,
+} from "@/lib/modelCapabilities";
+import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
+
+import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filters } from "@/types/filters";
+import { COLUMN_TYPE } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
-import { Separator } from "@/components/ui/separator";
-import { hasImagesInContent } from "@/lib/llm";
-import { supportsImageInput } from "@/lib/modelCapabilities";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
-import DatasetEmptyState from "./DatasetEmptyState";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -40,6 +47,8 @@ interface PlaygroundOutputActionsProps {
   datasetItems: DatasetItem[];
   datasetColumns: DatasetItemColumn[];
   loadingDatasetItems: boolean;
+  filters: Filters;
+  onFiltersChange: (filters: Filters) => void;
 }
 
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -54,6 +63,8 @@ const PlaygroundOutputActions = ({
   datasetItems,
   datasetColumns,
   loadingDatasetItems,
+  filters,
+  onFiltersChange,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -70,6 +81,17 @@ const PlaygroundOutputActions = ({
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
+
+  // Define filters column data for tag filtering
+  const filtersColumnData = useMemo(() => {
+    return [
+      {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+      },
+    ];
+  }, []);
 
   // Fetch playground project - always fetch to show metric selector
   const {
@@ -127,8 +149,11 @@ const PlaygroundOutputActions = ({
     return datasets.map((ds) => ({
       label: ds.name,
       value: ds.id,
+      action: {
+        href: `/${workspaceName}/datasets/${ds.id}`,
+      },
     }));
-  }, [datasets]);
+  }, [datasets, workspaceName]);
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
@@ -163,16 +188,23 @@ const PlaygroundOutputActions = ({
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
-  const hasImageCompatibilityIssues = useMemo(() => {
+  const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
       if (!prompt.model) return false;
 
       const modelSupportsImages = supportsImageInput(prompt.model);
+      const modelSupportsVideos = supportsVideoInput(prompt.model);
       const hasImages = prompt.messages.some((message) =>
         hasImagesInContent(message.content),
       );
+      const hasVideos = prompt.messages.some((message) =>
+        hasVideosInContent(message.content),
+      );
 
-      return hasImages && !modelSupportsImages;
+      return (
+        (hasImages && !modelSupportsImages) ||
+        (hasVideos && !modelSupportsVideos)
+      );
     });
   }, [promptMap]);
 
@@ -288,14 +320,14 @@ const PlaygroundOutputActions = ({
       isLoadingDatasets ||
       isDatasetRemoved ||
       isDatasetEmpty ||
-      hasImageCompatibilityIssues;
+      hasMediaCompatibilityIssues;
 
     const shouldTooltipAppear =
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       isDatasetEmpty ||
       isDatasetRemoved ||
-      hasImageCompatibilityIssues;
+      hasMediaCompatibilityIssues;
     const style: React.CSSProperties = isDisabledButton
       ? { pointerEvents: "auto" }
       : {};
@@ -305,8 +337,8 @@ const PlaygroundOutputActions = ({
         return promptCount === 1 ? "Run your prompt" : "Run your prompts";
       }
 
-      if (hasImageCompatibilityIssues) {
-        return "Some prompts contain images but the selected model doesn't support image input. Please change the model or remove images from the messages";
+      if (hasMediaCompatibilityIssues) {
+        return "Some prompts contain media but the selected model doesn't support media input. Please change the model or remove media from the messages";
       }
 
       if (isDatasetRemoved) {
@@ -484,6 +516,16 @@ const PlaygroundOutputActions = ({
             </Button>
           )}
         </div>
+        {datasetId && (
+          <div className="mt-2.5 flex">
+            <FiltersButton
+              columns={filtersColumnData}
+              filters={filters}
+              onChange={onFiltersChange}
+              layout="icon"
+            />
+          </div>
+        )}
         <div className="mt-2.5 flex">
           <MetricSelector
             rules={rules}
@@ -491,6 +533,7 @@ const PlaygroundOutputActions = ({
             onSelectionChange={setSelectedRuleIds}
             datasetId={datasetId}
             onCreateRuleClick={handleCreateRuleClick}
+            workspaceName={workspaceName}
           />
         </div>
         <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">

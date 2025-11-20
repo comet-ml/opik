@@ -17,7 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 import {
-  useMetricDateRangeWithQuery,
+  useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
@@ -229,7 +229,6 @@ const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
-const DATE_RANGE_KEY = "range";
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
@@ -251,9 +250,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQuery({
-    key: DATE_RANGE_KEY,
-  });
+  } = useMetricDateRangeWithQueryAndStorage();
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -421,10 +418,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
-  const clearRowSelection = useCallback(() => {
-    setRowSelection({});
-  }, []);
-
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -479,6 +472,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: type as TRACE_DATA_TYPE,
         filters,
         search: search as string,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
       },
       {
         refetchInterval: REFETCH_INTERVAL,
@@ -923,7 +918,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
-            onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <MetricDateRangeSelect

@@ -1,3 +1,4 @@
+import json
 import uuid
 import opik
 from opik.api_objects.prompt import PromptType
@@ -309,3 +310,133 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     names = set(p.name for p in results)
     assert len(results) == 2
     assert names == set([prompt_name_1, prompt_name_2])
+
+
+def test_prompt__format_playground_chat_prompt__returns_json(opik_client: opik.Opik):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"chat-prompt-{unique_identifier}"
+    # JSON template representing a chat messages array with multimodal content
+    # Build as Python structure for readability, then convert to JSON
+    prompt_structure = [
+        {
+            "role": "system",
+            "content": "You are {{assistant_type}}",
+        },
+        {
+            "role": "user",
+            "content": "{{user_message}}",
+        },
+        {
+            "role": "assistant",
+            "content": "{{assistant_response}}",
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "{{followup_text}}",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "{{image_url}}",
+                    },
+                },
+                {
+                    "type": "video_url",
+                    "video_url": {
+                        "url": "{{video_url}}",
+                    },
+                },
+            ],
+        },
+    ]
+    prompt_template = json.dumps(prompt_structure)
+
+    # Create a playground chat prompt with the appropriate metadata
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        metadata={
+            "created_from": "opik_ui",
+            "type": "messages_json",
+        },
+    )
+
+    # Format the prompt with variables
+    result = prompt.format(
+        assistant_type="a helpful AI",
+        user_message="Hello!",
+        assistant_response="Hi there! How can I help you today?",
+        followup_text="Can you analyze this image and video?",
+        image_url="https://example.com/image.jpg",
+        video_url="https://example.com/video.mp4",
+    )
+
+    # Should return parsed JSON (list of dicts), not a string
+    expected_result = [
+        {
+            "role": "system",
+            "content": "You are a helpful AI",
+        },
+        {
+            "role": "user",
+            "content": "Hello!",
+        },
+        {
+            "role": "assistant",
+            "content": "Hi there! How can I help you today?",
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Can you analyze this image and video?",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://example.com/image.jpg",
+                    },
+                },
+                {
+                    "type": "video_url",
+                    "video_url": {
+                        "url": "https://example.com/video.mp4",
+                    },
+                },
+            ],
+        },
+    ]
+
+    assert result == expected_result
+
+
+def test_prompt__format_playground_chat_prompt__invalid_json__returns_string(
+    opik_client: opik.Opik,
+):
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"invalid-chat-prompt-{unique_identifier}"
+    # Invalid JSON template (missing closing bracket)
+    prompt_template = '[{"role": "system", "content": "{{content}}"}'
+
+    # Create a playground chat prompt with the appropriate metadata
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        metadata={
+            "created_from": "opik_ui",
+            "type": "messages_json",
+        },
+    )
+
+    # Format the prompt - should handle invalid JSON gracefully
+    result = prompt.format(content="test content")
+
+    # Should return the formatted string (not parsed) because JSON is invalid
+    assert isinstance(result, str)
+    assert result == '[{"role": "system", "content": "test content"}'

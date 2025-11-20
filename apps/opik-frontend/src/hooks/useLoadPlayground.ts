@@ -13,9 +13,10 @@ import {
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import { MessageContent } from "@/types/llm";
 
 interface LoadPlaygroundOptions {
-  promptContent?: string;
+  promptContent?: MessageContent;
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;

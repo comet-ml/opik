@@ -113,6 +113,14 @@ from .batch_delete import BatchDelete
 from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
+from .boolean_feedback_definition import BooleanFeedbackDefinition
+from .boolean_feedback_definition_create import BooleanFeedbackDefinitionCreate
+from .boolean_feedback_definition_public import BooleanFeedbackDefinitionPublic
+from .boolean_feedback_definition_update import BooleanFeedbackDefinitionUpdate
+from .boolean_feedback_detail import BooleanFeedbackDetail
+from .boolean_feedback_detail_create import BooleanFeedbackDetailCreate
+from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
+from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -146,6 +154,8 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
+from .dashboard_page_public import DashboardPagePublic
+from .dashboard_public import DashboardPublic
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -160,6 +170,7 @@ from .dataset_item_page_public import DatasetItemPagePublic
 from .dataset_item_public import DatasetItemPublic
 from .dataset_item_public_source import DatasetItemPublicSource
 from .dataset_item_source import DatasetItemSource
+from .dataset_item_update import DatasetItemUpdate
 from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
@@ -202,15 +213,26 @@ from .experiment_public_type import ExperimentPublicType
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
 from .export_trace_service_request import ExportTraceServiceRequest
-from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
-from .feedback_create import FeedbackCreate, FeedbackCreate_Categorical, FeedbackCreate_Numerical
+from .feedback import Feedback, Feedback_Boolean, Feedback_Categorical, Feedback_Numerical
+from .feedback_create import (
+    FeedbackCreate,
+    FeedbackCreate_Boolean,
+    FeedbackCreate_Categorical,
+    FeedbackCreate_Numerical,
+)
 from .feedback_definition_page_public import FeedbackDefinitionPagePublic
 from .feedback_object_public import (
     FeedbackObjectPublic,
+    FeedbackObjectPublic_Boolean,
     FeedbackObjectPublic_Categorical,
     FeedbackObjectPublic_Numerical,
 )
-from .feedback_public import FeedbackPublic, FeedbackPublic_Categorical, FeedbackPublic_Numerical
+from .feedback_public import (
+    FeedbackPublic,
+    FeedbackPublic_Boolean,
+    FeedbackPublic_Categorical,
+    FeedbackPublic_Numerical,
+)
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
@@ -228,7 +250,12 @@ from .feedback_score_names import FeedbackScoreNames
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
-from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
+from .feedback_update import (
+    FeedbackUpdate,
+    FeedbackUpdate_Boolean,
+    FeedbackUpdate_Categorical,
+    FeedbackUpdate_Numerical,
+)
 from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
@@ -245,6 +272,9 @@ from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .ids_holder import IdsHolder
+from .image_url import ImageUrl
+from .image_url_public import ImageUrlPublic
+from .image_url_write import ImageUrlWrite
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -259,6 +289,9 @@ from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 from .llm_as_judge_message import LlmAsJudgeMessage
+from .llm_as_judge_message_content import LlmAsJudgeMessageContent
+from .llm_as_judge_message_content_public import LlmAsJudgeMessageContentPublic
+from .llm_as_judge_message_content_write import LlmAsJudgeMessageContentWrite
 from .llm_as_judge_message_public import LlmAsJudgeMessagePublic
 from .llm_as_judge_message_public_role import LlmAsJudgeMessagePublicRole
 from .llm_as_judge_message_role import LlmAsJudgeMessageRole
@@ -358,6 +391,8 @@ from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
 from .span_type import SpanType
+from .span_update import SpanUpdate
+from .span_update_type import SpanUpdateType
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
@@ -390,9 +425,11 @@ from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePubl
 from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
 from .trace_thread_page import TraceThreadPage
 from .trace_thread_status import TraceThreadStatus
+from .trace_thread_update import TraceThreadUpdate
 from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
 from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
+from .trace_update import TraceUpdate
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
@@ -407,6 +444,9 @@ from .value_entry_experiment_item_bulk_write_view_source import ValueEntryExperi
 from .value_entry_public import ValueEntryPublic
 from .value_entry_public_source import ValueEntryPublicSource
 from .value_entry_source import ValueEntrySource
+from .video_url import VideoUrl
+from .video_url_public import VideoUrlPublic
+from .video_url_write import VideoUrlWrite
 from .webhook import Webhook
 from .webhook_examples import WebhookExamples
 from .webhook_public import WebhookPublic
@@ -507,6 +547,14 @@ __all__ = [
     "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
+    "BooleanFeedbackDefinition",
+    "BooleanFeedbackDefinitionCreate",
+    "BooleanFeedbackDefinitionPublic",
+    "BooleanFeedbackDefinitionUpdate",
+    "BooleanFeedbackDetail",
+    "BooleanFeedbackDetailCreate",
+    "BooleanFeedbackDetailPublic",
+    "BooleanFeedbackDetailUpdate",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -540,6 +588,8 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
+    "DashboardPagePublic",
+    "DashboardPublic",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -554,6 +604,7 @@ __all__ = [
     "DatasetItemPublic",
     "DatasetItemPublicSource",
     "DatasetItemSource",
+    "DatasetItemUpdate",
     "DatasetItemWrite",
     "DatasetItemWriteSource",
     "DatasetPagePublic",
@@ -596,13 +647,16 @@ __all__ = [
     "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
+    "FeedbackCreate_Boolean",
     "FeedbackCreate_Categorical",
     "FeedbackCreate_Numerical",
     "FeedbackDefinitionPagePublic",
     "FeedbackObjectPublic",
+    "FeedbackObjectPublic_Boolean",
     "FeedbackObjectPublic_Categorical",
     "FeedbackObjectPublic_Numerical",
     "FeedbackPublic",
+    "FeedbackPublic_Boolean",
     "FeedbackPublic_Categorical",
     "FeedbackPublic_Numerical",
     "FeedbackScore",
@@ -623,8 +677,10 @@ __all__ = [
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
     "FeedbackUpdate",
+    "FeedbackUpdate_Boolean",
     "FeedbackUpdate_Categorical",
     "FeedbackUpdate_Numerical",
+    "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
     "Function",
@@ -643,6 +699,9 @@ __all__ = [
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "IdsHolder",
+    "ImageUrl",
+    "ImageUrlPublic",
+    "ImageUrlWrite",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -657,6 +716,9 @@ __all__ = [
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
     "LlmAsJudgeMessage",
+    "LlmAsJudgeMessageContent",
+    "LlmAsJudgeMessageContentPublic",
+    "LlmAsJudgeMessageContentWrite",
     "LlmAsJudgeMessagePublic",
     "LlmAsJudgeMessagePublicRole",
     "LlmAsJudgeMessageRole",
@@ -754,6 +816,8 @@ __all__ = [
     "SpanPublic",
     "SpanPublicType",
     "SpanType",
+    "SpanUpdate",
+    "SpanUpdateType",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",
@@ -786,9 +850,11 @@ __all__ = [
     "TraceThreadLlmAsJudgeCodeWrite",
     "TraceThreadPage",
     "TraceThreadStatus",
+    "TraceThreadUpdate",
     "TraceThreadUserDefinedMetricPythonCode",
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
+    "TraceUpdate",
     "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
@@ -803,6 +869,9 @@ __all__ = [
     "ValueEntryPublic",
     "ValueEntryPublicSource",
     "ValueEntrySource",
+    "VideoUrl",
+    "VideoUrlPublic",
+    "VideoUrlWrite",
     "Webhook",
     "WebhookExamples",
     "WebhookPublic",

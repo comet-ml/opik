@@ -48,6 +48,8 @@ tags:
   description: Automation rule evaluators resource
 - name: Chat Completions
   description: Chat Completions related resources
+- name: Dashboards
+  description: Workspace Dashboard resources
 - name: Datasets
   description: Dataset resources
 - name: Experiments
@@ -1137,6 +1139,155 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChatCompletionResponse"
+  /v1/private/dashboards:
+    get:
+      tags:
+      - Dashboards
+      summary: Find dashboards
+      description: Find dashboards in a workspace
+      operationId: findDashboards
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter dashboards by name (partial match, case insensitive)"
+      responses:
+        "200":
+          description: Dashboard page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPage_Public"
+    post:
+      tags:
+      - Dashboards
+      summary: Create dashboard
+      description: Create a new dashboard in a workspace
+      operationId: createDashboard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dashboard_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/dashboards/{dashboardId}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+  /v1/private/dashboards/{dashboardId}:
+    get:
+      tags:
+      - Dashboards
+      summary: Get dashboard by id
+      description: Get dashboard by id
+      operationId: getDashboardById
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dashboard resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Dashboard not found
+    delete:
+      tags:
+      - Dashboards
+      summary: Delete dashboard
+      description: Delete dashboard by id
+      operationId: deleteDashboard
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+    patch:
+      tags:
+      - Dashboards
+      summary: Update dashboard
+      description: Update dashboard by id. Partial updates are supported - only provided
+        fields will be updated.
+      operationId: updateDashboard
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardUpdate_Public"
+      responses:
+        "200":
+          description: Updated dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard_Public"
+        "404":
+          description: Dashboard not found
+        "409":
+          description: Conflict - dashboard with this name already exists
+  /v1/private/datasets/items/batch:
+    patch:
+      tags:
+      - Datasets
+      summary: Batch update dataset items
+      description: Update multiple dataset items
+      operationId: batchUpdateDatasetItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets:
     get:
       tags:
@@ -1227,6 +1378,43 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/items/from-csv:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from CSV file
+      description: Create dataset items from uploaded CSV file. CSV should have headers
+        in the first row. Processing happens asynchronously in batches.
+      operationId: createDatasetItemsFromCsv
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - dataset_id
+              - file
+              type: object
+              properties:
+                file:
+                  type: object
+                dataset_id:
+                  type: string
+                  format: uuid
+      responses:
+        "202":
+          description: Accepted - CSV processing started
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - CSV upload feature is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/{dataset_id}/items/from-spans:
     post:
       tags:
@@ -1528,6 +1716,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DatasetItem_Public"
+    patch:
+      tags:
+      - Datasets
+      summary: Partially update dataset item by id
+      description: Partially update dataset item by id. Only provided fields will
+        be updated.
+      operationId: patchDatasetItem
+      parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItem_Write"
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Dataset item not found
   /v1/private/datasets/{id}/items:
     get:
       tags:
@@ -2078,6 +2290,7 @@ paths:
           enum:
           - numerical
           - categorical
+          - boolean
       responses:
         "200":
           description: Feedback definitions resource
@@ -3282,6 +3495,41 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/spans/batch:
+    post:
+      tags:
+      - Spans
+      summary: Create spans
+      description: Create spans
+      operationId: createSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanBatch_Write"
+      responses:
+        "204":
+          description: No Content
+    patch:
+      tags:
+      - Spans
+      summary: Batch update spans
+      description: Update multiple spans
+      operationId: batchUpdateSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/spans:
     get:
       tags:
@@ -3358,15 +3606,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter spans created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter spans created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter spans created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter spans created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -3402,21 +3649,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/spans/batch:
-    post:
-      tags:
-      - Spans
-      summary: Create spans
-      description: Create spans
-      operationId: createSpans
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpanBatch_Write"
-      responses:
-        "204":
-          description: No Content
   /v1/private/spans/{id}:
     get:
       tags:
@@ -3632,15 +3864,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter spans created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter spans created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter spans created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter spans created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -3799,6 +4030,62 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/batch:
+    post:
+      tags:
+      - Traces
+      summary: Create traces
+      description: Create traces
+      operationId: createTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceBatch_Write"
+      responses:
+        "204":
+          description: No Content
+    patch:
+      tags:
+      - Traces
+      summary: Batch update traces
+      description: Update multiple traces
+      operationId: batchUpdateTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/traces/threads/batch:
+    patch:
+      tags:
+      - Traces
+      summary: Batch update threads
+      description: Update multiple threads
+      operationId: batchUpdateThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/threads/close:
     put:
       tags:
@@ -3881,15 +4168,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter traces created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter traces created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter traces created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter traces created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -3919,21 +4205,6 @@ paths:
               schema:
                 type: string
               example: "${basePath}/v1/private/traces/{traceId}"
-  /v1/private/traces/batch:
-    post:
-      tags:
-      - Traces
-      summary: Create traces
-      description: Create traces
-      operationId: createTraces
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TraceBatch_Write"
-      responses:
-        "204":
-          description: No Content
   /v1/private/traces/{id}:
     get:
       tags:
@@ -4167,15 +4438,14 @@ paths:
         in: query
         schema:
           type: string
-          description: Filter traces created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter traces created from this time (ISO-8601 format).
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter traces created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter traces created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -4332,14 +4602,13 @@ paths:
         schema:
           type: string
           description: Filter trace threads created from this time (ISO-8601 format).
-            Must be provided together with 'to_time'.
           format: date-time
       - name: to_time
         in: query
         schema:
           type: string
-          description: Filter trace threads created up to this time (ISO-8601 format).
-            Must be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter trace threads created up to this time (ISO-8601 format).\
+            \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
       responses:
         "200":
@@ -5064,6 +5333,9 @@ components:
           enum:
           - scope:project
           - threshold:feedback_score
+          - threshold:cost
+          - threshold:latency
+          - threshold:errors
         config_value:
           type: object
           additionalProperties:
@@ -5130,6 +5402,9 @@ components:
           enum:
           - scope:project
           - threshold:feedback_score
+          - threshold:cost
+          - threshold:latency
+          - threshold:errors
         config_value:
           type: object
           additionalProperties:
@@ -5260,6 +5535,9 @@ components:
           enum:
           - scope:project
           - threshold:feedback_score
+          - threshold:cost
+          - threshold:latency
+          - threshold:errors
         config_value:
           type: object
           additionalProperties:
@@ -5988,6 +6266,17 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
+    ImageUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+        detail:
+          type: string
+    JsonNode:
+      type: object
     LlmAsJudgeCode:
       required:
       - messages
@@ -6012,7 +6301,6 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
     LlmAsJudgeMessage:
       required:
-      - content
       - role
       type: object
       properties:
@@ -6026,6 +6314,27 @@ components:
           - CUSTOM
         content:
           type: string
+        content_array:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessageContent"
+        string_content:
+          type: boolean
+        structured_content:
+          type: boolean
+    LlmAsJudgeMessageContent:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        image_url:
+          $ref: "#/components/schemas/ImageUrl"
+        video_url:
+          $ref: "#/components/schemas/VideoUrl"
     LlmAsJudgeModelParameters:
       required:
       - name
@@ -6040,6 +6349,8 @@ components:
         seed:
           type: integer
           format: int32
+        custom_parameters:
+          $ref: "#/components/schemas/JsonNode"
     LlmAsJudgeOutputSchema:
       required:
       - description
@@ -6118,6 +6429,13 @@ components:
           type: object
           additionalProperties:
             type: string
+    VideoUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluatorLlmAsJudge_Write:
       required:
       - action
@@ -6215,6 +6533,17 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
+    ImageUrl_Write:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+        detail:
+          type: string
+    JsonNode_Write:
+      type: object
     LlmAsJudgeCode_Write:
       required:
       - messages
@@ -6237,9 +6566,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+    LlmAsJudgeMessageContent_Write:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        image_url:
+          $ref: "#/components/schemas/ImageUrl_Write"
+        video_url:
+          $ref: "#/components/schemas/VideoUrl_Write"
     LlmAsJudgeMessage_Write:
       required:
-      - content
       - role
       type: object
       properties:
@@ -6253,6 +6594,14 @@ components:
           - CUSTOM
         content:
           type: string
+        content_array:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
+        string_content:
+          type: boolean
+        structured_content:
+          type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
       - name
@@ -6267,6 +6616,8 @@ components:
         seed:
           type: integer
           format: int32
+        custom_parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
     LlmAsJudgeOutputSchema_Write:
       required:
       - description
@@ -6345,6 +6696,13 @@ components:
           type: object
           additionalProperties:
             type: string
+    VideoUrl_Write:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
       - action
@@ -6483,6 +6841,17 @@ components:
         properties:
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
+    ImageUrl_Public:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
+        detail:
+          type: string
+    JsonNode_Public:
+      type: object
     LlmAsJudgeCode_Public:
       required:
       - messages
@@ -6505,9 +6874,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+    LlmAsJudgeMessageContent_Public:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        image_url:
+          $ref: "#/components/schemas/ImageUrl_Public"
+        video_url:
+          $ref: "#/components/schemas/VideoUrl_Public"
     LlmAsJudgeMessage_Public:
       required:
-      - content
       - role
       type: object
       properties:
@@ -6521,6 +6902,14 @@ components:
           - CUSTOM
         content:
           type: string
+        content_array:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
+        string_content:
+          type: boolean
+        structured_content:
+          type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
       - name
@@ -6535,6 +6924,8 @@ components:
         seed:
           type: integer
           format: int32
+        custom_parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
     LlmAsJudgeOutputSchema_Public:
       required:
       - description
@@ -6613,6 +7004,13 @@ components:
           type: object
           additionalProperties:
             type: string
+    VideoUrl_Public:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluator_Public:
       required:
       - action
@@ -7058,6 +7456,138 @@ components:
           - function
         function:
           $ref: "#/components/schemas/Function"
+    Dashboard_Public:
+      required:
+      - config
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        workspace_id:
+          type: string
+          readOnly: true
+        name:
+          maxLength: 120
+          minLength: 1
+          type: string
+        slug:
+          type: string
+          readOnly: true
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    Dashboard_Write:
+      required:
+      - config
+      - name
+      type: object
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonNode_Write"
+    DashboardPage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dashboard_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    DashboardUpdate_Public:
+      type: object
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+    DatasetItemBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of dataset item IDs to update (max 1000)
+          items:
+            type: string
+            description: List of dataset item IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/DatasetItemUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple dataset items
+    DatasetItemUpdate:
+      type: object
+      properties:
+        input:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item input
+        expected_output:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item expected output
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        data:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          description: Tags
+          items:
+            type: string
+            description: Tags
+      description: Dataset item update request
     Dataset:
       required:
       - name
@@ -7202,6 +7732,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         experiment_items:
           type: array
           readOnly: true
@@ -7426,6 +7961,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     CreateDatasetItemsFromSpansRequest:
       required:
       - enrichment_options
@@ -7701,6 +8241,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         experiment_items:
           type: array
           readOnly: true
@@ -8045,6 +8590,11 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
         experiment_items:
           type: array
           readOnly: true
@@ -9251,8 +9801,48 @@ components:
           - running
           - completed
           - cancelled
-    JsonNode:
+    BooleanFeedbackDefinition:
+      required:
+      - details
+      - name
+      - type
       type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail"
+          created_at:
+            type: string
+            format: date-time
+            readOnly: true
+          created_by:
+            type: string
+            readOnly: true
+          last_updated_at:
+            type: string
+            format: date-time
+            readOnly: true
+          last_updated_by:
+            type: string
+            readOnly: true
+    BooleanFeedbackDetail:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition:
       required:
       - details
@@ -9327,11 +9917,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition"
     NumericalFeedbackDefinition:
       required:
       - details
@@ -9368,6 +9960,34 @@ components:
           type: number
         min:
           type: number
+    BooleanFeedbackDefinition_Create:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback_Create"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail_Create"
+    BooleanFeedbackDetail_Create:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition_Create:
       required:
       - details
@@ -9414,11 +10034,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Create"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Create"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Create"
     NumericalFeedbackDefinition_Create:
       required:
       - details
@@ -9441,6 +10063,48 @@ components:
           type: number
         min:
           type: number
+    BooleanFeedbackDefinition_Public:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback_Public"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail_Public"
+          created_at:
+            type: string
+            format: date-time
+            readOnly: true
+          created_by:
+            type: string
+            readOnly: true
+          last_updated_at:
+            type: string
+            format: date-time
+            readOnly: true
+          last_updated_by:
+            type: string
+            readOnly: true
+    BooleanFeedbackDetail_Public:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition_Public:
       required:
       - details
@@ -9531,11 +10195,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Public"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Public"
     NumericalFeedbackDefinition_Public:
       required:
       - details
@@ -9610,11 +10276,41 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Public"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Public"
+    BooleanFeedbackDefinition_Update:
+      required:
+      - details
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/Feedback_Update"
+      - type: object
+        properties:
+          details:
+            $ref: "#/components/schemas/BooleanFeedbackDetail_Update"
+    BooleanFeedbackDetail_Update:
+      required:
+      - falseLabel
+      - trueLabel
+      type: object
+      properties:
+        trueLabel:
+          minLength: 1
+          type: string
+          description: Label for true/1 value
+          example: Pass
+        falseLabel:
+          minLength: 1
+          type: string
+          description: Label for false/0 value
+          example: Fail
     CategoricalFeedbackDefinition_Update:
       required:
       - details
@@ -9661,11 +10357,13 @@ components:
           enum:
           - numerical
           - categorical
+          - boolean
       discriminator:
         propertyName: type
         mapping:
           numerical: "#/components/schemas/NumericalFeedbackDefinition_Update"
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Update"
+          boolean: "#/components/schemas/BooleanFeedbackDefinition_Update"
     NumericalFeedbackDefinition_Update:
       required:
       - details
@@ -9788,8 +10486,6 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
-    JsonNode_Write:
-      type: object
     ProviderApiKeyPage_Public:
       type: object
       properties:
@@ -10900,8 +11596,6 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion_Detail"
-    JsonNode_Public:
-      type: object
     PromptVersionPage_Public:
       type: object
       properties:
@@ -11045,6 +11739,7 @@ components:
     ServiceTogglesConfig:
       required:
       - alertsEnabled
+      - csvUploadEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
@@ -11064,6 +11759,89 @@ components:
           type: boolean
         welcomeWizardEnabled:
           type: boolean
+        csvUploadEnabled:
+          type: boolean
+    SpanBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of span IDs to update (max 1000)
+          items:
+            type: string
+            description: List of span IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/SpanUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple spans
+    SpanUpdate:
+      required:
+      - trace_id
+      type: object
+      properties:
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null and project_id not specified, Default Project is assumed"
+        project_id:
+          type: string
+          description: "If null and project_name not specified, Default Project is\
+            \ assumed"
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+          - guardrail
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString"
+        output:
+          $ref: "#/components/schemas/JsonListString"
+        metadata:
+          $ref: "#/components/schemas/JsonListString"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
     ErrorInfo_Write:
       required:
       - exception_type
@@ -11479,17 +12257,37 @@ components:
           default: true
         from_time:
           type: string
-          description: Filter spans created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter spans created from this time (ISO-8601 format).
           format: date-time
         to_time:
           type: string
-          description: Filter spans created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter spans created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
-    SpanUpdate:
+    TraceBatchUpdate:
       required:
-      - trace_id
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of trace IDs to update (max 1000)
+          items:
+            type: string
+            description: List of trace IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/TraceUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple traces
+    TraceUpdate:
       type: object
       properties:
         project_name:
@@ -11501,21 +12299,8 @@ components:
           description: "If null and project_name not specified, Default Project is\
             \ assumed"
           format: uuid
-        trace_id:
-          type: string
-          format: uuid
-        parent_span_id:
-          type: string
-          format: uuid
         name:
           type: string
-        type:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
         end_time:
           type: string
           format: date-time
@@ -11525,26 +12310,46 @@ components:
           $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonListString"
-        model:
-          type: string
-        provider:
-          type: string
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int32
-        total_estimated_cost:
-          minimum: 0.0
-          exclusiveMinimum: false
-          type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        thread_id:
+          type: string
+    TraceThreadBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of thread model IDs to update (max 1000)
+          items:
+            type: string
+            description: List of thread model IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/TraceThreadUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple trace threads
+    TraceThreadUpdate:
+      type: object
+      properties:
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     TraceThreadBatchIdentifier:
       type: object
       properties:
@@ -12034,12 +12839,11 @@ components:
         from_time:
           type: string
           description: Filter trace threads created from this time (ISO-8601 format).
-            Must be provided together with 'to_time'.
           format: date-time
         to_time:
           type: string
-          description: Filter trace threads created up to this time (ISO-8601 format).
-            Must be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter trace threads created up to this time (ISO-8601 format).\
+            \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
     TraceSearchStreamRequest_Public:
       type: object
@@ -12074,54 +12878,13 @@ components:
           default: false
         from_time:
           type: string
-          description: Filter traces created from this time (ISO-8601 format). Must
-            be provided together with 'to_time'.
+          description: Filter traces created from this time (ISO-8601 format).
           format: date-time
         to_time:
           type: string
-          description: Filter traces created up to this time (ISO-8601 format). Must
-            be provided together with 'from_time' and must be after 'from_time'.
+          description: "Filter traces created up to this time (ISO-8601 format). If\
+            \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
-    TraceUpdate:
-      type: object
-      properties:
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null and project_id not specified, Default Project is assumed"
-        project_id:
-          type: string
-          description: "If null and project_name not specified, Default Project is\
-            \ assumed"
-          format: uuid
-        name:
-          type: string
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString"
-        output:
-          $ref: "#/components/schemas/JsonListString"
-        metadata:
-          $ref: "#/components/schemas/JsonListString"
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo"
-        thread_id:
-          type: string
-    TraceThreadUpdate:
-      type: object
-      properties:
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
     WelcomeWizardTracking:
       type: object
       properties:

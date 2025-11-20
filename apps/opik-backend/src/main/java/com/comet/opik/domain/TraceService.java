@@ -7,6 +7,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
@@ -19,7 +20,6 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
@@ -62,7 +62,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.AlertEventType.TRACE_ERRORS;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
@@ -78,6 +77,8 @@ public interface TraceService {
     Mono<Long> create(TraceBatch batch);
 
     Mono<Void> update(TraceUpdate trace, UUID id);
+
+    Mono<Void> batchUpdate(TraceBatchUpdate batchUpdate);
 
     Mono<Trace> get(UUID id);
 
@@ -163,39 +164,8 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                                        raiseAlertEventIfApplicable(List.of(savedTrace), workspaceId, workspaceName,
-                                                userName);
                                     }));
                 }));
-    }
-
-    private void raiseAlertEventIfApplicable(List<Trace> traces, String workspaceId, String workspaceName,
-            String userName) {
-        if (CollectionUtils.isEmpty(traces)) {
-            return;
-        }
-
-        var tracesWithErrors = traces.stream()
-                .filter(trace -> trace.errorInfo() != null)
-                .map(trace -> trace.toBuilder()
-                        .createdBy(userName)
-                        .createdAt(Instant.now())
-                        .lastUpdatedBy(userName)
-                        .lastUpdatedAt(Instant.now())
-                        .build())
-                .toList();
-
-        if (CollectionUtils.isNotEmpty(tracesWithErrors)) {
-            var projectId = traces.getFirst().projectId();
-            eventBus.post(AlertEvent.builder()
-                    .eventType(TRACE_ERRORS)
-                    .workspaceId(workspaceId)
-                    .workspaceName(workspaceName)
-                    .userName(userName)
-                    .projectId(projectId)
-                    .payload(tracesWithErrors)
-                    .build());
-        }
     }
 
     @WithSpan
@@ -241,24 +211,8 @@ class TraceServiceImpl implements TraceService {
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName));
-                                        raiseAlertEventIfApplicableForBatch(traces, workspaceId, workspaceName,
-                                                userName);
                                     }));
                 }));
-    }
-
-    // Traces could belong to different projects
-    private void raiseAlertEventIfApplicableForBatch(List<Trace> traces, String workspaceId, String workspaceName,
-            String userName) {
-        if (CollectionUtils.isEmpty(traces)) {
-            return;
-        }
-
-        traces.stream()
-                .collect(Collectors.groupingBy(Trace::projectId))
-                .values()
-                .forEach(tracesPerProject -> raiseAlertEventIfApplicable(tracesPerProject, workspaceId, workspaceName,
-                        userName));
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {
@@ -380,6 +334,16 @@ class TraceServiceImpl implements TraceService {
                                         ctx.get(RequestContext.WORKSPACE_ID),
                                         ctx.get(RequestContext.USER_NAME)))))))
                 .then());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> batchUpdate(@NonNull TraceBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' traces", batchUpdate.ids().size());
+
+        boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
+        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' traces", batchUpdate.ids().size()));
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {

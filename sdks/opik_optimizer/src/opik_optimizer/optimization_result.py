@@ -5,7 +5,12 @@ from typing import Any
 import pydantic
 import rich
 
-from .reporting_utils import get_console, get_link_text, get_optimization_run_url_by_id
+from .reporting_utils import (
+    _format_message_content,
+    get_console,
+    get_link_text,
+    get_optimization_run_url_by_id,
+)
 
 
 def _format_float(value: Any, digits: int = 6) -> str:
@@ -20,7 +25,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     optimizer: str = "Optimizer"
 
-    prompt: list[dict[str, str]]
+    prompt: list[dict[str, Any]]
     score: float
     metric_name: str
 
@@ -28,7 +33,7 @@ class OptimizationResult(pydantic.BaseModel):
     dataset_id: str | None = None
 
     # Initial score
-    initial_prompt: list[dict[str, str]] | None = None
+    initial_prompt: list[dict[str, Any]] | None = None
     initial_score: float | None = None
 
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
@@ -303,10 +308,10 @@ class OptimizationResult(pydantic.BaseModel):
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
-            chat_group_items = []
+            chat_group_items: list[rich.console.RenderableType] = []
             for msg in self.prompt:
                 role = msg.get("role", "unknown")
-                content = str(msg.get("content", ""))
+                content = msg.get("content", "")
                 role_style = (
                     "bold green"
                     if role == "user"
@@ -316,11 +321,16 @@ class OptimizationResult(pydantic.BaseModel):
                         else ("bold magenta" if role == "system" else "")
                     )
                 )
+                # Format content using Rich, handling both string and multimodal content
+                formatted_content = _format_message_content(content)
+                role_text = rich.text.Text(f"{role.capitalize()}:", style=role_style)
                 chat_group_items.append(
-                    f"[{role_style}]{role.capitalize()}:[/] {content}"
+                    rich.console.Group(role_text, formatted_content)
                 )
-                chat_group_items.append("---")  # Separator
-            prompt_renderable = rich.console.Group(*chat_group_items)
+                chat_group_items.append(rich.text.Text("---", style="dim"))  # Separator
+            prompt_renderable: rich.console.RenderableType = rich.console.Group(
+                *chat_group_items
+            )
 
         except Exception:
             # Fallback to simple text prompt

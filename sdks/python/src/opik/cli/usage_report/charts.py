@@ -513,7 +513,7 @@ def create_individual_chart(
         else:
             period_labels.append(period)
 
-    # Create figure - use same size as reference file for consistency
+    # Create figure with consistent size for all charts (same as reference implementation)
     fig, ax = plt.subplots(figsize=(14, 8))
     unit_label = unit.capitalize()
     x = range(n_periods)
@@ -681,19 +681,44 @@ def create_individual_chart(
     ax.set_xlabel(unit_label)
     ax.set_xticks(x)
     ax.set_xticklabels(period_labels, rotation=45, ha="right")
-    if chart_type in ["trace_count", "token_count", "cost", "span_count"]:
-        # Use compact legend with top projects only (max 19 items: 18 top + Others)
-        ax.legend(
-            bbox_to_anchor=(0.5, -0.25),
-            loc="upper center",
-            ncol=4,
-            fontsize=9,
-            framealpha=0.9,
-        )
+    # Set x-axis limits to use full width, with small padding on edges
+    ax.set_xlim(-0.5, n_periods - 0.5)
+
     ax.grid(axis="y", alpha=0.3)
 
-    # Use rect parameter to make room for legends below charts (more space for lower legends)
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    # Configure legend for charts that need it - place inside figure bounds
+    has_legend = chart_type in ["trace_count", "token_count", "cost", "span_count"]
+    if has_legend:
+        # Truncate legend labels to maximum length to prevent overly wide legends
+        handles, labels = ax.get_legend_handles_labels()
+        max_label_length = 40  # Maximum characters per legend label
+        truncated_labels = []
+        for label in labels:
+            if len(label) > max_label_length:
+                truncated_labels.append(label[: max_label_length - 3] + "...")
+            else:
+                truncated_labels.append(label)
+
+        # Position legend inside the plot area at the bottom, with more space below
+        # This allows us to use bbox_inches=None for fixed image sizes
+        # Use 3 columns to ensure items wrap into multiple rows
+        ax.legend(
+            handles,
+            truncated_labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.35),  # Lower in plot area, ~1.5 inches below chart
+            ncol=3,  # 3 columns ensures wrapping into multiple rows
+            fontsize=8,
+            framealpha=0.9,
+        )
+
+    # Explicitly set margins to ensure chart uses full width consistently
+    # Left margin (10%) accounts for y-axis labels (including formatted labels like "500.00M" or "$350.00")
+    # Right margin (5%) is minimal to maximize chart width
+    # Bottom margin (42.5%) accommodates legend positioned below the plot area (outside axes bounds) with ~1 inch of space below
+    # Top margin (8%) for title
+    # This ensures ALL charts have identical dimensions regardless of y-axis formatter
+    fig.subplots_adjust(left=0.10, right=0.95, top=0.92, bottom=0.425)
 
     # Save chart to temporary file (use absolute path)
     chart_filename = os.path.join(
@@ -707,7 +732,11 @@ def create_individual_chart(
         os.makedirs(chart_dir, exist_ok=True)
 
     try:
-        plt.savefig(chart_filename, dpi=300, bbox_inches="tight")
+        # Use bbox_inches=None to preserve exact figure size (14x8 inches)
+        # Since legend is now inside figure bounds, we can use fixed dimensions
+        # This ensures ALL charts have identical dimensions (4200x2400 pixels at 300 DPI)
+        # regardless of y-axis label widths or content
+        plt.savefig(chart_filename, dpi=300, bbox_inches=None)
         plt.close()
 
         # Ensure file is fully written to disk using file system sync operations

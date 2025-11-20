@@ -19,4 +19,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean alertsEnabled;
     @JsonProperty
     @NotNull boolean welcomeWizardEnabled;
+    @JsonProperty
+    @NotNull boolean csvUploadEnabled;
 }

@@ -9,4 +9,5 @@ export interface ServiceTogglesConfig {
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
+    csvUploadEnabled: boolean;
 }

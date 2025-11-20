@@ -21,7 +21,7 @@ public record ProjectMetricRequest(
         @NonNull MetricType metricType,
         @NonNull TimeInterval interval,
         @NonNull Instant intervalStart,
-        @NonNull Instant intervalEnd,
+        Instant intervalEnd,
         List<TraceFilter> traceFilters,
         List<TraceThreadFilter> threadFilters,
         @JsonIgnore UUID uuidFromTime,

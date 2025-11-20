@@ -23,14 +23,15 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.TemplateUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -65,6 +66,7 @@ import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -72,7 +74,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
 
 @ImplementedBy(TraceDAOImpl.class)
@@ -127,6 +129,8 @@ interface TraceDAO {
     Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
 
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
+
+    Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags);
 }
 
 @Slf4j
@@ -787,7 +791,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -1004,7 +1009,8 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
@@ -1371,7 +1377,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id IN :project_ids
                     AND error_info != ''
-                    AND start_time BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
+                    AND toDateTime(UUIDv7ToDateTime(toUUID(id))) BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
                     GROUP BY workspace_id, project_id
                 ),
                 error_count_past_period AS (
@@ -1382,7 +1388,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id IN :project_ids
                     AND error_info != ''
-                    AND start_time \\< toStartOfDay(subtractDays(now(), 7))
+                    AND toDateTime(UUIDv7ToDateTime(toUUID(id))) \\< toStartOfDay(subtractDays(now(), 7))
                     GROUP BY workspace_id, project_id
                 )
             <endif>
@@ -1422,7 +1428,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id BETWEEN :uuid_from_time AND :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
@@ -1536,7 +1543,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -1818,7 +1826,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
                 AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -2410,12 +2419,13 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TraceSortingFactory sortingFactory;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
     @WithSpan
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
-        ST template = buildInsertTemplate(trace);
+        var template = buildInsertTemplate(trace);
 
         Statement statement = buildInsertStatement(trace, connection, template);
 
@@ -2466,7 +2476,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildInsertTemplate(Trace trace) {
-        ST template = new ST(INSERT);
+        var template = TemplateUtils.newST(INSERT);
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
@@ -2482,7 +2492,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> update(UUID id, TraceUpdate traceUpdate, Connection connection) {
 
-        ST template = buildUpdateTemplate(traceUpdate, UPDATE);
+        var template = buildUpdateTemplate(traceUpdate, UPDATE);
 
         String sql = template.render();
 
@@ -2534,7 +2544,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
-        ST template = new ST(update);
+        var template = TemplateUtils.newST(update);
 
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             template.add("name", traceUpdate.name());
@@ -2582,7 +2592,7 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Deleting traces, count '{}'{}", ids.size(),
                 projectId != null ? " for project id '" + projectId + "'" : "");
 
-        var template = new ST(DELETE_BY_ID);
+        var template = TemplateUtils.newST(DELETE_BY_ID);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template.add("project_id", id));
 
@@ -2908,7 +2918,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ST newFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
@@ -2932,10 +2942,9 @@ class TraceDAOImpl implements TraceDAO {
 
         // Add UUID bounds for time-based filtering (presence of uuid_from_time triggers the conditional)
         Optional.ofNullable(traceSearchCriteria.uuidFromTime())
-                .ifPresent(uuid_from_time -> {
-                    template.add("uuid_from_time", uuid_from_time);
-                    template.add("uuid_to_time", traceSearchCriteria.uuidToTime());
-                });
+                .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         return template;
     }
 
@@ -2953,10 +2962,10 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
 
         // Bind UUID BETWEEN bounds for time-based filtering
-        if (traceSearchCriteria.uuidFromTime() != null) {
-            statement.bind("uuid_from_time", traceSearchCriteria.uuidFromTime());
-            statement.bind("uuid_to_time", traceSearchCriteria.uuidToTime());
-        }
+        Optional.ofNullable(traceSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(traceSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
     }
 
     @Override
@@ -2998,7 +3007,7 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
 
-            var template = new ST(BATCH_INSERT)
+            var template = TemplateUtils.newST(BATCH_INSERT)
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -3062,7 +3071,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3100,7 +3109,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_DAILY_BI_INFORMATION);
+        var template = TemplateUtils.newST(TRACE_DAILY_BI_INFORMATION);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3133,7 +3142,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+            var statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_ids", List.of(criteria.projectId()));
@@ -3155,7 +3164,7 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(TRACE_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -3195,7 +3204,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
-                    ST template = new ST(SELECT_TRACES_STATS);
+                    var template = TemplateUtils.newST(SELECT_TRACES_STATS);
 
                     template.add("project_stats", true);
 
@@ -3238,7 +3247,7 @@ class TraceDAOImpl implements TraceDAO {
 
                     int offset = (page - 1) * size;
 
-                    ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+                    var template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
@@ -3280,7 +3289,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate.stream(connection -> {
 
-            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            var template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)
@@ -3442,7 +3451,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Mono<TraceThread> findThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = new ST(SELECT_TRACES_THREAD_BY_ID);
+            var template = TemplateUtils.newST(SELECT_TRACES_THREAD_BY_ID);
             template.add("truncate", truncate);
 
             var statement = connection.createStatement(template.render())
@@ -3528,6 +3537,124 @@ class TraceDAOImpl implements TraceDAO {
                     log.info("Closing trace search stream");
                     endSegment(segment);
                 });
+    }
+
+    private static final String BULK_UPDATE = """
+            INSERT INTO traces (
+                id,
+                project_id,
+                workspace_id,
+                name,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                tags,
+                error_info,
+                created_at,
+                created_by,
+                last_updated_by,
+                thread_id,
+                visibility_mode,
+                truncation_threshold
+            )
+            SELECT
+                t.id,
+                t.project_id,
+                t.workspace_id,
+                <if(name)> :name <else> t.name <endif> as name,
+                t.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> t.end_time <endif> as end_time,
+                <if(input)> :input <else> t.input <endif> as input,
+                <if(output)> :output <else> t.output <endif> as output,
+                <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
+                <if(tags)><if(merge_tags)>arrayConcat(t.tags, :tags)<else>:tags<endif><else>t.tags<endif> as tags,
+                <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
+                t.created_at,
+                t.created_by,
+                :user_name as last_updated_by,
+                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
+                t.visibility_mode,
+                :truncation_threshold as truncation_threshold
+            FROM traces t
+            WHERE t.id IN :ids AND t.workspace_id = :workspace_id
+            ORDER BY t.last_updated_at DESC
+            LIMIT 1 BY t.id;""";
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull TraceUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' traces", ids.size());
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        var query = template.render();
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids);
+
+                    bindBulkUpdateParams(update, statement);
+                    TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+
+                    Segment segment = startSegment("traces", "Clickhouse", "bulk_update");
+
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' traces", ids.size()));
+    }
+
+    private ST newBulkUpdateTemplate(TraceUpdate traceUpdate, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        if (StringUtils.isNotBlank(traceUpdate.name())) {
+            template.add("name", traceUpdate.name());
+        }
+        Optional.ofNullable(traceUpdate.input())
+                .ifPresent(input -> template.add("input", input.toString()));
+        Optional.ofNullable(traceUpdate.output())
+                .ifPresent(output -> template.add("output", output.toString()));
+        Optional.ofNullable(traceUpdate.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+        Optional.ofNullable(traceUpdate.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        Optional.ofNullable(traceUpdate.endTime())
+                .ifPresent(endTime -> template.add("end_time", endTime.toString()));
+        Optional.ofNullable(traceUpdate.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+        if (StringUtils.isNotBlank(traceUpdate.threadId())) {
+            template.add("thread_id", traceUpdate.threadId());
+        }
+
+        return template;
+    }
+
+    private void bindBulkUpdateParams(TraceUpdate traceUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(traceUpdate.name())) {
+            statement.bind("name", traceUpdate.name());
+        }
+        Optional.ofNullable(traceUpdate.input())
+                .ifPresent(input -> statement.bind("input", input.toString()));
+        Optional.ofNullable(traceUpdate.output())
+                .ifPresent(output -> statement.bind("output", output.toString()));
+        Optional.ofNullable(traceUpdate.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(traceUpdate.endTime())
+                .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
+        Optional.ofNullable(traceUpdate.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+        Optional.ofNullable(traceUpdate.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
+        if (StringUtils.isNotBlank(traceUpdate.threadId())) {
+            statement.bind("thread_id", traceUpdate.threadId());
+        }
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {

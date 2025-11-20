@@ -55,6 +55,7 @@ const HeaderWrapper = <TData,>({
             "flex size-full items-center gap-1",
             horizontalAlignClass,
           )}
+          onClick={(e) => e.stopPropagation()}
         >
           <HeaderStatistic
             statistic={columnStatistic}

@@ -9,8 +9,8 @@ import * as core from "../../../../core";
 export const FindFeedbackDefinitionsRequestType: core.serialization.Schema<
     serializers.FindFeedbackDefinitionsRequestType.Raw,
     OpikApi.FindFeedbackDefinitionsRequestType
-> = core.serialization.enum_(["numerical", "categorical"]);
+> = core.serialization.enum_(["numerical", "categorical", "boolean"]);
 
 export declare namespace FindFeedbackDefinitionsRequestType {
-    export type Raw = "numerical" | "categorical";
+    export type Raw = "numerical" | "categorical" | "boolean";
 }

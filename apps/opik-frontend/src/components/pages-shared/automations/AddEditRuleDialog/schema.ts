@@ -6,7 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -16,14 +16,15 @@ import {
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
-import { hasImagesInContent } from "@/lib/llm";
-import { supportsImageInput } from "@/lib/modelCapabilities";
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
-
-const isOpenAIModel = (modelName: string): boolean => {
-  const openAIModels = PROVIDER_MODELS[PROVIDER_TYPE.OPEN_AI] || [];
-  return openAIModels.some((model) => model.value === modelName);
-};
+import {
+  supportsImageInput,
+  supportsVideoInput,
+} from "@/lib/modelCapabilities";
+import {
+  hasImagesInContent,
+  getTextFromMessageContent,
+  hasVideosInContent,
+} from "@/lib/llm";
 
 const RuleNameSchema = z
   .string({
@@ -140,12 +141,30 @@ const LLMJudgeBaseSchema = z.object({
       .min(0, { message: "Seed must be a non-negative integer" })
       .optional()
       .nullable(),
+    custom_parameters: z.record(z.string(), z.unknown()).optional().nullable(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
     z.object({
       id: z.string(),
-      content: z.string().min(1, { message: "Message is required" }),
+      content: z.union([
+        z.string().min(1, { message: "Message is required" }),
+        z
+          .array(
+            z.union([
+              z.object({ type: z.literal("text"), text: z.string() }),
+              z.object({
+                type: z.literal("image_url"),
+                image_url: z.object({ url: z.string() }),
+              }),
+              z.object({
+                type: z.literal("video_url"),
+                video_url: z.object({ url: z.string() }),
+              }),
+            ]),
+          )
+          .min(1, { message: "Message is required" }),
+      ]),
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
@@ -191,22 +210,39 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
   );
+  const hasVideos = data.messages.some((message) =>
+    hasVideosInContent(message.content),
+  );
 
-  if (hasImages) {
-    if (!isOpenAIModel(data.model)) {
+  if (hasImages || hasVideos) {
+    const modelSupportsImages = supportsImageInput(data.model);
+    const modelSupportsVideos = supportsVideoInput(data.model);
+    const supportsMultimodal = modelSupportsImages || modelSupportsVideos;
+
+    if (!supportsMultimodal) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "Only OpenAI models are currently supported for Online evaluation with images. Please select an OpenAI model or remove images from messages.",
+          "The selected model does not support media input. Please choose a model with vision capabilities or remove images from messages.",
         path: ["model"],
       });
-    } else if (!supportsImageInput(data.model)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
-        path: ["model"],
-      });
+    } else {
+      if (hasImages && !modelSupportsImages) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
+          path: ["model"],
+        });
+      }
+      if (hasVideos && !modelSupportsVideos) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "The selected model does not support video input. Please choose a model with video capabilities or remove videos from messages.",
+          path: ["model"],
+        });
+      }
     }
   }
 });
@@ -214,9 +250,10 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) =>
-    m.content.includes("{{context}}"),
-  ).length;
+  const contextCount = data.messages.filter((m) => {
+    const content = getTextFromMessageContent(m.content);
+    return content.includes("{{context}}");
+  }).length;
 
   if (contextCount < 1) {
     ctx.addIssue({
@@ -235,7 +272,8 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   }
 
   data.messages.forEach((message, index) => {
-    const matches = message.content.match(/{{([^}]+)}}/g);
+    const content = getTextFromMessageContent(message.content);
+    const matches = content.match(/{{([^}]+)}}/g);
     if (matches) {
       matches.forEach((match) => {
         if (match !== "{{context}}") {
@@ -326,18 +364,41 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
-const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
+const convertLLMToProviderMessages = (
+  messages: LLMMessage[],
+): ProviderMessageType[] =>
+  messages.map(({ content, ...rest }) => {
+    const base: ProviderMessageType = {
+      ...rest,
+      content,
+      role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
+    };
 
-const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
-  messages.map(
-    (m) =>
-      ({
-        ...m,
-        role: m.role.toLowerCase(),
-        id: generateRandomString(),
-      }) as LLMMessage,
-  );
+    // For LlmAsJudgeMessage (online scoring), use separate fields
+    // Only set the appropriate field based on content type
+    if (typeof content === "string") {
+      return { ...base, content };
+    } else if (Array.isArray(content)) {
+      return {
+        ...base,
+        content: null,
+        content_array: content,
+      } as unknown as ProviderMessageType;
+    }
+
+    return base;
+  });
+
+const convertProviderToLLMMessages = (
+  messages: ProviderMessageType[],
+): LLMMessage[] =>
+  messages.map((m) => ({
+    ...m,
+    role: m.role.toLowerCase() as LLM_MESSAGE_ROLE,
+    // Convert from separate fields to union type for frontend
+    content: m.content_array ?? m.content ?? "",
+    id: generateRandomString(),
+  }));
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   return {
@@ -345,6 +406,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     config: {
       temperature: data.model?.temperature ?? 0,
       seed: data.model?.seed ?? null,
+      custom_parameters: data.model?.custom_parameters ?? null,
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -357,7 +419,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
 export const convertLLMJudgeDataToLLMJudgeObject = (
   data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
 ) => {
-  const { temperature, seed } = data.config;
+  const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
     temperature,
@@ -365,6 +427,10 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 
   if (seed != null) {
     model.seed = seed;
+  }
+
+  if (custom_parameters != null) {
+    model.custom_parameters = custom_parameters;
   }
 
   return {

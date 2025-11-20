@@ -284,16 +284,17 @@ async def get_dashboard():
 
 ## Supported event types
 
-Opik supports eight types of alert events:
+Opik supports ten types of alert events:
 
 ### Observability events
 
-**New error in trace**
+**Trace errors threshold exceeded**
 - **Event type**: `trace:errors`
-- **Triggered when**: A trace is logged with error information
+- **Triggered when**: Total trace error count exceeds the specified threshold within a time window
 - **Project scope**: Can be configured to specific projects
-- **Payload**: Array of trace objects with error details
-- **Use case**: Monitor production errors, debug issues in real-time
+- **Configuration**: Requires threshold value (error count) and time window (in seconds)
+- **Payload**: Metrics alert payload with error count details
+- **Use case**: Proactive error monitoring, detect error spikes, prevent system degradation
 
 **New score added to trace**
 - **Event type**: `trace:feedback_score`
@@ -315,6 +316,22 @@ Opik supports eight types of alert events:
 - **Project scope**: Can be configured to specific projects
 - **Payload**: Array of guardrail result objects
 - **Use case**: Security monitoring, compliance tracking, PII detection
+
+**Cost threshold exceeded**
+- **Event type**: `trace:cost`
+- **Triggered when**: Total trace cost exceeds the specified threshold within a time window
+- **Project scope**: Can be configured to specific projects
+- **Configuration**: Requires threshold value (in currency units) and time window (in seconds)
+- **Payload**: Metrics alert payload with cost details
+- **Use case**: Budget monitoring, cost control, prevent runaway spending
+
+**Latency threshold exceeded**
+- **Event type**: `trace:latency`
+- **Triggered when**: Average trace latency exceeds the specified threshold within a time window
+- **Project scope**: Can be configured to specific projects
+- **Configuration**: Requires threshold value (in seconds) and time window (in seconds)
+- **Payload**: Metrics alert payload with latency details
+- **Use case**: Performance monitoring, SLA compliance, user experience tracking
 
 ### Prompt engineering events
 
@@ -420,29 +437,19 @@ All webhook events follow a consistent payload structure:
 
 ## Event-specific payloads
 
-### Trace errors payload
+### Trace errors threshold exceeded payload
 
 ```json
 {
-  "metadata": [
-    {
-      "id": "trace-uuid",
-      "name": "trace-name",
-      "project_id": "project-uuid",
-      "project_name": "Project Name",
-      "start_time": "2025-01-15T10:00:00Z",
-      "end_time": "2025-01-15T10:00:05Z",
-      "input": { "query": "..." },
-      "output": { "response": "..." },
-      "error_info": {
-        "exception_type": "ExceptionName",
-        "message": "Error message",
-        "traceback": "Full traceback"
-      },
-      "metadata": { "custom": "data" },
-      "tags": ["tag1", "tag2"]
-    }
-  ]
+  "metadata": {
+    "event_type": "TRACE_ERRORS",
+    "metric_name": "trace:errors",
+    "metric_value": "15",
+    "threshold": "10",
+    "window_seconds": "900",
+    "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+    "project_names": "Demo Project,Default Project"
+  }
 }
 ```
 
@@ -592,6 +599,38 @@ All webhook events follow a consistent payload structure:
       ]
     }
   ]
+}
+```
+
+### Cost threshold exceeded payload
+
+```json
+{
+  "metadata": {
+    "event_type": "TRACE_COST",
+    "metric_name": "trace:cost",
+    "metric_value": "150.75",
+    "threshold": "100.00",
+    "window_seconds": "3600",
+    "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+    "project_names": "Demo Project,Default Project"
+  }
+}
+```
+
+### Latency threshold exceeded payload
+
+```json
+{
+  "metadata": {
+    "event_type": "TRACE_LATENCY",
+    "metric_name": "trace:latency",
+    "metric_value": "5250.5000",
+    "threshold": "5",
+    "window_seconds": "1800",
+    "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+    "project_names": "Demo Project,Default Project"
+  }
 }
 ```
 

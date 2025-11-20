@@ -1,10 +1,19 @@
-import React from "react";
+import React, { useCallback } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { EditorView } from "@codemirror/view";
+import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { LLMCustomConfigsType } from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
+import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
+import useJsonInput from "@/hooks/useJsonInput";
+import { Label } from "@/components/ui/label";
+import { FormErrorSkeleton } from "@/components/ui/form";
 import isUndefined from "lodash/isUndefined";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Info } from "lucide-react";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
@@ -12,6 +21,21 @@ interface CustomModelConfigProps {
 }
 
 const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
+  const theme = useCodemirrorTheme({ editable: true });
+
+  const handleExtraBodyParametersChange = useCallback(
+    (value: Record<string, unknown> | null) => {
+      onChange({ custom_parameters: value });
+    },
+    [onChange],
+  );
+
+  const { jsonString, showInvalidJSON, handleJsonChange, handleJsonBlur } =
+    useJsonInput({
+      value: configs.custom_parameters,
+      onChange: handleExtraBodyParametersChange,
+    });
+
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -93,6 +117,37 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
           }
         />
       )}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="custom_parameters" className="flex items-center gap-1">
+          Extra body parameters (Optional)
+          <TooltipWrapper
+            content={
+              <PromptModelSettingsTooltipContent text="Provider-specific JSON parameters sent with each request" />
+            }
+          >
+            <Info className="ml-1 size-4 text-light-slate" />
+          </TooltipWrapper>
+        </Label>
+        <div className="max-h-52 overflow-y-auto rounded-md border">
+          <CodeMirror
+            id="custom_parameters"
+            theme={theme}
+            value={jsonString}
+            onChange={handleJsonChange}
+            onBlur={handleJsonBlur}
+            extensions={[jsonLanguage, EditorView.lineWrapping]}
+            placeholder='{"key": "value"}'
+            basicSetup={{
+              lineNumbers: false,
+              foldGutter: false,
+              highlightActiveLine: false,
+              highlightSelectionMatches: false,
+            }}
+          />
+        </div>
+        {showInvalidJSON && <FormErrorSkeleton>Invalid JSON</FormErrorSkeleton>}
+      </div>
     </div>
   );
 };

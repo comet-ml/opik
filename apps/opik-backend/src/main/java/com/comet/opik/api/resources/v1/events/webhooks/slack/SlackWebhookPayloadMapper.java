@@ -6,16 +6,19 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -87,7 +90,7 @@ public class SlackWebhookPayloadMapper {
             case PROMPT_CREATED -> buildPromptCreatedDetails(metadata, baseUrl);
             case PROMPT_DELETED -> buildPromptDeletedDetails(metadata);
             case PROMPT_COMMITTED -> buildPromptCommittedDetails(metadata, baseUrl);
-            case TRACE_ERRORS -> buildTraceErrorsDetails(metadata, baseUrl);
+            case TRACE_ERRORS -> buildTraceErrorsMetricsDetails(metadata, baseUrl);
             case TRACE_FEEDBACK_SCORE -> buildTraceFeedbackScoreDetails(metadata, baseUrl);
             case TRACE_THREAD_FEEDBACK_SCORE -> buildTraceThreadFeedbackScoreDetails(metadata, baseUrl);
             case TRACE_GUARDRAILS_TRIGGERED -> buildGuardrailsTriggeredDetails(metadata, baseUrl);
@@ -166,31 +169,6 @@ public class SlackWebhookPayloadMapper {
                 commits.size(), baseUrl + "/prompts");
 
         return checkSlackTextLimit(mainText, "*Prompts Committed:*\n", commits, fallbackText);
-    }
-
-    private static DetailsBuildResult buildTraceErrorsDetails(List<?> metadata,
-            String baseUrl) {
-        if (metadata.isEmpty()) {
-            return new DetailsBuildResult("No trace errors");
-        }
-
-        // Deduplicate traces with project IDs
-        Set<Pair<UUID, UUID>> traceWithProjectIds = metadata.stream()
-                .map(item -> (List<Trace>) item)
-                .flatMap(List::stream)
-                .map(trace -> Pair.of(trace.id(), trace.projectId()))
-                .collect(Collectors.toSet());
-
-        List<String> traceLinks = traceWithProjectIds.stream()
-                .map(pair -> buildTraceLink(pair.getLeft(), pair.getRight(), baseUrl))
-                .toList();
-
-        String mainText = "*Traces with Errors:*\n" + String.join("\n", traceLinks);
-        String fallbackText = String.format(
-                "Overall %d Traces with errors created, you could check them here: <%s|View All>",
-                traceLinks.size(), baseUrl + "/projects");
-
-        return checkSlackTextLimit(mainText, "*Traces with Errors:*\n", traceLinks, fallbackText);
     }
 
     private static DetailsBuildResult buildTraceFeedbackScoreDetails(List<?> metadata,
@@ -278,16 +256,112 @@ public class SlackWebhookPayloadMapper {
         return checkSlackTextLimit(mainText, "*Experiments Finished:*\n", experimentLinks, fallbackText);
     }
 
+    private static DetailsBuildResult buildTraceErrorsMetricsDetails(List<?> metadata,
+            String baseUrl) {
+        return buildMetricsAlertDetails(metadata, baseUrl, "Trace Errors",
+                "No trace error alerts triggered");
+    }
+
     private static DetailsBuildResult buildCostDetails(List<?> metadata,
             String baseUrl) {
-        // TODO: implement cost details mapping
-        return new DetailsBuildResult("implement later");
+        return buildMetricsAlertDetails(metadata, baseUrl, "Cost",
+                "No cost alerts triggered");
     }
 
     private static DetailsBuildResult buildLatencyDetails(List<?> metadata,
             String baseUrl) {
-        // TODO: implement latency details mapping
-        return new DetailsBuildResult("implement later");
+        return buildMetricsAlertDetails(metadata, baseUrl, "Latency",
+                "No latency alerts triggered");
+    }
+
+    /**
+     * Builds metrics alert details for Slack notification.
+     *
+     * @param metadata the alert metadata containing MetricsAlertPayload objects
+     * @param baseUrl the base URL for creating links
+     * @param metricType the type of metric (e.g., "Cost", "Latency", "Trace Errors")
+     * @param emptyMessage the message to display when no alerts are triggered
+     * @return the formatted details result
+     */
+    private static DetailsBuildResult buildMetricsAlertDetails(List<?> metadata,
+            String baseUrl, String metricType, String emptyMessage) {
+        if (metadata.isEmpty()) {
+            return new DetailsBuildResult(emptyMessage);
+        }
+
+        List<String> alertDetails = metadata.stream()
+                .map(item -> formatMetricsAlertPayload((MetricsAlertPayload) item, metricType))
+                .toList();
+
+        List<String> projectIds = metadata.stream()
+                .map(item -> ((MetricsAlertPayload) item).projectIds())
+                .filter(StringUtils::isNotBlank)
+                .flatMap(ids -> Arrays.stream(ids.split(",")))
+                .distinct()
+                .toList();
+
+        String mainText = String.format("*%s Alert Triggered:*\n%s", metricType, String.join("\n", alertDetails));
+        String projectsLink = projectIds.size() == 1
+                ? String.format("\n\n<%s/projects/%s/traces|View Project>", baseUrl, projectIds.getFirst())
+                : String.format("\n\n<%s/projects|View All Projects>", baseUrl);
+
+        return new DetailsBuildResult(mainText + projectsLink);
+    }
+
+    /**
+     * Formats metrics alert payload into a readable Slack message.
+     */
+    private static String formatMetricsAlertPayload(@NonNull MetricsAlertPayload payload, String type) {
+        try {
+            // Format window duration
+            String windowDuration = formatWindowDuration(payload.windowSeconds());
+
+            // Build scope description
+            String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
+                    ? "*Workspace-wide*"
+                    : String.format("*Projects:* `%s`", payload.projectNames());
+
+            // Format based on metric type
+            String valuePrefix = type.equals("Cost") ? "$" : "";
+            String valueSuffix = type.equals("Latency") ? " s" : "";
+
+            return String.format("• *Current %s:* %s%s%s\n" +
+                    "  *Threshold:* %s%s%s\n" +
+                    "  *Time Window:* %s\n" +
+                    "  *Scope:* %s",
+                    type,
+                    valuePrefix,
+                    payload.metricValue(),
+                    valueSuffix,
+                    valuePrefix,
+                    payload.threshold(),
+                    valueSuffix,
+                    windowDuration,
+                    scope);
+        } catch (Exception e) {
+            log.error("Failed to format metrics alert payload: '{}'", payload, e);
+            return "• %s alert (unable to parse details)".formatted(type);
+        }
+    }
+
+    /**
+     * Formats window duration from seconds to human-readable format.
+     */
+    private static String formatWindowDuration(long seconds) {
+        Duration duration = Duration.ofSeconds(seconds);
+
+        if (duration.toDays() > 0) {
+            long days = duration.toDays();
+            return days + " day" + (days != 1 ? "s" : "");
+        } else if (duration.toHours() > 0) {
+            long hours = duration.toHours();
+            return hours + " hour" + (hours != 1 ? "s" : "");
+        } else if (duration.toMinutes() > 0) {
+            long minutes = duration.toMinutes();
+            return minutes + " minute" + (minutes != 1 ? "s" : "");
+        } else {
+            return seconds + " second" + (seconds != 1 ? "s" : "");
+        }
     }
 
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,
@@ -321,7 +395,7 @@ public class SlackWebhookPayloadMapper {
             case PROMPT_CREATED -> "Prompt Created";
             case PROMPT_DELETED -> "Prompt Deleted";
             case PROMPT_COMMITTED -> "Prompt Committed";
-            case TRACE_ERRORS -> "Trace Errors";
+            case TRACE_ERRORS -> "Trace Error Alert";
             case TRACE_FEEDBACK_SCORE -> "Trace Feedback Score";
             case TRACE_THREAD_FEEDBACK_SCORE -> "Thread Feedback Score";
             case TRACE_GUARDRAILS_TRIGGERED -> "Guardrail Triggered";

@@ -1,10 +1,10 @@
 from typing import Union, cast, List
 
-from . import base_batcher, sequence_splitter
-from .. import messages
 from opik.rest_api.types import span_write, trace_write
-import opik.jsonable_encoder as jsonable_encoder
 import opik.dict_utils as dict_utils
+
+from . import base_batcher, sequence_splitter
+from .. import messages, encoder_helpers
 
 
 class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
@@ -18,8 +18,10 @@ class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
             cleaned_span_write_kwargs = dict_utils.remove_none_from_dict(
                 span_write_kwargs
             )
-            cleaned_span_write_kwargs = jsonable_encoder.encode(
-                cleaned_span_write_kwargs
+            cleaned_span_write_kwargs = encoder_helpers.encode_and_anonymize(
+                cleaned_span_write_kwargs,
+                fields_to_anonymize=messages.CreateSpansBatchMessage.fields_to_anonymize(),
+                object_type="span",
             )
             rest_spans.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
@@ -52,8 +54,10 @@ class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
             cleaned_trace_write_kwargs = dict_utils.remove_none_from_dict(
                 trace_write_kwargs
             )
-            cleaned_trace_write_kwargs = jsonable_encoder.encode(
-                cleaned_trace_write_kwargs
+            cleaned_trace_write_kwargs = encoder_helpers.encode_and_anonymize(
+                cleaned_trace_write_kwargs,
+                fields_to_anonymize=messages.CreateTraceBatchMessage.fields_to_anonymize(),
+                object_type="trace",
             )
             rest_traces.append(trace_write.TraceWrite(**cleaned_trace_write_kwargs))
 

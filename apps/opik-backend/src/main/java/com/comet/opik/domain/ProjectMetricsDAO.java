@@ -1,11 +1,13 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -17,7 +19,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -66,6 +67,12 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
+
+    Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
+
+    Mono<BigDecimal> getTotalTraceErrors(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
 }
 
 @Slf4j
@@ -75,6 +82,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
@@ -194,7 +202,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -240,7 +249,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id BETWEEN :uuid_from_time AND :uuid_to_time
+                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -399,10 +409,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces_filtered
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_COUNT = """
@@ -412,10 +422,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces_filtered
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES = """
@@ -432,10 +442,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM feedback_scores_deduplication
             GROUP BY name, bucket
             ORDER BY name, bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
@@ -457,10 +467,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM thread_feedback_scores
             GROUP BY name, bucket
             ORDER BY name, bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_TOKEN_USAGE = """
@@ -486,10 +496,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM spans_dedup
             GROUP BY name, bucket
             ORDER BY name, bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_COST = """
@@ -511,10 +521,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM spans_dedup
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_GUARDRAILS_FAILED_COUNT = """
@@ -526,11 +536,47 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE g.result = 'failed'
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_TOTAL_COST = """
+            SELECT
+                sum(total_estimated_cost) AS total_cost
+            FROM spans final
+            WHERE workspace_id = :workspace_id
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>;
+            """;
+
+    private static final String GET_AVERAGE_DURATION = """
+            SELECT
+                avg(
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL)
+                ) AS avg_duration
+            FROM traces final
+            WHERE workspace_id = :workspace_id
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
+            """;
+
+    private static final String GET_TOTAL_TRACE_ERRORS = """
+            SELECT
+                COUNT(1) AS total_trace_errors
+            FROM traces final
+            WHERE workspace_id = :workspace_id
+                AND length(error_info) > 0
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
+            """;
 
     private static final String GET_THREAD_COUNT = """
             %s
@@ -539,10 +585,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM threads_filtered
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_DURATION = """
@@ -561,10 +607,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM threads_filtered
             GROUP BY bucket
             ORDER BY bucket
-            WITH FILL
+            <if(with_fill)>WITH FILL
                 FROM <fill_from>
                 TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                STEP <step>;
+                STEP <step><endif>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
     @Override
@@ -689,15 +735,101 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .collectList());
     }
 
+    @Override
+    public Mono<BigDecimal> getTotalCost(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
+        return getAlertMetric(
+                GET_TOTAL_COST,
+                projectIds,
+                startTime,
+                endTime,
+                "getTotalCost",
+                "total_cost");
+    }
+
+    @Override
+    public Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
+        return getAlertMetric(
+                GET_AVERAGE_DURATION,
+                projectIds,
+                startTime,
+                endTime,
+                "getAverageDuration",
+                "avg_duration");
+    }
+
+    @Override
+    public Mono<BigDecimal> getTotalTraceErrors(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime) {
+        return getAlertMetric(
+                GET_TOTAL_TRACE_ERRORS,
+                projectIds,
+                startTime,
+                endTime,
+                "getTotalTraceErrors",
+                "total_trace_errors");
+    }
+
+    private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
+            Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
+        return template.nonTransaction(connection -> {
+            var stTemplate = TemplateUtils.newST(query);
+
+            // Add project_ids flag to template if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                stTemplate.add("project_ids", true);
+            }
+
+            // Add uuid_from_time flag
+            stTemplate.add("uuid_from_time", true);
+            var uuidFromTime = instantToUUIDMapper.toLowerBound(startTime).toString();
+
+            // Add uuid_to_time flag if endTime is provided
+            String uuidToTime = null;
+            if (endTime != null) {
+                stTemplate.add("uuid_to_time", true);
+                uuidToTime = instantToUUIDMapper.toUpperBound(endTime).toString();
+            }
+
+            // Create statement once with all flags set
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("uuid_from_time", uuidFromTime);
+
+            // Bind uuid_to_time only if endTime is provided
+            if (uuidToTime != null) {
+                statement = statement.bind("uuid_to_time", uuidToTime);
+            }
+
+            // Bind project IDs if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+            }
+
+            InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get(rowName, BigDecimal.class)))
+                    .next()
+                    .defaultIfEmpty(BigDecimal.ZERO)
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
-        var template = new ST(query)
+        var template = TemplateUtils.newST(query)
                 .add("step", intervalToSql(request.interval()))
                 .add("bucket", wrapWeekly(request.interval(),
                         "toStartOfInterval(trace_time, %s)".formatted(intervalToSql(request.interval()))))
                 .add("fill_from", wrapWeekly(request.interval(),
                         "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
                                 .formatted(intervalToSql(request.interval()))));
+
+        // Add uuid flags for conditional SQL generation
+        template.add("uuid_from_time", true);
+        if (request.uuidToTime() != null) {
+            template.add("uuid_to_time", true);
+            template.add("with_fill", true);
+        }
+        // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
 
         Optional.ofNullable(request.traceFilters())
                 .ifPresent(filters -> {
@@ -726,8 +858,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
-                .bind("uuid_from_time", request.uuidFromTime().toString())
-                .bind("uuid_to_time", request.uuidToTime().toString());
+                .bind("uuid_from_time", request.uuidFromTime().toString());
+
+        // Bind uuid_to_time only if present
+        if (request.uuidToTime() != null) {
+            statement.bind("uuid_to_time", request.uuidToTime().toString());
+        }
 
         Optional.ofNullable(request.traceFilters())
                 .ifPresent(filters -> {

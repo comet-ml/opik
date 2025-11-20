@@ -16,8 +16,8 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.TemplateUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -64,7 +64,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
 
 @Singleton
@@ -901,7 +901,8 @@ class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1043,7 +1044,8 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1251,7 +1253,8 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
-                <if(uuid_from_time)> AND id BETWEEN :uuid_from_time AND :uuid_to_time <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1375,7 +1378,7 @@ class SpanDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = new ST(BULK_INSERT)
+            var template = TemplateUtils.newST(BULK_INSERT)
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -1511,7 +1514,7 @@ class SpanDAO {
     }
 
     private ST newInsertTemplate(Span span) {
-        var template = new ST(INSERT);
+        var template = TemplateUtils.newST(INSERT);
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
@@ -1530,7 +1533,7 @@ class SpanDAO {
     public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
+                    var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
 
                     var statement = connection.createStatement(template.render());
 
@@ -1631,7 +1634,7 @@ class SpanDAO {
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
-        var template = new ST(sql);
+        var template = TemplateUtils.newST(sql);
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -1759,7 +1762,7 @@ class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(DELETE_BY_TRACE_IDS);
+                    var template = TemplateUtils.newST(DELETE_BY_TRACE_IDS);
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
 
@@ -2034,7 +2037,7 @@ class SpanDAO {
     }
 
     private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
         Optional.ofNullable(spanSearchCriteria.traceId())
                 .ifPresent(traceId -> template.add("trace_id", traceId));
         Optional.ofNullable(spanSearchCriteria.type())
@@ -2052,11 +2055,11 @@ class SpanDAO {
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
 
-        // Bind UUID BETWEEN bounds for time-based filtering
-        if (spanSearchCriteria.uuidFromTime() != null) {
-            template.add("uuid_from_time", spanSearchCriteria.uuidFromTime());
-            template.add("uuid_to_time", spanSearchCriteria.uuidToTime());
-        }
+        // Bind UUID bounds for time-based filtering
+        Optional.ofNullable(spanSearchCriteria.uuidFromTime())
+                .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(spanSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         return template;
     }
 
@@ -2074,12 +2077,11 @@ class SpanDAO {
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));
 
-        // Bind UUID BETWEEN bounds for time-based filtering
+        // Bind UUID bounds for time-based filtering
         Optional.ofNullable(spanSearchCriteria.uuidFromTime())
-                .ifPresent(uuid_from_time -> {
-                    statement.bind("uuid_from_time", uuid_from_time);
-                    statement.bind("uuid_to_time", spanSearchCriteria.uuidToTime());
-                });
+                .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
+        Optional.ofNullable(spanSearchCriteria.uuidToTime())
+                .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
     }
 
     @WithSpan
@@ -2161,7 +2163,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(SPAN_COUNT_BY_WORKSPACE_ID);
+        var template = TemplateUtils.newST(SPAN_COUNT_BY_WORKSPACE_ID);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2197,7 +2199,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(SPAN_DAILY_BI_INFORMATION);
+        var template = TemplateUtils.newST(SPAN_DAILY_BI_INFORMATION);
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2248,6 +2250,168 @@ class SpanDAO {
             statement.bind("total_estimated_cost" + index, estimatedCost.toString());
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
+        }
+    }
+
+    private static final String BULK_UPDATE = """
+            INSERT INTO spans (
+                id,
+                project_id,
+                workspace_id,
+                trace_id,
+                parent_span_id,
+                name,
+                type,
+                start_time,
+                end_time,
+                input,
+                output,
+                metadata,
+                model,
+                provider,
+                total_estimated_cost,
+                total_estimated_cost_version,
+                tags,
+                usage,
+                error_info,
+                created_at,
+                created_by,
+                last_updated_by,
+                truncation_threshold
+            )
+            SELECT
+                s.id,
+                s.project_id,
+                s.workspace_id,
+                s.trace_id,
+                s.parent_span_id,
+                <if(name)> :name <else> s.name <endif> as name,
+                <if(type)> :type <else> s.type <endif> as type,
+                s.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> s.end_time <endif> as end_time,
+                <if(input)> :input <else> s.input <endif> as input,
+                <if(output)> :output <else> s.output <endif> as output,
+                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
+                <if(model)> :model <else> s.model <endif> as model,
+                <if(provider)> :provider <else> s.provider <endif> as provider,
+                <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
+                <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags,
+                <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+                <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
+                s.created_at,
+                s.created_by,
+                :user_name as last_updated_by,
+                :truncation_threshold
+            FROM spans s
+            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+            ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
+            """;
+
+    @WithSpan
+    public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull SpanUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Bulk updating '{}' spans", ids.size());
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+        var query = template.render();
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(query)
+                            .bind("ids", ids);
+
+                    bindBulkUpdateParams(update, statement);
+                    TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "bulk_update");
+
+                    return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                })
+                .then()
+                .doOnSuccess(__ -> log.info("Completed bulk update for '{}' spans", ids.size()));
+    }
+
+    private ST newBulkUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        if (StringUtils.isNotBlank(spanUpdate.name())) {
+            template.add("name", spanUpdate.name());
+        }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> template.add("type", type.toString()));
+        Optional.ofNullable(spanUpdate.input())
+                .ifPresent(input -> template.add("input", input.toString()));
+        Optional.ofNullable(spanUpdate.output())
+                .ifPresent(output -> template.add("output", output.toString()));
+        Optional.ofNullable(spanUpdate.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+        Optional.ofNullable(spanUpdate.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        if (StringUtils.isNotBlank(spanUpdate.model())) {
+            template.add("model", spanUpdate.model());
+        }
+        if (StringUtils.isNotBlank(spanUpdate.provider())) {
+            template.add("provider", spanUpdate.provider());
+        }
+        Optional.ofNullable(spanUpdate.endTime())
+                .ifPresent(endTime -> template.add("end_time", endTime.toString()));
+        Optional.ofNullable(spanUpdate.usage())
+                .ifPresent(usage -> template.add("usage", usage.toString()));
+        Optional.ofNullable(spanUpdate.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+
+        if (spanUpdate.totalEstimatedCost() != null) {
+            template.add("total_estimated_cost", "total_estimated_cost");
+            template.add("total_estimated_cost_version", "total_estimated_cost_version");
+        }
+        return template;
+    }
+
+    private void bindBulkUpdateParams(SpanUpdate spanUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(spanUpdate.name())) {
+            statement.bind("name", spanUpdate.name());
+        }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> statement.bind("type", type.toString()));
+        Optional.ofNullable(spanUpdate.input())
+                .ifPresent(input -> statement.bind("input", input.toString()));
+        Optional.ofNullable(spanUpdate.output())
+                .ifPresent(output -> statement.bind("output", output.toString()));
+        Optional.ofNullable(spanUpdate.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(spanUpdate.usage())
+                .ifPresent(usage -> {
+                    var usageKeys = new ArrayList<String>();
+                    var usageValues = new ArrayList<Integer>();
+                    for (var entry : usage.entrySet()) {
+                        usageKeys.add(entry.getKey());
+                        usageValues.add(entry.getValue());
+                    }
+                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
+                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
+                });
+        Optional.ofNullable(spanUpdate.endTime())
+                .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
+        Optional.ofNullable(spanUpdate.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
+        if (StringUtils.isNotBlank(spanUpdate.model())) {
+            statement.bind("model", spanUpdate.model());
+        }
+        if (StringUtils.isNotBlank(spanUpdate.provider())) {
+            statement.bind("provider", spanUpdate.provider());
+        }
+        Optional.ofNullable(spanUpdate.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
+
+        if (spanUpdate.totalEstimatedCost() != null) {
+            statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
+            statement.bind("total_estimated_cost_version", "");
         }
     }
 

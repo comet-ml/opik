@@ -25,11 +25,10 @@ export class ThreadsPage {
       .nth(2);
     this.threadDeletePopupDeleteButton = page.getByRole('button', { name: 'Delete' });
     this.threadCheckbox = page.getByLabel('Select row');
+    // Find the delete button by its trash icon SVG (same pattern as traces page)
     this.threadTableDeleteButton = page
-      .locator('div')
-      .filter({ hasText: /^Add to/ })
       .getByRole('button')
-      .nth(3);
+      .filter({ has: page.locator('svg path[d*="M3 6h18"]') });
     this.outputContainer = page.getByTestId('thread').locator('.comet-markdown');
   }
 

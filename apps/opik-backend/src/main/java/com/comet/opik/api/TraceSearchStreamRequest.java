@@ -25,8 +25,8 @@ public record TraceSearchStreamRequest(
         @Schema(description = "Max number of traces to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         @Schema(description = "Truncate input, output and metadata to slim payloads", defaultValue = "true") @DefaultValue("true") boolean truncate,
         @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments", defaultValue = "false") @DefaultValue("false") boolean stripAttachments,
-        @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant fromTime,
-        @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant toTime) {
+        @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant fromTime,
+        @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant toTime) {
 
     public Integer limit() {
         return limit == null ? 500 : limit;
