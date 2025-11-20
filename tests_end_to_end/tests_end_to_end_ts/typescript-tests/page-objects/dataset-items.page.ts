@@ -81,31 +81,36 @@ export class DatasetItemsPage {
 
   async getAllDatasetItemsOnCurrentPage(): Promise<Array<Record<string, string>>> {
     await this.removeDefaultColumns();
+    await this.page.waitForTimeout(500);
 
     const headerCells = await this.page.locator('th').allInnerTexts();
-    const keys = headerCells.slice(1, -1);
+    const keys = headerCells.slice(1, -1); // Remove first (checkbox) and last (actions)
     const items: Array<Record<string, string>> = [];
 
     const rows = await this.page.locator('tr').all();
 
+    // Start from index 1 to skip header row
     for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
       const item: Record<string, string> = {};
       const cells = await row.locator('td').all();
 
+      // Iterate through cells, skipping first (checkbox) and last (actions)
       for (let cellIndex = 0; cellIndex < cells.length - 2; cellIndex++) {
         const cell = cells[cellIndex + 1];
         let content = '';
 
+        // First data column (ID) - copy from clipboard as it may be truncated
         if (cellIndex === 0) {
           await cell.getByRole('button').hover();
           await row.getByRole('button').nth(1).click();
+          await this.page.waitForTimeout(50);
           content = await this.page.evaluate(() => (navigator as any).clipboard.readText());
         } else {
           content = (await cell.textContent()) || '';
         }
 
-        item[keys[cellIndex]] = content;
+        item[keys[cellIndex]] = content.trim();
       }
 
       items.push(item);
