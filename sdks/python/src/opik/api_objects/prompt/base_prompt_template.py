@@ -4,8 +4,6 @@ Base class for prompt templates.
 Defines abstract interface that both string and chat template variants must implement.
 """
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import Any
 

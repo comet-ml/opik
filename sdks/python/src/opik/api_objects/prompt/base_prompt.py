@@ -4,8 +4,6 @@ Base class for prompts.
 Defines abstract interface that both string and chat prompt variants must implement.
 """
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 

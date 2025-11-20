@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Union
 
 from .. import types as prompt_types

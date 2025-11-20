@@ -6,8 +6,6 @@ messages. Rendering is handled by a registry of part renderers so additional
 modalities can be plugged in without changing the core implementation.
 """
 
-from __future__ import annotations
-
 import re
 from typing import Any, Dict, List, Optional, Set, Union, cast
 from typing_extensions import override
@@ -23,6 +21,100 @@ from . import content_renderer_registry
 class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
     """
     Prompt template for chat-style prompts with multimodal content.
+
+    This class handles OpenAI-like message formats with support for text, images,
+    and video content. Templates use Mustache syntax (``{{variable}}``) by default
+    for variable substitution.
+
+    Args:
+        messages: List of message dictionaries with "role" and "content" keys.
+            Content can be a string or a list of content parts (text, image_url, video_url).
+        template_type: Template syntax to use for variable substitution.
+            Defaults to :class:`~opik.api_objects.prompt.types.PromptType.MUSTACHE`.
+        registry: Custom content renderer registry. If None, uses the default registry
+            with built-in support for text, image, and video rendering.
+        validate_placeholders: If True, raises an exception when template placeholders
+            don't match the provided variables during formatting.
+
+    Example:
+        Simple text-based chat template with variables::
+
+            template = ChatPromptTemplate([
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant specializing in {{domain}}."
+                },
+                {
+                    "role": "user",
+                    "content": "Explain {{topic}} in simple terms."
+                }
+            ])
+
+            messages = template.format({
+                "domain": "physics",
+                "topic": "quantum entanglement"
+            })
+
+        Multimodal template with image content::
+
+            template = ChatPromptTemplate([
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "What is in this image from {{location}}?"
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": "{{image_path}}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ])
+
+            messages = template.format({
+                "location": "Paris",
+                "image_path": "https://example.com/photo.jpg"
+            })
+
+        Template with video content::
+
+            template = ChatPromptTemplate([
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Analyze this video: {{description}}"
+                        },
+                        {
+                            "type": "video_url",
+                            "video_url": {
+                                "url": "{{video_url}}",
+                                "mime_type": "video/mp4"
+                            }
+                        }
+                    ]
+                }
+            ])
+
+            messages = template.format({
+                "description": "traffic analysis",
+                "video_url": "https://example.com/traffic.mp4"
+            })
+
+        When formatting with unsupported modalities, the content is replaced with
+        placeholders::
+
+            messages = template.format(
+                {"video_url": "https://example.com/video.mp4"},
+                supported_modalities={"text"}  # video not supported
+            )
+            # Returns: [{"role": "user", "content": "Analyze this video\\n<<<video>>><<</video>>>"}]
     """
 
     def __init__(
