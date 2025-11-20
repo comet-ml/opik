@@ -46,7 +46,7 @@ def _default_cache_dir() -> Path:
     return Path.home() / ".cache" / "huggingface"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def ensured_hf_cache(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
