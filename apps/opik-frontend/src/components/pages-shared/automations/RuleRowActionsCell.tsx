@@ -9,16 +9,19 @@ import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { EvaluatorsRule } from "@/types/automations";
 import { CellContext } from "@tanstack/react-table";
-import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
-const RuleRowActionsCell: React.FC<CellContext<EvaluatorsRule, unknown>> = (
-  context,
-) => {
+interface RuleRowActionsCellProps {
+  openEditDialog: (ruleId: string) => void;
+}
+
+const RuleRowActionsCell: React.FC<
+  RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>
+> = ({ openEditDialog, row, column, table }) => {
   const resetKeyRef = useRef(0);
-  const rule = context.row.original;
+  const rule = row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
   const { mutate } = useRulesBatchDeleteMutation();
@@ -31,18 +34,11 @@ const RuleRowActionsCell: React.FC<CellContext<EvaluatorsRule, unknown>> = (
 
   return (
     <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
+      metadata={column.columnDef.meta}
+      tableMetadata={table.options.meta}
       className="justify-end p-0"
       stopClickPropagation
     >
-      <AddEditRuleDialog
-        key={`add-${resetKeyRef.current}`}
-        projectId={rule.project_id}
-        rule={rule}
-        open={open === 2}
-        setOpen={setOpen}
-      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 1}
@@ -63,12 +59,7 @@ Tip: To pause scoring without deleting, disable the rule.`}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
+          <DropdownMenuItem onClick={() => openEditDialog(rule.id)}>
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
