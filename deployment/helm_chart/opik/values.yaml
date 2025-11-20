@@ -24,7 +24,7 @@ serviceAccount:
   name: ""
   annotations: {}
 
-demoDataJob: 
+demoDataJob:
   enabled: true
 
 nodeSelector: {}
@@ -33,16 +33,16 @@ affinity: {}
 
 caCerts:
   # -- (list) Additional Certificate Authority Certificates to trust.
-  # Each list entry has two keys: `name` and `content`. `name` should be a 
-  # unique identifier. content Should be PEM formated Public Certificate 
+  # Each list entry has two keys: `name` and `content`. `name` should be a
+  # unique identifier. content Should be PEM formated Public Certificate
   # contents.
   additionalCACerts:
 
-  # -- Certificates are Public Keys + Metadata, but some organizations may 
+  # -- Certificates are Public Keys + Metadata, but some organizations may
   # still prefer storing these in Secrets.
   additionalCACertsInSecret: false
 
-  # -- If there is an existing ConfigMap containing the additional CA 
+  # -- If there is an existing ConfigMap containing the additional CA
   # Certificates you can provide its name here instead of creatinga a new one.
   # If `additionalCACertsInSecret` is `true` we will look for this name in
   # Secrets.
@@ -541,7 +541,7 @@ clickhouse:
     name: ""
   zookeeper:
       host: opik-zookeeper
-  backup: 
+  backup:
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:
