@@ -15,7 +15,7 @@
 </h1>
 <h2 align="center" style="border-bottom: none">오픈 소스 LLM 평가 플랫폼</h2>
 <p align="center">
-Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 실행하도록 구축(build), 평가(evaluate), 최적화(optimize)를 지원합니다. RAG 챗봇에서 코드 어시스턴트, 복잡한 에이전트 파이프라인에 이르기까지, Opik은 포괄적인 트레이싱, 평가, 대시보드와 함께 <b>Opik Agent Optimizer</b>, <b>Opik Guardrails</b> 같은 강력한 기능을 제공하여 프로덕션 환경의 LLM 애플리케이션 개선과 보안을 돕습니다.
+Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 실행하도록 구축(build), 평가(evaluate), 최적화(optimize)하는 것을 지원합니다. RAG 챗봇에서 코드 어시스턴트, 복잡한 에이전트 파이프라인에 이르기까지, Opik은 포괄적인 트레이싱, 평가, 대시보드와 함께 <b>Opik Agent Optimizer</b>, <b>Opik Guardrails</b> 같은 강력한 기능을 제공하여 프로덕션 환경의 LLM 애플리케이션 개선과 보안을 돕습니다.
 </p>
 
 <div align="center">
@@ -50,9 +50,9 @@ Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 �
 
 Opik(Comet에서 개발한 오픈 소스 플랫폼으로, LLM 애플리케이션의 전 수명 주기를 간소화합니다)은 개발자가 모델과 에이전시 시스템을 평가, 테스트, 모니터링 및 최적화할 수 있도록 지원합니다. 주요 기능은 다음과 같습니다:
 
-- **포괄적 관찰성(Observability)**: LLM 호출의 상세 트레이싱, 대화 기록, 에이전트 활동 추적
+- **포괄적 관측성(Observability)**: LLM 호출의 상세 트레이싱, 대화 기록, 에이전트 활동 추적
 - **고급 평가(Evaluation)**: 강력한 프롬프트 평가, LLM-as-a-judge, 실험 관리
-- **프로덕션 대응**: 확장 가능한 모니터링 대시보드 및 온라인 평가 규칙
+- **프로덕션 대응**: 확장 가능한 모니터링 대시보드 및 온라인 평가 규칙 제공
 - **Opik Agent Optimizer**: 프롬프트와 에이전트를 개선하는 전용 SDK 및 최적화 도구
 - **Opik Guardrails**: 안전하고 책임 있는 AI 실천을 위한 기능
 
@@ -100,7 +100,7 @@ Opik(Comet에서 개발한 오픈 소스 플랫폼으로, LLM 애플리케이션
 
 가장 간단하게 로컬 Opik 인스턴스를 실행하는 방법. 새 `.opik.sh` 설치 스크립트 사용:
 
-On Linux or Mac Enviroment:
+On Linux or Mac Environment:
 
 ```bash
 # Opik 리포지토리 클론
@@ -113,7 +113,7 @@ cd opik
 ./opik.sh
 ```
 
-On Windows Enviroment:
+On Windows Environment:
 
 ```powershell
 # Opik 리포지토리 클론

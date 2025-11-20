@@ -99,7 +99,7 @@ Deploy Opik in your own environment. Choose between Docker for local setups or K
 
 This is the simplest way to get a local Opik instance running. Note the new `./opik.sh` installation script:
 
-On Linux or Mac Enviroment:
+On Linux or Mac Environment:
 
 ```bash
 # Clone the Opik repository
@@ -112,7 +112,7 @@ cd opik
 ./opik.sh
 ```
 
-On Windows Enviroment:
+On Windows Environment:
 
 ```powershell
 # Clone the Opik repository

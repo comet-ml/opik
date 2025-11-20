@@ -100,7 +100,7 @@ Opik（[Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&
 
 最も簡単にローカルOpikインスタンスを起動する方法です。新しい `.opik.sh` インストールスクリプトに注目：
 
-On Linux or Mac Enviroment:
+On Linux or Mac Environment:
 
 ```bash
 # Opikリポジトリをクローン
@@ -113,7 +113,7 @@ cd opik
 ./opik.sh
 ```
 
-On Windows Enviroment:
+On Windows Environment:
 
 ```powershell
 # Opikリポジトリをクローン
