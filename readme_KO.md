@@ -100,7 +100,7 @@ Opik(Comet에서 개발한 오픈 소스 플랫폼으로, LLM 애플리케이션
 
 가장 간단하게 로컬 Opik 인스턴스를 실행하는 방법. 새 `.opik.sh` 설치 스크립트 사용:
 
-On Linux or Mac Enviroment:
+On Linux or Mac Environment:
 
 ```bash
 # Opik 리포지토리 클론
@@ -113,7 +113,7 @@ cd opik
 ./opik.sh
 ```
 
-On Windows Enviroment:
+On Windows Environment:
 
 ```powershell
 # Opik 리포지토리 클론
