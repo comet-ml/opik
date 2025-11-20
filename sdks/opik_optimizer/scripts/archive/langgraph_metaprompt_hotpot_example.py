@@ -3,7 +3,7 @@ from typing import Any
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 
 from opik_optimizer import (
     ChatPrompt,
@@ -21,7 +21,7 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 prompt_template = """Answer the following questions as best you can. You have access to the following tools:
 

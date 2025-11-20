@@ -4,14 +4,14 @@ import opik
 import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer import GepaOptimizer
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 from opik_optimizer.utils import search_wikipedia
 
 from opik.evaluation.metrics import LevenshteinRatio, Equals
 from opik.evaluation.metrics.score_result import ScoreResult
 
 
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
