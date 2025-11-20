@@ -1,5 +1,6 @@
+import contextvars
 import logging
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, Any, List, Union
 import uuid
 
 from llama_index.core.callbacks import schema as llama_index_schema
@@ -15,8 +16,13 @@ from . import event_parsing_utils
 
 LOGGER = logging.getLogger(__name__)
 
-
 INDEX_CONSTRUCTION_TRACE_NAME = "index_construction"
+LLAMA_INDEX_METADATA = {"created_from": "llama_index"}
+
+# Context variable for root trace/span created by LlamaIndex
+_llama_root: contextvars.ContextVar[Optional[Union[span.SpanData, trace.TraceData]]] = (
+    contextvars.ContextVar("_llama_root", default=None)
+)
 
 
 def _get_last_event(trace_map: Dict[str, List[str]]) -> str:
@@ -37,20 +43,13 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         project_name: Optional[str] = None,
         skip_index_construction_trace: bool = False,
     ):
-        """
-        Initialize the instance with optional customization to define event filters and project-
-        specific data handling. The constructor sets up the necessary client and data mappings
-        for operational processing.
+        """Initialize LlamaIndex callback handler for Opik tracing.
 
-        Parameters:
-            event_starts_to_ignore: Optional list of event start types to be ignored during
-                processing.
-            event_ends_to_ignore: Optional list of event end types to be ignored during
-                processing.
-            project_name: Optional string representing the project name to establish context in
-                client operations.
-            skip_index_construction_trace: A boolean value determining whether to skip creation of trace/spans of index
-                construction.
+        Args:
+            event_starts_to_ignore: Event start types to be ignored during processing.
+            event_ends_to_ignore: Event end types to be ignored during processing.
+            project_name: Project name for trace/span context.
+            skip_index_construction_trace: Whether to skip index construction traces.
         """
         event_starts_to_ignore = (
             event_starts_to_ignore if event_starts_to_ignore else []
@@ -64,31 +63,11 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._skip_index_construction_trace = skip_index_construction_trace
         self._project_name = project_name
         self._opik_client = opik_client.get_client_cached()
-
         self._opik_context_storage = context_storage.get_current_context_instance()
 
-        self._opik_trace_data: Optional[trace.TraceData] = None
-        self._trace_created_by_us = False
-        self._wrapper_span_data: Optional[span.SpanData] = None
-        self._llama_index_root_name: Optional[str] = None
-
+        # Event tracking - shared across contexts, but events have unique IDs
         self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_event_id_to_output: Dict[str, Any] = {}
-
-    def _create_trace_data(self, trace_name: Optional[str]) -> trace.TraceData:
-        trace_data = trace.TraceData(
-            name=trace_name,
-            metadata={"created_from": "llama_index"},
-            project_name=self._project_name,
-        )
-
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.trace(**trace_data.as_start_parameters)
-
-        return trace_data
 
     def start_trace(self, trace_id: Optional[str] = None) -> None:
         if (
@@ -97,29 +76,29 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         ):
             return
 
-        self._llama_index_root_name = trace_id if trace_id else "llama_index_operation"
+        trace_name = trace_id if trace_id else "llama_index_operation"
 
         span_creation_result = span_creation_handler.create_span_respecting_context(
             start_span_arguments=arguments_helpers.StartSpanParameters(
-                name=self._llama_index_root_name,
+                name=trace_name,
                 type="general",
                 project_name=self._project_name,
-                metadata={"created_from": "llama_index"},
+                metadata=LLAMA_INDEX_METADATA,
             ),
             distributed_trace_headers=None,
             opik_context_storage=self._opik_context_storage,
         )
 
         if span_creation_result.trace_data is not None:
-            self._opik_trace_data = span_creation_result.trace_data
-            self._trace_created_by_us = True
-            self._opik_context_storage.set_trace_data(self._opik_trace_data)
-            self._opik_client.trace(**self._opik_trace_data.as_start_parameters)
-            # ignore span creation result to avoid duplicating the trace
+            self._opik_context_storage.set_trace_data(span_creation_result.trace_data)
+            self._opik_client.trace(
+                **span_creation_result.trace_data.as_start_parameters
+            )
+            _llama_root.set(span_creation_result.trace_data)
         else:
-            self._wrapper_span_data = span_creation_result.span_data
-            self._opik_context_storage.add_span_data(self._wrapper_span_data)
-            self._opik_client.span(**self._wrapper_span_data.as_start_parameters)
+            self._opik_context_storage.add_span_data(span_creation_result.span_data)
+            self._opik_client.span(**span_creation_result.span_data.as_start_parameters)
+            _llama_root.set(span_creation_result.span_data)
 
     def end_trace(
         self,
@@ -129,42 +108,26 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         if not trace_map:
             return
 
-        # When a trace finishes, we first get the last event output
+        root = _llama_root.get()
+        if root is None:
+            return
+
         last_event = _get_last_event(trace_map)
         last_event_output = self._map_event_id_to_output.get(last_event, None)
 
-        # If we created a wrapper span (external trace existed), finalize it
-        if self._wrapper_span_data is not None:
-            self._wrapper_span_data.init_end_time().update(output=last_event_output)
-            self._opik_client.span(**self._wrapper_span_data.as_parameters)
+        root.init_end_time().update(output=last_event_output)
 
-            self._opik_context_storage.pop_span_data(
-                ensure_id=self._wrapper_span_data.id
-            )
-            self._wrapper_span_data = None
+        if isinstance(root, span.SpanData):
+            # We created a wrapper span (external trace existed)
+            self._opik_client.span(**root.as_parameters)
+            self._opik_context_storage.pop_span_data(ensure_id=root.id)
+        elif isinstance(root, trace.TraceData):
+            # We created a trace (no external trace existed)
+            self._opik_client.trace(**root.as_parameters)
+            self._opik_context_storage.pop_trace_data(ensure_id=root.id)
 
-        # And then end the trace with the optional output
-        if self._opik_trace_data is not None:
-            # Only finalize the trace if we created it
-            if self._trace_created_by_us:
-                self._opik_trace_data.init_end_time().update(output=last_event_output)
-                self._opik_client.trace(**self._opik_trace_data.as_parameters)
-
-                # Pop trace from context since we created it
-                self._opik_context_storage.pop_trace_data(
-                    ensure_id=self._opik_trace_data.id
-                )
-
-            self._opik_trace_data = None
-            self._trace_created_by_us = False
-
-        # Clear the root name
-        self._llama_index_root_name = None
-
-        # Do not clean _map_event_id_to_span_data as streaming LLM events can
-        # end after this method is called. _map_event_id_to_span_data is
-        # individually cleaned after each event is ended
-        self._map_event_id_to_output.clear()
+        # Clean up
+        _llama_root.set(None)
 
     def on_event_start(
         self,
@@ -177,28 +140,30 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         if not event_id:
             event_id = str(uuid.uuid4())
 
-        if self._opik_trace_data is None and self._wrapper_span_data is None:
+        root_span_or_trace = _llama_root.get()
+
+        if root_span_or_trace is None:
             if not self._skip_index_construction_trace:
                 LOGGER.warning(
-                    "No trace data found in context for event start. "
-                    "This is likely due to the fact that the trace is not started properly. "
-                    f"The parent_id: {parent_id}, event_type: {event_type}, event_id: {event_id}."
+                    "No active LlamaIndex trace/span found in context. "
+                    "parent_id=%s, event_type=%s, event_id=%s",
+                    parent_id,
+                    event_type,
+                    event_id,
                 )
-
             return event_id
 
         span_input = event_parsing_utils.get_span_input_from_events(event_type, payload)
 
-        event_duplicates_root_operation = (
+        # Skip creating span if event duplicates root operation name
+        root_name = root_span_or_trace.name if root_span_or_trace else None
+        event_duplicates_root = (
             parent_id == llama_index_schema.BASE_TRACE_EVENT
-            and event_type.value == self._llama_index_root_name
+            and event_type.value == root_name
         )
-        if event_duplicates_root_operation:
+        if event_duplicates_root:
             if span_input:
-                if self._wrapper_span_data is not None:
-                    self._wrapper_span_data.update(input=span_input)
-                elif self._opik_trace_data is not None:
-                    self._opik_trace_data.update(input=span_input)
+                root_span_or_trace.update(input=span_input)
             return event_id
 
         span_creation_result = span_creation_handler.create_span_respecting_context(
@@ -211,15 +176,13 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                     else "general"
                 ),
                 project_name=self._project_name,
-                metadata={"created_from": "llama_index"},
+                metadata=LLAMA_INDEX_METADATA,
             ),
             distributed_trace_headers=None,
             opik_context_storage=self._opik_context_storage,
         )
         span_data = span_creation_result.span_data
         self._map_event_id_to_span_data[event_id] = span_data
-
-        # Add span to context storage
         self._opik_context_storage.add_span_data(span_data)
 
         if (
@@ -228,14 +191,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         ):
             self._opik_client.span(**span_data.as_start_parameters)
 
-        parent_event_is_root_operation = (
-            parent_id == llama_index_schema.BASE_TRACE_EVENT
-        )
-        if parent_event_is_root_operation and span_input is not None:
-            if self._wrapper_span_data is not None:
-                self._wrapper_span_data.update(input=span_input)
-            elif self._opik_trace_data is not None:
-                self._opik_trace_data.update(input=span_input)
+        # Update root input from first child event
+        if parent_id == llama_index_schema.BASE_TRACE_EVENT and span_input is not None:
+            root_span_or_trace.update(input=span_input)
 
         return event_id
 
@@ -249,29 +207,28 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         span_output = event_parsing_utils.get_span_output_from_event(
             event_type, payload
         )
-
         error_info = event_parsing_utils.get_span_error_info(payload)
 
-        if event_id:
-            self._map_event_id_to_output[event_id] = span_output
+        if not event_id:
+            return
 
-            # Log the output to the span with the matching id
-            if event_id in self._map_event_id_to_span_data:
-                span_data = self._map_event_id_to_span_data[event_id]
+        # Store output for end_trace
+        self._map_event_id_to_output[event_id] = span_output
 
-                llm_usage_info = event_parsing_utils.get_usage_data(payload)
-                span_data.update(**llm_usage_info.__dict__)
+        # Finalize span if it exists
+        if event_id in self._map_event_id_to_span_data:
+            span_data = self._map_event_id_to_span_data[event_id]
 
-                span_data.update(
-                    output=span_output, error_info=error_info
-                ).init_end_time()
-                if tracing_runtime_config.is_tracing_active():
-                    self._opik_client.span(**span_data.as_parameters)
+            llm_usage_info = event_parsing_utils.get_usage_data(payload)
+            span_data.update(**llm_usage_info.__dict__)
+            span_data.update(output=span_output, error_info=error_info).init_end_time()
 
-                self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+            if tracing_runtime_config.is_tracing_active():
+                self._opik_client.span(**span_data.as_parameters)
 
-                del self._map_event_id_to_span_data[event_id]
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+            del self._map_event_id_to_span_data[event_id]
 
     def flush(self) -> None:
-        """Sends pending Opik data to the backend"""
+        """Flush pending Opik data to backend."""
         self._opik_client.flush()

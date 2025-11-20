@@ -138,6 +138,100 @@ Given that the integration with Opik has been set up, all the traces are logged 
   <img src="/img/cookbook/llamaIndex_cookbook.png" />
 </Frame>
 
+## Using with the @track Decorator
+
+The LlamaIndex integration seamlessly works with Opik's `@track` decorator. When you call LlamaIndex operations inside a tracked function, the LlamaIndex traces will automatically be attached as child spans to your existing trace.
+
+```python
+import opik
+from llama_index.core import global_handler, set_global_handler
+from llama_index.llms.openai import OpenAI
+from llama_index.core.llms import ChatMessage
+
+# Configure Opik integration
+set_global_handler("opik")
+opik_callback_handler = global_handler
+
+@opik.track()
+def my_llm_application(user_query: str):
+    """Process user query with LlamaIndex"""
+    llm = OpenAI(model="gpt-3.5-turbo")
+    messages = [
+        ChatMessage(role="system", content="You are a helpful assistant."),
+        ChatMessage(role="user", content=user_query),
+    ]
+    
+    response = llm.chat(messages)
+    return response.message.content
+
+# Call the tracked function
+result = my_llm_application("What is the capital of France?")
+print(result)
+```
+
+In this example, Opik will create a trace for the `my_llm_application` function, and all LlamaIndex operations (like the LLM chat call) will appear as nested spans within this trace, giving you a complete view of your application's execution.
+
+## Using with Manual Trace Creation
+
+You can also manually create traces using `opik.start_as_current_trace()` and have LlamaIndex operations nested within:
+
+```python
+import opik
+from llama_index.core import global_handler, set_global_handler
+from llama_index.llms.openai import OpenAI
+from llama_index.core.llms import ChatMessage
+
+# Configure Opik integration
+set_global_handler("opik")
+opik_callback_handler = global_handler
+
+# Create a manual trace
+with opik.start_as_current_trace(name="user_query_processing"):
+    llm = OpenAI(model="gpt-3.5-turbo")
+    messages = [
+        ChatMessage(role="user", content="Explain quantum computing in simple terms"),
+    ]
+    
+    response = llm.chat(messages)
+    print(response.message.content)
+```
+
+This approach is useful when you want more control over trace naming and want to group multiple LlamaIndex operations under a single trace.
+
+## Token Usage in Streaming Responses
+
+When using streaming chat responses with OpenAI models (e.g., `llm.stream_chat()`), you need to explicitly enable token usage tracking by configuring the `stream_options` parameter:
+
+```python
+from llama_index.llms.openai import OpenAI
+from llama_index.core.llms import ChatMessage
+from llama_index.core import global_handler, set_global_handler
+
+# Configure Opik integration
+set_global_handler("opik")
+
+# Configure OpenAI LLM with stream_options to include usage information
+llm = OpenAI(
+    model="gpt-3.5-turbo",
+    additional_kwargs={
+        "stream_options": {"include_usage": True}
+    }
+)
+
+messages = [
+    ChatMessage(role="user", content="Tell me a short joke")
+]
+
+# Token usage will now be tracked in streaming responses
+response = llm.stream_chat(messages)
+for chunk in response:
+    print(chunk.delta, end="", flush=True)
+```
+
+<Note>
+Without setting `stream_options={'include_usage': True}`, streaming responses from OpenAI models will not include token usage information in Opik traces. This is a requirement of OpenAI's streaming API.
+</Note>
+
 ## Cost Tracking
 
 The Opik integration with LlamaIndex automatically tracks token usage and cost for all supported LLM models used within LlamaIndex applications.
