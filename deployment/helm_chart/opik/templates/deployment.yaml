@@ -59,7 +59,8 @@ spec:
               TRUSTSTORE_PATH="/emptydir/cacerts"
               CERTS_DIR="/opt/opik/custom-ca-certs"
 
-              cp -f /etc/pki/ca-trust/extracted/java/cacerts $TRUSTSTORE_PATH
+              touch $TRUSTSTORE_PATH
+              cat /etc/pki/ca-trust/extracted/java/cacerts > $TRUSTSTORE_PATH
 
               # Ensure the truststore exists
               if [[ ! -f "$TRUSTSTORE_PATH" ]]
