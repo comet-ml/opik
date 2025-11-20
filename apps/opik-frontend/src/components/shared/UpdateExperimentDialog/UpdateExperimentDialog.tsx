@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import {
@@ -39,6 +39,18 @@ export function UpdateExperimentDialog({
   const [metadata, setMetadata] = useState(
     JSON.stringify(latestMetadata || {}, null, 2),
   );
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setMetadata(JSON.stringify(latestMetadata || {}, null, 2));
+    }
+  }, [open, latestMetadata]);
+
+  // Check if any changes have been made
+  const hasChanges =
+    name !== "" || metadata !== JSON.stringify(latestMetadata || {}, null, 2);
 
   const handleUpdate = () => {
     let parsedMetadata: object = {};
@@ -96,7 +108,7 @@ export function UpdateExperimentDialog({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" onClick={handleUpdate}>
+            <Button type="submit" onClick={handleUpdate} disabled={!hasChanges}>
               Update Experiment
             </Button>
           </DialogClose>
