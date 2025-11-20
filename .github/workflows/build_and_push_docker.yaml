@@ -218,16 +218,72 @@ jobs:
         id: collect_digests
         run: |
           # Collect digests from build job outputs
-          # Each build job outputs digest_hash, but with matrix jobs, outputs are aggregated
-          # We'll query the registry directly for images pushed by digest
+          # Filter to only include digests for the current image type (regular or comet)
+          # Build jobs output: digest, platform, image_name
+          # We need to match image_name to filter correct digests
           
           PLATFORMS="amd64"
           if [[ "${{ inputs.image }}" != "opik-guardrails-backend" ]]; then
             PLATFORMS="$PLATFORMS arm64"
           fi
           
+          # Get all outputs from build jobs
+          BUILD_DIGESTS="${{ needs.build.outputs.digest }}"
+          BUILD_IMAGE_NAMES="${{ needs.build.outputs.image_name }}"
+          BUILD_PLATFORMS="${{ needs.build.outputs.platform }}"
+          
+          # Current image name for this merge job (regular or comet)
+          CURRENT_IMAGE_NAME="${{ steps.set_vars.outputs.image_name }}"
+          
+          echo "Current image name: $CURRENT_IMAGE_NAME"
           echo "Expected platforms: $PLATFORMS"
+          echo "All build digests: $BUILD_DIGESTS"
+          echo "All build image names: $BUILD_IMAGE_NAMES"
+          echo "All build platforms: $BUILD_PLATFORMS"
+          
+          # Filter digests that match current image_name
+          # Since matrix outputs are aggregated, we need to match digests to image names
+          # We'll verify each digest belongs to the correct image by checking the registry
+          
+          FILTERED_DIGESTS=""
+          BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/$CURRENT_IMAGE_NAME"
+          
+          # Convert space-separated strings to arrays
+          read -ra DIGEST_ARRAY <<< "$BUILD_DIGESTS"
+          read -ra IMAGE_NAME_ARRAY <<< "$BUILD_IMAGE_NAMES"
+          read -ra PLATFORM_ARRAY <<< "$BUILD_PLATFORMS"
+          
+          echo "Filtering digests for image: $CURRENT_IMAGE_NAME"
+          
+          for i in "${!DIGEST_ARRAY[@]}"; do
+            DIGEST="${DIGEST_ARRAY[$i]}"
+            IMAGE_NAME="${IMAGE_NAME_ARRAY[$i]}"
+            PLATFORM="${PLATFORM_ARRAY[$i]}"
+            
+            # Match by image_name first (faster than registry check)
+            if [[ "$IMAGE_NAME" == "$CURRENT_IMAGE_NAME" ]]; then
+              # Verify digest exists and belongs to correct image
+              DIGEST_REF="$BASE_IMAGE@$DIGEST"
+              if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
+                echo "  ✓ Matched digest for $IMAGE_NAME ($PLATFORM): $DIGEST"
+                FILTERED_DIGESTS="$FILTERED_DIGESTS $DIGEST"
+              else
+                echo "  ⚠ Digest not found in registry: $DIGEST_REF (skipping)"
+              fi
+            fi
+          done
+          
+          FILTERED_DIGESTS=$(echo "$FILTERED_DIGESTS" | xargs)  # Trim whitespace
+          
+          if [ -z "$FILTERED_DIGESTS" ]; then
+            echo "ERROR: No digests found for image: $CURRENT_IMAGE_NAME"
+            echo "Available image names: $BUILD_IMAGE_NAMES"
+            exit 1
+          fi
+          
+          echo "Filtered digests for $CURRENT_IMAGE_NAME: $FILTERED_DIGESTS"
           echo "digests_platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+          echo "build_digests=$FILTERED_DIGESTS" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.should_run == 'true'
@@ -255,15 +311,10 @@ jobs:
       - name: Create manifest list and push tags
         if: steps.check.outputs.should_run == 'true'
         run: |
-          # Collect digests from build job outputs
-          # docker/build-push-action@v6 outputs digest in format: sha256:hash
-          # With matrix jobs, needs.build.outputs.digest contains all digests (space-separated)
-          
+          # Use digests collected from build job outputs
           PLATFORMS="${{ steps.collect_digests.outputs.digests_platforms }}"
+          BUILD_DIGESTS="${{ steps.collect_digests.outputs.build_digests }}"
           BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}"
-          
-          # Get digests from build outputs (contains all digests from matrix jobs)
-          BUILD_DIGESTS="${{ needs.build.outputs.digest }}"
           
           echo "Collecting digests for platforms: $PLATFORMS"
           echo "Build job digests: $BUILD_DIGESTS"
