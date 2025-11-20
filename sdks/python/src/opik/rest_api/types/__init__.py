@@ -271,6 +271,9 @@ from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .ids_holder import IdsHolder
+from .image_url import ImageUrl
+from .image_url_public import ImageUrlPublic
+from .image_url_write import ImageUrlWrite
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -285,6 +288,9 @@ from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 from .llm_as_judge_message import LlmAsJudgeMessage
+from .llm_as_judge_message_content import LlmAsJudgeMessageContent
+from .llm_as_judge_message_content_public import LlmAsJudgeMessageContentPublic
+from .llm_as_judge_message_content_write import LlmAsJudgeMessageContentWrite
 from .llm_as_judge_message_public import LlmAsJudgeMessagePublic
 from .llm_as_judge_message_public_role import LlmAsJudgeMessagePublicRole
 from .llm_as_judge_message_role import LlmAsJudgeMessageRole
@@ -357,16 +363,13 @@ from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
-from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
-from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
-from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
@@ -439,6 +442,9 @@ from .value_entry_experiment_item_bulk_write_view_source import ValueEntryExperi
 from .value_entry_public import ValueEntryPublic
 from .value_entry_public_source import ValueEntryPublicSource
 from .value_entry_source import ValueEntrySource
+from .video_url import VideoUrl
+from .video_url_public import VideoUrlPublic
+from .video_url_write import VideoUrlWrite
 from .webhook import Webhook
 from .webhook_examples import WebhookExamples
 from .webhook_public import WebhookPublic
@@ -690,6 +696,9 @@ __all__ = [
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "IdsHolder",
+    "ImageUrl",
+    "ImageUrlPublic",
+    "ImageUrlWrite",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -704,6 +713,9 @@ __all__ = [
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
     "LlmAsJudgeMessage",
+    "LlmAsJudgeMessageContent",
+    "LlmAsJudgeMessageContentPublic",
+    "LlmAsJudgeMessageContentWrite",
     "LlmAsJudgeMessagePublic",
     "LlmAsJudgeMessagePublicRole",
     "LlmAsJudgeMessageRole",
@@ -774,16 +786,13 @@ __all__ = [
     "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
-    "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
-    "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
-    "PromptVersionTemplateStructure",
     "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
@@ -856,6 +865,9 @@ __all__ = [
     "ValueEntryPublic",
     "ValueEntryPublicSource",
     "ValueEntrySource",
+    "VideoUrl",
+    "VideoUrlPublic",
+    "VideoUrlWrite",
     "Webhook",
     "WebhookExamples",
     "WebhookPublic",
