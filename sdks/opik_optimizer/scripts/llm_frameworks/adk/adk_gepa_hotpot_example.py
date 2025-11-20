@@ -48,7 +48,7 @@ optimization_result = optimizer.optimize_prompt(
     n_samples=10,
     max_trials=8,
     reflection_minibatch_size=3,
-    candidate_selection_strategy="best",
+    candidate_selection_strategy="pareto",
     skip_perfect_score=False,
     display_progress_bar=True,
 )
