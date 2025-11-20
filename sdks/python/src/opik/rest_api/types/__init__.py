@@ -355,8 +355,11 @@ from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
+from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_public_template_structure import PromptPublicTemplateStructure
+from .prompt_template_structure import PromptTemplateStructure
 from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
@@ -780,8 +783,11 @@ __all__ = [
     "ProjectVisibility",
     "Prompt",
     "PromptDetail",
+    "PromptDetailTemplateStructure",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptPublicTemplateStructure",
+    "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
     "PromptVersion",
