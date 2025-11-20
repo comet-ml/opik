@@ -4257,7 +4257,7 @@ class DatasetsResourceTest {
         @DisplayName("Error: batch update exceeds max size")
         void batchUpdateDatasetItems__whenExceedsMaxSize__thenBadRequest() {
             // Create more than 1000 IDs
-            var tooManyIds = new java.util.HashSet<UUID>();
+            var tooManyIds = new HashSet<UUID>();
             for (int i = 0; i < 1001; i++) {
                 tooManyIds.add(UUID.randomUUID());
             }
@@ -4306,11 +4306,7 @@ class DatasetsResourceTest {
             assertThat(retrieved3.tags()).containsExactlyInAnyOrder("exclude", "tag3");
 
             // Create filter to match items with "include" tag
-            var filter = new com.comet.opik.api.filter.DatasetItemFilter(
-                    com.comet.opik.api.filter.DatasetItemField.TAGS,
-                    com.comet.opik.api.filter.Operator.CONTAINS,
-                    null,
-                    "include");
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
 
             // Batch update by filters with merge
             var batchUpdate = DatasetItemBatchUpdate.builder()
@@ -4336,11 +4332,7 @@ class DatasetsResourceTest {
         @DisplayName("Error: batch update by filters without merge is not allowed")
         void batchUpdateDatasetItems__whenUsingFiltersWithoutMerge__thenBadRequest() {
             // Create filter
-            var filter = new com.comet.opik.api.filter.DatasetItemFilter(
-                    com.comet.opik.api.filter.DatasetItemField.TAGS,
-                    com.comet.opik.api.filter.Operator.CONTAINS,
-                    null,
-                    "include");
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
 
             // Attempt batch update by filters without merge (should fail validation)
             var batchUpdate = DatasetItemBatchUpdate.builder()
@@ -4360,11 +4352,7 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("Error: batch update with both ids and filters")
         void batchUpdateDatasetItems__whenBothIdsAndFilters__thenBadRequest() {
-            var filter = new com.comet.opik.api.filter.DatasetItemFilter(
-                    com.comet.opik.api.filter.DatasetItemField.TAGS,
-                    com.comet.opik.api.filter.Operator.CONTAINS,
-                    null,
-                    "tag");
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag");
 
             var batchUpdate = DatasetItemBatchUpdate.builder()
                     .ids(Set.of(UUID.randomUUID()))
