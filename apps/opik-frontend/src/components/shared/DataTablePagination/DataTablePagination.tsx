@@ -26,9 +26,10 @@ type DataTableProps = {
   supportsTruncation?: boolean;
   truncationEnabled?: boolean;
   variant?: "default" | "minimal";
+  itemsPerPage?: number[];
 };
 
-const ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
+const DEFAULT_ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
 
 const DataTablePagination = ({
   page = 1,
@@ -39,6 +40,7 @@ const DataTablePagination = ({
   supportsTruncation = false,
   truncationEnabled = true,
   variant = "default",
+  itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
 }: DataTableProps) => {
   const maxSize =
     supportsTruncation && !truncationEnabled
@@ -113,7 +115,7 @@ const DataTablePagination = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {ITEMS_PER_PAGE.map((count) => {
+              {itemsPerPage.map((count) => {
                 const isDisabled =
                   disabledSizeChange ||
                   (maxSize !== undefined && count > maxSize);
