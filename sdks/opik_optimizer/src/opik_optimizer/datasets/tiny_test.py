@@ -28,6 +28,7 @@ TINY_TEST_SPEC = DatasetSpec(
         "data_files": "hf://datasets/vincentkoc/tiny_qa_benchmark_pp/data/core_en/core_en.jsonl",
         "split": split,
     },
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",

@@ -10,6 +10,7 @@ MEDHALLU_SPEC = DatasetSpec(
     hf_path="UTAustin-AIHealth/MedHallu",
     hf_name="pqa_labeled",
     default_source_split="train",
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",

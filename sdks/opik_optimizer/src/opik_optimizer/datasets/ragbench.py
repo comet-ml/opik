@@ -9,6 +9,7 @@ RAGBENCH_SPEC = DatasetSpec(
     name="ragbench_sentence_relevance",
     hf_path="wandb/ragbench-sentence-relevance-balanced",
     default_source_split="train",
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",

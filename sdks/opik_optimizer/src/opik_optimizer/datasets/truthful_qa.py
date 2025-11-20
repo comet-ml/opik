@@ -70,6 +70,7 @@ TRUTHFUL_QA_SPEC = DatasetSpec(
     hf_path="truthful_qa",
     hf_name="generation",
     default_source_split="validation",
+    prefer_presets=True,
     presets={
         "validation": DatasetSplitPreset(
             source_split="validation",

@@ -9,6 +9,7 @@ RAG_HALLU_SPEC = DatasetSpec(
     name="rag_hallucinations",
     hf_path="aporia-ai/rag_hallucinations",
     default_source_split="train",
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",

@@ -8,6 +8,7 @@ ELECTION_QUESTIONS_SPEC = DatasetSpec(
     name="election_questions",
     hf_path="Anthropic/election_questions",
     default_source_split="test",
+    prefer_presets=True,
     presets={
         "test": DatasetSplitPreset(
             source_split="test",

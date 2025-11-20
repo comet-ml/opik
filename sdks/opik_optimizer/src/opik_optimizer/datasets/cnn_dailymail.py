@@ -10,6 +10,7 @@ CNN_DAILYMAIL_SPEC = DatasetSpec(
     hf_path="cnn_dailymail",
     hf_name="3.0.0",
     default_source_split="validation",
+    prefer_presets=True,
     presets={
         "validation": DatasetSplitPreset(
             source_split="validation",

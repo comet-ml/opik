@@ -10,6 +10,7 @@ GSM8K_SPEC = DatasetSpec(
     hf_path="gsm8k",
     hf_name="main",
     default_source_split="train",
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",

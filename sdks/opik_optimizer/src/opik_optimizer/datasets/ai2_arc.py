@@ -10,6 +10,7 @@ AI2_ARC_SPEC = DatasetSpec(
     hf_path="ai2_arc",
     hf_name="ARC-Challenge",
     default_source_split="train",
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",
