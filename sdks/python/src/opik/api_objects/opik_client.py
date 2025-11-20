@@ -976,15 +976,15 @@ class Opik:
         self,
         id: str,
         name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        experiment_config: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Update an experiment's name and/or metadata.
+        Update an experiment's name and/or configuration.
 
         Args:
             id: The experiment ID.
             name: The new name for the experiment. If None, the name will not be updated.
-            metadata: The new metadata for the experiment. If None, the metadata will not be updated.
+            experiment_config: The new configuration for the experiment. If None, the configuration will not be updated.
 
         Raises:
             ValueError: if id is None or empty
@@ -995,7 +995,7 @@ class Opik:
                 f"id: {id}"
             )
 
-        self._rest_client.experiments.update_experiment(id, name=name, metadata=metadata)
+        self._rest_client.experiments.update_experiment(id, name=name, metadata=experiment_config)
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """

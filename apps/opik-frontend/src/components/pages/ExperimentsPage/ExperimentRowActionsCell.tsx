@@ -33,12 +33,12 @@ const ExperimentRowActionsCell: React.FunctionComponent<
   }, [experiment]);
 
   const updateExperimentHandler = useCallback(
-    (name: string, metadata: object) => {
+    (name: string, configuration: object) => {
       experimentUpdateMutation.mutate({
         experiment: {
           id: experiment.id,
           name: name,
-          metadata: metadata,
+          metadata: configuration,
         },
       });
     },
@@ -58,7 +58,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={updateExperimentHandler}
         latestName={experiment.name}
-        latestMetadata={experiment.metadata}
+        latestConfiguration={experiment.metadata}
       />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}

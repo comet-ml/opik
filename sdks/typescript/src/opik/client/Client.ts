@@ -347,17 +347,17 @@ export class OpikClient {
      *
      * @param id The ID of the experiment
      * @param name The new name
-     * @param metadata The new metadata
+     * @param experimentConfig The new configuration
      */
     public updateExperiment = async (
         id: string,
         name?: string,
-        metadata?: Record<string, unknown>
+        experimentConfig?: Record<string, unknown>
     ): Promise<void> => {
         logger.debug(`Updating experiment with ID "${id}"`);
 
         try {
-            await this.api.experiments.updateExperiment(id, { name, metadata });
+            await this.api.experiments.updateExperiment(id, { name, metadata: experimentConfig });
         } catch (error) {
             logger.error(`Failed to update experiment with ID "${id}"`, { error });
             throw error;

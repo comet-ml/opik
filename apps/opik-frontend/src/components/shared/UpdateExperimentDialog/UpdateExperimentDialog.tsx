@@ -19,9 +19,9 @@ import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 interface UpdateExperimentDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onConfirm: (name: string, metadata: object) => void;
+  onConfirm: (name: string, configuration: object) => void;
   latestName: string;
-  latestMetadata?: object;
+  latestConfiguration?: object;
 }
 
 export function UpdateExperimentDialog({
@@ -29,44 +29,48 @@ export function UpdateExperimentDialog({
   setOpen,
   onConfirm,
   latestName,
-  latestMetadata,
+  latestConfiguration,
 }: UpdateExperimentDialogProps) {
   const { toast } = useToast();
   const theme = useCodemirrorTheme({
     editable: true,
   });
   const [name, setName] = useState("");
-  const [metadata, setMetadata] = useState(
-    JSON.stringify(latestMetadata || {}, null, 2),
+  const [configuration, setConfiguration] = useState(
+    JSON.stringify(latestConfiguration || {}, null, 2),
   );
 
   // Reset state when dialog opens
   useEffect(() => {
     if (open) {
       setName("");
-      setMetadata(JSON.stringify(latestMetadata || {}, null, 2));
+      setConfiguration(JSON.stringify(latestConfiguration || {}, null, 2));
     }
-  }, [open, latestMetadata]);
+  }, [open, latestConfiguration]);
 
   // Check if any changes have been made
   const hasChanges =
-    name !== "" || metadata !== JSON.stringify(latestMetadata || {}, null, 2);
+    name !== "" ||
+    configuration !== JSON.stringify(latestConfiguration || {}, null, 2);
 
   const handleUpdate = () => {
-    let parsedMetadata: object = {};
+    let parsedConfiguration: object = {};
     try {
-      parsedMetadata = metadata ? JSON.parse(metadata) : {};
+      parsedConfiguration = configuration ? JSON.parse(configuration) : {};
     } catch (e) {
       toast({
         title: "Invalid JSON",
-        description: "Please provide valid JSON for metadata",
+        description: "Please provide valid JSON for configuration",
         variant: "destructive",
       });
       return;
     }
 
-    // Use latestName/Metadata if input is empty
-    onConfirm(name || latestName, parsedMetadata || latestMetadata || {});
+    // Use latestName/Configuration if input is empty
+    onConfirm(
+      name || latestName,
+      parsedConfiguration || latestConfiguration || {},
+    );
   };
 
   return (
@@ -88,12 +92,12 @@ export function UpdateExperimentDialog({
           </div>
 
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="metadata">Metadata</Label>
+            <Label htmlFor="configuration">Configuration</Label>
             <div className="max-h-52 overflow-y-auto rounded-md">
               <CodeMirror
                 theme={theme}
-                value={metadata}
-                onChange={setMetadata}
+                value={configuration}
+                onChange={setConfiguration}
                 extensions={[jsonLanguage]}
                 basicSetup={{
                   lineNumbers: false,
