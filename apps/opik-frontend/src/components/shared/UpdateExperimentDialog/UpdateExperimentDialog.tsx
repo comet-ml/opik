@@ -6,15 +6,18 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogAutoScrollBody,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Description } from "@/components/ui/description";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { DialogClose } from "@radix-ui/react-dialog";
-import { useToast } from "@/components/ui/use-toast";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
+import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
+import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface UpdateExperimentDialogProps {
   open: boolean;
@@ -31,7 +34,7 @@ export function UpdateExperimentDialog({
   latestName,
   latestConfiguration,
 }: UpdateExperimentDialogProps) {
-  const { toast } = useToast();
+  const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
     editable: true,
   });
@@ -57,19 +60,21 @@ export function UpdateExperimentDialog({
   const isValid = Boolean(name.trim().length);
 
   const handleUpdate = () => {
-    let parsedConfiguration: object = {};
-    try {
-      parsedConfiguration = configuration ? JSON.parse(configuration) : {};
-    } catch (e) {
-      toast({
-        title: "Invalid JSON",
-        description: "Please provide valid JSON for configuration",
-        variant: "destructive",
-      });
+    // Validate JSON configuration
+    const isConfigValid =
+      configuration.trim() === "" || isValidJsonObject(configuration);
+
+    if (!isConfigValid) {
+      setShowInvalidJSON(true);
       return;
     }
 
+    const parsedConfiguration = configuration
+      ? safelyParseJSON(configuration)
+      : {};
+
     onConfirm(name, parsedConfiguration);
+    setOpen(false);
   };
 
   return (
@@ -78,7 +83,7 @@ export function UpdateExperimentDialog({
         <DialogHeader>
           <DialogTitle>Edit experiment</DialogTitle>
         </DialogHeader>
-        <DialogAutoScrollBody className="space-y-4">
+        <div className="max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="name">Name</Label>
             <Input
@@ -103,21 +108,30 @@ export function UpdateExperimentDialog({
                 }}
               />
             </div>
+            <Description>
+              {
+                EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_metadata_be]
+                  .description
+              }
+            </Description>
           </div>
-        </DialogAutoScrollBody>
+          {showInvalidJSON && (
+            <Alert variant="destructive">
+              <AlertTitle>Configuration field is not valid</AlertTitle>
+            </Alert>
+          )}
+        </div>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button
-              type="submit"
-              onClick={handleUpdate}
-              disabled={!isValid || !hasChanges}
-            >
-              Update experiment
-            </Button>
-          </DialogClose>
+          <Button
+            type="submit"
+            onClick={handleUpdate}
+            disabled={!isValid || !hasChanges}
+          >
+            Update experiment
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
