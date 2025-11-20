@@ -76,24 +76,8 @@ public class StatsMapper {
 
         stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST_SUM, totalEstimatedCostSum.doubleValue()));
 
-        Map<String, Double> usage = row.get(USAGE, Map.class);
-        Map<String, Double> feedbackScores = row.get(FEEDBACK_SCORE, Map.class);
-
-        if (usage != null) {
-            usage.keySet()
-                    .stream()
-                    .sorted()
-                    .forEach(key -> stats
-                            .add(new AvgValueStat("%s.%s".formatted(USAGE, key), usage.get(key))));
-        }
-
-        if (feedbackScores != null) {
-            feedbackScores.keySet()
-                    .stream()
-                    .sorted()
-                    .forEach(key -> stats.add(new AvgValueStat("%s.%s".formatted(FEEDBACK_SCORE, key),
-                            feedbackScores.get(key))));
-        }
+        addMapStats(row, USAGE, stats);
+        addMapStats(row, FEEDBACK_SCORE, stats);
 
         // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
         if (row.getMetadata().contains("guardrails_failed_count")) {
@@ -246,22 +230,38 @@ public class StatsMapper {
             stats.add(new PercentageValueStat(DURATION, duration));
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> feedbackScoresMap = row.get(FEEDBACK_SCORE, Map.class);
-        if (feedbackScoresMap != null) {
-            feedbackScoresMap.entrySet().stream()
+        addMapStats(row, FEEDBACK_SCORE, stats);
+        addMapStats(row, USAGE, stats);
+
+        return new ProjectStats(stats.build().toList());
+    }
+
+    /**
+     * Extracts a map from a row and adds its values as AvgValueStat entries to the stats builder.
+     * Converts all numeric values to doubles and sorts entries by key.
+     *
+     * @param row The database row containing the map field
+     * @param fieldName The field name to extract from the row (e.g., "feedback_scores", "usage")
+     * @param statsBuilder The builder to add stats to
+     */
+    @SuppressWarnings("unchecked")
+    private static void addMapStats(
+            Row row,
+            String fieldName,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        Map<String, Object> map = row.get(fieldName, Map.class);
+        if (map != null) {
+            map.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .forEach(entry -> {
                         double value = entry.getValue() instanceof Number number
                                 ? number.doubleValue()
                                 : 0.0;
-                        stats.add(new AvgValueStat(
-                                "%s.%s".formatted(FEEDBACK_SCORE, entry.getKey()),
+                        statsBuilder.add(new AvgValueStat(
+                                "%s.%s".formatted(fieldName, entry.getKey()),
                                 value));
                     });
         }
-
-        return new ProjectStats(stats.build().toList());
     }
 
     private static BigDecimal getCostValue(Row row, String columnName) {

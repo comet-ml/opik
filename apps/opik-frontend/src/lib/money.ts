@@ -7,7 +7,7 @@ const MIN_DISPLAYED_COST = 0.001;
 const CURRENCY = "$";
 const PRECISION = 3;
 
-type FormatCostOptions = {
+export type FormatCostOptions = {
   modifier?: "short" | "kFormat";
   noValue?: string;
   precision?: number;

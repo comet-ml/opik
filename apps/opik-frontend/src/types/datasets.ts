@@ -3,6 +3,7 @@ import {
   AggregatedDuration,
   AggregatedFeedbackScore,
   DYNAMIC_COLUMN_TYPE,
+  UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
 
@@ -96,6 +97,8 @@ export interface ExperimentItem {
   output: object;
   feedback_scores?: TraceFeedbackScore[];
   duration?: number;
+  usage?: UsageData;
+  total_estimated_cost?: number;
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;

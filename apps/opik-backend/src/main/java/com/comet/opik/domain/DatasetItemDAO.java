@@ -974,7 +974,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         SELECT DISTINCT
                             eif.trace_id as trace_id,
                             t.duration as duration,
-                            s.total_estimated_cost as total_estimated_cost
+                            s.total_estimated_cost as total_estimated_cost,
+                            s.usage as usage
                         FROM experiment_items_filtered eif
                         LEFT JOIN (
                             SELECT
@@ -990,7 +991,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         LEFT JOIN (
                             SELECT
                                 trace_id,
-                                sum(total_estimated_cost) as total_estimated_cost
+                                sum(total_estimated_cost) as total_estimated_cost,
+                                sumMap(usage) as usage
                             FROM spans final
                             WHERE workspace_id = :workspace_id
                             AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
@@ -1027,7 +1029,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
                         toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                         sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                        toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
+                        toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                        avgMap(tc.usage) AS usage
                     FROM experiment_items_filtered ei
                     LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
                     LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
@@ -1476,6 +1479,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         Optional.ofNullable(filters)
                 .ifPresent(filtersParam -> {
+                    // Bind all filters - the builder will handle both regular and aggregated filters
                     filterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.EXPERIMENT_ITEM);
                     filterQueryBuilder.bind(statement, filtersParam,

@@ -1,9 +1,14 @@
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 
-import { formatCost } from "@/lib/money";
+import { formatCost, FormatCostOptions } from "@/lib/money";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
+import VerticallySplitCellWrapper, {
+  SplitCellRenderContent,
+} from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
 
 const CostCell = <TData,>(context: CellContext<TData, string>) => {
   const value = context.getValue();
@@ -17,6 +22,39 @@ const CostCell = <TData,>(context: CellContext<TData, string>) => {
     </CellWrapper>
   );
 };
+
+type CompareCustomMeta = {
+  accessor: string;
+  formatter?: (value: number, config?: FormatCostOptions) => string;
+};
+
+const CompareCostCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
+  context,
+) => {
+  const experimentCompare = context.row.original;
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { accessor, formatter = formatCost } = (custom ??
+    {}) as CompareCustomMeta;
+
+  const renderContent: SplitCellRenderContent = (item?: ExperimentItem) => {
+    const value = get(item, accessor);
+    if (!isNumber(value)) return "-";
+
+    return formatter(value, { modifier: "short" });
+  };
+
+  return (
+    <VerticallySplitCellWrapper
+      renderContent={renderContent}
+      experimentCompare={experimentCompare}
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      rowId={context.row.id}
+    />
+  );
+};
+
+CostCell.Compare = CompareCostCell;
 
 type CustomMeta = {
   aggregationKey?: string;
