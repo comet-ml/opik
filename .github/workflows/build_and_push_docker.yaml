@@ -1,4 +1,6 @@
-name: "Build Docker Images Multi-Arch ${{ github.event.inputs.image }}"
+name: "Build Docker Images Multi-Arch"
+
+run-name: "Build ${{ inputs.image }}${{ inputs.build_comet_image && '-comet' || '' }} - ${{ inputs.version }}"
 
 on:
   workflow_call:
