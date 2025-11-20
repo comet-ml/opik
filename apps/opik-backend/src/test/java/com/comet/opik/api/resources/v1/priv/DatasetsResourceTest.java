@@ -7417,28 +7417,31 @@ class DatasetsResourceTest {
             var datasetItems = datasetItemBatch.items();
 
             // Create traces and spans with costs
-            var traceIds = new ArrayList<UUID>();
             var costValues = List.of(
                     BigDecimal.valueOf(10.50),
                     BigDecimal.valueOf(25.75),
                     BigDecimal.valueOf(5.25));
 
-            for (int i = 0; i < 3; i++) {
-                // Create trace
-                var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                        .projectName(projectName)
-                        .build();
-                var traceId = createTrace(trace, apiKey, workspaceName);
-                traceIds.add(traceId);
+            // Create traces using PodamFactoryUtils
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
 
-                // Create span with cost data
-                var span = factory.manufacturePojo(Span.class).toBuilder()
-                        .projectName(projectName)
-                        .traceId(traceId)
-                        .totalEstimatedCost(costValues.get(i))
-                        .build();
-                createSpan(span, apiKey, workspaceName);
-            }
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            // Create spans in batch
+            var spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i))
+                            .totalEstimatedCost(costValues.get(i))
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
             // Create experiment
             var experimentId = GENERATOR.generate();
@@ -7516,28 +7519,31 @@ class DatasetsResourceTest {
             var datasetItems = datasetItemBatch.items();
 
             // Create traces and spans with usage data
-            var traceIds = new ArrayList<UUID>();
             var usageValues = List.of(
                     Map.of("total_tokens", 150, "prompt_tokens", 100, "completion_tokens", 50),
                     Map.of("total_tokens", 50, "prompt_tokens", 30, "completion_tokens", 20),
                     Map.of("total_tokens", 100, "prompt_tokens", 60, "completion_tokens", 40));
 
-            for (int i = 0; i < 3; i++) {
-                // Create trace
-                var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                        .projectName(projectName)
-                        .build();
-                var traceId = createTrace(trace, apiKey, workspaceName);
-                traceIds.add(traceId);
+            // Create traces using PodamFactoryUtils
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
 
-                // Create span with usage data
-                var span = factory.manufacturePojo(Span.class).toBuilder()
-                        .projectName(projectName)
-                        .traceId(traceId)
-                        .usage(usageValues.get(i))
-                        .build();
-                createSpan(span, apiKey, workspaceName);
-            }
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            // Create spans in batch
+            var spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i))
+                            .usage(usageValues.get(i))
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
             // Create experiment
             var experimentId = GENERATOR.generate();
