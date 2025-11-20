@@ -200,7 +200,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(prompt=new_prompt)
+            agent = self._instantiate_agent(prompt=new_prompt)
 
             try:
                 logger.debug(

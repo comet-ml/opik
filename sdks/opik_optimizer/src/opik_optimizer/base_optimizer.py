@@ -189,10 +189,33 @@ class BaseOptimizer(ABC):
             raise TypeError(
                 f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
             )
-        # Always refresh optimizer binding so reused agent classes track the current optimizer.
-        # If same agent is used across more than one optimizer this ensures handover.
-        agent_class.optimizer = self  # type: ignore[attr-defined]
         return agent_class
+
+    def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
+        """Attach this optimizer to the agent instance without mutating the class."""
+        try:
+            agent.optimizer = self  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - custom agents may forbid new attrs
+            logger.debug(
+                "Unable to record optimizer on agent instance of %s",
+                agent.__class__.__name__,
+            )
+        return agent
+
+    def _instantiate_agent(
+        self,
+        *args: Any,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
+    ) -> OptimizableAgent:
+        """
+        Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
+        """
+        resolved_class = agent_class or getattr(self, "agent_class", None)
+        if resolved_class is None:
+            raise ValueError("agent_class must be provided before instantiation")
+        agent = resolved_class(*args, **kwargs)
+        return self._bind_optimizer_to_agent(agent)
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -774,7 +797,7 @@ class BaseOptimizer(ABC):
         else:
             self.agent_class = agent_class
 
-        agent = self.agent_class(prompt)
+        agent = self._instantiate_agent(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)

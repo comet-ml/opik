@@ -249,7 +249,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(new_prompt)
+            agent = self._instantiate_agent(new_prompt)
 
             if mcp_config is not None:
                 coordinator = mcp_config.coordinator

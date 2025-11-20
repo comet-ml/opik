@@ -69,7 +69,7 @@ class EvaluationOps:
             additional_metadata=additional_metadata,
         )
         try:
-            agent = self.agent_class(new_prompt)
+            agent = optimizer._instantiate_agent(new_prompt)
         except Exception:
             return 0.0
 

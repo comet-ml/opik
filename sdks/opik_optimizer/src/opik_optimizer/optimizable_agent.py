@@ -43,6 +43,7 @@ class OptimizableAgent:
     input_dataset_field: str | None = None
     prompts: dict[str, "ChatPrompt"]
     prompt: "ChatPrompt"
+    optimizer: Any | None = None
 
     def __init__(self, prompt: "ChatPrompt", project_name: str | None = None) -> None:
         """
@@ -133,10 +134,11 @@ class OptimizableAgent:
             while count < 20:
                 count += 1
                 response = self._llm_complete(all_messages, self.prompt.tools, seed)
-                if hasattr(self, "optimizer") and hasattr(
-                    self.optimizer, "_increment_llm_counter"
+                optimizer_ref = self.optimizer
+                if optimizer_ref is not None and hasattr(
+                    optimizer_ref, "_increment_llm_counter"
                 ):
-                    self.optimizer._increment_llm_counter()
+                    optimizer_ref._increment_llm_counter()
                 msg = response.choices[0].message
                 all_messages.append(msg.to_dict())
                 if msg.tool_calls:
@@ -161,20 +163,22 @@ class OptimizableAgent:
                             }
                         )
                         # Increment tool call counter if we have access to the optimizer
-                        if hasattr(self, "optimizer") and hasattr(
-                            self.optimizer, "_increment_tool_counter"
+                        optimizer_ref = self.optimizer
+                        if optimizer_ref is not None and hasattr(
+                            optimizer_ref, "_increment_tool_counter"
                         ):
-                            self.optimizer._increment_tool_counter()
+                            optimizer_ref._increment_tool_counter()
                 else:
                     final_response = msg["content"]
                     break
             result = final_response
         else:
             response = self._llm_complete(all_messages, None, seed)
-            if hasattr(self, "optimizer") and hasattr(
-                self.optimizer, "_increment_llm_counter"
+            optimizer_ref = self.optimizer
+            if optimizer_ref is not None and hasattr(
+                optimizer_ref, "_increment_llm_counter"
             ):
-                self.optimizer._increment_llm_counter()
+                optimizer_ref._increment_llm_counter()
             result = response.choices[0].message.content
         return result
 
