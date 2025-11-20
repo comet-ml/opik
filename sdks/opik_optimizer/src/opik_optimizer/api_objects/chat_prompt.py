@@ -213,7 +213,7 @@ class ChatPrompt:
         """
         messages = self._standardize_prompts()
         try:
-            serialized = json.dumps(messages, ensure_ascii=True)
+            serialized = json.dumps(messages, ensure_ascii=False)
         except (TypeError, ValueError):
             serialized = str(messages)
 
