@@ -115,6 +115,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
+import static com.comet.opik.domain.alerts.MetricsAlertJob.formatDecimal;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -1216,9 +1217,11 @@ class AlertResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(booleans = {true, false})
+        @MethodSource("feedbackScoreThresholdProvider")
         @DisplayName("when trace feedback score exceeds threshold, then feedback score alert webhook is called")
-        void whenSingleTraceFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(boolean isProjectScoped) {
+        void whenSingleTraceFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(boolean isProjectScoped,
+                MetricsAlertJob.Operator operator, BigDecimal feedbackScoreValue, BigDecimal threshold,
+                boolean shouldTrigger) {
             var mock = prepareMockWorkspace();
 
             // Create a project
@@ -1231,32 +1234,43 @@ class AlertResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
 
-            // Create a feedback score with value 0.8
+            // Create a feedback score
             String feedbackScoreName = "accuracy";
             FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
                     .name(feedbackScoreName)
-                    .value(BigDecimal.valueOf(0.8))
+                    .value(feedbackScoreValue)
                     .source(ScoreSource.SDK)
                     .build();
             traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
 
             // Create an alert with feedback score threshold configuration
-            // Threshold: 0.5, Window: 60 seconds, Operator: > (value 0.8 > 0.5)
             var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_FEEDBACK_SCORE,
-                    isProjectScoped ? projectId : null, feedbackScoreName, "0.5", "60", ">");
+                    isProjectScoped ? projectId : null, feedbackScoreName, threshold.toPlainString(), "60", operator);
 
             var alert = createAlertForEvent(alertTrigger);
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
 
-            // Wait for MetricsAlertJob to run and verify webhook was called
-            var payload = verifyWebhookCalledAndGetPayload(alert);
+            if (shouldTrigger) {
+                // Wait for MetricsAlertJob to run and verify webhook was called
+                var payload = verifyWebhookCalledAndGetPayload(alert);
 
-            // Verify payload contains feedback score metrics information
-            MetricsAlertPayload feedbackScorePayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
+                // Verify payload contains feedback score metrics information
+                MetricsAlertPayload feedbackScorePayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(feedbackScorePayload, "TRACE_FEEDBACK_SCORE", "0.8000", "0.5000", "60",
-                    isProjectScoped ? projectId : null, isProjectScoped ? projectName : null);
+                verifyMetricsPayload(feedbackScorePayload, "TRACE_FEEDBACK_SCORE",
+                        formatDecimal(feedbackScoreValue), formatDecimal(threshold), "60",
+                        isProjectScoped ? projectId : null, isProjectScoped ? projectName : null);
+            } else {
+                // Verify webhook was NOT called (alert not triggered)
+                Awaitility.await()
+                        .pollDelay(java.time.Duration.ofSeconds(2))
+                        .atMost(java.time.Duration.ofSeconds(3))
+                        .untilAsserted(() -> {
+                            var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                            assertThat(requests).isEmpty();
+                        });
+            }
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1267,10 +1281,11 @@ class AlertResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(booleans = {true, false})
+        @MethodSource("feedbackScoreThresholdProvider")
         @DisplayName("when thread feedback score exceeds threshold, then thread feedback score alert webhook is called")
         void whenSingleTraceThreadFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(
-                boolean isProjectScoped) {
+                boolean isProjectScoped, MetricsAlertJob.Operator operator, BigDecimal feedbackScoreValue,
+                BigDecimal threshold, boolean shouldTrigger) {
             var mock = prepareMockWorkspace();
 
             // Create a project
@@ -1300,35 +1315,46 @@ class AlertResourceTest {
             traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
                     mock.getRight());
 
-            // Create a feedback score for the thread with value 0.9
+            // Create a feedback score for the thread
             String feedbackScoreName = "helpfulness";
             var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
                     .threadId(thread.id())
                     .projectName(project.name())
                     .name(feedbackScoreName)
-                    .value(BigDecimal.valueOf(0.9))
+                    .value(feedbackScoreValue)
                     .source(ScoreSource.SDK)
                     .build();
 
             traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
 
             // Create an alert with thread feedback score threshold configuration
-            // Threshold: 0.7, Window: 60 seconds, Operator: > (value 0.9 > 0.7)
             var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
-                    isProjectScoped ? projectId : null, feedbackScoreName, "0.7", "60", ">");
+                    isProjectScoped ? projectId : null, feedbackScoreName, threshold.toPlainString(), "60", operator);
 
             var alert = createAlertForEvent(alertTrigger);
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
 
-            // Wait for MetricsAlertJob to run and verify webhook was called
-            var payload = verifyWebhookCalledAndGetPayload(alert);
+            if (shouldTrigger) {
+                // Wait for MetricsAlertJob to run and verify webhook was called
+                var payload = verifyWebhookCalledAndGetPayload(alert);
 
-            // Verify payload contains feedback score metrics information
-            MetricsAlertPayload feedbackScorePayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
+                // Verify payload contains feedback score metrics information
+                MetricsAlertPayload feedbackScorePayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            verifyMetricsPayload(feedbackScorePayload, "TRACE_THREAD_FEEDBACK_SCORE", "0.9000", "0.7000", "60",
-                    isProjectScoped ? projectId : null, isProjectScoped ? project.name() : null);
+                verifyMetricsPayload(feedbackScorePayload, "TRACE_THREAD_FEEDBACK_SCORE",
+                        formatDecimal(feedbackScoreValue), formatDecimal(threshold), "60",
+                        isProjectScoped ? projectId : null, isProjectScoped ? project.name() : null);
+            } else {
+                // Verify webhook was NOT called (alert not triggered)
+                Awaitility.await()
+                        .pollDelay(java.time.Duration.ofSeconds(2))
+                        .atMost(java.time.Duration.ofSeconds(3))
+                        .untilAsserted(() -> {
+                            var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                            assertThat(requests).isEmpty();
+                        });
+            }
 
             var batchDelete = BatchDelete.builder()
                     .ids(Set.of(alertId))
@@ -1336,6 +1362,25 @@ class AlertResourceTest {
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NO_CONTENT);
+        }
+
+        static Stream<Arguments> feedbackScoreThresholdProvider() {
+            return Stream.of(
+                    // GREATER_THAN operator - should trigger when score > threshold
+                    Arguments.of(true, MetricsAlertJob.Operator.GREATER_THAN, BigDecimal.valueOf(0.8),
+                            BigDecimal.valueOf(0.5), true),
+                    Arguments.of(false, MetricsAlertJob.Operator.GREATER_THAN, BigDecimal.valueOf(0.8),
+                            BigDecimal.valueOf(0.5), true),
+                    Arguments.of(true, MetricsAlertJob.Operator.GREATER_THAN, BigDecimal.valueOf(0.3),
+                            BigDecimal.valueOf(0.5), false),
+
+                    // LESS_THAN operator - should trigger when score < threshold
+                    Arguments.of(true, MetricsAlertJob.Operator.LESS_THAN, BigDecimal.valueOf(0.3),
+                            BigDecimal.valueOf(0.5), true),
+                    Arguments.of(false, MetricsAlertJob.Operator.LESS_THAN, BigDecimal.valueOf(0.3),
+                            BigDecimal.valueOf(0.5), true),
+                    Arguments.of(true, MetricsAlertJob.Operator.LESS_THAN, BigDecimal.valueOf(0.8),
+                            BigDecimal.valueOf(0.5), false));
         }
 
         @ParameterizedTest
@@ -1976,7 +2021,7 @@ class AlertResourceTest {
             // Create alert with feedback score threshold configuration
             // Threshold: 0.6, Window: 60 seconds, Operator: > (value 0.85 > 0.6)
             var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_FEEDBACK_SCORE,
-                    projectId, feedbackScoreName, "0.6", "60", ">");
+                    projectId, feedbackScoreName, "0.6", "60", MetricsAlertJob.Operator.GREATER_THAN);
 
             var alert = createAlertForEvent(alertTrigger, alertType);
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
@@ -2044,7 +2089,7 @@ class AlertResourceTest {
             // Create alert with thread feedback score threshold configuration
             // Threshold: 0.5, Window: 60 seconds, Operator: > (value 0.75 > 0.5)
             var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
-                    projectId, feedbackScoreName, "0.5", "60", ">");
+                    projectId, feedbackScoreName, "0.5", "60", MetricsAlertJob.Operator.GREATER_THAN);
 
             var alert = createAlertForEvent(alertTrigger, alertType);
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
@@ -2622,7 +2667,8 @@ class AlertResourceTest {
     }
 
     private static AlertTrigger triggerWithFeedbackScoreThreshold(AlertEventType eventType, UUID projectId,
-            String feedbackScoreName, String threshold, String window, String operator) {
+            String feedbackScoreName, String threshold, String window,
+            MetricsAlertJob.Operator operator) {
         List<AlertTriggerConfig> triggerConfigs = new ArrayList<>();
         triggerConfigs.add(AlertTriggerConfig.builder()
                 .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
@@ -2630,7 +2676,7 @@ class AlertResourceTest {
                         NAME_CONFIG_KEY, feedbackScoreName,
                         THRESHOLD_CONFIG_KEY, threshold,
                         WINDOW_CONFIG_KEY, window,
-                        OPERATOR_CONFIG_KEY, operator))
+                        OPERATOR_CONFIG_KEY, operator.getValue()))
                 .build());
         if (projectId != null) {
             triggerConfigs.add(AlertTriggerConfig.builder()

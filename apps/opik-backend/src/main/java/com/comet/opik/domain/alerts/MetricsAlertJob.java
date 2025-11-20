@@ -336,7 +336,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     /**
      * Formats decimal number to 4 decimal places.
      */
-    private static String formatDecimal(BigDecimal value) {
+    public static String formatDecimal(BigDecimal value) {
         if (value.stripTrailingZeros().scale() <= 0) {
             // It's an integer
             return value.toBigInteger().toString();
