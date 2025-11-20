@@ -37,3 +37,10 @@ def test_opik_client__update_experiment__missing_mandatory_parameters__error_rai
 
     with pytest.raises(ValueError):
         opik_client_.update_experiment(id=experiment_id)
+
+
+def test_opik_client__update_experiment__no_update_parameters__error_raised():
+    opik_client_ = opik_client.Opik()
+
+    with pytest.raises(ValueError):
+        opik_client_.update_experiment(id="some-experiment-id")

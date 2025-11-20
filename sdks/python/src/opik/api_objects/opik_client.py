@@ -987,11 +987,16 @@ class Opik:
             experiment_config: The new configuration for the experiment. If None, the configuration will not be updated.
 
         Raises:
-            ValueError: if id is None or empty
+            ValueError: if id is None or empty, or if both name and experiment_config are None
         """
         if not id:
             raise ValueError(
                 f"id must be provided and can not be None or empty, id: {id}"
+            )
+
+        if name is None and experiment_config is None:
+            raise ValueError(
+                "At least one of 'name' or 'experiment_config' must be provided"
             )
 
         self._rest_client.experiments.update_experiment(
