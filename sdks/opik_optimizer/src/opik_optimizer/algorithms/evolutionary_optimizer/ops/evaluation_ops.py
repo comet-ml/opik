@@ -53,11 +53,9 @@ def evaluate_prompt(
         {"evaluation": evaluation_details} if evaluation_details else None
     )
 
-    # Map dataset parameter to dataset_training for internal consistency
-    dataset_training = dataset
     experiment_config = optimizer._prepare_experiment_config(
         prompt=new_prompt,
-        dataset_training=dataset_training,
+        dataset=dataset,
         metric=metric,
         experiment_config=experiment_config,
         configuration_updates=configuration_updates,

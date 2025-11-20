@@ -144,11 +144,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         meta_metadata = helpers.drop_none(
             {"optimization_id": optimization_id, "stage": "trial_evaluation"}
         )
-        # Map dataset parameter to dataset_training for internal consistency
-        dataset_training = dataset
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset_training=dataset_training,
+            dataset=dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
@@ -278,6 +276,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         best_score: float,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
+        validation_dataset: opik.Dataset | None,
         metric: Callable,
         optimization_id: str,
         n_samples: int | None,
@@ -335,7 +334,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         ) as improved_reporter:
             improved_experiment_result = self._evaluate_prompt(
                 prompt=improved_chat_prompt,
-                dataset=dataset,
+                dataset=validation_dataset | dataset,
                 metric=metric,
                 optimization_id=optimization_id,
                 n_samples=n_samples,
@@ -362,7 +361,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
-        dataset_validation: opik.Dataset | None = None,
+        validation_dataset: opik.Dataset | None = None,
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
         *args: Any,
@@ -386,13 +385,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 be a valid UUIDv7 string.
             max_trials: Maximum number of optimization iterations to run.
             max_retries: Maximum retries allowed for addressing a failure mode.
-            dataset_validation: Optional validation dataset (not yet supported by this optimizer).
+            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
         """
-        if dataset_validation is not None:
-            logger.warning(
-                f"{self.__class__.__name__} currently does not support validation dataset. "
-                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
-            )
         # Reset counters at the start of optimization
         self._validate_optimization_inputs(
             prompt, dataset, metric, support_content_parts=True
@@ -441,7 +435,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self._evaluate_prompt(
                 prompt=prompt,
-                dataset=dataset,
+                dataset=validation_dataset | dataset,
                 metric=metric,
                 optimization_id=optimization.id,
                 n_samples=n_samples,
@@ -542,6 +536,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             best_score=best_score,
                             prompt=prompt,
                             dataset=dataset,
+                            validation_dataset=validation_dataset,
                             metric=metric,
                             optimization_id=optimization.id,
                             n_samples=n_samples,

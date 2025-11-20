@@ -132,12 +132,12 @@ def display_evaluation(
 def display_optimization_start_message(
     verbose: int = 1,
     dataset_training_name: str | None = None,
-    dataset_validation_name: str | None = None,
+    validation_dataset_name: str | None = None,
     is_using_validation: bool = False,
 ) -> None:
     if verbose >= 1:
         console.print(Text("> Starting the optimization run"))
-        if dataset_training_name and dataset_validation_name and is_using_validation:
+        if dataset_training_name and validation_dataset_name and is_using_validation:
             console.print(
                 Text(
                     f"│  Training dataset (feedback): {dataset_training_name}",
@@ -146,7 +146,7 @@ def display_optimization_start_message(
             )
             console.print(
                 Text(
-                    f"│  Validation dataset (ranking): {dataset_validation_name}",
+                    f"│  Validation dataset (ranking): {validation_dataset_name}",
                     style="dim",
                 )
             )

@@ -204,6 +204,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable,
         baseline_score: float,
         n_trials: int = 10,
@@ -229,11 +230,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "baseline_score": baseline_score,
             }
         )
-        # Map dataset parameter to dataset_training for internal consistency
-        dataset_training = dataset
         base_experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset_training=dataset_training,
+            dataset=dataset,
+            validation_dataset=validation_dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
@@ -312,7 +312,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             ) as trial_reporter:
                 trial_reporter.start_trial(messages_for_reporting)
                 score = task_evaluator.evaluate(
-                    dataset=dataset,
+                    dataset=validation_dataset | dataset,
                     dataset_item_ids=eval_dataset_item_ids,
                     metric=metric,
                     evaluated_task=llm_task,
@@ -451,7 +451,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_id=optimization_id,
         )
 
-    def optimize_prompt(  # type: ignore
+    def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
@@ -461,9 +461,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
-        max_trials: int = 10,
         optimization_id: str | None = None,
-        dataset_validation: Dataset | None = None,
+        validation_dataset: Dataset | None = None,
+        max_trials: int = 10,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -480,16 +480,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             max_trials: Number of trials for Bayesian Optimization (default: 10)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
-            dataset_validation: Optional validation dataset (not yet supported by this optimizer).
+            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
 
         Returns:
             OptimizationResult: Result of the optimization
         """
-        if dataset_validation is not None:
-            logger.warning(
-                f"{self.__class__.__name__} currently does not support validation dataset. "
-                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
-            )
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -541,8 +536,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose=self.verbose,
         ) as eval_report:
             baseline_score = self._evaluate_prompt(
-                prompt,
-                dataset=dataset,
+                prompt=prompt,
+                dataset=validation_dataset | dataset,
                 metric=metric,
                 n_samples=n_samples,
                 optimization_id=(optimization.id if optimization is not None else None),
@@ -570,6 +565,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompt=prompt,
             fewshot_prompt_template=fewshot_template,
             dataset=dataset,
+            validation_dataset=validation_dataset,
             metric=metric,
             baseline_score=baseline_score,
             optimization_id=optimization.id if optimization is not None else None,
@@ -624,11 +620,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         additional_metadata = (
             {"optimization_id": optimization_id} if optimization_id else None
         )
-        # Map dataset parameter to dataset_training for internal consistency
-        dataset_training = dataset
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset_training=dataset_training,
+            dataset=dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,

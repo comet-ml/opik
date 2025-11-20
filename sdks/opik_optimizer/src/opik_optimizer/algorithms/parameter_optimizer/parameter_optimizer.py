@@ -89,15 +89,10 @@ class ParameterOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
-        dataset_validation: Dataset | None = None,
+        validation_dataset: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
-        if dataset_validation is not None:
-            logger.warning(
-                f"{self.__class__.__name__} currently does not support validation dataset. "
-                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
-            )
         raise NotImplementedError(
             "ParameterOptimizer.optimize_prompt is not supported. "
             "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
@@ -110,6 +105,7 @@ class ParameterOptimizer(BaseOptimizer):
         dataset: Dataset,
         metric: Callable[[Any, Any], float],
         parameter_space: ParameterSearchSpace | Mapping[str, Any],
+        validation_dataset: Dataset | None = None,
         experiment_config: dict | None = None,
         max_trials: int | None = None,
         n_samples: int | None = None,
@@ -147,6 +143,17 @@ class ParameterOptimizer(BaseOptimizer):
         """
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
+
+        if validation_dataset is not None:
+            logger.warning(
+                f"Due to the internal implementation of {self.__class__.__name__}, it currently"
+                "fully ignores the dataset if `validation_dataset` is provided. We recommend not"
+                "using the `validation_dataset` parameter."
+            )
+
+            experiment_config = experiment_config or {}
+            experiment_config["validation_dataset"] = validation_dataset.name
+            experiment_config["validation_dataset_id"] = validation_dataset.id
 
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
         assert isinstance(parameter_space, ParameterSearchSpace)  # for mypy
@@ -204,7 +211,7 @@ class ParameterOptimizer(BaseOptimizer):
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompt,
-                dataset=dataset,
+                dataset=validation_dataset | dataset,
                 metric=metric,
                 n_threads=self.n_threads,
                 verbose=self.verbose,
@@ -279,7 +286,7 @@ class ParameterOptimizer(BaseOptimizer):
             ) as trial_reporter:
                 score = self.evaluate_prompt(
                     prompt=tuned_prompt,
-                    dataset=dataset,
+                    dataset=validation_dataset | dataset,
                     metric=metric,
                     n_threads=self.n_threads,
                     verbose=self.verbose,

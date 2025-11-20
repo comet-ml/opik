@@ -186,13 +186,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         use_full_dataset: bool = True,
         optimization_id: str | None = None,
         mcp_config: MCPExecutionConfig | None = None,
-        dataset_validation: opik.Dataset | None = None,
         **kwargs: Any,
     ) -> float:
         """
         Args:
-            dataset: Dataset parameter (mapped internally to dataset_training)
-            dataset_validation: Optional validation dataset (used for ranking)
+            dataset: Opik Dataset to evaluate the prompt on
             metric: Metric functions
             use_full_dataset: Whether to use the full dataset or a subset
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
@@ -202,18 +200,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             float: The evaluation score
         """
-        # Map dataset parameter to dataset_training internally
-        dataset_training = dataset
-
-        # Optimizer decides which dataset to use for evaluation based on context
-        # For ranking (candidate evaluation), use validation if provided, else training
-        dataset_evaluation = (
-            dataset_validation if dataset_validation is not None else dataset_training
-        )
-
         # Calculate subset size for trials
         if not use_full_dataset:
-            total_items = len(dataset_evaluation.get_items())
+            total_items = len(dataset.get_items())
             if n_samples is not None:
                 if n_samples > total_items:
                     logger.warning(
@@ -247,8 +236,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset_training=dataset_training,
-            dataset_validation=dataset_validation,
+            dataset=dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
@@ -343,12 +331,12 @@ class MetaPromptOptimizer(BaseOptimizer):
             }
             return result
 
-        # Use evaluation dataset's get_items with limit for sampling
+        # Use dataset's get_items with limit for sampling
         logger.debug(
             f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
         )
         score = task_evaluator.evaluate(
-            dataset=dataset_evaluation,
+            dataset=dataset,
             metric=metric,
             evaluated_task=llm_task,
             dataset_item_ids=dataset_item_ids,
@@ -373,7 +361,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
-        dataset_validation: Dataset | None = None,
+        validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
@@ -391,12 +379,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         Args:
             prompt: The ChatPrompt to optimize. Can include system/user/assistant messages,
                 tools, and model configuration.
-            dataset: Opik Dataset containing training examples (training set - used for feedback/context).
-                Each item is passed to the prompt during evaluation.
-                TODO/FIXME: This parameter will be deprecated in favor of dataset_training.
-                For now, it serves as the training dataset parameter.
+            dataset: Opik Dataset containing evaluation examples. Each item is passed to the
+                prompt during evaluation.
             metric: Evaluation function that takes (dataset_item, llm_output) and returns a
                 score (float). Higher scores indicate better performance.
+            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
             experiment_config: Optional metadata dictionary to log with Opik experiments.
                 Useful for tracking experiment parameters and context.
             n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.
@@ -415,8 +402,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             candidate_generator: Optional custom function to generate candidate prompts.
                 Overrides default meta-reasoning generator. Should return list[ChatPrompt].
             candidate_generator_kwargs: Optional kwargs to pass to candidate_generator.
-            dataset_validation: Optional validation dataset (validation set - used for ranking candidates).
-                If not provided, uses dataset by default with a warning.
 
         Returns:
             OptimizationResult: Contains the best prompt found, final score, optimization
@@ -457,6 +442,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Set project name from parameter
         self.project_name = project_name
 
+        # Update experiment_config with validation_dataset if provided
+        if validation_dataset:
+            experiment_config = experiment_config or {}
+            experiment_config["validation_dataset"] = validation_dataset.name
+            experiment_config["validation_dataset_id"] = validation_dataset.id
+
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
             logger.warning(
@@ -488,45 +479,30 @@ class MetaPromptOptimizer(BaseOptimizer):
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
-        # Build optimizer config with dataset information
-        # Convert dataset parameter to dataset_training for internal consistency
-        dataset_training = dataset
-        optimizer_config = {
-            "optimizer": self.__class__.__name__,
-            "max_trials": max_trials,
-            "prompts_per_round": self.prompts_per_round,
-            "n_samples": n_samples,
-            "auto_continue": auto_continue,
-            "dataset_training": getattr(dataset_training, "name", None) or "dataset",
-        }
-        if dataset_validation is not None:
-            optimizer_config["dataset_validation"] = (
-                getattr(dataset_validation, "name", None) or "validation_dataset"
-            )
-            optimizer_config["dataset_usage"] = (
-                "Training dataset for feedback/context, validation dataset for ranking"
-            )
-        else:
-            optimizer_config["dataset_usage"] = (
-                "Training dataset used for both feedback and ranking (validation not provided)"
-            )
-
         reporting.display_configuration(
             messages=prompt.get_messages(),
-            optimizer_config=optimizer_config,
+            optimizer_config={
+                "optimizer": self.__class__.__name__,
+                "max_trials": max_trials,
+                "prompts_per_round": self.prompts_per_round,
+                "n_samples": n_samples,
+                "auto_continue": auto_continue,
+                "validation_dataset": validation_dataset.name
+                if validation_dataset
+                else None,
+            },
             verbose=self.verbose,
             tools=getattr(prompt, "tools", None),
         )
 
         try:
             optimization_id = optimization.id if optimization is not None else None
-            # Convert dataset parameter to dataset_training for internal consistency
-            dataset_training = dataset
             result = self._optimize_prompt(
                 optimization_id=optimization_id,
                 prompt=prompt,
-                dataset_training=dataset_training,
+                dataset=dataset,
                 metric=metric,
+                validation_dataset=validation_dataset,
                 experiment_config=experiment_config,
                 max_trials=max_trials,
                 n_samples=n_samples,
@@ -534,7 +510,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 mcp_config=mcp_config,
                 candidate_generator=candidate_generator,
                 candidate_generator_kwargs=candidate_generator_kwargs,
-                dataset_validation=dataset_validation,
             )
             if optimization:
                 self._update_optimization(optimization, status="completed")
@@ -562,7 +537,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
-        dataset_validation: Dataset | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
@@ -589,12 +563,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         if tool_segment_id not in {segment.segment_id for segment in segments}:
             raise ValueError(f"Tool '{tool_name}' not present in prompt tools")
 
-        # Convert dataset parameter to dataset_training for internal consistency
-        dataset_training = dataset
         return self._optimize_prompt(
             optimization_id=None,
             prompt=prompt,
-            dataset_training=dataset_training,
+            dataset=dataset,
+            validation_dataset=None,
             metric=metric,
             experiment_config=experiment_config,
             max_trials=10,
@@ -608,14 +581,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "panel_style": panel_style,
             },
             tool_panel_style=panel_style,
-            dataset_validation=dataset_validation,
         )
 
     def _optimize_prompt(
         self,
         optimization_id: str | None,
         prompt: chat_prompt.ChatPrompt,
-        dataset_training: Dataset,
+        dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable,
         experiment_config: dict | None,
         max_trials: int,
@@ -625,46 +598,24 @@ class MetaPromptOptimizer(BaseOptimizer):
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
         tool_panel_style: str = "bright_magenta",
-        dataset_validation: Dataset | None = None,
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
-        self.dataset = dataset_training  # Training dataset for feedback/context
+        self.dataset = dataset
         self.prompt = prompt
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
-        # Use validation dataset if provided, otherwise fall back to training dataset with warning
-        self._validation_dataset_used = dataset_validation is not None
-        if dataset_validation is None:
-            logger.warning(
-                "No validation dataset provided. Using training dataset for candidate ranking. "
-                "For better optimization results, consider providing a separate validation dataset."
-            )
-
         current_prompt = prompt
-        # Get dataset names for reporting
-        dataset_training_name = (
-            getattr(dataset_training, "name", None) or "training dataset"
-        )
-        dataset_validation_name = (
-            getattr(dataset_validation, "name", None) if dataset_validation else None
-        )
-        evaluation_dataset_name = (
-            dataset_validation_name if dataset_validation else dataset_training_name
-        )
-        is_using_validation = dataset_validation is not None
-        with reporting.display_evaluation(
-            verbose=self.verbose,
-            dataset_name=evaluation_dataset_name,
-            is_validation=is_using_validation,
-        ) as baseline_reporter:
-            # Use validation dataset for initial baseline evaluation (ranking)
-            # Pass training dataset as dataset parameter (function will use validation if provided)
+        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+            if validation_dataset:
+                experiment_config = experiment_config or {}
+                experiment_config["validation_dataset"] = validation_dataset.name
+                experiment_config["validation_dataset_id"] = validation_dataset.id
+
             initial_score = self._evaluate_prompt(
                 prompt,
                 optimization_id=optimization_id,
-                dataset=dataset_training,  # Training dataset (mapped internally)
-                dataset_validation=dataset_validation,  # Function uses this for evaluation if provided
+                dataset=validation_dataset | dataset,
                 metric=metric,
                 n_samples=n_samples,
                 experiment_config=experiment_config,
@@ -678,12 +629,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             baseline_reporter.set_score(initial_score)
 
-        reporting.display_optimization_start_message(
-            verbose=self.verbose,
-            dataset_training_name=dataset_training_name,
-            dataset_validation_name=dataset_validation_name,
-            is_using_validation=is_using_validation,
-        )
+        reporting.display_optimization_start_message(verbose=self.verbose)
 
         # Calculate the maximum number of rounds, we will stop early if we hit the
         # max_trials limit
@@ -730,22 +676,17 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
                 for candidate_count, prompt in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
-                        verbose=self.verbose,
-                        dataset_name=evaluation_dataset_name,
-                        is_validation=is_using_validation,
+                        verbose=self.verbose
                     ) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompt)
 
                         candidate_prompt = prompt.copy()
 
                         try:
-                            # Use validation dataset for candidate ranking (Pareto evaluation)
-                            # Pass training dataset as dataset parameter (function will use validation if provided)
                             prompt_score = self._evaluate_prompt(
                                 prompt=candidate_prompt,
                                 optimization_id=optimization_id,
-                                dataset=dataset_training,  # Training dataset (mapped internally)
-                                dataset_validation=dataset_validation,  # Function uses this for evaluation if provided
+                                dataset=validation_dataset | dataset,
                                 metric=metric,
                                 n_samples=n_samples,
                                 use_full_dataset=False,
@@ -825,7 +766,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
-            dataset_id=dataset_training.id,
+            dataset_id=dataset.id,
             optimization_id=optimization_id,
             best_tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
@@ -923,21 +864,16 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
     def _get_task_context(self, metric: Callable) -> str:
-        """Get task-specific context from the dataset and metric configuration.
-
-        Uses training dataset (self.dataset) for feedback/context, not validation dataset.
-        """
+        """Get task-specific context from the dataset and metric configuration."""
         if self.dataset is None:
             return ""
 
         try:
             # Try get_items() first as it's the preferred method
-            # Use training dataset (self.dataset) for context, not validation
             items = self.dataset.get_items()
             sample = items[0]  # Get first sample
         except Exception as e:
             logger.warning(f"Could not get sample from dataset: {e}")
-            sample = None
 
         # Describe Single Metric
         if sample is not None:
@@ -950,9 +886,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             context += f"Dataset fields (includes both input and optionally the expected output): {', '.join([x for x in sample.keys() if x != 'id'])}\n"
             context += f"Evaluation Metric:\n{metrics_str}\n"
             context += f"\nExample:\n{json.dumps(sample)}\n"
-            return context
 
-        return ""
+        return context
 
     def _generate_candidate_prompts(
         self,
@@ -972,11 +907,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
             logger.debug(f"Current best score: {best_score:.4f}")
 
-            # Determine if we're using validation dataset for scoring
-            is_using_validation = getattr(self, "_validation_dataset_used", False)
-            history_context = self._build_history_context(
-                previous_rounds, is_using_validation=is_using_validation
-            )
+            history_context = self._build_history_context(previous_rounds)
             task_context_str = ""
             analysis_instruction = ""
             metric_focus_instruction = ""
@@ -1000,20 +931,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "Task context and metric-specific instructions disabled for reasoning prompt."
                 )
 
-            # Add dataset usage note if using validation dataset
-            dataset_note = ""
-            if is_using_validation and task_context_str:
-                dataset_note = (
-                    "\nNote: Task examples above are from training dataset (for understanding). "
-                    "Scores shown are from validation dataset (for ranking candidates)."
-                )
-            elif is_using_validation:
-                dataset_note = "\nNote: Scores shown are from validation dataset (for ranking candidates)."
-
             user_prompt = f"""Current prompt: {current_prompt.get_messages()}
             Current score: {best_score}
             {history_context}
-            {task_context_str}{dataset_note}
+            {task_context_str}
 
             {analysis_instruction}
             Generate {self.prompts_per_round} improved versions of this prompt.
@@ -1273,25 +1194,12 @@ class MetaPromptOptimizer(BaseOptimizer):
             except Exception as exc:
                 raise ValueError(f"Error generating MCP prompt candidates: {exc}")
 
-    def _build_history_context(
-        self,
-        previous_rounds: list[OptimizationRound],
-        is_using_validation: bool = False,
-    ) -> str:
-        """Build context from previous optimization rounds.
-
-        Scores shown are from validation dataset (for ranking) when validation dataset is provided.
-        This follows GEPA pattern where validation set is used only for ranking candidates.
-        """
+    def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
+        """Build context from previous optimization rounds."""
         if not previous_rounds:
             return ""
 
-        dataset_note = (
-            " (validation dataset scores for ranking)"
-            if is_using_validation
-            else " (training dataset scores)"
-        )
-        context = f"\nPrevious rounds (latest first){dataset_note}:\n"
+        context = "\nPrevious rounds (latest first):\n"
         for round_data in reversed(previous_rounds[-3:]):
             context += f"\nRound {round_data.round_number}:\n"
             context += f"Best score this round: {round_data.best_score:.4f}\n"
