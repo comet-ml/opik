@@ -991,11 +991,12 @@ class Opik:
         """
         if not id:
             raise ValueError(
-                "id must be provided and can not be None or empty, "
-                f"id: {id}"
+                "id must be provided and can not be None or empty, " f"id: {id}"
             )
 
-        self._rest_client.experiments.update_experiment(id, name=name, metadata=experiment_config)
+        self._rest_client.experiments.update_experiment(
+            id, name=name, metadata=experiment_config
+        )
 
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """
