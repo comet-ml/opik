@@ -3,6 +3,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 import {
+  addAllParentIds,
   constructDataMapAndSearchIds,
   filterFunction,
 } from "./helpers";
@@ -94,12 +95,16 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       traceSpans,
       predicate,
     );
+    const parentIds = addAllParentIds(searchIds, dataMap);
 
     retVal.searchIds = searchIds;
     retVal.filteredTraceSpans =
       searchIds.size === 0
         ? null
-        : traceSpans.filter((traceSpan) => searchIds.has(traceSpan.id));
+        : traceSpans.filter(
+            (traceSpan) =>
+              searchIds.has(traceSpan.id) || parentIds.has(traceSpan.id),
+          );
 
     return retVal;
   }, [traceSpans, hasSearchOrFilter, trace, predicate]);

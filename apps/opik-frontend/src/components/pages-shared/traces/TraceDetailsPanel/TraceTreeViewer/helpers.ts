@@ -472,3 +472,31 @@ export const constructDataMapAndSearchIds = (
   return [dataMap, searchIds];
 };
 
+export const addAllParentIds = (
+  searchIds: Set<string>,
+  dataMap: Map<string, Span | Trace>,
+): Set<string> => {
+  const parentIds = new Set<string>();
+
+  const ensureParent = (id: string): void => {
+    if (!parentIds.has(id)) {
+      parentIds.add(id);
+      const data = dataMap.get(id);
+      const parentId = get(data, "parent_span_id");
+      if (parentId) {
+        ensureParent(parentId);
+      }
+    }
+  };
+
+  searchIds.forEach((id) => {
+    const data = dataMap.get(id);
+    const parentId = get(data, "parent_span_id");
+    if (parentId) {
+      ensureParent(parentId);
+    }
+  });
+
+  return parentIds;
+};
+
