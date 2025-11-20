@@ -63,7 +63,7 @@ providers:
         enabled: true
         test_playground: true
         test_online_scoring: true
-        
+
 test_config:
   skip_missing_api_keys: true
   response_timeout: 30
