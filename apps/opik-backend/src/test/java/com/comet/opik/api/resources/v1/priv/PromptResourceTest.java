@@ -512,7 +512,7 @@ class PromptResourceTest {
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
-            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit(), null);
 
             try (var actualResponse = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
@@ -855,7 +855,7 @@ class PromptResourceTest {
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit(), null);
 
             try (var actualResponse = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
@@ -2410,21 +2410,21 @@ class PromptResourceTest {
                     // Retrieve by prompt name and commit null
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
-                                    promptVersion2, promptName) -> new PromptVersionRetrieve(promptName, null),
+                                    promptVersion2, promptName) -> new PromptVersionRetrieve(promptName, null, null),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion2),
                     // Retrieve by prompt name and first commit
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
                                     promptVersion2,
-                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion.commit()),
+                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion.commit(), null),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion),
                     // Retrieve by prompt name and last commit
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
                                     promptVersion2,
-                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion2.commit()),
+                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion2.commit(), null),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion2));
         }
@@ -2475,17 +2475,17 @@ class PromptResourceTest {
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
                                     prompt) -> new PromptVersionRetrieve(prompt.name(),
-                                            RandomStringUtils.randomAlphanumeric(8)),
+                                            RandomStringUtils.randomAlphanumeric(8), null),
                             "Prompt version not found"),
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
                                     prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
-                                            promptVersion.commit()),
+                                            promptVersion.commit(), null),
                             "Prompt not found"),
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
                                     prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
-                                            null),
+                                            null, null),
                             "Prompt not found"));
         }
 
@@ -2511,12 +2511,12 @@ class PromptResourceTest {
         public Stream<Arguments> when__promptVersionRetrieveRequestIsInvalid__thenReturnError() {
             return Stream.of(
                     arguments(
-                            new PromptVersionRetrieve(null, null),
+                            new PromptVersionRetrieve(null, null, null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
                             new ErrorMessage(List.of("name must not be blank"))),
                     arguments(
-                            new PromptVersionRetrieve("", null),
+                            new PromptVersionRetrieve("", null, null),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
                             new ErrorMessage(List.of("name must not be blank"))));
@@ -2548,7 +2548,7 @@ class PromptResourceTest {
                     .build();
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null);
+            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.TEXT);
 
             retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
         }
@@ -2582,9 +2582,55 @@ class PromptResourceTest {
                     .build();
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null);
+            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.CHAT);
 
             retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("Error: should return bad request when template_structure mismatch")
+        void shouldReturnBadRequest_whenTemplateStructureMismatch() {
+            // Create a STRING prompt
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .template("Hello {{name}}")
+                    .build();
+
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(promptVersion)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+            createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            // Try to retrieve it as CHAT prompt - should fail with clear error
+            var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.CHAT);
+
+            try (var response = client
+                    .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.hasEntity()).isTrue();
+                var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(errorMessage.getMessage())
+                        .contains("is a text prompt, but chat prompt was requested");
+            }
         }
 
     }

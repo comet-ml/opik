@@ -72,7 +72,7 @@ public interface PromptService {
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
-    PromptVersion retrievePromptVersion(String name, String commit);
+    PromptVersion retrievePromptVersion(String name, String commit, TemplateStructure templateStructure);
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
@@ -560,7 +560,8 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit,
+            TemplateStructure templateStructure) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
@@ -571,6 +572,15 @@ class PromptServiceImpl implements PromptService {
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
+            }
+
+            // Validate template structure if specified (for early error detection)
+            if (templateStructure != null && !prompt.templateStructure().equals(templateStructure)) {
+                String expectedType = templateStructure == TemplateStructure.CHAT ? "chat" : "text";
+                String actualType = prompt.templateStructure() == TemplateStructure.CHAT ? "chat" : "text";
+                throw new BadRequestException(
+                        "Prompt '%s' is a %s prompt, but %s prompt was requested".formatted(
+                                name, actualType, expectedType));
             }
 
             PromptVersion promptVersion;
