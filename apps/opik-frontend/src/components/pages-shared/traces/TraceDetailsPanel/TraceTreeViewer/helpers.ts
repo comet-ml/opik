@@ -499,4 +499,3 @@ export const addAllParentIds = (
 
   return parentIds;
 };
-
