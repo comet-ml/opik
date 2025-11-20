@@ -69,7 +69,7 @@ export function UpdateExperimentDialog({
     // Use latestName/Configuration if input is empty
     onConfirm(
       name || latestName,
-      parsedConfiguration || latestConfiguration || {},
+      parsedConfiguration ?? latestConfiguration ?? {},
     );
   };
 
