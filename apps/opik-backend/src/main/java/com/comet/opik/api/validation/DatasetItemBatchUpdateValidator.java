@@ -38,6 +38,14 @@ public class DatasetItemBatchUpdateValidator
             isValid = false;
         }
 
+        // Validate that mergeTags is true when using filters
+        if (hasFilters && !batchUpdate.mergeTags()) {
+            context.buildConstraintViolationWithTemplate(
+                    "When using 'filters', 'merge_tags' must be true. Tag replacement (merge_tags=false) is only supported when using 'ids'.")
+                    .addConstraintViolation();
+            isValid = false;
+        }
+
         return isValid;
     }
 }

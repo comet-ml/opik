@@ -4333,34 +4333,16 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: batch update by filters without merge")
-        void batchUpdateDatasetItems__whenUsingFiltersWithoutMerge__thenSucceed() {
-            // Create items with different tags
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("include", "tag1"))
-                    .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("include", "tag2"))
-                    .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("exclude", "tag3"))
-                    .build();
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item1, item2, item3))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
-
-            // Create filter to match items with "include" tag
+        @DisplayName("Error: batch update by filters without merge is not allowed")
+        void batchUpdateDatasetItems__whenUsingFiltersWithoutMerge__thenBadRequest() {
+            // Create filter
             var filter = new com.comet.opik.api.filter.DatasetItemFilter(
                     com.comet.opik.api.filter.DatasetItemField.TAGS,
                     com.comet.opik.api.filter.Operator.CONTAINS,
                     null,
                     "include");
 
-            // Batch update by filters without merge
+            // Attempt batch update by filters without merge (should fail validation)
             var batchUpdate = DatasetItemBatchUpdate.builder()
                     .filters(List.of(filter))
                     .update(DatasetItemUpdate.builder()
@@ -4369,15 +4351,10 @@ class DatasetsResourceTest {
                     .mergeTags(false)
                     .build();
 
-            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify only items matching filters were updated
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
-            assertThat(updated1.tags()).containsExactlyInAnyOrder("replaced");
-            assertThat(updated2.tags()).containsExactlyInAnyOrder("replaced");
-            assertThat(updated3.tags()).containsExactlyInAnyOrder("exclude", "tag3"); // unchanged
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
         }
 
         @Test
