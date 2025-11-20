@@ -144,24 +144,7 @@ class PromptResourceTest {
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
-    private final PodamFactory factory = createPodamFactory();
-
-    private static PodamFactory createPodamFactory() {
-        PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-        var strategy = (uk.co.jemos.podam.api.RandomDataProviderStrategy) podamFactory.getStrategy();
-        // Default to STRING for TemplateStructure to maintain backward compatibility
-        // CHAT-specific tests will explicitly override this
-        strategy.addOrReplaceTypeManufacturer(TemplateStructure.class,
-                new uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer<>() {
-                    @Override
-                    public TemplateStructure getType(uk.co.jemos.podam.api.DataProviderStrategy dataProviderStrategy,
-                            uk.co.jemos.podam.api.AttributeMetadata attributeMetadata,
-                            uk.co.jemos.podam.common.ManufacturingContext manufacturingContext) {
-                        return TemplateStructure.TEXT;
-                    }
-                });
-        return podamFactory;
-    }
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
     private ClientSupport client;
@@ -288,6 +271,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -325,6 +309,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -362,6 +347,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -394,14 +380,21 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+            var request = CreatePromptVersion.builder()
+                    .name(factory.manufacturePojo(String.class))
+                    .version(version)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
+                    .post(Entity.json(request))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
@@ -429,6 +422,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -467,15 +461,17 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            CreatePromptVersion request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
@@ -510,9 +506,10 @@ class PromptResourceTest {
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion, null);
+            var request = createPromptVersionRequest(UUID.randomUUID().toString(), promptVersion);
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
@@ -630,6 +627,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -664,6 +662,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -698,6 +697,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -728,14 +728,21 @@ class PromptResourceTest {
                 boolean success,
                 String workspaceName) {
 
-            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+            var request = CreatePromptVersion.builder()
+                    .name(factory.manufacturePojo(String.class))
+                    .version(version)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
+                    .post(Entity.json(request))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
@@ -761,6 +768,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -797,15 +805,17 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            CreatePromptVersion request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -840,9 +850,10 @@ class PromptResourceTest {
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion, null);
+            var request = createPromptVersionRequest(UUID.randomUUID().toString(), promptVersion);
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -880,6 +891,14 @@ class PromptResourceTest {
 
             return TestUtils.getIdFromLocation(response.getLocation());
         }
+    }
+
+    private CreatePromptVersion createPromptVersionRequest(String name, PromptVersion version) {
+        return CreatePromptVersion.builder()
+                .name(name)
+                .version(version)
+                .templateStructure(version.templateStructure())
+                .build();
     }
 
     @Nested
@@ -989,6 +1008,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1449,6 +1469,7 @@ class PromptResourceTest {
                             .createdBy(USER)
                             .versionCount(random.nextLong(5))
                             .template(null)
+                            .templateStructure(TemplateStructure.TEXT)
                             .build())
                     .toList();
 
@@ -1457,8 +1478,9 @@ class PromptResourceTest {
                 for (int i = 0; i < prompt.versionCount(); i++) {
                     var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
+                            .templateStructure(TemplateStructure.TEXT)
                             .build();
-                    var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+                    var request = createPromptVersionRequest(prompt.name(), promptVersion);
                     createPromptVersion(request, apiKey, workspaceName);
                 }
             });
@@ -1587,6 +1609,7 @@ class PromptResourceTest {
                             .createdBy(USER)
                             .versionCount(random.nextLong(5))
                             .template(null)
+                            .templateStructure(TemplateStructure.TEXT)
                             .build())
                     .toList();
 
@@ -1595,8 +1618,9 @@ class PromptResourceTest {
                 for (int i = 0; i < prompt.versionCount(); i++) {
                     var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
+                            .templateStructure(TemplateStructure.TEXT)
                             .build();
-                    var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+                    var request = createPromptVersionRequest(prompt.name(), promptVersion);
                     createPromptVersion(request, apiKey, workspaceName);
                 }
             });
@@ -1789,6 +1813,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1796,9 +1821,10 @@ class PromptResourceTest {
             PromptVersion promptVersion = factory.manufacturePojo(PromptVersion.class)
                     .toBuilder()
                     .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            promptVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion, null), API_KEY,
+            promptVersion = createPromptVersion(createPromptVersionRequest(prompt.name(), promptVersion), API_KEY,
                     TEST_WORKSPACE);
 
             Prompt expectedPrompt = prompt.toBuilder()
@@ -1896,9 +1922,10 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .commit(null)
                     .id(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), expectedPromptVersion);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1913,6 +1940,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1923,9 +1951,10 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .commit(versionId.toString().substring(versionId.toString().length() - 8))
                     .id(versionId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), expectedPromptVersion);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1950,9 +1979,10 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .commit(versionId.toString().substring(versionId.toString().length() - 8))
                     .id(versionId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(promptName, expectedPromptVersion, null);
+            var request = createPromptVersionRequest(promptName, expectedPromptVersion);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, apiKey, workspaceName);
 
@@ -1969,6 +1999,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             var versionId = factory.manufacturePojo(UUID.class);
@@ -1976,19 +2007,21 @@ class PromptResourceTest {
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .id(versionId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .id(versionId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             assertPromptVersionConflict(
-                    new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion2, null),
+                    createPromptVersionRequest(UUID.randomUUID().toString(), promptVersion2),
                     API_KEY, TEST_WORKSPACE, "Prompt version already exists");
         }
 
@@ -2000,23 +2033,26 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .commit(promptVersion.commit())
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             assertPromptVersionConflict(
-                    new CreatePromptVersion(prompt.name(), promptVersion2, null),
+                    createPromptVersionRequest(prompt.name(), promptVersion2),
                     API_KEY, TEST_WORKSPACE, "Prompt version already exists");
         }
 
@@ -2042,60 +2078,102 @@ class PromptResourceTest {
 
         Stream<Arguments> when__promptVersionIsInvalid__thenReturnError() {
             return Stream.of(
-                    arguments(new CreatePromptVersion(null, factory.manufacturePojo(PromptVersion.class), null),
+                    arguments(CreatePromptVersion.builder()
+                            .name(null)
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .templateStructure(TemplateStructure.TEXT)
+                                    .build())
+                            .templateStructure(null)
+                            .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    arguments(new CreatePromptVersion("", factory.manufacturePojo(PromptVersion.class), null),
+                    arguments(CreatePromptVersion.builder()
+                            .name("")
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .templateStructure(TemplateStructure.TEXT)
+                                    .build())
+                            .templateStructure(null)
+                            .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("").build(),
-                                    null),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .commit("")
+                                            .templateStructure(TemplateStructure.TEXT)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("1234567").build(),
-                                    null),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .commit("1234567")
+                                            .templateStructure(TemplateStructure.TEXT)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("1234-567").build(),
-                                    null),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .commit("1234-567")
+                                            .templateStructure(TemplateStructure.TEXT)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().id(UUID.randomUUID()).build(),
-                                    null),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .id(UUID.randomUUID())
+                                            .templateStructure(TemplateStructure.TEXT)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_BAD_REQUEST,
                             new ErrorMessage(List.of("prompt version id must be a version 7 UUID")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().template("").build(),
-                                    null),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .template("")
+                                            .templateStructure(TemplateStructure.TEXT)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().template(null).build(),
-                                    null),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .template(null)
+                                            .templateStructure(TemplateStructure.TEXT)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
@@ -2115,6 +2193,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2123,15 +2202,17 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2149,6 +2230,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2157,6 +2239,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
@@ -2164,12 +2247,13 @@ class PromptResourceTest {
             var promptVersions = IntStream.range(0, 20)
                     .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
+                            .templateStructure(TemplateStructure.TEXT)
                             .build())
                     .toList();
 
             promptVersions
                     .forEach(promptVersion -> createPromptVersion(
-                            new CreatePromptVersion(prompt.name(), promptVersion, null),
+                            createPromptVersionRequest(prompt.name(), promptVersion),
                             API_KEY, TEST_WORKSPACE));
 
             List<PromptVersion> expectedPromptVersionPage1 = promptVersions.reversed().subList(0, 10);
@@ -2189,6 +2273,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2196,12 +2281,13 @@ class PromptResourceTest {
             var promptVersions = IntStream.range(0, 10)
                     .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
+                            .templateStructure(TemplateStructure.TEXT)
                             .build())
                     .toList();
 
             promptVersions
                     .forEach(promptVersion -> createPromptVersion(
-                            new CreatePromptVersion(prompt.name(), promptVersion, null),
+                            createPromptVersionRequest(prompt.name(), promptVersion),
                             API_KEY, TEST_WORKSPACE));
 
             List<PromptVersion> promptVersionPage1 = promptVersions.reversed().subList(0, 2);
@@ -2256,6 +2342,7 @@ class PromptResourceTest {
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2264,9 +2351,10 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .type(type)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2311,6 +2399,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2318,16 +2407,18 @@ class PromptResourceTest {
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request2 = new CreatePromptVersion(prompt.name(), promptVersion2, null);
+            var request2 = createPromptVersionRequest(prompt.name(), promptVersion2);
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
             var createdPromptVersion2 = createPromptVersion(request2, API_KEY, TEST_WORKSPACE);
@@ -2373,6 +2464,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template(null)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2380,9 +2472,10 @@ class PromptResourceTest {
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, null);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion);
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2471,9 +2564,14 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .template("Hello {{name}}")
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.TEXT);
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(promptVersion)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.TEXT);
@@ -2501,9 +2599,14 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .template(chatTemplate)
+                    .templateStructure(TemplateStructure.CHAT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.CHAT);
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(promptVersion)
+                    .templateStructure(TemplateStructure.CHAT)
+                    .build();
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             var retrieveRequest = new PromptVersionRetrieve(prompt.name(), null, TemplateStructure.CHAT);
@@ -2529,9 +2632,14 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .promptId(promptId)
                     .template("Hello {{name}}")
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion, TemplateStructure.TEXT);
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(promptVersion)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             // Try to retrieve it as CHAT prompt - should fail with clear error
@@ -2569,6 +2677,7 @@ class PromptResourceTest {
                     .template(null)
                     .versionCount(0L)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -2582,9 +2691,10 @@ class PromptResourceTest {
                     .variables(null)
                     .template("Original template content")
                     .changeDescription("First version")
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var createdV1 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion1, null), API_KEY,
+            var createdV1 = createPromptVersion(createPromptVersionRequest(prompt.name(), promptVersion1), API_KEY,
                     TEST_WORKSPACE);
 
             // Create second version
@@ -2594,9 +2704,10 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .template("Modified template content")
                     .changeDescription("Second version")
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            var createdV2 = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion2, null), API_KEY,
+            var createdV2 = createPromptVersion(createPromptVersionRequest(prompt.name(), promptVersion2), API_KEY,
                     TEST_WORKSPACE);
 
             // Now restore the first version
@@ -2639,6 +2750,7 @@ class PromptResourceTest {
                     .template(null)
                     .versionCount(0L)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId1 = createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
@@ -2649,6 +2761,7 @@ class PromptResourceTest {
                     .template(null)
                     .versionCount(0L)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
@@ -2662,9 +2775,10 @@ class PromptResourceTest {
                     .variables(null)
                     .template("Original template content")
                     .changeDescription("First version")
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            createPromptVersion(new CreatePromptVersion(prompt1.name(), promptVersion1, null),
+            createPromptVersion(createPromptVersionRequest(prompt1.name(), promptVersion1),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -2680,10 +2794,10 @@ class PromptResourceTest {
                     .changeDescription("Second version")
                     .build();
 
-            var prompt2V1 = createPromptVersion(new CreatePromptVersion(prompt2.name(), promptVersion2, null), API_KEY,
+            var prompt2V1 = createPromptVersion(createPromptVersionRequest(prompt2.name(), promptVersion2), API_KEY,
                     TEST_WORKSPACE);
 
-            createPromptVersion(new CreatePromptVersion(prompt1.name(), newpPromptVersion1, null), API_KEY,
+            createPromptVersion(createPromptVersionRequest(prompt1.name(), newpPromptVersion1), API_KEY,
                     TEST_WORKSPACE);
 
             // Now restore the first version
@@ -2777,7 +2891,7 @@ class PromptResourceTest {
             assertThat(promptVersionPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields("variables", "promptId")
+                                    .withIgnoredFields("variables", "promptId", "templateStructure")
                                     .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
