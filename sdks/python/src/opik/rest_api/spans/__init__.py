@@ -7,7 +7,6 @@ from .types import (
     GetSpanStatsRequestType,
     GetSpansByProjectRequestType,
     SpanSearchStreamRequestPublicType,
-    SpanUpdateType,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "GetSpanStatsRequestType",
     "GetSpansByProjectRequestType",
     "SpanSearchStreamRequestPublicType",
-    "SpanUpdateType",
 ]

@@ -16,6 +16,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
+    csvUploadEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -26,5 +27,6 @@ export declare namespace ServiceTogglesConfig {
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
+        csvUploadEnabled: boolean;
     }
 }

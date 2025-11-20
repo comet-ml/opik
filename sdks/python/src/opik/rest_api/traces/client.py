@@ -20,6 +20,8 @@ from ..types.trace_public import TracePublic
 from ..types.trace_thread import TraceThread
 from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
+from ..types.trace_thread_update import TraceThreadUpdate
+from ..types.trace_update import TraceUpdate
 from ..types.trace_write import TraceWrite
 from ..types.value_entry import ValueEntry
 from .raw_client import AsyncRawTracesClient, RawTracesClient
@@ -227,6 +229,114 @@ class TracesClient:
         )
         return _response.data
 
+    def create_traces(
+        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Create traces
+
+        Parameters
+        ----------
+        traces : typing.Sequence[TraceWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import TraceWrite
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.create_traces(traces=[TraceWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
+        """
+        _response = self._raw_client.create_traces(traces=traces, request_options=request_options)
+        return _response.data
+
+    def batch_update_traces(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple traces
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of trace IDs to update (max 1000)
+
+        update : TraceUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import TraceUpdate
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.batch_update_traces(ids=['ids'], update=TraceUpdate(), )
+        """
+        _response = self._raw_client.batch_update_traces(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
+
+    def batch_update_threads(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceThreadUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple threads
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of thread model IDs to update (max 1000)
+
+        update : TraceThreadUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import TraceThreadUpdate
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.batch_update_threads(ids=['ids'], update=TraceThreadUpdate(), )
+        """
+        _response = self._raw_client.batch_update_threads(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
+
     def close_trace_thread(
         self,
         *,
@@ -420,34 +530,6 @@ class TracesClient:
             thread_id=thread_id,
             request_options=request_options,
         )
-        return _response.data
-
-    def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
-        """
-        Create traces
-
-        Parameters
-        ----------
-        traces : typing.Sequence[TraceWrite]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-        from Opik import TraceWrite
-        import datetime
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.create_traces(traces=[TraceWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
-        """
-        _response = self._raw_client.create_traces(traces=traces, request_options=request_options)
         return _response.data
 
     def get_trace_by_id(
@@ -1639,6 +1721,123 @@ class AsyncTracesClient:
         )
         return _response.data
 
+    async def create_traces(
+        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Create traces
+
+        Parameters
+        ----------
+        traces : typing.Sequence[TraceWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import TraceWrite
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.create_traces(traces=[TraceWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_traces(traces=traces, request_options=request_options)
+        return _response.data
+
+    async def batch_update_traces(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple traces
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of trace IDs to update (max 1000)
+
+        update : TraceUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import TraceUpdate
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.batch_update_traces(ids=['ids'], update=TraceUpdate(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.batch_update_traces(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
+
+    async def batch_update_threads(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceThreadUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple threads
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of thread model IDs to update (max 1000)
+
+        update : TraceThreadUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import TraceThreadUpdate
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.batch_update_threads(ids=['ids'], update=TraceThreadUpdate(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.batch_update_threads(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
+
     async def close_trace_thread(
         self,
         *,
@@ -1841,37 +2040,6 @@ class AsyncTracesClient:
             thread_id=thread_id,
             request_options=request_options,
         )
-        return _response.data
-
-    async def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
-        """
-        Create traces
-
-        Parameters
-        ----------
-        traces : typing.Sequence[TraceWrite]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        from Opik import TraceWrite
-        import datetime
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.traces.create_traces(traces=[TraceWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.create_traces(traces=traces, request_options=request_options)
         return _response.data
 
     async def get_trace_by_id(

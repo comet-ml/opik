@@ -170,6 +170,7 @@ from .dataset_item_page_public import DatasetItemPagePublic
 from .dataset_item_public import DatasetItemPublic
 from .dataset_item_public_source import DatasetItemPublicSource
 from .dataset_item_source import DatasetItemSource
+from .dataset_item_update import DatasetItemUpdate
 from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
@@ -390,6 +391,8 @@ from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
 from .span_type import SpanType
+from .span_update import SpanUpdate
+from .span_update_type import SpanUpdateType
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
@@ -422,9 +425,11 @@ from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePubl
 from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
 from .trace_thread_page import TraceThreadPage
 from .trace_thread_status import TraceThreadStatus
+from .trace_thread_update import TraceThreadUpdate
 from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
 from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
+from .trace_update import TraceUpdate
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
@@ -599,6 +604,7 @@ __all__ = [
     "DatasetItemPublic",
     "DatasetItemPublicSource",
     "DatasetItemSource",
+    "DatasetItemUpdate",
     "DatasetItemWrite",
     "DatasetItemWriteSource",
     "DatasetPagePublic",
@@ -810,6 +816,8 @@ __all__ = [
     "SpanPublic",
     "SpanPublicType",
     "SpanType",
+    "SpanUpdate",
+    "SpanUpdateType",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",
@@ -842,9 +850,11 @@ __all__ = [
     "TraceThreadLlmAsJudgeCodeWrite",
     "TraceThreadPage",
     "TraceThreadStatus",
+    "TraceThreadUpdate",
     "TraceThreadUserDefinedMetricPythonCode",
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
+    "TraceUpdate",
     "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
