@@ -51,11 +51,11 @@ install-dev:
 # Disable LiteLLM disk cache to avoid RO sqlite errors during tests.
 test:
 	$(call warn_if_no_venv)
-	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile --cov=opik_optimizer --cov-report=term-missing --cov-report=xml --cov-report=html
+	HF_HUB_ENABLE_PROGRESS_BARS=0 HF_HUB_DISABLE_TELEMETRY=1 PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile --cov=opik_optimizer --cov-report=term-missing --cov-report=xml --cov-report=html
 
 profile:
 	$(call warn_if_no_venv)
-	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile tests/unit --profile --maxfail=1
+	HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_ENABLE_PROGRESS_BARS=0 HF_HUB_DISABLE_TELEMETRY=1 PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile tests/unit --profile --maxfail=1
 
 precommit:
 	$(call warn_if_no_venv)

@@ -12,6 +12,8 @@ permissions:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  HF_HUB_ENABLE_PROGRESS_BARS: "0"
+  HF_HUB_DISABLE_TELEMETRY: "1"
 
 jobs:
     run-e2e-tests:

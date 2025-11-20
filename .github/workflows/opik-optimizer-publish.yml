@@ -12,6 +12,9 @@ jobs:
     build-and-publish:
         runs-on: ubuntu-latest
         timeout-minutes: 5
+        env:
+          HF_HUB_ENABLE_PROGRESS_BARS: "0"
+          HF_HUB_DISABLE_TELEMETRY: "1"
         steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
