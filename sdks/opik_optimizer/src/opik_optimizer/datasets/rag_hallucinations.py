@@ -2,30 +2,25 @@ from __future__ import annotations
 
 import opik
 
-from functools import lru_cache
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+RAG_HALLU_SPEC = DatasetSpec(
+    name="rag_hallucinations",
+    hf_path="aporia-ai/rag_hallucinations",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=300,
+            dataset_name="rag_hallucination_train",
+        )
+    },
+    prefer_presets=True,
+)
 
-
-@lru_cache(maxsize=1)
-def _get_rag_hallu_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="rag_hallucinations",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "aporia-ai/rag_hallucinations",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "rag_hallucination_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_RAG_HALLU_HANDLE = DatasetHandle(RAG_HALLU_SPEC)
 
 
 def rag_hallucinations(
@@ -39,8 +34,7 @@ def rag_hallucinations(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """RAG Hallucinations dataset slices (context, question, answer, label)."""
-    loader = _get_rag_hallu_loader()
-    return loader(
+    return _RAG_HALLU_HANDLE.load(
         split=split,
         count=count,
         start=start,

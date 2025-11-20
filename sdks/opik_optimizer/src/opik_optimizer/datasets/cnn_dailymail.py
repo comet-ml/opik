@@ -1,33 +1,26 @@
 from __future__ import annotations
 
-from typing import Any
-from functools import lru_cache
-
 import opik
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
+CNN_DAILYMAIL_SPEC = DatasetSpec(
+    name="cnn_dailymail",
+    hf_path="cnn_dailymail",
+    hf_name="3.0.0",
+    default_source_split="validation",
+    presets={
+        "validation": DatasetSplitPreset(
+            source_split="validation",
+            start=0,
+            count=100,
+            dataset_name="cnn_dailymail_train",
+        )
+    },
+)
 
-@lru_cache(maxsize=1)
-def _get_cnn_dailymail_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="cnn_dailymail",
-        default_source_split="validation",
-        load_kwargs_resolver=lambda split: {
-            "path": "cnn_dailymail",
-            "name": "3.0.0",
-            "split": split,
-        },
-        presets={
-            "validation": {
-                "source_split": "validation",
-                "start": 0,
-                "count": 100,
-                "dataset_name": "cnn_dailymail_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_CNN_DAILYMAIL_HANDLE = DatasetHandle(CNN_DAILYMAIL_SPEC)
 
 
 def cnn_dailymail(
@@ -47,8 +40,7 @@ def cnn_dailymail(
     mirror earlier demo behavior. Provide explicit `split`, `count`, or `start`
     arguments to stream any region of the dataset.
     """
-    loader = _get_cnn_dailymail_loader()
-    return loader(
+    return _CNN_DAILYMAIL_HANDLE.load(
         split=split,
         count=count,
         start=start,

@@ -1,32 +1,27 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
 import opik
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
+GSM8K_SPEC = DatasetSpec(
+    name="gsm8k",
+    hf_path="gsm8k",
+    hf_name="main",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=300,
+            dataset_name="gsm8k_train",
+        )
+    },
+    prefer_presets=True,
+)
 
-@lru_cache(maxsize=1)
-def _get_gsm8k_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="gsm8k",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "gsm8k",
-            "name": "main",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "gsm8k_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_GSM8K_HANDLE = DatasetHandle(GSM8K_SPEC)
 
 
 def gsm8k(
@@ -40,8 +35,7 @@ def gsm8k(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """Grade-school math word problems (GSM8K) slices."""
-    loader = _get_gsm8k_loader()
-    return loader(
+    return _GSM8K_HANDLE.load(
         split=split,
         count=count,
         start=start,

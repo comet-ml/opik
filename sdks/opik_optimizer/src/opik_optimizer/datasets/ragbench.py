@@ -1,31 +1,26 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
 import opik
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
+RAGBENCH_SPEC = DatasetSpec(
+    name="ragbench_sentence_relevance",
+    hf_path="wandb/ragbench-sentence-relevance-balanced",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=300,
+            dataset_name="ragbench_sentence_relevance_train",
+        )
+    },
+    prefer_presets=True,
+)
 
-@lru_cache(maxsize=1)
-def _get_ragbench_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="ragbench_sentence_relevance",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "wandb/ragbench-sentence-relevance-balanced",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "ragbench_sentence_relevance_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_RAGBENCH_HANDLE = DatasetHandle(RAGBENCH_SPEC)
 
 
 def ragbench_sentence_relevance(
@@ -39,8 +34,7 @@ def ragbench_sentence_relevance(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """RAGBench sentence relevance slices."""
-    loader = _get_ragbench_loader()
-    return loader(
+    return _RAGBENCH_HANDLE.load(
         split=split,
         count=count,
         start=start,

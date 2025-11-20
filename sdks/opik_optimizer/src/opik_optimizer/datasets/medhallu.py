@@ -1,33 +1,27 @@
 from __future__ import annotations
 
-from typing import Any
-from functools import lru_cache
-
 import opik
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
+MEDHALLU_SPEC = DatasetSpec(
+    name="medhallu",
+    hf_path="UTAustin-AIHealth/MedHallu",
+    hf_name="pqa_labeled",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=300,
+            dataset_name="medhallu_train",
+        )
+    },
+    prefer_presets=True,
+)
 
-@lru_cache(maxsize=1)
-def _get_medhallu_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="medhallu",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "UTAustin-AIHealth/MedHallu",
-            "name": "pqa_labeled",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "medhallu_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_MEDHALLU_HANDLE = DatasetHandle(MEDHALLU_SPEC)
 
 
 def medhallu(
@@ -41,8 +35,7 @@ def medhallu(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """Medical hallucination QA dataset slices."""
-    loader = _get_medhallu_loader()
-    return loader(
+    return _MEDHALLU_HANDLE.load(
         split=split,
         count=count,
         start=start,

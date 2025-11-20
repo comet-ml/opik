@@ -1,31 +1,38 @@
 from __future__ import annotations
 
-from typing import Any
-
 import opik
 
-from opik_optimizer.utils.dataset_utils import load_hf_dataset_slice
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
-_HOVER_PRESETS = {
-    "train": {
-        "source_split": "train",
-        "start": 0,
-        "count": 150,
-        "dataset_name": "hover_train",
+HOVER_SPEC = DatasetSpec(
+    name="hover",
+    hf_path="vincentkoc/hover-parquet",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=150,
+            dataset_name="hover_train",
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="train",
+            start=150,
+            count=300,
+            dataset_name="hover_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="validation",
+            start=0,
+            count=300,
+            dataset_name="hover_test",
+        ),
     },
-    "validation": {
-        "source_split": "train",
-        "start": 150,
-        "count": 300,
-        "dataset_name": "hover_validation",
-    },
-    "test": {
-        "source_split": "validation",
-        "start": 0,
-        "count": 300,
-        "dataset_name": "hover_test",
-    },
-}
+    prefer_presets=True,
+)
+
+_HOVER_HANDLE = DatasetHandle(HOVER_SPEC)
 
 
 def hover(
@@ -39,24 +46,12 @@ def hover(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """General-purpose HoVer loader."""
-    return load_hf_dataset_slice(
-        base_name="hover",
-        requested_split=split,
-        presets=_HOVER_PRESETS,
-        default_source_split="train",
-        load_kwargs_resolver=_hover_load_kwargs,
-        start=start,
+    return _HOVER_HANDLE.load(
+        split=split,
         count=count,
+        start=start,
         dataset_name=dataset_name,
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
-        prefer_presets=split is not None,
     )
-
-
-def _hover_load_kwargs(source_split: str) -> dict[str, Any]:
-    return {
-        "path": "vincentkoc/hover-parquet",
-        "split": source_split,
-    }

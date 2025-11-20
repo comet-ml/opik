@@ -1,34 +1,26 @@
 from __future__ import annotations
 
-from typing import Any
-
 import opik
 
-from functools import lru_cache
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+AI2_ARC_SPEC = DatasetSpec(
+    name="ai2_arc",
+    hf_path="ai2_arc",
+    hf_name="ARC-Challenge",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=300,
+            dataset_name="ai2_arc_train",
+        )
+    },
+)
 
-
-@lru_cache(maxsize=1)
-def _get_ai2_arc_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="ai2_arc",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "ai2_arc",
-            "name": "ARC-Challenge",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "ai2_arc_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_AI2_ARC_HANDLE = DatasetHandle(AI2_ARC_SPEC)
 
 
 def ai2_arc(
@@ -48,8 +40,7 @@ def ai2_arc(
     demos (`dataset_name="ai2_arc_train"`). Pass explicit `split`, `count`, or
     `start` arguments to pull arbitrary portions of the Hugging Face dataset.
     """
-    loader = _get_ai2_arc_loader()
-    return loader(
+    return _AI2_ARC_HANDLE.load(
         split=split,
         count=count,
         start=start,

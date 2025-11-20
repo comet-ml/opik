@@ -1,20 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
-from functools import lru_cache
-
 import opik
-import pandas as pd
+from typing import Any
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
-
-
-def _load_halu_dataframe(split: str) -> pd.DataFrame:
-    if split != "train":
-        raise ValueError("HaluEval exposes only a training split.")
-    return pd.read_parquet(
-        "hf://datasets/pminervini/HaluEval/general/data-00000-of-00001.parquet"
-    )
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
 
 def _halu_records_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -28,27 +18,24 @@ def _halu_records_transform(records: list[dict[str, Any]]) -> list[dict[str, Any
     ]
 
 
-@lru_cache(maxsize=1)
-def _get_halu_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="halu_eval",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "pminervini/HaluEval",
-            "name": "general",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "halu_eval_300_train",
-            }
-        },
-        prefer_presets=True,
-        records_transform=_halu_records_transform,
-    )
+HALU_EVAL_SPEC = DatasetSpec(
+    name="halu_eval",
+    hf_path="pminervini/HaluEval",
+    hf_name="general",
+    default_source_split="train",
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=300,
+            dataset_name="halu_eval_300_train",
+        )
+    },
+    prefer_presets=True,
+    records_transform=_halu_records_transform,
+)
+
+_HALU_EVAL_HANDLE = DatasetHandle(HALU_EVAL_SPEC)
 
 
 def halu_eval_300(
@@ -68,8 +55,7 @@ def halu_eval_300(
     ``split``/``count``/``start``/``dataset_name`` to stream other sections of the
     dataset.
     """
-    loader = _get_halu_loader()
-    return loader(
+    return _HALU_EVAL_HANDLE.load(
         split=split,
         count=count,
         start=start,

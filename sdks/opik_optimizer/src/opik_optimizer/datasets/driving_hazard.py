@@ -15,7 +15,11 @@ import opik
 from typing import Any
 from PIL import Image
 
-from opik_optimizer.utils.dataset_utils import default_dataset_name, resolve_test_mode_count
+from opik_optimizer.utils.dataset_utils import (
+    default_dataset_name,
+    resolve_test_mode_count,
+    warn_deprecated_dataset,
+)
 
 
 def driving_hazard(
@@ -87,6 +91,7 @@ def driving_hazard_50(
     image_quality: int = 60,
 ) -> opik.Dataset:
     """Legacy helper for 50 training samples."""
+    warn_deprecated_dataset("driving_hazard_50", "driving_hazard(count=50)")
     return driving_hazard(
         split="train",
         count=50,
@@ -103,6 +108,7 @@ def driving_hazard_100(
     image_quality: int = 60,
 ) -> opik.Dataset:
     """Legacy helper for 100 training samples."""
+    warn_deprecated_dataset("driving_hazard_100", "driving_hazard(count=100)")
     return driving_hazard(
         split="train",
         count=100,
@@ -119,6 +125,9 @@ def driving_hazard_test_split(
     image_quality: int = 60,
 ) -> opik.Dataset:
     """Legacy helper for 100 test samples."""
+    warn_deprecated_dataset(
+        "driving_hazard_test_split", 'driving_hazard(split="test", count=100)'
+    )
     return driving_hazard(
         split="test",
         count=100,

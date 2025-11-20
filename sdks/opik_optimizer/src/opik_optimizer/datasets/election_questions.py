@@ -1,35 +1,24 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
-from typing import Any
-
 import opik
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
-from functools import lru_cache
+ELECTION_QUESTIONS_SPEC = DatasetSpec(
+    name="election_questions",
+    hf_path="Anthropic/election_questions",
+    default_source_split="test",
+    presets={
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=300,
+            dataset_name="election_questions_train",
+        )
+    },
+)
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
-
-
-@lru_cache(maxsize=1)
-def _get_election_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="election_questions",
-        default_source_split="test",
-        load_kwargs_resolver=lambda split: {
-            "path": "Anthropic/election_questions",
-            "split": split,
-        },
-        presets={
-            "test": {
-                "source_split": "test",
-                "start": 0,
-                "count": 300,
-                "dataset_name": "election_questions_train",
-            }
-        },
-        prefer_presets=True,
-    )
+_ELECTION_QUESTIONS_HANDLE = DatasetHandle(ELECTION_QUESTIONS_SPEC)
 
 
 def election_questions(
@@ -43,8 +32,7 @@ def election_questions(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """Anthropic election question classification slices."""
-    loader = _get_election_loader()
-    return loader(
+    return _ELECTION_QUESTIONS_HANDLE.load(
         split=split,
         count=count,
         start=start,

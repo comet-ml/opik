@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
 import opik
-import datasets as ds
+from typing import Any
 
-from opik_optimizer.utils.dataset_utils import OptimizerDatasetLoader
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
 
 def _tiny_records_transform(records: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -21,27 +20,27 @@ def _tiny_records_transform(records: list[dict[str, str]]) -> list[dict[str, Any
     return transformed
 
 
-@lru_cache(maxsize=1)
-def _get_tiny_loader() -> OptimizerDatasetLoader:
-    return OptimizerDatasetLoader(
-        base_name="tiny_test",
-        default_source_split="train",
-        load_kwargs_resolver=lambda split: {
-            "path": "json",
-            "data_files": "hf://datasets/vincentkoc/tiny_qa_benchmark_pp/data/core_en/core_en.jsonl",
-            "split": split,
-        },
-        presets={
-            "train": {
-                "source_split": "train",
-                "start": 0,
-                "count": 5,
-                "dataset_name": "tiny_test_train",
-            }
-        },
-        prefer_presets=True,
-        records_transform=_tiny_records_transform,
-    )
+TINY_TEST_SPEC = DatasetSpec(
+    name="tiny_test",
+    default_source_split="train",
+    load_kwargs_resolver=lambda split: {
+        "path": "json",
+        "data_files": "hf://datasets/vincentkoc/tiny_qa_benchmark_pp/data/core_en/core_en.jsonl",
+        "split": split,
+    },
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=5,
+            dataset_name="tiny_test_train",
+        )
+    },
+    prefer_presets=True,
+    records_transform=_tiny_records_transform,
+)
+
+_TINY_TEST_HANDLE = DatasetHandle(TINY_TEST_SPEC)
 
 
 def tiny_test(
@@ -55,8 +54,7 @@ def tiny_test(
     test_mode_count: int | None = None,
 ) -> opik.Dataset:
     """Tiny QA benchmark slices (core_en subset)."""
-    loader = _get_tiny_loader()
-    return loader(
+    return _TINY_TEST_HANDLE.load(
         split=split,
         count=count,
         start=start,
