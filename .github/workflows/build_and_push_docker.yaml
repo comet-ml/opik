@@ -275,3 +275,5 @@ jobs:
           else
             echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
           fi
+          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik/${{ steps.set_vars.outputs.image_name }})" >> $GITHUB_STEP_SUMMARY
+
