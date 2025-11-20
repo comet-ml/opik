@@ -146,6 +146,17 @@ jobs:
         if: steps.check.outputs.should_run == 'true'
         uses: docker/setup-buildx-action@v3
 
+      - name: Extract metadata (tags, labels) for Docker
+        if: steps.check.outputs.should_run == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ inputs.is_release == true }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+
       - name: Build and Push Docker Image
         if: steps.check.outputs.should_run == 'true'
         id: build
@@ -153,10 +164,11 @@ jobs:
         with:
           context: apps/${{ inputs.image }}/
           platforms: linux/${{ matrix.platform }}
-          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:${{ inputs.is_release && 'latest' || 'main' }}
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:main
           provenance: false
           load: true
           outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
             ${{ matrix.image_type == 'comet' && inputs.comet_build_args || '' }}
@@ -267,6 +279,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata (tags, labels) for Docker
+        if: steps.check.outputs.should_run == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ inputs.is_release == true }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+
       - name: Create manifest list and push tags
         if: steps.check.outputs.should_run == 'true'
         run: |
@@ -301,23 +324,13 @@ jobs:
           
           echo ""
           echo "Collected verified digests: $DIGESTS"
+          echo "Tags from metadata: ${{ steps.meta.outputs.tags }}"
+          echo "Labels from metadata: ${{ steps.meta.outputs.labels }}"
           
-          # Build tags
-          TAGS="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:${{ inputs.version }}"
-          if [[ "${{ inputs.is_release }}" == "true" ]]; then
-            TAGS="$TAGS ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:latest"
-          fi
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            TAGS="$TAGS ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:main"
-          fi
+          # Create and push manifest using metadata tags
+          # Metadata outputs tags as JSON array, convert to -t flags
+          TAG_ARGS=$(echo "${{ steps.meta.outputs.tags }}" | jq -r '.[] | "-t " + .' | tr '\n' ' ')
           
-          # Create and push manifest
-          TAG_ARGS=""
-          for tag in $TAGS; do
-            TAG_ARGS="$TAG_ARGS -t $tag"
-          done
-          
-          echo ""
           echo "Creating manifest with tags: $TAG_ARGS"
           echo "Using digests: $DIGESTS"
           docker buildx imagetools create $TAG_ARGS $DIGESTS
@@ -326,16 +339,11 @@ jobs:
         if: steps.check.outputs.should_run == 'true'
         run: |
           echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ inputs.is_release }}" == "true" ]]; then
-            echo "${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:latest" >> $GITHUB_STEP_SUMMARY
-            if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
-              echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
-            fi
-          else
+          echo "${{ steps.meta.outputs.tags }}" | jq -r '.[]' >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
             echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           fi
           echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> $GITHUB_STEP_SUMMARY
 
