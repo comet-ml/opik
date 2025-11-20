@@ -94,6 +94,8 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         needs: run-e2e-tests
+        env:
+            OPIK_USE_HF_STREAMING: "true"
 
         defaults:
           run:
