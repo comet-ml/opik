@@ -387,6 +387,9 @@ def load_hf_dataset_slice(
     use_presets = (
         prefer_presets if prefer_presets is not None else requested_split is not None
     )
+    effective_count = (
+        resolve_test_mode_count(test_mode_count) if test_mode else count
+    )
     slice_request = resolve_slice_request(
         base_name=base_name,
         requested_split=requested_split,
@@ -395,7 +398,7 @@ def load_hf_dataset_slice(
         default_start=0,
         default_count=None,
         start=start,
-        count=count,
+        count=effective_count,
         dataset_name=dataset_name,
         prefer_presets=use_presets,
     )
