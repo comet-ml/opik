@@ -15,10 +15,9 @@ public class DatasetItemBatchUpdateValidator
             return false;
         }
 
-        boolean isValid = true;
         context.disableDefaultConstraintViolation();
 
-        // Check if ids is provided
+        // Check if `ids` is provided
         boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
         // Check if filters is provided
         boolean hasFilters = CollectionUtils.isNotEmpty(batchUpdate.filters());
@@ -27,7 +26,7 @@ public class DatasetItemBatchUpdateValidator
         if (!hasIds && !hasFilters) {
             context.buildConstraintViolationWithTemplate("Either 'ids' or 'filters' must be provided.")
                     .addConstraintViolation();
-            isValid = false;
+            return false;
         }
 
         // Validate that both ids and filters are not provided at the same time
@@ -35,7 +34,7 @@ public class DatasetItemBatchUpdateValidator
             context.buildConstraintViolationWithTemplate(
                     "Cannot provide both 'ids' and 'filters'. Use 'ids' for specific items or 'filters' to update items matching the filter criteria.")
                     .addConstraintViolation();
-            isValid = false;
+            return false;
         }
 
         // Validate that mergeTags is true when using filters
@@ -43,9 +42,9 @@ public class DatasetItemBatchUpdateValidator
             context.buildConstraintViolationWithTemplate(
                     "When using 'filters', 'merge_tags' must be true. Tag replacement (merge_tags=false) is only supported when using 'ids'.")
                     .addConstraintViolation();
-            isValid = false;
+            return false;
         }
 
-        return isValid;
+        return true;
     }
 }

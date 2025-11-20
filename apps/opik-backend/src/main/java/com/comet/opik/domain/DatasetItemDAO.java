@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemUpdate;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -70,8 +71,7 @@ public interface DatasetItemDAO {
 
     Mono<Void> bulkUpdate(Set<UUID> ids, DatasetItemUpdate update, boolean mergeTags);
 
-    Mono<Void> bulkUpdateByFilters(List<com.comet.opik.api.filter.DatasetItemFilter> filters,
-            DatasetItemUpdate update, boolean mergeTags);
+    Mono<Void> bulkUpdateByFilters(List<DatasetItemFilter> filters, DatasetItemUpdate update, boolean mergeTags);
 }
 
 @Singleton
@@ -1500,7 +1500,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Bulk updating '{}' dataset items", ids.size());
 
         var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
-        template.add("ids", true); // Add flag to indicate we're using IDs
+        template.add("ids", true);
         var query = template.render();
 
         return asyncTemplate.nonTransaction(connection -> {
@@ -1553,7 +1553,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> bulkUpdateByFilters(@NonNull List<com.comet.opik.api.filter.DatasetItemFilter> filters,
+    public Mono<Void> bulkUpdateByFilters(@NonNull List<DatasetItemFilter> filters,
             @NonNull DatasetItemUpdate update, boolean mergeTags) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(filters), "filters must not be empty");
         log.info("Bulk updating dataset items by filters");
