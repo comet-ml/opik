@@ -343,13 +343,25 @@ class BaseOptimizer(ABC):
         self,
         *,
         prompt: "chat_prompt.ChatPrompt",
-        dataset: Dataset,
+        dataset_training: Dataset,
         metric: Callable,
         experiment_config: dict[str, Any] | None = None,
         configuration_updates: dict[str, Any] | None = None,
         additional_metadata: dict[str, Any] | None = None,
+        dataset_validation: Dataset | None = None,
     ) -> dict[str, Any]:
-        dataset_id = getattr(dataset, "id", None)
+        """
+        Prepare experiment configuration with dataset tracking.
+
+        Args:
+            dataset_training: Training dataset (used for feedback/context)
+            dataset_validation: Optional validation dataset (used for ranking)
+        """
+        training_dataset_id = getattr(dataset_training, "id", None)
+        validation_dataset_id = (
+            getattr(dataset_validation, "id", None) if dataset_validation else None
+        )
+
         project_name = (
             getattr(self.agent_class, "project_name", None)
             if hasattr(self, "agent_class")
@@ -369,8 +381,8 @@ class BaseOptimizer(ABC):
             ),
             "agent_config": self._build_agent_config(prompt),
             "metric": getattr(metric, "__name__", str(metric)),
-            "dataset": getattr(dataset, "name", None),
-            "dataset_id": dataset_id,
+            "dataset_training": getattr(dataset_training, "name", None),
+            "dataset_training_id": training_dataset_id,
             "optimizer": self.__class__.__name__,
             "optimizer_metadata": self._build_optimizer_metadata(),
             "tool_signatures": self._summarize_tool_signatures(prompt),
@@ -381,6 +393,13 @@ class BaseOptimizer(ABC):
                 "prompt_project_name": getattr(prompt, "project_name", None),
             },
         }
+
+        # Add validation dataset metadata if provided
+        if dataset_validation is not None:
+            base_config["dataset_validation"] = getattr(
+                dataset_validation, "name", None
+            )
+            base_config["dataset_validation_id"] = validation_dataset_id
 
         if configuration_updates:
             base_config["configuration"] = self._deep_merge_dicts(
@@ -407,6 +426,7 @@ class BaseOptimizer(ABC):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        dataset_validation: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -414,7 +434,9 @@ class BaseOptimizer(ABC):
         Optimize a prompt.
 
         Args:
-           dataset: Opik dataset name, or Opik dataset
+           dataset: Opik dataset name, or Opik dataset (training set - used for feedback/context)
+               TODO/FIXME: This parameter will be deprecated in favor of dataset_training.
+               For now, it serves as the training dataset parameter.
            metric: A metric function, this function should have two arguments:
                dataset_item and llm_output
            prompt: the prompt to optimize
@@ -424,6 +446,8 @@ class BaseOptimizer(ABC):
            project_name: Opik project name for logging traces (default: "Optimization")
            optimization_id: Optional ID to use when creating the Opik optimization run;
                when provided it must be a valid UUIDv7 string.
+           dataset_validation: Optional validation dataset (validation set - used for ranking candidates).
+               If not provided, uses dataset by default with a warning.
            **kwargs: Additional arguments for optimization
         """
         pass
@@ -476,8 +500,22 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         seed: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
+        dataset_validation: Dataset | None = None,
     ) -> float:
         random.seed(seed)
+
+        # Map dataset parameter to dataset_training internally
+        dataset_training = dataset
+
+        # Use validation dataset if provided, otherwise fall back to training dataset with warning
+        dataset_evaluation = (
+            dataset_validation if dataset_validation is not None else dataset_training
+        )
+        if dataset_validation is None:
+            logger.warning(
+                "No validation dataset provided. Using training dataset for evaluation. "
+                "For better optimization results, consider providing a separate validation dataset."
+            )
 
         self.agent_class: type[OptimizableAgent]
 
@@ -506,7 +544,8 @@ class BaseOptimizer(ABC):
 
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset=dataset,
+            dataset_training=dataset_training,
+            dataset_validation=dataset_validation,
             metric=metric,
             experiment_config=experiment_config,
         )
@@ -515,12 +554,14 @@ class BaseOptimizer(ABC):
             if dataset_item_ids is not None:
                 raise Exception("Can't use n_samples and dataset_item_ids")
 
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            all_ids = [
+                dataset_item["id"] for dataset_item in dataset_evaluation.get_items()
+            ]
             n_samples = min(n_samples, len(all_ids))
             dataset_item_ids = random.sample(all_ids, n_samples)
 
         score = task_evaluator.evaluate(
-            dataset=dataset,
+            dataset=dataset_evaluation,
             dataset_item_ids=dataset_item_ids,
             metric=metric,
             evaluated_task=llm_task,
