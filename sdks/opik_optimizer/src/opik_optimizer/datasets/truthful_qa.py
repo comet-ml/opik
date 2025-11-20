@@ -17,7 +17,9 @@ def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if target in mc_item:
                 choices = mc_item[target]["choices"]
                 labels = mc_item[target]["labels"]
-                correct_answers.update(choice for choice, label in zip(choices, labels) if label == 1)
+                correct_answers.update(
+                    choice for choice, label in zip(choices, labels) if label == 1
+                )
         all_answers = set(gen_item["correct_answers"] + gen_item["incorrect_answers"])
         for target in ("mc1_targets", "mc2_targets"):
             if target in mc_item:

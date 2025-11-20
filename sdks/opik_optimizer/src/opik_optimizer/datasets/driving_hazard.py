@@ -16,6 +16,7 @@ from typing import Any
 from PIL import Image
 
 from opik_optimizer.utils.dataset_utils import (
+    dataset_name_for_mode,
     default_dataset_name,
     resolve_test_mode_count,
     warn_deprecated_dataset,
@@ -58,7 +59,9 @@ def driving_hazard(
 
     normalized_split = split.lower()
     if normalized_split not in {"train", "test"}:
-        raise ValueError("Driving hazard dataset exposes only 'train' and 'test' splits.")
+        raise ValueError(
+            "Driving hazard dataset exposes only 'train' and 'test' splits."
+        )
 
     preset_name = None
     if normalized_split == "train" and count == 50:
@@ -68,11 +71,15 @@ def driving_hazard(
     elif normalized_split == "test" and count == 100:
         preset_name = "driving_hazard_test"
 
-    target_name = dataset_name or preset_name or default_dataset_name(
-        base="driving_hazard",
-        split=normalized_split,
-        start=0,
-        count=count,
+    target_name = (
+        dataset_name
+        or preset_name
+        or default_dataset_name(
+            base="driving_hazard",
+            split=normalized_split,
+            start=0,
+            count=count,
+        )
     )
 
     return _load_dhpr_dataset(
@@ -163,9 +170,7 @@ def _load_dhpr_dataset(
         opik.Dataset with loaded and processed samples
     """
     # Adjust for test mode
-    full_name = dataset_name
-    if test_mode and not full_name.endswith("_sample"):
-        full_name = f"{full_name}_sample"
+    full_name = dataset_name_for_mode(dataset_name, test_mode)
     actual_nb_items = nb_items
     if test_mode:
         actual_nb_items = min(nb_items, resolve_test_mode_count(None))
