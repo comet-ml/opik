@@ -166,6 +166,7 @@ class GepaOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        dataset_validation: Dataset | None = None,
         max_trials: int = 10,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
@@ -206,10 +207,16 @@ class GepaOptimizer(BaseOptimizer):
             raise_on_exception: Raise exceptions instead of continuing (default: True)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
+            dataset_validation: Optional validation dataset (not yet supported by this optimizer).
 
         Returns:
             OptimizationResult: Result of the optimization
         """
+        if dataset_validation is not None:
+            logger.warning(
+                f"{self.__class__.__name__} currently does not support validation dataset. "
+                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
+            )
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
 
@@ -568,9 +575,11 @@ class GepaOptimizer(BaseOptimizer):
                 configuration_updates = helpers.drop_none(
                     {"gepa": {"phase": "final", "selected": True}}
                 )
+                # Map dataset parameter to dataset_training for internal consistency
+                dataset_training = dataset
                 final_experiment_config = self._prepare_experiment_config(
                     prompt=final_prompt,
-                    dataset=dataset,
+                    dataset_training=dataset_training,
                     metric=metric,
                     experiment_config=experiment_config,
                     configuration_updates=configuration_updates,
@@ -784,10 +793,12 @@ class GepaOptimizer(BaseOptimizer):
 
             return {"llm_output": raw.strip()}
 
+        # Map dataset parameter to dataset_training for internal consistency
+        dataset_training = dataset
         configuration_updates = helpers.drop_none({"gepa": extra_metadata})
         experiment_config = self._prepare_experiment_config(
             prompt=prompt,
-            dataset=dataset,
+            dataset_training=dataset_training,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
