@@ -59,11 +59,7 @@ Tip: To pause scoring without deleting, disable the rule.`}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              openEditDialog(rule.id);
-            }}
-          >
+          <DropdownMenuItem onClick={() => openEditDialog(rule.id)}>
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
