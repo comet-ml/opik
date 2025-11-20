@@ -109,7 +109,7 @@ export function UpdateExperimentDialog({
           </DialogClose>
           <DialogClose asChild>
             <Button type="submit" onClick={handleUpdate} disabled={!hasChanges}>
-              Update Experiment
+              Update experiment
             </Button>
           </DialogClose>
         </DialogFooter>
