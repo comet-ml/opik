@@ -9,9 +9,12 @@ from importlib import resources
 from typing import Any
 from collections.abc import Sequence
 from collections.abc import Callable, Iterable
+import warnings
 
 import opik
 from datasets import load_dataset
+
+from opik_optimizer.api_objects.types import DatasetSpec
 
 
 @lru_cache(maxsize=None)
@@ -166,11 +169,13 @@ def resolve_preset_split(
     if requested_split is None and not prefer_presets:
         preset = None
 
-    source_split = (
-        preset.get("source_split")
-        if preset and "source_split" in preset
-        else default_source_split
-    )
+    if preset is not None:
+        source_split = preset.get("source_split", normalized_split)
+    elif requested_split is not None:
+        source_split = normalized_split
+    else:
+        source_split = default_source_split
+
     resolved_start = start if start is not None else (
         preset.get("start") if preset and "start" in preset else default_start
     )
@@ -185,7 +190,7 @@ def resolve_preset_split(
     else:
         resolved_name = default_dataset_name(
             base=base_name,
-            split=normalized_split,
+            split=normalized_split if requested_split is not None else source_split,
             start=resolved_start,
             count=resolved_count,
         )
@@ -264,29 +269,19 @@ def load_hf_dataset_slice(
     )
 
 
-class OptimizerDatasetLoader:
-    """Convenience wrapper for HuggingFace datasets with optional split presets."""
+class DatasetHandle:
+    """High-level interface for datasets defined via DatasetSpec."""
 
-    def __init__(
-        self,
-        *,
-        base_name: str,
-        default_source_split: str = "train",
-        load_kwargs_resolver: Callable[[str], dict[str, Any]],
-        presets: dict[str, dict[str, Any]] | None = None,
-        prefer_presets: bool = False,
-        records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
-        custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]] | None = None,
-    ) -> None:
-        self.base_name = base_name
-        self.default_source_split = default_source_split
-        self.load_kwargs_resolver = load_kwargs_resolver
-        self.presets = presets or {}
-        self.prefer_presets = prefer_presets
-        self.records_transform = records_transform
-        self.custom_loader = custom_loader
+    def __init__(self, spec: DatasetSpec) -> None:
+        self.spec = spec
+        self._load_kwargs_resolver = spec.load_kwargs_resolver or _default_load_kwargs_resolver(
+            spec
+        )
+        self._presets = {
+            name: preset.model_dump() for name, preset in spec.presets.items()
+        }
 
-    def __call__(
+    def load(
         self,
         *,
         split: str | None = None,
@@ -298,6 +293,7 @@ class OptimizerDatasetLoader:
         test_mode_count: int | None = None,
         prefer_presets: bool | None = None,
     ) -> opik.Dataset:
+        """Load the dataset slice described by this spec."""
         if prefer_presets is None:
             no_overrides = (
                 split is None
@@ -305,15 +301,16 @@ class OptimizerDatasetLoader:
                 and count is None
                 and dataset_name is None
             )
-            pref = self.prefer_presets and no_overrides
+            pref = self.spec.prefer_presets and no_overrides
         else:
             pref = prefer_presets
+
         return load_hf_dataset_slice(
-            base_name=self.base_name,
+            base_name=self.spec.name,
             requested_split=split,
-            presets=self.presets,
-            default_source_split=self.default_source_split,
-            load_kwargs_resolver=self.load_kwargs_resolver,
+            presets=self._presets,
+            default_source_split=self.spec.default_source_split,
+            load_kwargs_resolver=self._load_kwargs_resolver,
             start=start,
             count=count,
             dataset_name=dataset_name,
@@ -321,9 +318,33 @@ class OptimizerDatasetLoader:
             seed=seed,
             test_mode_count=test_mode_count,
             prefer_presets=pref,
-            records_transform=self.records_transform,
-            custom_loader=self.custom_loader,
+            records_transform=self.spec.records_transform,
+            custom_loader=self.spec.custom_loader,
         )
+
+
+def _default_load_kwargs_resolver(spec: DatasetSpec) -> Callable[[str], dict[str, Any]]:
+    if spec.hf_path is None:
+        raise ValueError(
+            f"DatasetSpec '{spec.name}' must define either hf_path or load_kwargs_resolver."
+        )
+
+    def resolver(split: str) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"path": spec.hf_path, "split": split}
+        if spec.hf_name is not None:
+            kwargs["name"] = spec.hf_name
+        return kwargs
+
+    return resolver
+
+
+def warn_deprecated_dataset(old_name: str, replacement_hint: str) -> None:
+    """Emit a consistent deprecation warning for legacy dataset helpers."""
+    warnings.warn(
+        f"{old_name}() is deprecated; use {replacement_hint} instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
 
 __all__ = [
@@ -337,5 +358,6 @@ __all__ = [
     "default_dataset_name",
     "resolve_preset_split",
     "load_hf_dataset_slice",
-    "OptimizerDatasetLoader",
+    "DatasetHandle",
+    "warn_deprecated_dataset",
 ]
