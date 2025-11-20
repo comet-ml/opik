@@ -4,12 +4,12 @@ import hashlib
 import os
 import secrets
 import time
+import warnings
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
-from typing import Any
-from collections.abc import Sequence
-from collections.abc import Callable, Iterable
-import warnings
+from typing import Any, cast
 
 import opik
 from datasets import load_dataset
@@ -19,7 +19,7 @@ from opik_optimizer.api_objects.types import DatasetSpec
 
 @lru_cache(maxsize=None)
 def dataset_suffix(package: str, filename: str) -> str:
-    """Return a stable checksum-based suffix for a JSONL dataset file."""
+    """Return a stable checksum-based suffix for a JSON/JSONL file shipped with the SDK."""
     text = resources.files(package).joinpath(filename).read_text(encoding="utf-8")
     return hashlib.md5(text.encode("utf-8")).hexdigest()[:8]
 
@@ -111,7 +111,6 @@ def download_and_slice_hf_dataset(
         start: Starting index within the shuffled split.
         count: Number of rows to return. If ``None`` we include everything from
             ``start`` to the end of the split.
-        seed: Deterministic shuffle seed.
     """
     hf_dataset = load_fn(**load_kwargs)
     shuffled = hf_dataset.shuffle(seed=seed)
@@ -132,6 +131,43 @@ def download_and_slice_hf_dataset(
     return subset.to_list()
 
 
+def fetch_records_for_slice(
+    *,
+    slice_request: SliceRequest,
+    load_kwargs_resolver: Callable[[str], dict[str, Any]],
+    seed: int,
+    custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]]
+    | None = None,
+    load_fn: Callable[..., Any] = load_dataset,
+) -> list[dict[str, Any]]:
+    """
+    Fetch the raw records for a slice request using either a custom loader or HF datasets.
+
+    Args:
+        slice_request: Resolved coordinates describing which split/start/count to stream.
+        load_kwargs_resolver: Callable producing kwargs for ``load_dataset``.
+        seed: Deterministic shuffle seed.
+        custom_loader: Optional callable overriding the default HF download path.
+        load_fn: Loader function (defaults to ``datasets.load_dataset``).
+    """
+    if custom_loader is not None:
+        return custom_loader(
+            slice_request.source_split,
+            slice_request.start,
+            slice_request.count,
+            seed,
+        )
+
+    load_kwargs = load_kwargs_resolver(slice_request.source_split)
+    return download_and_slice_hf_dataset(
+        load_fn=load_fn,
+        load_kwargs=load_kwargs,
+        start=slice_request.start,
+        count=slice_request.count,
+        seed=seed,
+    )
+
+
 def default_dataset_name(
     *,
     base: str,
@@ -149,7 +185,26 @@ def default_dataset_name(
     return "_".join(parts)
 
 
-def resolve_preset_split(
+# Accepted short-hands for split names so callers can pass `split="val"` etc.
+_SPLIT_ALIASES = {
+    "val": "validation",
+    "valid": "validation",
+    "evaluation": "validation",
+    "dev": "validation",
+}
+
+
+@dataclass(frozen=True)
+class SliceRequest:
+    """Resolved description of which HF slice to stream and what to call it."""
+
+    source_split: str
+    start: int
+    count: int | None
+    dataset_name: str
+
+
+def resolve_slice_request(
     *,
     base_name: str,
     requested_split: str | None,
@@ -161,8 +216,8 @@ def resolve_preset_split(
     count: int | None = None,
     dataset_name: str | None = None,
     prefer_presets: bool = True,
-) -> tuple[str, int, int | None, str]:
-    """Resolve a user request into concrete HF slice coordinates."""
+) -> SliceRequest:
+    """Resolve a user request into a concrete HF slice definition."""
     normalized_split = (requested_split or default_source_split).lower()
     normalized_split = _SPLIT_ALIASES.get(normalized_split, normalized_split)
     preset = presets.get(normalized_split)
@@ -176,12 +231,24 @@ def resolve_preset_split(
     else:
         source_split = default_source_split
 
-    resolved_start = start if start is not None else (
-        preset.get("start") if preset and "start" in preset else default_start
+    raw_start: Any = (
+        start
+        if start is not None
+        else (preset.get("start") if preset and "start" in preset else default_start)
     )
-    resolved_count = count if count is not None else (
-        preset.get("count") if preset and "count" in preset else default_count
+    if raw_start is None:
+        raw_start = default_start
+    resolved_start = cast(int, raw_start)
+
+    raw_count: Any = (
+        count
+        if count is not None
+        else (preset.get("count") if preset and "count" in preset else default_count)
     )
+    if raw_count is None:
+        resolved_count: int | None = None
+    else:
+        resolved_count = cast(int, raw_count)
 
     if dataset_name:
         resolved_name = dataset_name
@@ -195,13 +262,50 @@ def resolve_preset_split(
             count=resolved_count,
         )
 
-    return source_split, resolved_start, resolved_count, resolved_name
+    return SliceRequest(
+        source_split=source_split,
+        start=resolved_start,
+        count=resolved_count,
+        dataset_name=resolved_name,
+    )
 
 
-_SPLIT_ALIASES = {
-    "val": "validation",
-    "dev": "validation",
-}
+def resolve_preset_split(
+    *,
+    base_name: str,
+    requested_split: str | None,
+    presets: dict[str, dict[str, Any]],
+    default_source_split: str,
+    default_start: int = 0,
+    default_count: int | None = None,
+    start: int | None = None,
+    count: int | None = None,
+    dataset_name: str | None = None,
+    prefer_presets: bool = True,
+) -> tuple[str, int, int | None, str]:
+    """
+    Backwards-compatible wrapper returning the tuple format previously used.
+
+    Prefer :func:`resolve_slice_request` for new call sites.
+    """
+    slice_request = resolve_slice_request(
+        base_name=base_name,
+        requested_split=requested_split,
+        presets=presets,
+        default_source_split=default_source_split,
+        default_start=default_start,
+        default_count=default_count,
+        start=start,
+        count=count,
+        dataset_name=dataset_name,
+        prefer_presets=prefer_presets,
+    )
+    return (
+        slice_request.source_split,
+        slice_request.start,
+        slice_request.count,
+        slice_request.dataset_name,
+    )
 
 
 def load_hf_dataset_slice(
@@ -219,18 +323,27 @@ def load_hf_dataset_slice(
     seed: int | None = None,
     test_mode_count: int | None = None,
     prefer_presets: bool | None = None,
-    records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
-    custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]] | None = None,
+    records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
+    | None = None,
+    custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]]
+    | None = None,
 ) -> opik.Dataset:
-    """Shared helper to download an HF slice and create an Opik dataset."""
+    """Shared helper to download an HF slice and create an Opik dataset.
+
+    The ``seed`` parameter is threaded all the way from public dataset helpers,
+    ensuring callers can deterministically reproduce any slice by setting a
+    global env var or passing ``seed=...`` explicitly.
+    """
     use_presets = (
         prefer_presets if prefer_presets is not None else requested_split is not None
     )
-    source_split, resolved_start, resolved_count, target_name = resolve_preset_split(
+    slice_request = resolve_slice_request(
         base_name=base_name,
         requested_split=requested_split,
         presets=presets,
         default_source_split=default_source_split,
+        default_start=0,
+        default_count=None,
         start=start,
         count=count,
         dataset_name=dataset_name,
@@ -239,18 +352,13 @@ def load_hf_dataset_slice(
 
     resolved_seed = resolve_dataset_seed(seed)
     effective_test_count = resolve_test_mode_count(test_mode_count)
-
-    if custom_loader is not None:
-        records = custom_loader(source_split, resolved_start, resolved_count, resolved_seed)
-    else:
-        load_kwargs = load_kwargs_resolver(source_split)
-        records = download_and_slice_hf_dataset(
-            load_fn=load_fn,
-            load_kwargs=load_kwargs,
-            start=resolved_start,
-            count=resolved_count,
-            seed=resolved_seed,
-        )
+    records = fetch_records_for_slice(
+        slice_request=slice_request,
+        load_kwargs_resolver=load_kwargs_resolver,
+        seed=resolved_seed,
+        custom_loader=custom_loader,
+        load_fn=load_fn,
+    )
 
     slice_size = len(records)
     expected_items = effective_test_count if test_mode else slice_size
@@ -262,7 +370,7 @@ def load_hf_dataset_slice(
         records = records[:expected_items]
 
     return create_dataset_from_records(
-        dataset_name=target_name,
+        dataset_name=slice_request.dataset_name,
         records=records,
         expected_size=expected_items,
         test_mode=test_mode,
@@ -274,8 +382,8 @@ class DatasetHandle:
 
     def __init__(self, spec: DatasetSpec) -> None:
         self.spec = spec
-        self._load_kwargs_resolver = spec.load_kwargs_resolver or _default_load_kwargs_resolver(
-            spec
+        self._load_kwargs_resolver = (
+            spec.load_kwargs_resolver or _default_load_kwargs_resolver(spec)
         )
         self._presets = {
             name: preset.model_dump() for name, preset in spec.presets.items()
@@ -293,7 +401,14 @@ class DatasetHandle:
         test_mode_count: int | None = None,
         prefer_presets: bool | None = None,
     ) -> opik.Dataset:
-        """Load the dataset slice described by this spec."""
+        """
+        Load the dataset slice described by this spec.
+
+        Args mirror the public dataset helpers; notably ``seed`` controls the
+        deterministic shuffle performed inside ``download_and_slice_hf_dataset``,
+        so callers can fully reproduce slices by passing ``seed`` all the way
+        through the public API.
+        """
         if prefer_presets is None:
             no_overrides = (
                 split is None
@@ -355,7 +470,10 @@ __all__ = [
     "resolve_test_mode_count",
     "create_dataset_from_records",
     "download_and_slice_hf_dataset",
+    "fetch_records_for_slice",
     "default_dataset_name",
+    "SliceRequest",
+    "resolve_slice_request",
     "resolve_preset_split",
     "load_hf_dataset_slice",
     "DatasetHandle",
