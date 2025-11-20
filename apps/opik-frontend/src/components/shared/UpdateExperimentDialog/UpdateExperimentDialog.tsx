@@ -53,7 +53,7 @@ export function UpdateExperimentDialog({
     }
     prevOpenRef.current = open;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, latestName, latestConfiguration]);
+  }, [open]);
 
   // Check if any changes have been made
   const hasChanges =
