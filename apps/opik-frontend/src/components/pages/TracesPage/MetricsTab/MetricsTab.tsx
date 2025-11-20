@@ -31,7 +31,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     minDate,
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
-    queryKey: METRICS_TAB_DATE_RANGE_QUERY_KEY,
+    key: METRICS_TAB_DATE_RANGE_QUERY_KEY,
   });
 
   const { data: traces } = useTracesList(
