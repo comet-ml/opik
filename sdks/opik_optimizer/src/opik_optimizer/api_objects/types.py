@@ -1,4 +1,5 @@
-from typing import Any, Callable, Literal, Union
+from typing import Any, Literal, Union
+from collections.abc import Callable
 
 import pydantic
 
@@ -86,5 +87,9 @@ class DatasetSpec(pydantic.BaseModel):
     load_kwargs_resolver: Callable[[str], dict[str, Any]] | None = None
     presets: dict[str, DatasetSplitPreset] = pydantic.Field(default_factory=dict)
     prefer_presets: bool = False
-    custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]] | None = None
-    records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None
+    custom_loader: (
+        Callable[[str, int, int | None, int], list[dict[str, Any]]] | None
+    ) = None
+    records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = (
+        None
+    )
