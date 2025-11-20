@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import {
@@ -38,17 +38,19 @@ export function UpdateExperimentDialog({
   const theme = useCodemirrorTheme({
     editable: true,
   });
+  const prevOpenRef = useRef(false);
   const [name, setName] = useState(latestName);
   const [configuration, setConfiguration] = useState(
     JSON.stringify(latestConfiguration || {}, null, 2),
   );
 
-  // Reset state when dialog opens
+  // Reset state only when dialog opens (false -> true transition)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setName(latestName);
       setConfiguration(JSON.stringify(latestConfiguration || {}, null, 2));
     }
+    prevOpenRef.current = open;
   }, [open, latestName, latestConfiguration]);
 
   // Check if any changes have been made
@@ -70,7 +72,7 @@ export function UpdateExperimentDialog({
     }
 
     const parsedConfiguration = configuration
-      ? safelyParseJSON(configuration)
+      ? safelyParseJSON(configuration) ?? {}
       : {};
 
     onConfirm(name, parsedConfiguration);

@@ -354,6 +354,10 @@ export class OpikClient {
         name?: string,
         experimentConfig?: Record<string, unknown>
     ): Promise<void> => {
+        if (!name && !experimentConfig) {
+            throw new Error("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
+        }
+
         logger.debug(`Updating experiment with ID "${id}"`);
 
         try {

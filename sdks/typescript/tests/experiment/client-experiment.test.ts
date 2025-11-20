@@ -563,5 +563,16 @@ describe("Opik experiment operations", () => {
         metadata: {},
       });
     });
+
+    it<ExperimentTestContext>("should throw error when no parameters are provided", async ({
+      client,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-no-params";
+
+      await expect(
+        client.updateExperiment(experimentId)
+      ).rejects.toThrow("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
+    });
   });
 });
