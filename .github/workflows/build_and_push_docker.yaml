@@ -1,4 +1,4 @@
-name: "Build Docker Images"
+name: "Build Docker Images Multi-Arch ${{ github.event.inputs.image }}"
 
 on:
   workflow_call:
