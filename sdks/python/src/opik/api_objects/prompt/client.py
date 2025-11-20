@@ -145,11 +145,9 @@ class PromptClient:
             return prompt_version
 
         except rest_api_core.ApiError as e:
-            if e.status_code == 400:
-                # Backend returns 400 when template_structure doesn't match
-                return None
             if e.status_code != 404:
                 raise e
+            # 400, 404 - not found
 
         return None
 
