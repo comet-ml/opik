@@ -52,10 +52,12 @@ const PlaygroundOutputTable = ({
   const [hydratedDatasetItems, setHydratedDatasetItems] = useState<
     DatasetItem[]
   >([]);
+  const [isHydrating, setIsHydrating] = useState(false);
 
   // Hydrate dataset items when they change
   useEffect(() => {
     const hydrateItems = async () => {
+      setIsHydrating(true);
       const hydratedItems = await Promise.all(
         datasetItems.map(async (item) => {
           const hydratedData = await hydrateDatasetItemData(item);
@@ -66,20 +68,25 @@ const PlaygroundOutputTable = ({
         }),
       );
       setHydratedDatasetItems(hydratedItems);
+      setIsHydrating(false);
     };
 
     if (datasetItems.length > 0) {
       hydrateItems();
     } else {
       setHydratedDatasetItems([]);
+      setIsHydrating(false);
     }
   }, [datasetItems, hydrateDatasetItemData]);
 
-  const noDataMessage = isLoadingDatasetItems
-    ? "Loading..."
-    : "No dataset items";
+  const noDataMessage =
+    isLoadingDatasetItems || isHydrating ? "Loading..." : "No dataset items";
 
   const rows = useMemo(() => {
+    if (isLoadingDatasetItems || isHydrating) {
+      return [];
+    }
+
     return hydratedDatasetItems.map((di) => {
       return {
         id: di.id,
@@ -90,7 +97,7 @@ const PlaygroundOutputTable = ({
         tags: di.tags || [],
       };
     });
-  }, [hydratedDatasetItems]);
+  }, [hydratedDatasetItems, isLoadingDatasetItems, isHydrating]);
 
   const columns = useMemo(() => {
     if (isEmpty(datasetColumns)) {
@@ -184,7 +191,7 @@ const PlaygroundOutputTable = ({
 
   return (
     <div
-      className="playground-table overflow-x-auto pt-10" // eslint-disable-line tailwindcss/no-custom-classname
+      className="playground-table overflow-x-auto pt-11" // eslint-disable-line tailwindcss/no-custom-classname
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       <DataTable

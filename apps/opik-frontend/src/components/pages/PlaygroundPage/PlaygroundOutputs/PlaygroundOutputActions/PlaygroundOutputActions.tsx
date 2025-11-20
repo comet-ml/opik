@@ -10,6 +10,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import MetricSelector from "./MetricSelector";
 import DatasetEmptyState from "./DatasetEmptyState";
 
@@ -49,6 +50,11 @@ interface PlaygroundOutputActionsProps {
   loadingDatasetItems: boolean;
   filters: Filters;
   onFiltersChange: (filters: Filters) => void;
+  page: number;
+  onChangePage: (page: number) => void;
+  size: number;
+  onChangeSize: (size: number) => void;
+  total: number;
 }
 
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -65,6 +71,11 @@ const PlaygroundOutputActions = ({
   loadingDatasetItems,
   filters,
   onFiltersChange,
+  page,
+  onChangePage,
+  size,
+  onChangeSize,
+  total,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -536,6 +547,21 @@ const PlaygroundOutputActions = ({
             workspaceName={workspaceName}
           />
         </div>
+        {datasetId && (
+          <div className="mt-2.5 flex h-8 items-center justify-center">
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <DataTablePagination
+              page={page}
+              pageChange={onChangePage}
+              size={size}
+              sizeChange={onChangeSize}
+              total={total}
+              variant="minimal"
+              itemsPerPage={[10, 50, 100, 200, 500]}
+            />
+            <Separator orientation="vertical" className="mx-2 h-4" />
+          </div>
+        )}
         <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}

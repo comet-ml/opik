@@ -25,9 +25,11 @@ type DataTableProps = {
   sizeChange?: (number: number) => void;
   supportsTruncation?: boolean;
   truncationEnabled?: boolean;
+  variant?: "default" | "minimal";
+  itemsPerPage?: number[];
 };
 
-const ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
+const DEFAULT_ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
 
 const DataTablePagination = ({
   page = 1,
@@ -37,6 +39,8 @@ const DataTablePagination = ({
   sizeChange,
   supportsTruncation = false,
   truncationEnabled = true,
+  variant = "default",
+  itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
 }: DataTableProps) => {
   const maxSize =
     supportsTruncation && !truncationEnabled
@@ -44,6 +48,7 @@ const DataTablePagination = ({
       : undefined;
 
   const showWarning = supportsTruncation && !truncationEnabled;
+  const isMinimal = variant === "minimal";
 
   const from = Math.max(size * (page - 1) + 1, 0);
   const to = Math.min(size * page, total);
@@ -51,6 +56,13 @@ const DataTablePagination = ({
   const disabledPrevious = page === 1;
   const disabledNext = page === totalPages || !totalPages;
   const disabledSizeChange = !isFunction(sizeChange);
+
+  const text = isMinimal
+    ? `${from}-${to} of ${total}`
+    : `Showing ${from}-${to} of ${total}`;
+  const buttonSize = isMinimal ? "icon-xs" : "icon-sm";
+  const navButtonVariant = isMinimal ? "ghost" : "outline";
+  const buttonClass = isMinimal ? "w-5" : "";
 
   useEffect(() => {
     if (maxSize && size > maxSize && sizeChange) {
@@ -65,22 +77,26 @@ const DataTablePagination = ({
   }, [total, page, size, pageChange]);
 
   return (
-    <div className="flex flex-row justify-end gap-4">
+    <div
+      className={`flex flex-row justify-end ${isMinimal ? "gap-1" : "gap-4"}`}
+    >
       {showWarning && <TruncationDisabledWarning />}
-      <div className="flex flex-row gap-2">
+      <div className={`flex flex-row ${isMinimal ? "gap-0.5" : "gap-2"}`}>
         <Button
-          variant="outline"
-          size="icon-sm"
+          variant={navButtonVariant}
+          size={buttonSize}
           disabled={disabledPrevious}
           onClick={() => pageChange(1)}
+          className={buttonClass}
         >
           <ChevronFirst />
         </Button>
         <Button
-          variant="outline"
-          size="icon-sm"
+          variant={navButtonVariant}
+          size={buttonSize}
           disabled={disabledPrevious}
           onClick={() => pageChange(page - 1)}
+          className={buttonClass}
         >
           <ChevronLeft />
         </Button>
@@ -90,14 +106,16 @@ const DataTablePagination = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="min-w-4 px-4"
+                className={`min-w-4 px-4 ${
+                  isMinimal ? "h-6 px-0 leading-none focus-visible:ring-0" : ""
+                }`}
                 disabled={disabledSizeChange}
               >
-                {`Showing ${from}-${to} of ${total}`}
+                {text}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {ITEMS_PER_PAGE.map((count) => {
+              {itemsPerPage.map((count) => {
                 const isDisabled =
                   disabledSizeChange ||
                   (maxSize !== undefined && count > maxSize);
@@ -116,17 +134,19 @@ const DataTablePagination = ({
           </DropdownMenu>
         </div>
         <Button
-          variant="outline"
-          size="icon-sm"
+          variant={navButtonVariant}
+          size={buttonSize}
           disabled={disabledNext}
+          className={buttonClass}
           onClick={() => pageChange(page + 1)}
         >
           <ChevronRight />
         </Button>
         <Button
-          variant="outline"
-          size="icon-sm"
+          variant={navButtonVariant}
+          size={buttonSize}
           disabled={disabledNext}
+          className={buttonClass}
           onClick={() => pageChange(totalPages)}
         >
           <ChevronLast />
